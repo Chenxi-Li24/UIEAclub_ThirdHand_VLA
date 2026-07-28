@@ -1,0 +1,27 @@
+# ============================================================
+# Task: ArUco Tag Sorting
+# ============================================================
+
+task:
+  name: "ar_tag_sort"
+  description: "Sort objects by ArUco marker ID into designated bins"
+  detector: "aruco"
+
+aruco:
+  dictionary: "DICT_4X4_50"
+  marker_size_m: 0.05
+  marker_ids: [0, 1, 2, 3, 4, 5]
+
+zones:
+  0: {position: [-0.15, -0.2, 0.01], label: "Zone A"}
+  1: {position: [-0.15,  0.0, 0.01], label: "Zone B"}
+  2: {position: [-0.15,  0.2, 0.01], label: "Zone C"}
+  3: {position: [ 0.15, -0.2, 0.01], label: "Zone D"}
+  4: {position: [ 0.15,  0.0, 0.01], label: "Zone E"}
+  5: {position: [ 0.15,  0.2, 0.01], label: "Zone F"}
+
+approach_height_m: 0.05
+lift_height_m: 0.1
+grasp_speed: 0.1
+transport_speed: 0.3
+place_speed: 0.15

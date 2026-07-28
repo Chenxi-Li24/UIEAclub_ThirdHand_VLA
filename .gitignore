@@ -1,0 +1,49 @@
+# Python
+__pycache__/
+*.py[cod]
+*.so
+*.egg-info/
+dist/
+build/
+eggs/
+*.egg
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Environment
+.env
+api_keys.yaml
+
+# Logs
+logs/*.csv
+logs/*.jsonl
+logs/*.yaml
+logs/**/frames/
+
+# Data (runtime-generated)
+data/calibration/*.npz
+data/calibration/*.yaml
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb
+
+# PlatformIO
+.pio/
+
+# Node (if using web frontend build)
+node_modules/
+dist/

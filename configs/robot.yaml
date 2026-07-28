@@ -1,0 +1,41 @@
+# ============================================================
+# Robot Configuration — Lumos Touch R1
+# ============================================================
+# See: https://www.lumosbot.tech/products/touch/
+# SDK: https://github.com/lumos-open/startouch_sdk
+
+# --- Robot Identity ---
+model: "Lumos Touch R1"
+model_number: 0  # 0-10
+
+# --- CAN Bus ---
+can_interface: "can0"
+can_bitrate: 1000000  # 1 Mbps
+
+# --- Joint Limits (degrees) ---
+joint_limits:
+  min_degrees: [-180, -155, -80, -180, -100, -360]
+  max_degrees: [180, 155, 180, 180, 100, 360]
+
+# --- TCP (Tool Center Point) offset from flange (meters) ---
+tcp_offset_m: [0.0, 0.0, 0.155]
+
+# --- Home Position (joint angles in degrees) ---
+home_joints_deg: [0.0, -30.0, -60.0, -90.0, 0.0, 0.0]
+
+# --- Motion Defaults ---
+default_speed: 0.3          # 0.0–1.0
+default_acceleration: 0.5
+
+# --- Gripper ---
+gripper:
+  model: "TypeFZ"           # TypeFZ | TypeLJ
+  open_distance_mm: 60.0
+  close_distance_mm: 0.0
+  force: 0.5
+
+# --- E-STOP ---
+estop:
+  method: "keyboard"
+  keyboard_key: "space"
+  gpio_pin: null

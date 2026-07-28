@@ -1,0 +1,36 @@
+# ============================================================
+# Task: Pick and Place
+# ============================================================
+
+task:
+  name: "pick_place"
+  description: "Detect ArUco marker, pick object, place at target location"
+  detector: "aruco"         # aruco | yolo | multi
+
+approach:
+  height_above_m: 0.05
+  speed: 0.3
+
+grasp:
+  depth_below_surface_m: 0.02
+  speed: 0.1
+  close_force: 0.5
+  post_grasp_pause_s: 0.5
+
+lift:
+  height_m: 0.1
+  speed: 0.3
+
+place:
+  height_above_m: 0.03
+  speed: 0.15
+  open_delay_s: 0.3
+
+return:
+  home_on_complete: true
+  home_on_error: true
+
+aruco:
+  dictionary: "DICT_4X4_50"
+  marker_size_m: 0.05
+  marker_ids: []

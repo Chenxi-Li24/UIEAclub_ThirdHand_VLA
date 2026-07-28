@@ -1,0 +1,14 @@
+{
+  "name": "thirdhand-web-control",
+  "version": "1.0.0",
+  "description": "ThirdHand Web Control Panel - direct Startouch SDK control on Ubuntu",
+  "main": "proxy.js",
+  "scripts": {
+    "start": "node proxy.js",
+    "dev": "node proxy.js"
+  },
+  "dependencies": {
+    "express": "^4.21.0",
+    "ws": "^8.18.0"
+  }
+}

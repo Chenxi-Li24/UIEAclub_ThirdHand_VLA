@@ -47,3 +47,7 @@ Thumbs.db
 # Node (if using web frontend build)
 node_modules/
 dist/
+
+# Standalone Startouch web control runtime
+web-control/.env
+web-control/server/web-control.log

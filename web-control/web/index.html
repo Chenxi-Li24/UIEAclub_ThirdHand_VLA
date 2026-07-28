@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ThirdHand - Startouch 机械臂控制</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <!-- 软件停止提示 -->
+  <div id="estop-overlay">
+    <div class="estop-box">
+      <div class="estop-icon">⏹</div>
+      <div class="estop-text" id="stop-title">正在停止 SDK</div>
+      <div class="estop-sub" id="stop-detail">等待电机失能确认；硬件急停请使用独立急停装置</div>
+      <button class="action-btn action-primary" id="btn-stop-reconnect">重新连接 SDK</button>
+    </div>
+  </div>
+
+  <!-- 主布局：grid 三行 -->
+  <div id="app">
+    <!-- 顶部状态栏 -->
+    <header id="topbar">
+      <div class="topbar-brand">
+        <span class="brand-name">ThirdHand</span>
+        <span class="brand-model">Startouch</span>
+      </div>
+
+      <div class="topbar-status">
+        <div class="conn-indicator" id="conn-indicator">
+          <span class="conn-dot" id="conn-dot"></span>
+          <span class="conn-ip" id="conn-ip">未连接</span>
+        </div>
+        <span class="hb-label" id="hb-label">SDK: --</span>
+        <span class="state-badge" id="state-badge">--</span>
+      </div>
+
+      <div class="topbar-actions">
+        <button class="btn-estop" id="btn-estop-top" title="停止 SDK 控制进程">⏹ 软件停止</button>
+        <select id="theme-select" title="切换配色">
+          <option value="deepspace">科技深空</option>
+          <option value="industrial">工业橙黑</option>
+          <option value="cyber">赛博紫黑</option>
+          <option value="dark">暗黑</option>
+          <option value="green">暗绿</option>
+          <option value="blue">暗蓝</option>
+          <option value="purple">暗紫</option>
+          <option value="orange">暗橙</option>
+          <option value="light">亮白</option>
+        </select>
+        <button class="btn-drawer-toggle" id="btn-drawer-toggle" title="控制面板">☰</button>
+      </div>
+    </header>
+
+    <!-- 3D 视口（grid 中间行，自动撑满） -->
+    <div id="viewport">
+      <div id="three-container"></div>
+
+      <!-- 左上角视图工具浮动栏 -->
+      <div id="view-tools">
+        <button class="tool-btn active" id="btn-tool-grid" title="切换网格">⊞</button>
+        <button class="tool-btn active" id="btn-tool-axes" title="切换坐标轴">✛</button>
+        <button class="tool-btn" id="btn-tool-reset" title="重置视角">⟲</button>
+        <div class="tool-divider"></div>
+        <button class="tool-btn active" id="btn-tool-floor" title="地面安装">⬛</button>
+        <button class="tool-btn" id="btn-tool-wall" title="壁挂安装">⬜</button>
+      </div>
+
+      <!-- 连接配置 + 日志开关浮动条 -->
+      <div id="conn-bar">
+        <span class="conn-input">Ubuntu 本机 · can0</span>
+        <button class="conn-btn" id="btn-connect">连接</button>
+        <button class="conn-btn conn-btn-danger" id="btn-disconnect" style="display:none">断开</button>
+        <div class="conn-divider"></div>
+        <button class="conn-btn conn-btn-log" id="btn-log-toggle" title="通信日志">📋日志</button>
+      </div>
+    </div>
+
+    <!-- 底部状态栏 -->
+    <footer id="statusbar">
+      <div class="statusbar-joints" id="statusbar-joints">
+        <span class="sjoint" id="sj1">J1:--°</span>
+        <span class="sjoint" id="sj2">J2:--°</span>
+        <span class="sjoint" id="sj3">J3:--°</span>
+        <span class="sjoint" id="sj4">J4:--°</span>
+        <span class="sjoint" id="sj5">J5:--°</span>
+        <span class="sjoint" id="sj6">J6:--°</span>
+      </div>
+      <div class="statusbar-right">
+        <span class="stcp" id="stcp">TCP: --</span>
+      </div>
+    </footer>
+  </div>
+
+  <!-- 右侧控制抽屉（body 级浮动，不参与 grid） -->
+  <aside id="control-drawer">
+    <div class="drawer-handle" id="drawer-handle" title="收起面板">◂</div>
+
+    <div class="drawer-content">
+      <!-- 关节控制 -->
+      <div class="drawer-section" id="sec-joints">
+        <div class="sec-header">
+          <span>关节控制</span>
+          <button class="sec-toggle">▾</button>
+        </div>
+        <div class="sec-body" id="joint-controls-body">
+          <!-- 动态生成 -->
+        </div>
+      </div>
+
+      <!-- 预设位置 -->
+      <div class="drawer-section" id="sec-presets">
+        <div class="sec-header">
+          <span>预设位置</span>
+          <button class="sec-toggle">▾</button>
+        </div>
+        <div class="sec-body">
+          <div class="preset-grid" id="preset-grid"></div>
+        </div>
+      </div>
+
+      <!-- 操作 -->
+      <div class="drawer-section" id="sec-actions">
+        <div class="sec-header">
+          <span>操作</span>
+          <button class="sec-toggle">▾</button>
+        </div>
+        <div class="sec-body">
+          <button class="action-btn action-primary" id="btn-send">发送到机械臂</button>
+          <div class="action-row">
+            <button class="action-btn action-secondary" id="btn-home">六轴 0° 姿态</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 夹爪控制 -->
+      <div class="drawer-section" id="sec-gripper">
+        <div class="sec-header">
+          <span>夹爪控制</span>
+          <button class="sec-toggle">▾</button>
+        </div>
+        <div class="sec-body">
+          <div class="joint-label">
+            <span class="joint-name">目标开度</span>
+            <span class="joint-value" id="gripper-value">100%</span>
+          </div>
+          <input type="range" class="joint-slider" id="gripper-slider" min="0" max="1" step="0.01" value="1">
+          <div class="joint-label">
+            <span class="joint-name">实时反馈</span>
+            <span class="joint-value" id="gripper-actual">--</span>
+          </div>
+          <div class="action-row">
+            <button class="action-btn action-secondary" id="btn-gripper-close">闭合</button>
+            <button class="action-btn action-secondary" id="btn-gripper-open">打开</button>
+          </div>
+          <button class="action-btn action-primary" id="btn-gripper-send">发送到夹爪</button>
+        </div>
+      </div>
+
+      <!-- 实时角度 -->
+      <div class="drawer-section" id="sec-rt-angles">
+        <div class="sec-header">
+          <span>实时角度</span>
+          <button class="sec-toggle">▾</button>
+        </div>
+        <div class="sec-body">
+          <div class="rt-angles" id="rt-angles-display">
+            <span class="rt-angle" id="rt-j1">J1: --°</span>
+            <span class="rt-angle" id="rt-j2">J2: --°</span>
+            <span class="rt-angle" id="rt-j3">J3: --°</span>
+            <span class="rt-angle" id="rt-j4">J4: --°</span>
+            <span class="rt-angle" id="rt-j5">J5: --°</span>
+            <span class="rt-angle" id="rt-j6">J6: --°</span>
+          </div>
+          <label class="toggle-label">
+            <input type="checkbox" id="chk-sync" checked>
+            <span>同步 3D 模型</span>
+          </label>
+        </div>
+      </div>
+
+      <!-- 末端位置 -->
+      <div class="drawer-section" id="sec-tcp">
+        <div class="sec-header">
+          <span>末端位置 (mm)</span>
+          <button class="sec-toggle">▾</button>
+        </div>
+        <div class="sec-body">
+          <div class="tcp-grid">
+            <span class="tcp-label">X</span><span class="tcp-val" id="tcp-x">0.0</span>
+            <span class="tcp-label">Y</span><span class="tcp-val" id="tcp-y">0.0</span>
+            <span class="tcp-label">Z</span><span class="tcp-val" id="tcp-z">0.0</span>
+            <span class="tcp-label">Rx</span><span class="tcp-val" id="tcp-rx">0.0</span>
+            <span class="tcp-label">Ry</span><span class="tcp-val" id="tcp-ry">0.0</span>
+            <span class="tcp-label">Rz</span><span class="tcp-val" id="tcp-rz">0.0</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- 通信日志面板（底部上滑） -->
+  <div id="log-panel">
+    <div class="log-header">
+      <span>通信日志</span>
+      <button class="log-close" id="btn-log-close">✕</button>
+    </div>
+    <div class="log-area" id="log-area"></div>
+  </div>
+
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "./js/lib/three.module.js",
+      "three/addons/": "./js/lib/"
+    }
+  }
+  </script>
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>

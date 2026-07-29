@@ -68,8 +68,11 @@ MIT — see [LICENSE](LICENSE)
 # Fixed A/B Pick and Place demo
 
 The isolated real-arm workflow is configured for a 25 cm vertical lift,
-15% motion speed, adaptive low-stiffness bottle grasping, and three requested
-A-to-B-to-A cycles. Do not run the web controller at the same time.
+30% operator-verified motion speed, adaptive low-stiffness bottle grasping,
+and one supervised A-to-B-to-A cycle per launch. Each logical route is sent as
+one continuous SDK path. Step confirmation remains enabled until three
+complete real cycles are recorded. Do not run another CAN controller at the
+same time.
 
 Ubuntu local launch:
 

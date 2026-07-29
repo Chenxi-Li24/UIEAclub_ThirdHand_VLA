@@ -191,11 +191,11 @@ validated_cycles="$(awk -F= '/^VALIDATED_REAL_CYCLES=/{print $2}' <<<"$preflight
 if ! "$PYTHON" - "$speed_scale" <<'PY'
 import sys
 speed = float(sys.argv[1])
-if not 0 < speed <= 0.20:
+if not 0 < speed <= 0.30:
     raise SystemExit(1)
 PY
 then
-  fail "SPEED_CHECK" "speed scale must be in (0, 0.20]"
+  fail "SPEED_CHECK" "speed scale must be in (0, 0.30]"
 fi
 
 echo "LOG_DIRECTORY=$LOG_DIR"

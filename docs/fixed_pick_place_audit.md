@@ -8,8 +8,8 @@ Current task settings:
 
 - workflow: `home_transit_ab`
 - vertical lift above A and B: 0.250 m
-- normal target motion speed scale: 0.15
-- current continuous-path validation gate: 0.03, one cycle, step confirmation
+- operator-verified motion speed scale and hard limit: 0.30
+- current launch gate: one cycle with step confirmation
 - normal requested cycles per launch after validation: 3
 - every bottle approach is vertical (`HOME -> A_UP -> A` and
   `HOME -> B_UP -> B`); every departure first returns vertically to the
@@ -72,9 +72,11 @@ Software-only coverage verifies:
 - duplicate Start, invalid Continue, process-launch failure, broken
   confirmation pipes, stop-signal races and process-group Stop are covered.
 
-Continuous real motion has not yet been validated. The first true-arm check
-must be supervised, empty-load, step-by-step and limited to 3%. Only after
-that succeeds may the existing 15% bottle task be retried.
+On 2026-07-30 the onsite operator explicitly confirmed that 30% motion speed
+had been tested and was acceptable. The speed configuration and hard limit
+were therefore raised to 0.30. This confirmation does not prove three
+consecutive complete bottle cycles, so one-cycle step confirmation remains
+enabled and `validated_real_cycles` remains zero.
 
 On 2026-07-29 at 20:40, the 15%/25 cm real run completed cycle 1
 (A→B→A). Adaptive contact was detected at normalized gripper positions 0.749
@@ -169,12 +171,16 @@ for real mode.
 
 - Python compilation: passed.
 - Git whitespace/error check: passed.
-- Standard-library automated tests: 37 passed at the continuous-dashboard
-  implementation checkpoint.
+- Standard-library automated tests: 38 passed after the 30% speed-boundary
+  update, including acceptance at 0.30 and rejection above 0.30.
 - Tests cover normal sequence, missing/invalid/all-zero/non-finite/out-of-limit
   points, timeout, gripper failure, operator abort, Ctrl+C cleanup, dry-run
   orchestration, point-file backup/update, and exclusive lock conflict.
 - Full `STARTOUCH_SIMULATE=1` sequence: passed.
+- The current real point configuration completed all 20 supervised stages in
+  simulation at speed scale 0.30, including both adaptive grasps and final Home.
+- Production preflight passed with `SPEED_SCALE=0.3000`, `CYCLES=1`,
+  `REQUIRE_STEP_CONFIRMATION=1`, and `DEMO_PREFLIGHT_OK`.
 - Full Startouch SDK `dry_run=True` sequence: passed, including gripper state
   completion and SDK destruction/cleanup.
 - SDK import in LumosTouch Python: passed.
@@ -196,8 +202,8 @@ for real mode.
    its owner; never terminate it from this demo.
 2. Confirm an operator is beside the arm, the work area is clear, and the
    hardware E-stop/power disconnect is reachable.
-3. Validate the new continuous path empty-load at 3% with step confirmation.
-4. Only after the 3% path succeeds, restore the verified 15% limit and retry
-   the bottle task.
+3. Continue supervised bottle validation at the operator-verified 30% limit
+   with step confirmation.
+4. Do not exceed 30% or disable step confirmation based only on a partial run.
 5. Record unattended mode only after three consecutive real cycles succeed
    with the bottle remaining centered at both physical fixtures.

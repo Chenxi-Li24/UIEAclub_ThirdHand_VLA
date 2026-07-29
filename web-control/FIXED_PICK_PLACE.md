@@ -13,9 +13,9 @@ vision, Cartesian IK, ROS, or the unfinished VLA control wrappers.
 - The existing bridge retains CAN preflight, stable-state checks, motion
   serialization, all-zero rejection, CAN receive monitoring, and its exclusive
   `/tmp/startouch-web-can0.lock`.
-- Real mode is hard-limited to a speed scale of 20%. The current validated
-  configuration uses 15% and still requires `--confirm-each-step` until three
-  consecutive real cycles succeed.
+- Real mode is hard-limited to the operator-verified speed scale of 30%.
+  The current configuration still requires `--confirm-each-step` until three
+  consecutive complete real cycles succeed.
 - An error or Ctrl+C stops the remaining sequence and requests the bridge's
   SDK `cleanup()` path. This software stop is not a substitute for a reachable
   hardware E-stop or power disconnect.
@@ -72,11 +72,11 @@ reachable, and no other control process is running:
 cd ~/arm/UIEAclub_ThirdHand_VLA-fixed-pick-place
 ~/miniconda3/envs/LumosTouch/bin/python \
   web-control/scripts/fixed_pick_place.py \
-  --real --speed-scale 0.15 --confirm-each-step
+  --real --speed-scale 0.30 --confirm-each-step
 ```
 
-The current A/B sequence repeats three times and uses 25 cm raised transfer
-points:
+The current supervised A/B launch runs one cycle and uses 25 cm raised transfer
+points. Each logical route is submitted as one continuous SDK path:
 
 ```text
 OPEN -> HOME -> A_UP -> A -> ADAPTIVE_GRASP_A -> A_UP -> B_UP -> B -> OPEN

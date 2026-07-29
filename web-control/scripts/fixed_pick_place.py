@@ -21,6 +21,8 @@ from typing import Any, Callable
 import yaml
 
 
+MAX_REAL_SPEED_SCALE = 0.30
+
 POINT_NAMES = (
     "home",
     "pre_pick",
@@ -215,8 +217,13 @@ def load_config(path: Path, *, require_all_points: bool = True) -> dict[str, Any
         )
 
     speed_scale = float(raw.get("speed_scale", 0.05))
-    if not math.isfinite(speed_scale) or not 0 < speed_scale <= 1:
-        raise ConfigurationError("speed_scale must be in (0, 1]")
+    if (
+        not math.isfinite(speed_scale)
+        or not 0 < speed_scale <= MAX_REAL_SPEED_SCALE
+    ):
+        raise ConfigurationError(
+            f"speed_scale must be in (0, {MAX_REAL_SPEED_SCALE:.2f}]"
+        )
 
     motion = raw.get("motion", {})
     gripper = raw.get("gripper", {})
@@ -315,8 +322,13 @@ def load_config(path: Path, *, require_all_points: bool = True) -> dict[str, Any
     if not 1 <= cycles <= 100:
         raise ConfigurationError("demo.cycles must be between 1 and 100")
     demo_speed = float(demo.get("speed_scale", speed_scale))
-    if not math.isfinite(demo_speed) or not 0 < demo_speed <= 0.20:
-        raise ConfigurationError("demo.speed_scale must be in (0, 0.20]")
+    if (
+        not math.isfinite(demo_speed)
+        or not 0 < demo_speed <= MAX_REAL_SPEED_SCALE
+    ):
+        raise ConfigurationError(
+            f"demo.speed_scale must be in (0, {MAX_REAL_SPEED_SCALE:.2f}]"
+        )
     raw["demo"] = {
         **demo,
         "cycles": cycles,
@@ -1018,8 +1030,11 @@ def main() -> int:
                 raise ConfigurationError("--speed-scale must be in (0, 1]")
             config["speed_scale"] = args.speed_scale
         if mode == "real":
-            if config["speed_scale"] > 0.20:
-                raise ConfigurationError("real-arm speed scale must not exceed 0.20")
+            if config["speed_scale"] > MAX_REAL_SPEED_SCALE:
+                raise ConfigurationError(
+                    "real-arm speed scale must not exceed "
+                    f"{MAX_REAL_SPEED_SCALE:.2f}"
+                )
             if (
                 not args.confirm_each_step
                 and (

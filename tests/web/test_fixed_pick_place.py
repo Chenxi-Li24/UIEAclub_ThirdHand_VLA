@@ -300,6 +300,30 @@ class FixedPickPlaceTests(unittest.TestCase):
                     with self.assertRaisesRegex(fixed.ConfigurationError, message):
                         fixed.load_config(write_config(Path(directory), data))
 
+    def test_verified_30_percent_speed_is_allowed_and_remains_the_hard_limit(self):
+        with tempfile.TemporaryDirectory() as directory:
+            config_path = Path(directory)
+
+            at_limit = config_dict()
+            at_limit["speed_scale"] = 0.30
+            at_limit["demo"] = {"speed_scale": 0.30}
+            loaded = fixed.load_config(write_config(config_path, at_limit))
+            self.assertEqual(loaded["speed_scale"], 0.30)
+            self.assertEqual(loaded["demo"]["speed_scale"], 0.30)
+
+            for field in ("speed_scale", "demo.speed_scale"):
+                with self.subTest(field=field):
+                    above_limit = config_dict()
+                    above_limit["demo"] = {"speed_scale": 0.30}
+                    if field == "speed_scale":
+                        above_limit["speed_scale"] = 0.301
+                    else:
+                        above_limit["demo"]["speed_scale"] = 0.301
+                    with self.assertRaisesRegex(
+                        fixed.ConfigurationError, r"\(0, 0\.30\]"
+                    ):
+                        fixed.load_config(write_config(config_path, above_limit))
+
     def test_motion_timeout_stops_sequence(self):
         bridge = FakeBridge("fixed_pick_place:pick")
         runner = fixed.FixedPickPlaceRunner(

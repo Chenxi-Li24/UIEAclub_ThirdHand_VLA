@@ -21,6 +21,37 @@ Python VLA 框架自带的 FastAPI 控制台使用端口 `8000`，两者用途�
 `server/startouch_bridge.py` 负责 SDK 状态读取、CAN 预检、限位校验、轨迹和夹爪
 控制。`startouch_sdk` 是外部依赖，不包含在本仓库中。
 
+## 语音和文字 AI / Voice & Text AI
+
+网页控制台现在提供麦克风和文字对话入口：
+
+```text
+浏览器麦克风或文字
+  -> Voice Protocol v1 WebSocket
+  -> Jetson Voice Bridge
+  -> WhisperASR（仅语音）
+  -> ClaudeAgent
+  -> 最终转写、AI 回复和候选动作
+  -> 网页显示与本地 3D 预览
+```
+
+Voice Bridge 与 Startouch 真实控制链隔离。它不导入 `RobotExecutor`，不连接
+机器人 `/ws` 控制代理，也不会将 AI 候选动作直接发送给机械臂。用户确认候选
+动作时，目前只更新本地 3D 模型和日志。
+
+当前状态：
+
+- Task 1：Jetson ASR GPU 加速基线已经完成。
+- Task 2：final-only Voice Bridge 已在隔离的 GPU 端口 `3002` 完成验收。
+- 正式 `3001` 服务、原始 `voice_agent.py`、系统 Python 和 CPU 环境未被替换。
+- VAD、分段增量 ASR 和实时 `transcript.partial` 属于后续工作。
+
+相关文档：
+
+- [Voice Protocol v1](docs/voice-protocol-v1.md)
+- [本次 Voice Bridge 更新日志](docs/voice-bridge-update-2026-07-30.md)
+- [Jetson Voice Bridge 部署与测试](voice-bridge/README.md)
+
 ## 支持环境
 
 | 系统 | 状态 | Python | Node.js |

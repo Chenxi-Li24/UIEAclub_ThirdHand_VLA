@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { STLLoader } from 'three/addons/loaders/STLLoader.js';
 import { ColladaLoader } from 'three/addons/loaders/ColladaLoader.js';
+import { VoiceControl } from './voice-control.js';
 console.log('[main.js] Modules imported, THREE keys:', Object.keys(THREE).length);
 
 // === SceneManager ===
@@ -148,6 +149,7 @@ class ArmModel {
     this.scene.add(this.mount);
     this.robot = null;
     this.jointAngles = [0, 0, 0, 0, 0, 0];
+    this.gripperPosition = 1;
     this.jointNames = ['joint1', 'joint2', 'joint3', 'joint4', 'joint5', 'joint6'];
     this.loaded = false;
     this.installMode = 'floor';
@@ -218,9 +220,14 @@ class ArmModel {
 
   setGripperPosition(position) {
     if (!this.robot || !Number.isFinite(position)) return;
-    const opening = Math.max(0, Math.min(1, position)) * 0.0425;
+    this.gripperPosition = Math.max(0, Math.min(1, position));
+    const opening = this.gripperPosition * 0.0425;
     this.robot.joints.gripper_joint1?.setJointValue(-opening);
     this.robot.joints.gripper_joint2?.setJointValue(opening);
+  }
+
+  getGripperPosition() {
+    return this.gripperPosition;
   }
 
   setInstallMode(mode) {
@@ -337,6 +344,22 @@ class UIControls {
     this.robotStateReady = false;
     this.gripperTargetEdited = false;
     this._drawerCollapsed = false;
+    this.drawer = null;
+    this.logPanel = null;
+    this.logButton = null;
+    this.gripperSlider = null;
+    this.lastRobotState = {
+      joints: null,
+      gripperPosition: null,
+      stateName: null
+    };
+    this.localVoicePreview = {
+      joints: false,
+      gripper: false,
+      timer: 0,
+      baselineJoints: null,
+      baselineGripperPosition: null
+    };
   }
 
   build() {
@@ -371,6 +394,7 @@ class UIControls {
       valEl.textContent = defaultVal.toFixed(1) + '°';
 
       slider.addEventListener('input', () => {
+        this.clearVoicePreview({ restore: true, reason: '手动关节调整' });
         const val = parseFloat(slider.value);
         valEl.textContent = val.toFixed(1) + '°';
         this._updateArm(i, val);
@@ -381,17 +405,20 @@ class UIControls {
 
     // 连接按钮
     document.getElementById('btn-connect').addEventListener('click', () => {
+      this.clearVoicePreview({ restore: true, reason: '连接机械臂' });
       this.ws.send({ cmd: 'connect' });
       this._log('→ 连接 Startouch SDK (can0)');
       this._setConnStatus('connecting', 'Startouch · can0');
     });
 
     document.getElementById('btn-disconnect').addEventListener('click', () => {
+      this.clearVoicePreview({ restore: true, reason: '断开机械臂' });
       this.ws.send({ cmd: 'disconnect' });
       this._log('→ 断开连接');
       this._setConnStatus('disconnected', '');
     });
     document.getElementById('btn-stop-reconnect').addEventListener('click', () => {
+      this.clearVoicePreview({ restore: true, reason: '重新连接机械臂' });
       this.ws.send({ cmd: 'connect' });
       this._log('→ 重新连接 Startouch SDK');
     });
@@ -403,12 +430,14 @@ class UIControls {
 
     // SDK software stop. A hardware E-stop remains a separate safety device.
     document.getElementById('btn-estop-top').addEventListener('click', () => {
+      this.clearVoicePreview({ restore: true, reason: '软件停止' });
       this.ws.send({ cmd: 'software_stop' });
       this._log('→ 软件停止并断开 SDK');
     });
 
     // Move to the all-zero joint pose; this does not redefine robot calibration.
     document.getElementById('btn-home').addEventListener('click', () => {
+      this.clearVoicePreview({ restore: true, reason: '手动回零' });
       this.arm.goHome();
       const zeros = new Array(this.arm.jointNames.length).fill(0);
       this.setJointValues(zeros);
@@ -421,21 +450,19 @@ class UIControls {
       this.syncMode = e.target.checked;
     });
 
-    const gripperSlider = document.getElementById('gripper-slider');
-    const setGripperValue = value => {
-      gripperSlider.value = value;
-      document.getElementById('gripper-value').textContent = `${Math.round(value * 100)}%`;
-    };
+    this.gripperSlider = document.getElementById('gripper-slider');
     const sendGripperValue = value => {
+      this.clearVoicePreview({ restore: true, reason: '手动夹爪控制' });
       const position = Math.max(0, Math.min(1, Number(value)));
-      setGripperValue(position);
+      this._setGripperTargetValue(position);
       this.gripperTargetEdited = true;
       this.ws.send({ cmd: 'gripper', position });
       this._log(`→ 夹爪 ${(position * 100).toFixed(0)}%`);
     };
-    gripperSlider.addEventListener('input', () => {
+    this.gripperSlider.addEventListener('input', () => {
+      this.clearVoicePreview({ restore: true, reason: '手动夹爪调整' });
       this.gripperTargetEdited = true;
-      setGripperValue(Number(gripperSlider.value));
+      this._setGripperTargetValue(Number(this.gripperSlider.value));
     });
     document.getElementById('btn-gripper-close').addEventListener('click', () => {
       sendGripperValue(0);
@@ -444,35 +471,23 @@ class UIControls {
       sendGripperValue(1);
     });
     document.getElementById('btn-gripper-send').addEventListener('click', () => {
-      sendGripperValue(gripperSlider.value);
+      sendGripperValue(this.gripperSlider.value);
     });
 
     // 抽屉收起/展开
-    const drawer = document.getElementById('control-drawer');
+    this.drawer = document.getElementById('control-drawer');
     const handle = document.getElementById('drawer-handle');
     const toggleBtn = document.getElementById('btn-drawer-toggle');
-
-    const collapseDrawer = () => {
-      drawer.classList.add('collapsed');
-      this._drawerCollapsed = true;
-    };
-    const expandDrawer = () => {
-      drawer.classList.remove('collapsed');
-      this._drawerCollapsed = false;
-    };
-    const toggleDrawer = () => {
-      if (this._drawerCollapsed) expandDrawer(); else collapseDrawer();
-    };
 
     // handle 固定显示 ◂，仅收起时可见（CSS 控制）
     handle.textContent = '◂';
     handle.addEventListener('click', (e) => {
       e.stopPropagation();
-      toggleDrawer();
+      this.toggleDrawer();
     });
     toggleBtn.addEventListener('click', (e) => {
       e.stopPropagation();
-      toggleDrawer();
+      this.toggleDrawer();
     });
 
     // section 折叠
@@ -498,20 +513,18 @@ class UIControls {
     document.getElementById('btn-disconnect').addEventListener('click', e => e.stopPropagation());
 
     // 日志面板（按钮在连接栏中）
-    const logPanel = document.getElementById('log-panel');
-    const logBtn = document.getElementById('btn-log-toggle');
-    logBtn.addEventListener('click', (e) => {
+    this.logPanel = document.getElementById('log-panel');
+    this.logButton = document.getElementById('btn-log-toggle');
+    this.logButton.addEventListener('click', (e) => {
       e.stopPropagation();
-      const open = logPanel.classList.toggle('open');
-      logBtn.classList.toggle('active', open);
+      const open = this.logPanel.classList.toggle('open');
+      this.logButton.classList.toggle('active', open);
     });
-    document.getElementById('btn-log-close').addEventListener('click', () => {
-      logPanel.classList.remove('open');
-      logBtn.classList.remove('active');
-    });
+    document.getElementById('btn-log-close').addEventListener('click', () => this.closeLog());
 
     // WebSocket 事件监听
     this.ws.on('connection', (data) => {
+      this.clearVoicePreview({ restore: false, reason: '连接状态变化' });
       if (data.connected) {
         this.gripperTargetEdited = false;
         this.robotStateReady = false;
@@ -541,6 +554,7 @@ class UIControls {
     });
 
     this.ws.on('config', (data) => {
+      this.clearVoicePreview({ restore: false, reason: '控制配置更新' });
       console.log('[UI] config received, presets:', data.presets ? Object.keys(data.presets) : 'none');
       if (data.presets) this._setPresets(data.presets);
       if (data.jointLimits) this._setJointLimits(data.jointLimits);
@@ -558,13 +572,23 @@ class UIControls {
     });
 
     this.ws.on('robot_state', (data) => {
+      if (data.joints && data.joints.length >= 6) {
+        this.lastRobotState.joints = data.joints.slice(0, 6).map(Number);
+      }
+      if (Number.isFinite(data.gripperPosition)) {
+        this.lastRobotState.gripperPosition = Number(data.gripperPosition);
+      }
+      if (data.stateName) {
+        this.lastRobotState.stateName = data.stateName;
+      }
+
       // 更新实时角度
       if (data.joints && data.joints.length >= 6) {
         this.robotStateReady = true;
         this._setMotionControlsEnabled(true);
         this._updateRTAngles(data.joints);
         // 同步滑块
-        if (this.syncMode) {
+        if (this.syncMode && !this.localVoicePreview.joints) {
           this.setJointValues(data.joints);
         }
       }
@@ -576,7 +600,9 @@ class UIControls {
         this._updateTCP(data.tcpPos, data.tcpEuler);
       }
       if (Number.isFinite(data.gripperPosition)) {
-        this.arm.setGripperPosition(data.gripperPosition);
+        if (!this.localVoicePreview.gripper) {
+          this.arm.setGripperPosition(data.gripperPosition);
+        }
         const actual = document.getElementById('gripper-actual');
         if (actual) {
           const distance = Number.isFinite(data.gripperDistanceMm)
@@ -585,7 +611,7 @@ class UIControls {
           actual.textContent = `${(data.gripperPosition * 100).toFixed(1)}%${distance}`;
         }
         if (!this.gripperTargetEdited) {
-          setGripperValue(data.gripperPosition);
+          this._setGripperTargetValue(data.gripperPosition);
         }
       }
     });
@@ -615,6 +641,7 @@ class UIControls {
     });
 
     this.ws.on('software_stop', data => {
+      this.clearVoicePreview({ restore: false, reason: '软件停止状态' });
       document.getElementById('estop-overlay').classList.add('active');
       const title = document.getElementById('stop-title');
       const detail = document.getElementById('stop-detail');
@@ -638,6 +665,173 @@ class UIControls {
       this._setPresets(this.presets);
     }
     this._setMotionControlsEnabled(false);
+  }
+
+  collapseDrawer() {
+    if (!this.drawer) this.drawer = document.getElementById('control-drawer');
+    this.drawer?.classList.add('collapsed');
+    this._drawerCollapsed = true;
+  }
+
+  expandDrawer() {
+    if (!this.drawer) this.drawer = document.getElementById('control-drawer');
+    this.drawer?.classList.remove('collapsed');
+    this._drawerCollapsed = false;
+  }
+
+  toggleDrawer() {
+    if (this._drawerCollapsed) this.expandDrawer();
+    else this.collapseDrawer();
+  }
+
+  closeLog() {
+    if (!this.logPanel) this.logPanel = document.getElementById('log-panel');
+    if (!this.logButton) this.logButton = document.getElementById('btn-log-toggle');
+    this.logPanel?.classList.remove('open');
+    this.logButton?.classList.remove('active');
+  }
+
+  appendLocalLog(message) {
+    this._log(`[本地模拟 · 未发送至 LUMOS] ${message}`);
+  }
+
+  supportsVoiceCandidate(candidate) {
+    const intent = candidate?.intent;
+    const args = candidate?.args || {};
+    if (intent === 'robot.estop' || intent === 'robot.status') return true;
+    if (!this.arm.loaded) return false;
+    if (intent === 'robot.preset') return args.name === 'home';
+    if (['gripper.open', 'gripper.close', 'gripper.grip'].includes(intent)) return true;
+    return intent === 'gripper.set_position' &&
+      Number.isInteger(args.position) &&
+      args.position >= 0 &&
+      args.position <= 3800;
+  }
+
+  simulateVoiceCandidate(candidate) {
+    if (!this.supportsVoiceCandidate(candidate)) {
+      return { ok: false, message: '该动作不支持 LUMOS 本地模拟。' };
+    }
+
+    const intent = candidate.intent;
+    const args = candidate.args || {};
+    if (intent === 'robot.status') {
+      const joints = this.lastRobotState.joints || this.arm.getJointAngles();
+      const state = this.lastRobotState.stateName || 'LOCAL';
+      const message = `本地状态 ${state}；关节 ${joints.map(value => `${Number(value).toFixed(1)}°`).join(' / ')}`;
+      this.appendLocalLog(message);
+      return { ok: true, message };
+    }
+
+    if (intent === 'robot.estop') {
+      const message = '已模拟“停止”意图；未触发软件停止，也未触发硬件急停。';
+      this.appendLocalLog(message);
+      return { ok: true, message };
+    }
+
+    if (intent === 'robot.preset' && args.name === 'home') {
+      const joints = new Array(this.arm.jointNames.length).fill(0);
+      this._startVoicePreview({ joints }, 'LUMOS 六轴零位预览');
+      return { ok: true, message: '正在本地预览 LUMOS 六轴零位，5 秒后恢复实时模型。' };
+    }
+
+    let gripperPosition;
+    if (intent === 'gripper.open') gripperPosition = 1;
+    if (intent === 'gripper.close' || intent === 'gripper.grip') gripperPosition = 0;
+    if (intent === 'gripper.set_position') gripperPosition = args.position / 3800;
+
+    if (Number.isFinite(gripperPosition)) {
+      this._startVoicePreview(
+        { gripperPosition },
+        `LUMOS 夹爪 ${(gripperPosition * 100).toFixed(0)}% 预览`
+      );
+      return {
+        ok: true,
+        message: `正在本地预览夹爪 ${(gripperPosition * 100).toFixed(0)}%，5 秒后恢复实时模型。`
+      };
+    }
+
+    return { ok: false, message: '该动作不支持 LUMOS 本地模拟。' };
+  }
+
+  _startVoicePreview(preview, label) {
+    clearTimeout(this.localVoicePreview.timer);
+    if (!this.localVoicePreview.joints && !this.localVoicePreview.gripper) {
+      this.localVoicePreview.baselineJoints = this.arm.getJointAngles();
+      this.localVoicePreview.baselineGripperPosition = this.arm.getGripperPosition();
+    }
+    if (Array.isArray(preview.joints)) {
+      this.localVoicePreview.joints = true;
+      this.arm.setJointAngles(preview.joints);
+      this._updateTCP();
+    }
+    if (Number.isFinite(preview.gripperPosition)) {
+      this.localVoicePreview.gripper = true;
+      this.arm.setGripperPosition(preview.gripperPosition);
+    }
+    const indicator = document.getElementById('voice-preview-indicator');
+    const indicatorLabel = document.getElementById('voice-preview-label');
+    if (indicatorLabel) indicatorLabel.textContent = label;
+    if (indicator) {
+      indicator.hidden = false;
+      indicator.dataset.previewJoints = String(this.localVoicePreview.joints);
+      indicator.dataset.previewGripper = String(this.localVoicePreview.gripper);
+    }
+    this.appendLocalLog(`${label}；5 秒后恢复实时模型`);
+    this.localVoicePreview.timer = setTimeout(() => {
+      this.clearVoicePreview({ restore: true, reason: '本地模拟预览结束' });
+    }, 5000);
+  }
+
+  clearVoicePreview({ restore = true, reason = '' } = {}) {
+    const hadPreview = this.localVoicePreview.joints || this.localVoicePreview.gripper;
+    clearTimeout(this.localVoicePreview.timer);
+    this.localVoicePreview.timer = 0;
+
+    if (restore && this.localVoicePreview.joints && this.lastRobotState.joints) {
+      this.arm.setJointAngles(this.lastRobotState.joints);
+      this._updateTCP();
+    } else if (
+      restore &&
+      this.localVoicePreview.joints &&
+      this.localVoicePreview.baselineJoints
+    ) {
+      this.arm.setJointAngles(this.localVoicePreview.baselineJoints);
+      this._updateTCP();
+    }
+    if (
+      restore &&
+      this.localVoicePreview.gripper &&
+      Number.isFinite(this.lastRobotState.gripperPosition)
+    ) {
+      this.arm.setGripperPosition(this.lastRobotState.gripperPosition);
+    } else if (
+      restore &&
+      this.localVoicePreview.gripper &&
+      Number.isFinite(this.localVoicePreview.baselineGripperPosition)
+    ) {
+      this.arm.setGripperPosition(this.localVoicePreview.baselineGripperPosition);
+    }
+
+    this.localVoicePreview.joints = false;
+    this.localVoicePreview.gripper = false;
+    this.localVoicePreview.baselineJoints = null;
+    this.localVoicePreview.baselineGripperPosition = null;
+    const indicator = document.getElementById('voice-preview-indicator');
+    if (indicator) {
+      indicator.hidden = true;
+      delete indicator.dataset.previewJoints;
+      delete indicator.dataset.previewGripper;
+    }
+    if (hadPreview && reason) this.appendLocalLog(`${reason}，已退出本地预览`);
+  }
+
+  _setGripperTargetValue(value) {
+    const slider = this.gripperSlider || document.getElementById('gripper-slider');
+    const normalized = Math.max(0, Math.min(1, Number(value)));
+    if (slider) slider.value = normalized;
+    const label = document.getElementById('gripper-value');
+    if (label) label.textContent = `${Math.round(normalized * 100)}%`;
   }
 
   _setMotionControlsEnabled(enabled) {
@@ -726,6 +920,7 @@ class UIControls {
   }
 
   _sendServo() {
+    this.clearVoicePreview({ restore: true, reason: '发送手动关节目标' });
     const joints = this.arm.getJointAngles();
     this.ws.send({ cmd: 'servo', joints: joints });
     this._log(`→ servo ${joints.map(j => j.toFixed(1)).join(' ')}`);
@@ -764,6 +959,7 @@ class UIControls {
       btn.title = joints.map(j => j.toFixed(1)).join(', ');
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
+        this.clearVoicePreview({ restore: true, reason: '手动预设控制' });
         this.setJointValues(joints);
         this.ws.send({ cmd: 'preset', name: name });
         this._log(`→ ${name}`);
@@ -819,14 +1015,53 @@ class UIControls {
 
 
 // === App Entry ===
+function createLocalCandidateSimulator(getUi) {
+  return Object.freeze({
+    supports(candidate) {
+      return Boolean(getUi()?.supportsVoiceCandidate(candidate));
+    },
+    simulate(candidate) {
+      const ui = getUi();
+      if (!ui) return { ok: false, message: 'LUMOS 本地模型尚未准备好。' };
+      return ui.simulateVoiceCandidate(candidate);
+    }
+  });
+}
+
 function startApp() {
   console.log('[App] ThirdHand Web Control starting...');
+
+  let ui = null;
+  const voice = new VoiceControl({
+    candidateSimulator: createLocalCandidateSimulator(() => ui),
+    onPanelOpen: () => {
+      if (ui) {
+        ui.closeLog();
+        ui.collapseDrawer();
+        return;
+      }
+      document.getElementById('log-panel')?.classList.remove('open');
+      document.getElementById('btn-log-toggle')?.classList.remove('active');
+      document.getElementById('control-drawer')?.classList.add('collapsed');
+    }
+  });
+  voice.init();
+
+  document.getElementById('btn-log-toggle')?.addEventListener('click', () => {
+    voice.closePanel();
+  });
+  document.getElementById('btn-drawer-toggle')?.addEventListener('click', () => {
+    if (window.innerWidth <= 900) voice.closePanel();
+  });
+  document.getElementById('drawer-handle')?.addEventListener('click', () => {
+    if (window.innerWidth <= 900) voice.closePanel();
+  });
 
   const ws = new WSClient();
   const viewport = document.getElementById('three-container');
   const scene = new SceneManager(viewport);
   const arm = new ArmModel(scene.scene);
-  const ui = new UIControls(ws, arm);
+  ui = new UIControls(ws, arm);
 
   // 主题切换
   const themeSelect = document.getElementById('theme-select');

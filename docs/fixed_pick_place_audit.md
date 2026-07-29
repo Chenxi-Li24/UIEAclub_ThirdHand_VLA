@@ -8,8 +8,9 @@ Current task settings:
 
 - workflow: `home_transit_ab`
 - vertical lift above A and B: 0.250 m
-- motion speed scale: 0.15
-- requested cycles per launch: 3
+- normal target motion speed scale: 0.15
+- current continuous-path validation gate: 0.03, one cycle, step confirmation
+- normal requested cycles per launch after validation: 3
 - every bottle approach is vertical (`HOME -> A_UP -> A` and
   `HOME -> B_UP -> B`); every departure first returns vertically to the
   corresponding raised point

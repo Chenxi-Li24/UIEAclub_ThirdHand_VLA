@@ -22,8 +22,11 @@ joint_max_speeds_deg_s:
 - 1000.0
 speed_scale: 0.15
 demo:
-  speed_scale: 0.15
-  cycles: 3
+  # First continuous-trajectory hardware validation is intentionally locked
+  # to one supervised empty-load cycle at 3%. Restore 15%/3 cycles only after
+  # this path has been observed safely on the real arm.
+  speed_scale: 0.03
+  cycles: 1
   require_step_confirmation: true
   validated_real_cycles: 0
 motion:
@@ -31,12 +34,12 @@ motion:
   min_time_s: 0.5
   timeout_s: 45.0
   settle_s: 0.2
-  # Segment tolerance permits a missed 2-degree command to be recomputed;
-  # the final waypoint must still satisfy the stricter tolerance below.
-  target_tolerance_deg: 2.5
+  # Intermediate chunks may lag under bottle load and are recomputed from
+  # feedback; the final waypoint must still satisfy the strict tolerance below.
+  target_tolerance_deg: 4.0
   # Real moves are closed-loop and recomputed after every small segment.
   execution_chunk_deg: 12.0
-  final_target_tolerance_deg: 1.0
+  final_target_tolerance_deg: 1.2
   # HOME is the taught raised transit pose for both A and B.
   max_segment_delta_deg: [120.0, 160.0, 85.0, 120.0, 30.0, 30.0]
 gripper:

@@ -248,6 +248,12 @@ def main() -> int:
             )
         except OSError as exc:
             print(f"浏览器打开失败，请手动访问 {url}: {exc}", flush=True)
+
+    def request_shutdown(_signum=None, _frame=None):
+        raise KeyboardInterrupt
+
+    signal.signal(signal.SIGINT, request_shutdown)
+    signal.signal(signal.SIGTERM, request_shutdown)
     try:
         server.serve_forever()
     except KeyboardInterrupt:

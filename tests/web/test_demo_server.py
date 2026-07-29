@@ -43,6 +43,20 @@ class FakeProcess:
 
 
 class DemoServerTests(unittest.TestCase):
+    def test_page_has_start_stop_status_and_log(self):
+        html = (ROOT / "web-control" / "demo" / "index.html").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn('id="start-demo"', html)
+        self.assertIn('id="stop-demo"', html)
+        self.assertIn('id="demo-status"', html)
+        self.assertIn('id="demo-log"', html)
+
+    def test_server_defaults_to_ubuntu_localhost(self):
+        module = load_server()
+        self.assertEqual(module.DEFAULT_HOST, "127.0.0.1")
+        self.assertEqual(module.DEFAULT_PORT, 8766)
+
     def test_idle_status_does_not_spawn_or_open_can(self):
         module = load_server()
         calls = []

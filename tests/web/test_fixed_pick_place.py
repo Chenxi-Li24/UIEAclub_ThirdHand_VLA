@@ -285,6 +285,27 @@ class FixedPickPlaceTests(unittest.TestCase):
         self.assertEqual(bridge.calls, [("connect",)])
         self.assertIs(bridge.closed_failed, True)
 
+    def test_closed_confirmation_channel_is_a_clean_user_abort(self):
+        bridge = FakeBridge()
+
+        def closed_channel(_prompt):
+            raise EOFError("closed")
+
+        runner = fixed.FixedPickPlaceRunner(
+            bridge,
+            config_dict(),
+            "real",
+            logging.getLogger("test"),
+            confirm_each_step=True,
+            confirm=closed_channel,
+        )
+        with self.assertRaisesRegex(
+            fixed.UserAbort,
+            "confirmation channel closed",
+        ):
+            runner.run()
+        self.assertIs(bridge.closed_failed, True)
+
     def test_dry_run_mode_uses_same_sequence_without_real_bridge(self):
         bridge = FakeBridge()
         runner = fixed.FixedPickPlaceRunner(

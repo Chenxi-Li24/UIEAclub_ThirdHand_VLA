@@ -754,9 +754,13 @@ class FixedPickPlaceRunner:
     def _confirm_step(self, state: str) -> None:
         if not self.confirm_each_step:
             return
-        answer = self.confirm(
-            f"[{state}] Press Enter to execute this step; type STOP to abort: "
-        )
+        print(f"AWAITING_CONFIRMATION={state}", flush=True)
+        try:
+            answer = self.confirm(
+                f"[{state}] Press Enter to execute this step; type STOP to abort: "
+            )
+        except EOFError as exc:
+            raise UserAbort("operator confirmation channel closed") from exc
         if answer.strip().upper() == "STOP":
             raise UserAbort(f"operator aborted before {state}")
 

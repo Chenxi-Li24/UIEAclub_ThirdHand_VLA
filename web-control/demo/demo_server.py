@@ -73,6 +73,7 @@ class DemoController:
             process = self._popen_factory(
                 ["bash", str(self.root / "scripts" / "demo_fixed_pick_place.sh")],
                 cwd=str(self.root),
+                stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
                 text=True,
@@ -102,13 +103,33 @@ class DemoController:
         self._killpg(pid, signal.SIGINT)
         return True
 
+    def continue_step(self) -> bool:
+        with self._lock:
+            process = self._process
+            if (
+                process is None
+                or process.poll() is not None
+                or self._state != "WAITING_CONFIRMATION"
+                or process.stdin is None
+            ):
+                return False
+            process.stdin.write("\n")
+            process.stdin.flush()
+            self._state = "RUNNING"
+            self._message = "已确认，正在执行当前步骤"
+            return True
+
     def _consume_line(self, raw_line: str) -> None:
         line = raw_line.rstrip("\r\n")
         if not line:
             return
         with self._lock:
             self._log_tail.append(line)
-            if line == "RESOURCE_CONFLICT":
+            if line.startswith("AWAITING_CONFIRMATION="):
+                self._state = "WAITING_CONFIRMATION"
+                self._stage = line.split("=", 1)[1] or "UNKNOWN"
+                self._message = "等待现场人员点击“执行下一步”"
+            elif line == "RESOURCE_CONFLICT":
                 self._resource_conflict = True
                 self._state = "FAILED"
                 self._message = "RESOURCE_CONFLICT"
@@ -200,6 +221,13 @@ class DemoRequestHandler(SimpleHTTPRequestHandler):
             self._json(
                 HTTPStatus.ACCEPTED if stopped else HTTPStatus.CONFLICT,
                 {"accepted": stopped, **self.controller.status()},
+            )
+            return
+        if path == "/api/continue":
+            continued = self.controller.continue_step()
+            self._json(
+                HTTPStatus.ACCEPTED if continued else HTTPStatus.CONFLICT,
+                {"accepted": continued, **self.controller.status()},
             )
             return
         self._json(HTTPStatus.NOT_FOUND, {"error": "not found"})

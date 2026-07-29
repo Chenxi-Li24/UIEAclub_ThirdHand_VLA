@@ -106,6 +106,12 @@ SIGINT only to the page-owned process group; the runner executes SDK cleanup
 and motor disable, and the arm remains at its current pose. It does not offer
 any function to terminate an unrelated controller.
 
+When `--confirm-each-step` is active, the page shows
+`WAITING_CONFIRMATION` and enables the yellow “执行下一步” button. Each click
+writes exactly one confirmation to the owned runner. Closing the confirmation
+channel is handled as a clean operator abort with cleanup rather than an
+uncaught `EOFError`.
+
 For smooth motion, each logical route is interpolated into points no farther
 than 12° apart and submitted as one SDK `set_joint_waypoints` call. This keeps
 the bounds check without forcing the arm to decelerate to zero at every

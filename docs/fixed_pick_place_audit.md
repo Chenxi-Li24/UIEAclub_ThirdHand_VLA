@@ -60,6 +60,10 @@ Software-only coverage verifies:
 - the dashboard is idle without spawning a robot process;
 - Stop signals only the dashboard-owned process group;
 - `RESOURCE_CONFLICT` is reported without signalling the conflicting process.
+- supervised confirmation is transported through the dashboard-owned stdin;
+  the yellow “执行下一步” button confirms one displayed stage at a time;
+- a closed confirmation channel becomes a clean operator abort instead of an
+  uncaught `EOFError`.
 
 Continuous real motion has not yet been validated. The first true-arm check
 must be supervised, empty-load, step-by-step and limited to 3%. Only after
@@ -158,7 +162,7 @@ for real mode.
 
 - Python compilation: passed.
 - Git whitespace/error check: passed.
-- Standard-library automated tests: 25 passed at the continuous-dashboard
+- Standard-library automated tests: 28 passed at the continuous-dashboard
   implementation checkpoint.
 - Tests cover normal sequence, missing/invalid/all-zero/non-finite/out-of-limit
   points, timeout, gripper failure, operator abort, Ctrl+C cleanup, dry-run

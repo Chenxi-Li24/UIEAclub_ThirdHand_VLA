@@ -103,6 +103,12 @@ motors, and leaves the arm at its current pose. It never stops another user's
 process. If the manual web controller or another robot task is active, the
 page reports `RESOURCE_CONFLICT`.
 
+While supervised step confirmation is required, the page enters
+`WAITING_CONFIRMATION` before each logical action and enables the yellow
+“执行下一步” button. The button confirms only the currently displayed stage.
+After three consecutive validated real cycles, the configured unattended
+demo can run without per-step confirmation.
+
 Each safe logical route now sends one multi-waypoint SDK trajectory, so the
 12° interpolation points no longer cause repeated stop/start motion. The arm
 still stops at Home, the A/B raised points, and the grasp/release points where

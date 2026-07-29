@@ -8,6 +8,7 @@ const elements = {
   log: document.getElementById('demo-log'),
   lastLog: document.getElementById('last-log'),
   start: document.getElementById('start-demo'),
+  continue: document.getElementById('continue-demo'),
   stop: document.getElementById('stop-demo'),
 };
 
@@ -30,6 +31,8 @@ function render(data) {
     lastText = text;
   }
   elements.start.disabled = data.owned;
+  elements.continue.disabled =
+    !data.owned || data.state !== 'WAITING_CONFIRMATION';
   elements.stop.disabled = !data.owned;
 }
 
@@ -69,6 +72,10 @@ elements.stop.addEventListener('click', () => {
     '机械臂停留在当前位置。是否停止？'
   );
   if (confirmed) request('/api/stop');
+});
+
+elements.continue.addEventListener('click', () => {
+  request('/api/continue');
 });
 
 document.getElementById('scroll-log').addEventListener('click', () => {

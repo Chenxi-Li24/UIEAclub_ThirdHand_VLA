@@ -25,6 +25,7 @@ class FakeProcess:
     def __init__(self, output="", returncode=None):
         self.pid = 4242
         self.stdout = io.StringIO(output)
+        self.stdin = io.StringIO()
         self._returncode = returncode
         self._finished = threading.Event()
         if returncode is not None:
@@ -49,6 +50,7 @@ class DemoServerTests(unittest.TestCase):
         )
         self.assertIn('id="start-demo"', html)
         self.assertIn('id="stop-demo"', html)
+        self.assertIn('id="continue-demo"', html)
         self.assertIn('id="demo-status"', html)
         self.assertIn('id="demo-log"', html)
 
@@ -86,6 +88,21 @@ class DemoServerTests(unittest.TestCase):
         self.assertTrue(controller.start())
         self.assertTrue(controller.stop())
         self.assertEqual(signals, [(process.pid, signal.SIGINT)])
+
+    def test_continue_writes_only_when_owned_runner_is_waiting(self):
+        module = load_server()
+        process = FakeProcess()
+        controller = module.DemoController(
+            ROOT,
+            popen_factory=lambda *args, **kwargs: process,
+        )
+        self.assertFalse(controller.continue_step())
+        self.assertTrue(controller.start())
+        controller._consume_line("AWAITING_CONFIRMATION=OPEN_GRIPPER_READY")
+        self.assertEqual(controller.status()["state"], "WAITING_CONFIRMATION")
+        self.assertTrue(controller.continue_step())
+        self.assertEqual(process.stdin.getvalue(), "\n")
+        process.finish(130)
 
     def test_resource_conflict_is_reported_without_signalling(self):
         module = load_server()

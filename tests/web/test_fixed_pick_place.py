@@ -91,6 +91,25 @@ class FakeBridge:
 
 
 class FixedPickPlaceTests(unittest.TestCase):
+    def run_launcher_mode_validation(self, **overrides):
+        env = os.environ.copy()
+        env.update(
+            {
+                "DEMO_MODE_VALIDATE_ONLY": "1",
+                "DEMO_PREFLIGHT_ONLY": "1",
+                **overrides,
+            }
+        )
+        return subprocess.run(
+            ["bash", str(ROOT / "scripts" / "demo_fixed_pick_place.sh")],
+            cwd=ROOT,
+            env=env,
+            text=True,
+            capture_output=True,
+            timeout=30,
+            check=False,
+        )
+
     def test_full_real_config_simulation_completes_with_confirmations(self):
         result = subprocess.run(
             [
@@ -311,6 +330,56 @@ class FixedPickPlaceTests(unittest.TestCase):
         self.assertIn("trap forward_stop INT TERM", script)
         self.assertIn('kill -INT "$runner_pid"', script)
         self.assertIn('"$PYTHON" "${runner_args[@]}" <&0 &', script)
+
+    def test_launcher_accepts_only_the_fixed_automatic_tuple(self):
+        result = self.run_launcher_mode_validation(
+            DEMO_RUN_MODE="automatic-three-cycle",
+            DEMO_CYCLES="3",
+            DEMO_CONFIRM_EACH_STEP="0",
+        )
+        output = result.stdout + result.stderr
+        self.assertEqual(result.returncode, 0, output)
+        self.assertIn("RUN_MODE=automatic-three-cycle", output)
+        self.assertIn("CYCLES=3", output)
+        self.assertIn("REQUIRE_STEP_CONFIRMATION=0", output)
+        self.assertIn("DEMO_MODE_VALIDATION_OK", output)
+
+    def test_launcher_rejects_invalid_automatic_tuples_before_preflight(self):
+        cases = [
+            {
+                "DEMO_RUN_MODE": "unknown",
+                "DEMO_CYCLES": "3",
+                "DEMO_CONFIRM_EACH_STEP": "0",
+            },
+            {
+                "DEMO_RUN_MODE": "automatic-three-cycle",
+                "DEMO_CYCLES": "2",
+                "DEMO_CONFIRM_EACH_STEP": "0",
+            },
+            {
+                "DEMO_RUN_MODE": "automatic-three-cycle",
+                "DEMO_CYCLES": "3",
+                "DEMO_CONFIRM_EACH_STEP": "1",
+            },
+        ]
+        for overrides in cases:
+            with self.subTest(overrides=overrides):
+                result = self.run_launcher_mode_validation(**overrides)
+                output = result.stdout + result.stderr
+                self.assertNotEqual(result.returncode, 0, output)
+                self.assertIn("FAILED_STAGE=MODE_CHECK", output)
+                self.assertNotIn("RUN_COMMAND=", output)
+
+    def test_launcher_rejects_automatic_overrides_in_manual_mode(self):
+        result = self.run_launcher_mode_validation(
+            DEMO_RUN_MODE="manual",
+            DEMO_CYCLES="3",
+            DEMO_CONFIRM_EACH_STEP="0",
+        )
+        output = result.stdout + result.stderr
+        self.assertNotEqual(result.returncode, 0, output)
+        self.assertIn("FAILED_STAGE=MODE_CHECK", output)
+        self.assertNotIn("RUN_COMMAND=", output)
 
     def test_interpolate_joint_path_bounds_every_segment(self):
         path = fixed.interpolate_joint_path(

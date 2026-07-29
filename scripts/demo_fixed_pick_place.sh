@@ -53,6 +53,37 @@ resource_conflict() {
   exit 23
 }
 
+run_mode="${DEMO_RUN_MODE:-manual}"
+requested_cycles="${DEMO_CYCLES:-}"
+requested_confirmation="${DEMO_CONFIRM_EACH_STEP:-}"
+case "$run_mode" in
+  manual)
+    [[ -z "$requested_cycles" && -z "$requested_confirmation" ]] ||
+      fail "MODE_CHECK" "manual mode does not accept automatic overrides"
+    ;;
+  automatic-three-cycle)
+    [[ "$requested_cycles" == "3" ]] ||
+      fail "MODE_CHECK" "automatic mode requires DEMO_CYCLES=3"
+    [[ "$requested_confirmation" == "0" ]] ||
+      fail "MODE_CHECK" \
+        "automatic mode requires DEMO_CONFIRM_EACH_STEP=0"
+    ;;
+  *)
+    fail "MODE_CHECK" "unknown DEMO_RUN_MODE=$run_mode"
+    ;;
+esac
+
+if [[ "${DEMO_MODE_VALIDATE_ONLY:-0}" == "1" ]]; then
+  echo "RUN_MODE=$run_mode"
+  if [[ "$run_mode" == "automatic-three-cycle" ]]; then
+    echo "CYCLES=3"
+    echo "REQUIRE_STEP_CONFIRMATION=0"
+  fi
+  echo "DEMO_MODE_VALIDATION_OK"
+  echo "LOG=$LAUNCH_LOG"
+  exit 0
+fi
+
 cd "$WORKTREE" || fail "DIRECTORY_CHECK" "cannot enter $WORKTREE"
 [[ "$PWD" == "$WORKTREE" ]] || fail "DIRECTORY_CHECK" "unexpected directory: $PWD"
 [[ -x "$PYTHON" ]] || fail "PYTHON_CHECK" "Python is not executable: $PYTHON"
@@ -177,15 +208,21 @@ for base, raised in (("a", "a_up"), ("b", "b_up")):
         raise SystemExit(f"{raised} must preserve XY and orientation from {base}")
 print(f"LIFT_HEIGHT_M={lift_height:.3f}")
 print(f"SPEED_SCALE={config['demo']['speed_scale']:.4f}")
-print(f"CYCLES={config['demo']['cycles']}")
-print(f"REQUIRE_STEP_CONFIRMATION={int(config['demo']['require_step_confirmation'])}")
+print(f"CONFIG_CYCLES={config['demo']['cycles']}")
+print(
+    "CONFIG_REQUIRE_STEP_CONFIRMATION="
+    f"{int(config['demo']['require_step_confirmation'])}"
+)
 print(f"VALIDATED_REAL_CYCLES={config['demo']['validated_real_cycles']}")
 PY
 )" || fail "POINT_VALIDATION" "point configuration is missing or unsafe"
 echo "$preflight"
 
 speed_scale="$(awk -F= '/^SPEED_SCALE=/{print $2}' <<<"$preflight")"
-require_confirmation="$(awk -F= '/^REQUIRE_STEP_CONFIRMATION=/{print $2}' <<<"$preflight")"
+config_cycles="$(awk -F= '/^CONFIG_CYCLES=/{print $2}' <<<"$preflight")"
+config_confirmation="$(
+  awk -F= '/^CONFIG_REQUIRE_STEP_CONFIRMATION=/{print $2}' <<<"$preflight"
+)"
 validated_cycles="$(awk -F= '/^VALIDATED_REAL_CYCLES=/{print $2}' <<<"$preflight")"
 [[ -n "$speed_scale" ]] || fail "SPEED_CHECK" "speed scale is missing"
 if ! "$PYTHON" - "$speed_scale" <<'PY'
@@ -198,6 +235,16 @@ then
   fail "SPEED_CHECK" "speed scale must be in (0, 0.30]"
 fi
 
+if [[ "$run_mode" == "automatic-three-cycle" ]]; then
+  cycles=3
+  require_confirmation=0
+else
+  cycles="$config_cycles"
+  require_confirmation="$config_confirmation"
+fi
+echo "RUN_MODE=$run_mode"
+echo "CYCLES=$cycles"
+echo "REQUIRE_STEP_CONFIRMATION=$require_confirmation"
 echo "LOG_DIRECTORY=$LOG_DIR"
 if [[ "${DEMO_PREFLIGHT_ONLY:-0}" == "1" ]]; then
   echo "DEMO_PREFLIGHT_OK"
@@ -217,7 +264,9 @@ runner_args=(
   --config "$CONFIG"
   --speed-scale "$speed_scale"
 )
-if [[ "$require_confirmation" == "1" || "$validated_cycles" -lt 3 ]]; then
+if [[ "$run_mode" == "automatic-three-cycle" ]]; then
+  runner_args+=(--cycles 3 --automatic-three-cycle)
+elif [[ "$require_confirmation" == "1" || "$validated_cycles" -lt 3 ]]; then
   runner_args+=(--confirm-each-step)
 fi
 

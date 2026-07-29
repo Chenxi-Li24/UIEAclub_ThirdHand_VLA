@@ -101,10 +101,12 @@ bash scripts/open_fixed_pick_place_control.sh
 ```
 
 It binds only to `127.0.0.1:8766` and does not connect to `can0` while idle.
-The Start button launches the guarded one-click entry. The Stop button sends
-SIGINT only to the page-owned process group; the runner executes SDK cleanup
-and motor disable, and the arm remains at its current pose. It does not offer
-any function to terminate an unrelated controller.
+`手动逐步演示` launches one supervised cycle. `一键自动循环 3 次` launches
+exactly three cycles without waiting for the Continue button. Both modes keep
+the 30% hard limit, 25 cm lift, resource preflight, countdown and cleanup.
+The Stop button sends SIGINT only to the page-owned process group; the runner
+executes SDK cleanup and motor disable, and the arm remains at its current
+pose. It does not offer any function to terminate an unrelated controller.
 
 When `--confirm-each-step` is active, the page shows
 `WAITING_CONFIRMATION` and enables the yellow “执行下一步” button. Each click

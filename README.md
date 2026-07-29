@@ -69,10 +69,10 @@ MIT — see [LICENSE](LICENSE)
 
 The isolated real-arm workflow is configured for a 25 cm vertical lift,
 30% operator-verified motion speed, adaptive low-stiffness bottle grasping,
-and one supervised A-to-B-to-A cycle per launch. Each logical route is sent as
-one continuous SDK path. Step confirmation remains enabled until three
-complete real cycles are recorded. Do not run another CAN controller at the
-same time.
+and one continuous SDK path per logical route. The dashboard offers one
+manual step-by-step cycle and a separate one-click automatic mode that runs
+exactly three A-to-B-to-A cycles without pressing Continue. Do not run another
+CAN controller at the same time.
 
 Ubuntu local launch:
 
@@ -100,17 +100,19 @@ bash scripts/open_fixed_pick_place_control.sh
 ```
 
 The page opens at `http://127.0.0.1:8766/`. Its service does not connect to
-`can0` while idle. “开始演示” launches the guarded script above; “停止并失能”
-interrupts only the process launched by this page, runs cleanup, disables the
-motors, and leaves the arm at its current pose. It never stops another user's
-process. If the manual web controller or another robot task is active, the
-page reports `RESOURCE_CONFLICT`.
+`can0` while idle. `手动逐步演示` runs the one-cycle confirmation workflow.
+`一键自动循环 3 次` runs three cycles without pressing Continue. Both buttons
+use the same preflight, 30% hard limit, three-second countdown, logs and
+cleanup. `停止并失能` interrupts only the process launched by this page,
+disables the motors, and leaves the arm at its current pose. It never stops
+another user's process. If another controller is active, the page reports
+`RESOURCE_CONFLICT`.
 
 While supervised step confirmation is required, the page enters
 `WAITING_CONFIRMATION` before each logical action and enables the yellow
 “执行下一步” button. The button confirms only the currently displayed stage.
-After three consecutive validated real cycles, the configured unattended
-demo can run without per-step confirmation.
+The automatic button is the only path that bypasses per-step confirmation,
+and it is fixed to exactly three cycles.
 
 Each safe logical route now sends one multi-waypoint SDK trajectory, so the
 12° interpolation points no longer cause repeated stop/start motion. The arm

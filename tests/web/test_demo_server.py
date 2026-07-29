@@ -250,6 +250,53 @@ class DemoServerTests(unittest.TestCase):
             self.assertEqual(len(confirmed_stages), 20, confirmed_stages)
             self.assertIn("CYCLE_1_RETURN_A_UP_TO_HOME", confirmed_stages)
 
+    def test_dashboard_drives_three_cycle_automatic_simulation(self):
+        module = load_server()
+        runner = ROOT / "web-control" / "scripts" / "fixed_pick_place.py"
+        config = ROOT / "configs" / "tasks" / "fixed_pick_place.yaml"
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            scripts = root / "scripts"
+            scripts.mkdir()
+            launcher = scripts / "demo_fixed_pick_place.sh"
+            command = " ".join(
+                shlex.quote(value)
+                for value in (
+                    "/home/nieqingcao/miniconda3/envs/LumosTouch/bin/python",
+                    str(runner),
+                    "--simulate",
+                    "--config",
+                    str(config),
+                    "--speed-scale",
+                    "1.0",
+                    "--cycles",
+                    "3",
+                    "--automatic-three-cycle",
+                )
+            )
+            launcher.write_text(
+                "#!/usr/bin/env bash\n"
+                '[[ "$DEMO_RUN_MODE" == "automatic-three-cycle" ]]\n'
+                '[[ "$DEMO_CYCLES" == "3" ]]\n'
+                '[[ "$DEMO_CONFIRM_EACH_STEP" == "0" ]]\n'
+                f"{command}\n",
+                encoding="utf-8",
+            )
+            launcher.chmod(0o755)
+            controller = module.DemoController(root)
+            self.assertTrue(controller.start("automatic-three-cycle"))
+            deadline = time.monotonic() + 120
+            while time.monotonic() < deadline:
+                status = controller.status()
+                if status["state"] in {"COMPLETE", "FAILED", "STOPPED"}:
+                    break
+                time.sleep(0.02)
+            status = controller.status()
+            output = "\n".join(status["log_tail"])
+            self.assertEqual(status["state"], "COMPLETE", status)
+            self.assertIn("CYCLE 3/3 COMPLETE", output)
+            self.assertNotIn("AWAITING_CONFIRMATION=", output)
+
     def test_page_has_start_stop_status_and_log(self):
         html = (ROOT / "web-control" / "demo" / "index.html").read_text(
             encoding="utf-8"

@@ -9,8 +9,8 @@ Current task settings:
 - workflow: `home_transit_ab`
 - vertical lift above A and B: 0.250 m
 - operator-verified motion speed scale and hard limit: 0.30
-- current launch gate: one cycle with step confirmation
-- normal requested cycles per launch after validation: 3
+- manual button: one cycle with step confirmation
+- automatic button: exactly three cycles without per-stage confirmation
 - every bottle approach is vertical (`HOME -> A_UP -> A` and
   `HOME -> B_UP -> B`); every departure first returns vertically to the
   corresponding raised point
@@ -42,6 +42,12 @@ The dashboard binds to `127.0.0.1:8766`, remains detached from `can0` while
 idle, and owns only the demo process it launches. Stop forwards SIGINT to that
 owned process, which performs cleanup and motor disable; it does not return
 Home automatically and cannot terminate an unrelated process.
+
+The automatic button passes a fixed, launcher-validated tuple:
+`automatic-three-cycle`, `CYCLES=3`, and
+`REQUIRE_STEP_CONFIRMATION=0`. Unknown modes or altered automatic values fail
+at `MODE_CHECK` before CAN or runner startup. The manual button retains its
+existing one-cycle confirmation behavior.
 
 ## Continuous trajectory improvement
 

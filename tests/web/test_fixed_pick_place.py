@@ -91,6 +91,30 @@ class FakeBridge:
 
 
 class FixedPickPlaceTests(unittest.TestCase):
+    def test_full_real_config_simulation_completes_with_confirmations(self):
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(SCRIPT),
+                "--simulate",
+                "--config",
+                str(ROOT / "configs" / "tasks" / "fixed_pick_place.yaml"),
+                "--speed-scale",
+                "1.0",
+                "--confirm-each-step",
+            ],
+            input="\n" * 40,
+            text=True,
+            capture_output=True,
+            timeout=60,
+            check=False,
+        )
+        output = result.stdout + result.stderr
+        self.assertEqual(result.returncode, 0, output)
+        self.assertIn("CYCLE 1/1 COMPLETE", output)
+        self.assertIn("STATE COMPLETE", output)
+        self.assertEqual(output.count("AWAITING_CONFIRMATION="), 20)
+
     def test_resource_guard_matches_executables_not_diagnostic_text(self):
         guard = ROOT / "scripts" / "fixed_pick_place_resource_guard.sh"
 

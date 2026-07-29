@@ -641,9 +641,12 @@ class BridgeClient:
         kp: float,
         kd: float,
     ) -> None:
-        if self.mode == "dry-run":
+        if self.mode in {"simulate", "dry-run"}:
             self.set_gripper(0.5, timeout_s)
-            self.log.info("adaptive grasp dry-run contact_position=0.500")
+            self.log.info(
+                "adaptive grasp %s contact_position=0.500",
+                self.mode,
+            )
             return
         start = self.latest_gripper_position
         if not isinstance(start, (int, float)) or not math.isfinite(start):

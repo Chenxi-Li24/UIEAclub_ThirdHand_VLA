@@ -70,16 +70,25 @@ class DemoController:
             self._log_tail.clear()
             self._stop_requested = False
             self._resource_conflict = False
-            process = self._popen_factory(
-                ["bash", str(self.root / "scripts" / "demo_fixed_pick_place.sh")],
-                cwd=str(self.root),
-                stdin=subprocess.PIPE,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                text=True,
-                bufsize=1,
-                start_new_session=True,
-            )
+            try:
+                process = self._popen_factory(
+                    [
+                        "bash",
+                        str(self.root / "scripts" / "demo_fixed_pick_place.sh"),
+                    ],
+                    cwd=str(self.root),
+                    stdin=subprocess.PIPE,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    text=True,
+                    bufsize=1,
+                    start_new_session=True,
+                )
+            except OSError as exc:
+                self._state = "FAILED"
+                self._stage = "PROCESS_LAUNCH"
+                self._message = f"无法启动演示进程：{exc}"
+                return False
             self._process = process
             self._last_pid = process.pid
             monitor = threading.Thread(
@@ -100,7 +109,20 @@ class DemoController:
             self._stage = "SOFTWARE_STOP"
             self._message = "正在中断演示、cleanup 并失能"
             pid = process.pid
-        self._killpg(pid, signal.SIGINT)
+        try:
+            self._killpg(pid, signal.SIGINT)
+        except ProcessLookupError:
+            with self._lock:
+                self._state = "STOPPED"
+                self._stage = "SOFTWARE_STOP"
+                self._message = "演示进程已经退出"
+            return False
+        except OSError as exc:
+            with self._lock:
+                self._state = "FAILED"
+                self._stage = "SOFTWARE_STOP"
+                self._message = f"无法发送停止信号：{exc}"
+            return False
         return True
 
     def continue_step(self) -> bool:
@@ -113,8 +135,14 @@ class DemoController:
                 or process.stdin is None
             ):
                 return False
-            process.stdin.write("\n")
-            process.stdin.flush()
+            try:
+                process.stdin.write("\n")
+                process.stdin.flush()
+            except (BrokenPipeError, OSError, ValueError) as exc:
+                self._state = "FAILED"
+                self._stage = "CONFIRMATION_CHANNEL"
+                self._message = f"确认通道不可用：{exc}"
+                return False
             self._state = "RUNNING"
             self._message = "已确认，正在执行当前步骤"
             return True

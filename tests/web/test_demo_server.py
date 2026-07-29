@@ -3,11 +3,14 @@ from __future__ import annotations
 import importlib.util
 import io
 from pathlib import Path
+import shlex
 import signal
 import tempfile
 import threading
 import time
 import unittest
+from urllib import error as urllib_error
+from urllib import request as urllib_request
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -44,7 +47,155 @@ class FakeProcess:
         self._finished.set()
 
 
+class BrokenInput:
+    def write(self, _value):
+        raise BrokenPipeError("closed")
+
+    def flush(self):
+        raise BrokenPipeError("closed")
+
+    def close(self):
+        pass
+
+
 class DemoServerTests(unittest.TestCase):
+    def test_process_start_failure_becomes_readable_failed_state(self):
+        module = load_server()
+
+        def fail_start(*_args, **_kwargs):
+            raise OSError("launcher unavailable")
+
+        controller = module.DemoController(ROOT, popen_factory=fail_start)
+        self.assertFalse(controller.start())
+        status = controller.status()
+        self.assertEqual(status["state"], "FAILED")
+        self.assertIn("launcher unavailable", status["message"])
+
+    def test_broken_confirmation_pipe_becomes_readable_failed_state(self):
+        module = load_server()
+        process = FakeProcess()
+        process.stdin = BrokenInput()
+        controller = module.DemoController(
+            ROOT,
+            popen_factory=lambda *_args, **_kwargs: process,
+        )
+        self.assertTrue(controller.start())
+        controller._consume_line("AWAITING_CONFIRMATION=BROKEN_PIPE")
+        self.assertFalse(controller.continue_step())
+        status = controller.status()
+        self.assertEqual(status["state"], "FAILED")
+        self.assertIn("确认通道", status["message"])
+        process.finish(1)
+
+    def test_stop_signal_race_does_not_escape_as_server_error(self):
+        module = load_server()
+        process = FakeProcess()
+        controller = module.DemoController(
+            ROOT,
+            popen_factory=lambda *_args, **_kwargs: process,
+            killpg=lambda *_args: (_ for _ in ()).throw(
+                ProcessLookupError("gone")
+            ),
+        )
+        self.assertTrue(controller.start())
+        self.assertFalse(controller.stop())
+        self.assertIn(controller.status()["state"], {"STOPPED", "FAILED"})
+        process.finish(130)
+
+    def test_http_api_rejects_invalid_actions_and_controls_owned_runner(self):
+        module = load_server()
+        process = FakeProcess()
+
+        def killpg(_pid, signum):
+            process.finish(-signum)
+
+        controller = module.DemoController(
+            ROOT,
+            popen_factory=lambda *args, **kwargs: process,
+            killpg=killpg,
+        )
+        server = module.create_server(controller, "127.0.0.1", 0)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        base = f"http://127.0.0.1:{server.server_port}"
+
+        def post(path):
+            return urllib_request.urlopen(
+                urllib_request.Request(base + path, method="POST"),
+                timeout=2,
+            )
+
+        try:
+            with urllib_request.urlopen(base + "/api/status", timeout=2) as response:
+                self.assertEqual(response.status, 200)
+            with self.assertRaises(urllib_error.HTTPError) as invalid_continue:
+                post("/api/continue")
+            self.assertEqual(invalid_continue.exception.code, 409)
+            with post("/api/start") as response:
+                self.assertEqual(response.status, 202)
+            with self.assertRaises(urllib_error.HTTPError) as duplicate_start:
+                post("/api/start")
+            self.assertEqual(duplicate_start.exception.code, 409)
+            controller._consume_line("AWAITING_CONFIRMATION=HTTP_STEP")
+            with post("/api/continue") as response:
+                self.assertEqual(response.status, 202)
+            self.assertEqual(process.stdin.getvalue(), "\n")
+            with post("/api/stop") as response:
+                self.assertEqual(response.status, 202)
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join(2)
+
+    def test_dashboard_drives_complete_real_config_simulation(self):
+        module = load_server()
+        runner = ROOT / "web-control" / "scripts" / "fixed_pick_place.py"
+        config = ROOT / "configs" / "tasks" / "fixed_pick_place.yaml"
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            scripts = root / "scripts"
+            scripts.mkdir()
+            launcher = scripts / "demo_fixed_pick_place.sh"
+            command = " ".join(
+                shlex.quote(value)
+                for value in (
+                    "/home/nieqingcao/miniconda3/envs/LumosTouch/bin/python",
+                    str(runner),
+                    "--simulate",
+                    "--config",
+                    str(config),
+                    "--speed-scale",
+                    "1.0",
+                    "--confirm-each-step",
+                )
+            )
+            launcher.write_text(
+                "#!/usr/bin/env bash\n"
+                f"{command} <&0 &\n"
+                "runner_pid=$!\n"
+                'wait "$runner_pid"\n',
+                encoding="utf-8",
+            )
+            launcher.chmod(0o755)
+            controller = module.DemoController(root)
+            self.assertTrue(controller.start())
+            confirmed_stages = []
+            deadline = time.monotonic() + 60
+            while time.monotonic() < deadline:
+                status = controller.status()
+                if status["state"] == "WAITING_CONFIRMATION":
+                    stage = status["stage"]
+                    if not confirmed_stages or confirmed_stages[-1] != stage:
+                        confirmed_stages.append(stage)
+                        self.assertTrue(controller.continue_step())
+                elif status["state"] in {"COMPLETE", "FAILED", "STOPPED"}:
+                    break
+                time.sleep(0.01)
+            status = controller.status()
+            self.assertEqual(status["state"], "COMPLETE", status)
+            self.assertEqual(len(confirmed_stages), 20, confirmed_stages)
+            self.assertIn("CYCLE_1_RETURN_A_UP_TO_HOME", confirmed_stages)
+
     def test_page_has_start_stop_status_and_log(self):
         html = (ROOT / "web-control" / "demo" / "index.html").read_text(
             encoding="utf-8"

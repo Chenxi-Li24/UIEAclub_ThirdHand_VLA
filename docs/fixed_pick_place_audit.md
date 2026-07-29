@@ -65,6 +65,12 @@ Software-only coverage verifies:
   the yellow “执行下一步” button confirms one displayed stage at a time;
 - a closed confirmation channel becomes a clean operator abort instead of an
   uncaught `EOFError`.
+- the real task configuration completes all 20 confirmed logical stages in
+  Startouch simulation, including both adaptive grasps and final Home;
+- the dashboard drives that same simulation from Start through 20 Continue
+  actions to COMPLETE;
+- duplicate Start, invalid Continue, process-launch failure, broken
+  confirmation pipes, stop-signal races and process-group Stop are covered.
 
 Continuous real motion has not yet been validated. The first true-arm check
 must be supervised, empty-load, step-by-step and limited to 3%. Only after
@@ -163,7 +169,7 @@ for real mode.
 
 - Python compilation: passed.
 - Git whitespace/error check: passed.
-- Standard-library automated tests: 28 passed at the continuous-dashboard
+- Standard-library automated tests: 37 passed at the continuous-dashboard
   implementation checkpoint.
 - Tests cover normal sequence, missing/invalid/all-zero/non-finite/out-of-limit
   points, timeout, gripper failure, operator abort, Ctrl+C cleanup, dry-run

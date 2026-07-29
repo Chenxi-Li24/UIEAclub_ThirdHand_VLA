@@ -4,6 +4,7 @@ import importlib.util
 import logging
 import os
 from pathlib import Path
+import subprocess
 import sys
 import tempfile
 import time
@@ -90,6 +91,53 @@ class FakeBridge:
 
 
 class FixedPickPlaceTests(unittest.TestCase):
+    def test_resource_guard_matches_executables_not_diagnostic_text(self):
+        guard = ROOT / "scripts" / "fixed_pick_place_resource_guard.sh"
+
+        def classified(argv):
+            with tempfile.TemporaryDirectory() as directory:
+                proc = Path(directory) / "123"
+                proc.mkdir()
+                (proc / "cmdline").write_bytes(
+                    b"\0".join(value.encode("utf-8") for value in argv) + b"\0"
+                )
+                result = subprocess.run(
+                    [
+                        "bash",
+                        "-c",
+                        'source "$1"; is_robot_controller_process "$2"',
+                        "resource-guard-test",
+                        str(guard),
+                        str(proc),
+                    ],
+                    check=False,
+                )
+                return result.returncode == 0
+
+        diagnostic = [
+            "bash",
+            "-c",
+            (
+                "grep -nE 'ros|colcon' ~/.bashrc; "
+                "find /usr /opt -type f -name ros2 -print"
+            ),
+        ]
+        self.assertFalse(classified(diagnostic))
+        self.assertTrue(
+            classified(
+                [
+                    "/home/nieqingcao/miniconda3/bin/python",
+                    "-u",
+                    (
+                        "/home/nieqingcao/arm/UIEAclub_ThirdHand_VLA-"
+                        "fixed-pick-place/web-control/server/startouch_bridge.py"
+                    ),
+                ]
+            )
+        )
+        self.assertTrue(classified(["node", "proxy.js"]))
+        self.assertTrue(classified(["/opt/ros/noetic/bin/roscore"]))
+
     def test_final_docs_include_exact_launch_commands_and_dashboard(self):
         required = [
             "cd /home/nieqingcao/arm/UIEAclub_ThirdHand_VLA-fixed-pick-place",

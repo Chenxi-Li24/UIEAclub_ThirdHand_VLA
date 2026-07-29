@@ -8,10 +8,14 @@ RUNNER="$WORKTREE/web-control/scripts/fixed_pick_place.py"
 LOG_DIR="$WORKTREE/logs/fixed_pick_place"
 EXPECTED_BRANCH="fanxy/fixed-pick-place"
 CAN_INTERFACE="can0"
+RESOURCE_GUARD="$WORKTREE/scripts/fixed_pick_place_resource_guard.sh"
 # Low-stiffness bottle grasp. Adaptive contact detection adds only a small
 # position preload after the fingers stop on the object.
 export STARTOUCH_GRIPPER_KP="2.0"
 export STARTOUCH_GRIPPER_KD="0.1"
+
+# shellcheck disable=SC1090
+source "$RESOURCE_GUARD"
 
 runner_pid=""
 
@@ -100,12 +104,10 @@ for proc in /proc/[0-9]*; do
     user="$(ps -o user= -p "$pid" | xargs)"
     resource_conflict "user=$user pid=$pid cwd=$cwd cmd=$cmd resource=current_worktree"
   fi
-  case "$cmd" in
-    *startouch_bridge.py*|*"node proxy.js"*|*fixed_pick_place.py*|*teach_fixed_point.py*|*roscore*|*"ros2 "*|*moveit*)
-      user="$(ps -o user= -p "$pid" | xargs)"
-      resource_conflict "user=$user pid=$pid cwd=${cwd:-unknown} cmd=$cmd resource=robot_or_can0"
-      ;;
-  esac
+  if is_robot_controller_process "$proc"; then
+    user="$(ps -o user= -p "$pid" | xargs)"
+    resource_conflict "user=$user pid=$pid cwd=${cwd:-unknown} cmd=$cmd resource=robot_or_can0"
+  fi
 done
 
 if command -v lsof >/dev/null 2>&1; then

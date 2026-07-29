@@ -1,0 +1,34 @@
+# Fixed-joint Pick and Place. Every null point must be taught on the real arm.
+version: 1
+
+# Hardware-tested limits and maximum motor speeds from web-control/server/config.js.
+joint_limits_deg:
+  - [-162.0, 162.0]
+  - [-12.0, 201.0]
+  - [-183.0, 0.0]
+  - [-98.0, 98.0]
+  - [-98.0, 98.0]
+  - [-164.0, 164.0]
+joint_max_speeds_deg_s: [300.0, 300.0, 300.0, 1000.0, 1000.0, 1000.0]
+
+# Real mode is additionally hard-limited to <= 0.05 by the runner.
+speed_scale: 0.05
+
+motion:
+  min_time_s: 0.5
+  timeout_s: 45.0
+  settle_s: 0.2
+
+gripper:
+  open_position: 1.0
+  close_position: 0.0
+  timeout_s: 5.0
+
+waypoints:
+  home: null
+  pre_pick: null
+  pick: null
+  lift: null
+  pre_place: null
+  place: null
+  retreat: null

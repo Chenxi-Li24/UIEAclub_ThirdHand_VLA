@@ -27,6 +27,7 @@ api_keys.yaml
 logs/*.csv
 logs/*.jsonl
 logs/*.yaml
+logs/**/*.log
 logs/**/frames/
 
 # Data (runtime-generated)

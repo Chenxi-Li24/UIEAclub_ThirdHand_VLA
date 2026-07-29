@@ -270,6 +270,28 @@ class FixedPickPlaceTests(unittest.TestCase):
         )
         self.assertTrue(classified(["node", "proxy.js"]))
         self.assertTrue(classified(["/opt/ros/noetic/bin/roscore"]))
+        self.assertFalse(
+            classified(
+                [
+                    "/usr/bin/python3",
+                    "/opt/ros/galactic/bin/ros2",
+                    "launch",
+                    "xv_sdk_ros2",
+                    "xv_sdk_node_launch.py",
+                ]
+            )
+        )
+        self.assertTrue(
+            classified(
+                [
+                    "/usr/bin/python3",
+                    "/opt/ros/galactic/bin/ros2",
+                    "launch",
+                    "robot_bringup",
+                    "arm_control.launch.py",
+                ]
+            )
+        )
 
     def test_worktree_guard_ignores_cwd_only_but_detects_open_files(self):
         guard = ROOT / "scripts" / "fixed_pick_place_resource_guard.sh"

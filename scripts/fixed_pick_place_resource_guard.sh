@@ -8,6 +8,24 @@ is_robot_controller_process() {
   local executable=""
   local argument=""
   local basename=""
+  local index=0
+  local -a arguments=()
+
+  while IFS= read -r -d '' argument; do
+    arguments+=("$argument")
+  done < "$proc/cmdline"
+
+  # The XV camera/CharUco stack is a ROS 2 launch process, but it neither
+  # controls the arm nor owns can0. Match this exact camera launch before the
+  # deliberately conservative generic ros2 rule below.
+  for ((index = 0; index + 3 < ${#arguments[@]}; index++)); do
+    if [[ "${arguments[index]##*/}" == "ros2" &&
+          "${arguments[index + 1]}" == "launch" &&
+          "${arguments[index + 2]}" == "xv_sdk_ros2" &&
+          "${arguments[index + 3]##*/}" == "xv_sdk_node_launch.py" ]]; then
+      return 1
+    fi
+  done
 
   executable="$(readlink -f "$proc/exe" 2>/dev/null || true)"
   basename="${executable##*/}"
@@ -17,7 +35,7 @@ is_robot_controller_process() {
       ;;
   esac
 
-  while IFS= read -r -d '' argument; do
+  for argument in "${arguments[@]}"; do
     basename="${argument##*/}"
     case "$basename" in
       startouch_bridge.py|proxy.js|fixed_pick_place.py|teach_fixed_point.py)
@@ -27,7 +45,7 @@ is_robot_controller_process() {
         return 0
         ;;
     esac
-  done < "$proc/cmdline"
+  done
 
   return 1
 }

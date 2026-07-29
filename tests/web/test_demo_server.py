@@ -4,6 +4,7 @@ import importlib.util
 import io
 from pathlib import Path
 import signal
+import tempfile
 import threading
 import time
 import unittest
@@ -103,6 +104,86 @@ class DemoServerTests(unittest.TestCase):
         self.assertTrue(controller.continue_step())
         self.assertEqual(process.stdin.getvalue(), "\n")
         process.finish(130)
+
+    def test_real_bash_background_runner_receives_web_confirmation(self):
+        module = load_server()
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            scripts = root / "scripts"
+            scripts.mkdir()
+            launcher = scripts / "demo_fixed_pick_place.sh"
+            launcher.write_text(
+                "#!/usr/bin/env bash\n"
+                "python3 -u -c '"
+                'print(\"AWAITING_CONFIRMATION=TEST_STEP\", flush=True); '
+                "input(); "
+                'print(\"PICK AND PLACE COMPLETE\", flush=True)'
+                "' <&0 &\n"
+                "runner_pid=$!\n"
+                'wait "$runner_pid"\n',
+                encoding="utf-8",
+            )
+            launcher.chmod(0o755)
+            controller = module.DemoController(root)
+            self.assertTrue(controller.start())
+            deadline = time.monotonic() + 3
+            while (
+                controller.status()["state"] != "WAITING_CONFIRMATION"
+                and time.monotonic() < deadline
+            ):
+                time.sleep(0.01)
+            self.assertEqual(
+                controller.status()["state"],
+                "WAITING_CONFIRMATION",
+            )
+            self.assertTrue(controller.continue_step())
+            deadline = time.monotonic() + 3
+            while (
+                controller.status()["owned"]
+                and time.monotonic() < deadline
+            ):
+                time.sleep(0.01)
+            status = controller.status()
+            self.assertEqual(status["state"], "COMPLETE")
+            self.assertIn("PICK AND PLACE COMPLETE", status["log_tail"])
+
+    def test_real_bash_process_group_stops_while_waiting(self):
+        module = load_server()
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            scripts = root / "scripts"
+            scripts.mkdir()
+            launcher = scripts / "demo_fixed_pick_place.sh"
+            launcher.write_text(
+                "#!/usr/bin/env bash\n"
+                "python3 -u -c '"
+                "import signal, sys; "
+                "signal.signal(signal.SIGINT, "
+                "lambda *_: sys.exit(130)); "
+                'print(\"AWAITING_CONFIRMATION=TEST_STOP\", flush=True); '
+                "input()"
+                "' <&0 &\n"
+                "runner_pid=$!\n"
+                'wait "$runner_pid"\n',
+                encoding="utf-8",
+            )
+            launcher.chmod(0o755)
+            controller = module.DemoController(root)
+            self.assertTrue(controller.start())
+            deadline = time.monotonic() + 3
+            while (
+                controller.status()["state"] != "WAITING_CONFIRMATION"
+                and time.monotonic() < deadline
+            ):
+                time.sleep(0.01)
+            self.assertTrue(controller.stop())
+            deadline = time.monotonic() + 3
+            while (
+                controller.status()["state"] != "STOPPED"
+                and time.monotonic() < deadline
+            ):
+                time.sleep(0.01)
+            self.assertEqual(controller.status()["state"], "STOPPED")
 
     def test_resource_conflict_is_reported_without_signalling(self):
         module = load_server()

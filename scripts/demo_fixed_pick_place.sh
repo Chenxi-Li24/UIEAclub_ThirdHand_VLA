@@ -222,7 +222,7 @@ if [[ "$require_confirmation" == "1" || "$validated_cycles" -lt 3 ]]; then
 fi
 
 echo "RUN_COMMAND=$PYTHON ${runner_args[*]}"
-"$PYTHON" "${runner_args[@]}" &
+"$PYTHON" "${runner_args[@]}" <&0 &
 runner_pid=$!
 wait "$runner_pid"
 rc=$?

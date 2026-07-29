@@ -162,6 +162,10 @@ class DemoController:
             for line in process.stdout:
                 self._consume_line(line)
         returncode = process.wait()
+        if process.stdin is not None:
+            process.stdin.close()
+        if process.stdout is not None:
+            process.stdout.close()
         with self._lock:
             if process is not self._process:
                 return

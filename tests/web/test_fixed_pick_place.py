@@ -196,6 +196,7 @@ class FixedPickPlaceTests(unittest.TestCase):
         )
         self.assertIn("trap forward_stop INT TERM", script)
         self.assertIn('kill -INT "$runner_pid"', script)
+        self.assertIn('"$PYTHON" "${runner_args[@]}" <&0 &', script)
 
     def test_interpolate_joint_path_bounds_every_segment(self):
         path = fixed.interpolate_joint_path(

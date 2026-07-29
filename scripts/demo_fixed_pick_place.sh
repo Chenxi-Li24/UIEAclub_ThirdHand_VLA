@@ -100,7 +100,7 @@ for proc in /proc/[0-9]*; do
   cwd="$(readlink -f "$proc/cwd" 2>/dev/null || true)"
   [[ -n "${allowed_pids[$pid]:-}" ]] && continue
   is_own_descendant "$pid" && continue
-  if [[ "$cwd" == "$WORKTREE" ]]; then
+  if process_uses_worktree_files "$proc" "$WORKTREE"; then
     user="$(ps -o user= -p "$pid" | xargs)"
     resource_conflict "user=$user pid=$pid cwd=$cwd cmd=$cmd resource=current_worktree"
   fi

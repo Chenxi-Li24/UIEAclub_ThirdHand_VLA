@@ -138,6 +138,41 @@ class FixedPickPlaceTests(unittest.TestCase):
         self.assertTrue(classified(["node", "proxy.js"]))
         self.assertTrue(classified(["/opt/ros/noetic/bin/roscore"]))
 
+    def test_worktree_guard_ignores_cwd_only_but_detects_open_files(self):
+        guard = ROOT / "scripts" / "fixed_pick_place_resource_guard.sh"
+        with tempfile.TemporaryDirectory() as directory:
+            base = Path(directory)
+            worktree = base / "worktree"
+            worktree.mkdir()
+            proc = base / "123"
+            proc.mkdir()
+            (proc / "fd").mkdir()
+            (proc / "cwd").symlink_to(worktree, target_is_directory=True)
+
+            def is_using_files():
+                result = subprocess.run(
+                    [
+                        "bash",
+                        "-c",
+                        (
+                            'source "$1"; '
+                            'process_uses_worktree_files "$2" "$3"'
+                        ),
+                        "worktree-guard-test",
+                        str(guard),
+                        str(proc),
+                        str(worktree),
+                    ],
+                    check=False,
+                )
+                return result.returncode == 0
+
+            self.assertFalse(is_using_files())
+            active_file = worktree / "active.yaml"
+            active_file.write_text("active", encoding="utf-8")
+            (proc / "fd" / "3").symlink_to(active_file)
+            self.assertTrue(is_using_files())
+
     def test_final_docs_include_exact_launch_commands_and_dashboard(self):
         required = [
             "cd /home/nieqingcao/arm/UIEAclub_ThirdHand_VLA-fixed-pick-place",

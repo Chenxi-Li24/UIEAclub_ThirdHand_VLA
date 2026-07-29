@@ -31,3 +31,24 @@ is_robot_controller_process() {
 
   return 1
 }
+
+# A process whose cwd happens to be the worktree is not necessarily editing or
+# executing it. Treat the worktree as occupied only while the process has an
+# actual open file descriptor inside the tree.
+process_uses_worktree_files() {
+  local proc="$1"
+  local worktree="$2"
+  local descriptor=""
+  local target=""
+
+  for descriptor in "$proc"/fd/*; do
+    [[ -e "$descriptor" || -L "$descriptor" ]] || continue
+    target="$(readlink -f "$descriptor" 2>/dev/null || true)"
+    case "$target" in
+      "$worktree"|"$worktree"/*)
+        return 0
+        ;;
+    esac
+  done
+  return 1
+}

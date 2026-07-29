@@ -1390,6 +1390,105 @@ html, body {
   gap: 7px;
 }
 
+.voice-route-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.voice-route-option {
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 160ms ease, background 160ms ease, transform 160ms ease;
+}
+
+.voice-route-option:hover:not(:disabled) {
+  border-color: var(--accent);
+  transform: translateY(-1px);
+}
+
+.voice-route-option[data-active="true"] {
+  border-color: var(--accent);
+  background: var(--accent-dim);
+  box-shadow: inset 0 0 0 1px rgba(0, 229, 255, 0.12);
+}
+
+.voice-route-option:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.voice-route-option strong,
+.voice-route-option small {
+  display: block;
+}
+
+.voice-route-option strong {
+  margin-top: 3px;
+  font-size: 0.76rem;
+}
+
+.voice-route-option small {
+  margin-top: 4px;
+  color: var(--text-secondary);
+  font-size: 0.62rem;
+}
+
+.voice-route-kicker {
+  color: var(--accent);
+  font-family: 'Consolas', 'SFMono-Regular', monospace;
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+}
+
+.voice-route-control {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.voice-route-control span {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-family: 'Consolas', 'SFMono-Regular', monospace;
+  font-size: 0.62rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.voice-route-control button {
+  flex: 0 0 auto;
+  min-height: 30px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-card);
+  color: var(--text-primary);
+  font-size: 0.66rem;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.voice-route-control button:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.voice-route-control button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
 .voice-inline-control input,
 .voice-device-row select {
   min-width: 0;
@@ -1850,6 +1949,8 @@ html, body {
 .voice-icon-button:focus-visible,
 .voice-record-button:focus-visible,
 .voice-record-cancel:focus-visible,
+.voice-route-option:focus-visible,
+.voice-route-control button:focus-visible,
 .voice-inline-control button:focus-visible,
 .voice-device-row button:focus-visible,
 .voice-cancel-button:focus-visible,

@@ -1,7 +1,9 @@
 const VOICE_PROTOCOL = 'thirdhand.voice.v1';
-const DEFAULT_ENDPOINT = 'ws://192.168.58.43:3001/v1/voice';
+const GPU_ENDPOINT = 'ws://192.168.58.43:3002/v1/voice';
+const CPU_ENDPOINT = 'ws://192.168.58.43:3001/v1/voice';
+const DEFAULT_ENDPOINT = GPU_ENDPOINT;
 const LEGACY_DEFAULT_ENDPOINT = 'ws://127.0.0.1:3001/v1/voice';
-const ENDPOINT_MIGRATION_KEY = 'voiceAiEndpointDefaultV2';
+const ENDPOINT_MIGRATION_KEY = 'voiceAiEndpointDefaultV3';
 const TARGET_SAMPLE_RATE = 16000;
 const FRAME_MS = 100;
 const FRAME_SAMPLES = TARGET_SAMPLE_RATE * FRAME_MS / 1000;
@@ -304,7 +306,7 @@ class VoiceSocket {
       }
     });
     socket.addEventListener('error', () => {
-      this.callbacks.onError?.('无法连接本地 AI 3001。');
+      this.callbacks.onError?.('无法连接所选本地 AI 通道。');
     });
     socket.addEventListener('close', () => {
       if (this.socket !== socket) return;
@@ -381,6 +383,9 @@ export class VoiceControl {
     this.panel = document.getElementById('voice-panel');
     this.toggleButton = document.getElementById('btn-voice-toggle');
     this.endpointInput = document.getElementById('voice-ai-endpoint');
+    this.endpointButtons = [...document.querySelectorAll('[data-voice-endpoint]')];
+    this.endpointDescription = document.getElementById('voice-route-description');
+    this.reconnectButton = document.getElementById('voice-ai-reconnect');
     this.deviceSelect = document.getElementById('voice-device-select');
     this.micButton = document.getElementById('voice-mic-toggle');
     this.recordButton = document.getElementById('voice-record-toggle');
@@ -429,23 +434,26 @@ export class VoiceControl {
     if (!this.panel || !this.toggleButton) return;
 
     const storedEndpoint = localStorage.getItem('voiceAiEndpoint');
-    const shouldMigrateEndpoint =
-      localStorage.getItem(ENDPOINT_MIGRATION_KEY) !== '1' &&
-      storedEndpoint === LEGACY_DEFAULT_ENDPOINT;
-    const savedEndpoint = !storedEndpoint || shouldMigrateEndpoint
-      ? DEFAULT_ENDPOINT
-      : storedEndpoint;
+    const endpointMigrationComplete =
+      localStorage.getItem(ENDPOINT_MIGRATION_KEY) === '1';
+    const storedEndpointIsValid =
+      typeof storedEndpoint === 'string' &&
+      /^wss?:\/\//i.test(storedEndpoint);
+    const savedEndpoint = endpointMigrationComplete && storedEndpointIsValid
+      ? storedEndpoint
+      : DEFAULT_ENDPOINT;
     localStorage.setItem(ENDPOINT_MIGRATION_KEY, '1');
+    localStorage.setItem('voiceAiEndpoint', savedEndpoint);
     this.endpointInput.value = savedEndpoint;
+    this._renderEndpointRoute(savedEndpoint);
 
     this.toggleButton.addEventListener('click', () => this.togglePanel());
     document.getElementById('voice-panel-close').addEventListener('click', () => this.closePanel());
-    document.getElementById('voice-ai-reconnect').addEventListener('click', () => this._connectAi());
-    this.endpointInput.addEventListener('keydown', event => {
-      if (event.key === 'Enter') this._connectAi();
-    });
-    this.endpointInput.addEventListener('change', () => {
-      localStorage.setItem('voiceAiEndpoint', this.endpointInput.value.trim());
+    this.reconnectButton.addEventListener('click', () => this._connectAi());
+    this.endpointButtons.forEach(button => {
+      button.addEventListener('click', () => {
+        this._selectAiRoute(button.dataset.voiceEndpoint);
+      });
     });
     this.micButton.addEventListener('click', () => this._toggleMicrophone());
     this.deviceSelect.addEventListener('change', () => this._changeMicrophone());
@@ -547,7 +555,7 @@ export class VoiceControl {
       return;
     }
     if (!this.voiceSocket.isReady()) {
-      this._showNotice('本地 AI 3001 未连接，无法发送语音。', 'warning');
+      this._showNotice('所选本地 AI 通道未连接，无法发送语音。', 'warning');
       return;
     }
 
@@ -652,7 +660,7 @@ export class VoiceControl {
       return;
     }
     if (!this.voiceSocket.isReady()) {
-      this._showNotice('本地 AI 3001 未连接，文字草稿已保留。', 'warning');
+      this._showNotice('所选本地 AI 通道未连接，文字草稿已保留。', 'warning');
       return;
     }
 
@@ -677,9 +685,41 @@ export class VoiceControl {
   }
 
   _connectAi() {
-    const endpoint = this.endpointInput.value.trim() || DEFAULT_ENDPOINT;
+    const requestedEndpoint = this.endpointInput.value.trim();
+    const endpoint = /^wss?:\/\//i.test(requestedEndpoint)
+      ? requestedEndpoint
+      : DEFAULT_ENDPOINT;
+    this.endpointInput.value = endpoint;
     localStorage.setItem('voiceAiEndpoint', endpoint);
+    this._renderEndpointRoute(endpoint);
     this.voiceSocket.connect(endpoint);
+  }
+
+  _selectAiRoute(endpoint) {
+    if (this.requestMode !== null || this.pendingCandidate) {
+      this._showNotice('请先完成或取消当前 AI 会话，再切换计算路径。', 'warning');
+      return;
+    }
+    this.endpointInput.value = endpoint;
+    this._connectAi();
+  }
+
+  _renderEndpointRoute(endpoint) {
+    this.endpointButtons.forEach(button => {
+      const active = button.dataset.voiceEndpoint === endpoint;
+      button.dataset.active = String(active);
+      button.setAttribute('aria-pressed', String(active));
+    });
+
+    if (this.endpointDescription) {
+      if (endpoint === GPU_ENDPOINT) {
+        this.endpointDescription.textContent = 'GPU 3002 · CUDA / float16';
+      } else if (endpoint === CPU_ENDPOINT || endpoint === LEGACY_DEFAULT_ENDPOINT) {
+        this.endpointDescription.textContent = 'CPU 3001 · int8 兼容回退';
+      } else {
+        this.endpointDescription.textContent = '测试或自定义 AI 通道';
+      }
+    }
   }
 
   async _toggleMicrophone() {
@@ -929,6 +969,11 @@ export class VoiceControl {
   }
 
   _renderControls() {
+    const routeLocked = this.requestMode !== null || Boolean(this.pendingCandidate);
+    this.endpointButtons.forEach(button => {
+      button.disabled = routeLocked;
+    });
+    this.reconnectButton.disabled = routeLocked;
     this._renderRecordButton();
     this._renderTextComposer();
   }

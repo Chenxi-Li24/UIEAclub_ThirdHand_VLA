@@ -246,10 +246,27 @@
           <span class="voice-session-status" id="voice-session-status" data-state="idle"
                 role="status" aria-live="polite">等待操作</span>
         </div>
-        <div class="voice-inline-control">
-          <input id="voice-ai-endpoint" type="url" value="ws://192.168.58.43:3001/v1/voice"
-                 aria-label="Jetson AI WebSocket 地址" spellcheck="false">
-          <button id="voice-ai-reconnect" type="button">重连</button>
+        <div class="voice-route-options" role="group" aria-label="选择语音识别计算路径">
+          <button class="voice-route-option" type="button"
+                  data-voice-endpoint="ws://192.168.58.43:3002/v1/voice"
+                  aria-pressed="true">
+            <span class="voice-route-kicker">GPU</span>
+            <strong>高速识别</strong>
+            <small>端口 3002 · 推荐</small>
+          </button>
+          <button class="voice-route-option" type="button"
+                  data-voice-endpoint="ws://192.168.58.43:3001/v1/voice"
+                  aria-pressed="false">
+            <span class="voice-route-kicker">CPU</span>
+            <strong>兼容回退</strong>
+            <small>端口 3001 · 较慢</small>
+          </button>
+        </div>
+        <div class="voice-route-control">
+          <input id="voice-ai-endpoint" type="hidden"
+                 value="ws://192.168.58.43:3002/v1/voice">
+          <span id="voice-route-description">GPU 3002 · CUDA / float16</span>
+          <button id="voice-ai-reconnect" type="button">重新连接</button>
         </div>
       </section>
 
@@ -267,7 +284,7 @@
           </select>
           <button id="voice-mic-toggle" type="button">启用麦克风</button>
         </div>
-        <p class="voice-help">只在录音期间向 3001 发送音频；关闭麦克风会立即释放设备。</p>
+        <p class="voice-help">只在录音期间向所选 AI 通道发送音频；关闭麦克风会立即释放设备。</p>
       </section>
 
       <section class="voice-capture-block" aria-labelledby="voice-capture-label">

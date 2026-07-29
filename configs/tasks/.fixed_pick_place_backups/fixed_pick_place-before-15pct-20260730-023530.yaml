@@ -20,13 +20,12 @@ joint_max_speeds_deg_s:
 - 1000.0
 - 1000.0
 - 1000.0
-speed_scale: 0.15
+speed_scale: 0.30
 demo:
-  # The operator requested a 15% demo speed on 2026-07-30. The separately
-  # tested 30% value remains only as the software hard limit.
+  # The operator confirmed 30% motion speed on the real arm on 2026-07-30.
   # Keep one supervised cycle and step confirmation until three complete
   # bottle cycles have been recorded successfully.
-  speed_scale: 0.15
+  speed_scale: 0.30
   cycles: 1
   require_step_confirmation: true
   validated_real_cycles: 0

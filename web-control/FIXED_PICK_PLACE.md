@@ -14,8 +14,8 @@ vision, Cartesian IK, ROS, or the unfinished VLA control wrappers.
   serialization, all-zero rejection, CAN receive monitoring, and its exclusive
   `/tmp/startouch-web-can0.lock`.
 - Real mode is hard-limited to the operator-verified speed scale of 30%.
-  The current configuration still requires `--confirm-each-step` until three
-  consecutive complete real cycles succeed.
+  The current demo configuration uses 15% and manual mode still requires
+  `--confirm-each-step`.
 - An error or Ctrl+C stops the remaining sequence and requests the bridge's
   SDK `cleanup()` path. This software stop is not a substitute for a reachable
   hardware E-stop or power disconnect.
@@ -72,7 +72,7 @@ reachable, and no other control process is running:
 cd ~/arm/UIEAclub_ThirdHand_VLA-fixed-pick-place
 ~/miniconda3/envs/LumosTouch/bin/python \
   web-control/scripts/fixed_pick_place.py \
-  --real --speed-scale 0.30 --confirm-each-step
+  --real --speed-scale 0.15 --confirm-each-step
 ```
 
 The current supervised A/B launch runs one cycle and uses 25 cm raised transfer
@@ -102,8 +102,9 @@ bash scripts/open_fixed_pick_place_control.sh
 
 It binds only to `127.0.0.1:8766` and does not connect to `can0` while idle.
 `手动逐步演示` launches one supervised cycle. `一键自动循环 3 次` launches
-exactly three cycles without waiting for the Continue button. Both modes keep
-the 30% hard limit, 25 cm lift, resource preflight, countdown and cleanup.
+exactly three cycles without waiting for the Continue button. Both modes use
+15% speed and keep the 30% hard limit, 25 cm lift, resource preflight,
+countdown and cleanup.
 The Stop button sends SIGINT only to the page-owned process group; the runner
 executes SDK cleanup and motor disable, and the arm remains at its current
 pose. It does not offer any function to terminate an unrelated controller.

@@ -73,7 +73,7 @@ elements.start.addEventListener('click', () => {
 
 elements.startAuto.addEventListener('click', () => {
   const confirmed = window.confirm(
-    '将以 30% 速度自动执行 3 次完整 A→B→A 循环，过程中无需点击下一步。' +
+    '将以 15% 速度自动执行 3 次完整 A→B→A 循环，过程中无需点击下一步。' +
     '请把测试物体放在固定 A 点，清空机械臂工作区，' +
     '并确认现场人员和物理急停均已就绪。是否开始？'
   );

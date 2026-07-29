@@ -8,7 +8,8 @@ Current task settings:
 
 - workflow: `home_transit_ab`
 - vertical lift above A and B: 0.250 m
-- operator-verified motion speed scale and hard limit: 0.30
+- current motion speed scale: 0.15
+- operator-tested software hard limit: 0.30
 - manual button: one cycle with step confirmation
 - automatic button: exactly three cycles without per-stage confirmation
 - every bottle approach is vertical (`HOME -> A_UP -> A` and
@@ -208,8 +209,7 @@ for real mode.
    its owner; never terminate it from this demo.
 2. Confirm an operator is beside the arm, the work area is clear, and the
    hardware E-stop/power disconnect is reachable.
-3. Continue supervised bottle validation at the operator-verified 30% limit
-   with step confirmation.
-4. Do not exceed 30% or disable step confirmation based only on a partial run.
+3. Continue supervised bottle validation at the requested 15% speed.
+4. Do not exceed the tested 30% hard limit.
 5. Record unattended mode only after three consecutive real cycles succeed
    with the bottle remaining centered at both physical fixtures.

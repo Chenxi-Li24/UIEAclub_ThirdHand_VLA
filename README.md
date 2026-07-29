@@ -68,7 +68,7 @@ MIT — see [LICENSE](LICENSE)
 # Fixed A/B Pick and Place demo
 
 The isolated real-arm workflow is configured for a 25 cm vertical lift,
-30% operator-verified motion speed, adaptive low-stiffness bottle grasping,
+15% current motion speed with a 30% hard limit, adaptive low-stiffness grasping,
 and one continuous SDK path per logical route. The dashboard offers one
 manual step-by-step cycle and a separate one-click automatic mode that runs
 exactly three A-to-B-to-A cycles without pressing Continue. Do not run another

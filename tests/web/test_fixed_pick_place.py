@@ -505,6 +505,17 @@ class FixedPickPlaceTests(unittest.TestCase):
                     ):
                         fixed.load_config(write_config(config_path, above_limit))
 
+    def test_current_manual_and_automatic_demo_speed_is_15_percent(self):
+        config = fixed.load_config(
+            ROOT / "configs" / "tasks" / "fixed_pick_place.yaml"
+        )
+        self.assertEqual(config["speed_scale"], 0.15)
+        self.assertEqual(config["demo"]["speed_scale"], 0.15)
+        javascript = (
+            ROOT / "web-control" / "demo" / "demo.js"
+        ).read_text(encoding="utf-8")
+        self.assertIn("15% 速度自动执行 3 次", javascript)
+
     def test_motion_timeout_stops_sequence(self):
         bridge = FakeBridge("fixed_pick_place:pick")
         runner = fixed.FixedPickPlaceRunner(

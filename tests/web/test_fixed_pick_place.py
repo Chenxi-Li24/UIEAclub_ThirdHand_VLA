@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 import sys
 import tempfile
+import time
 import unittest
 
 import yaml
@@ -416,6 +417,112 @@ class FixedPickPlaceTests(unittest.TestCase):
         finally:
             first.shutdown()
             second.shutdown()
+
+    def test_bridge_continuous_path_calls_sdk_once(self):
+        bridge_path = ROOT / "web-control" / "server" / "startouch_bridge.py"
+        bridge_spec = importlib.util.spec_from_file_location(
+            "continuous_path_bridge",
+            bridge_path,
+        )
+        assert bridge_spec and bridge_spec.loader
+        bridge_module = importlib.util.module_from_spec(bridge_spec)
+        bridge_spec.loader.exec_module(bridge_module)
+        arm = bridge_module.SimulatedArm()
+        calls = []
+        original = arm.set_joint_waypoints
+
+        def record(waypoints, time_sec=None, speed_percent=None):
+            calls.append([list(point) for point in waypoints])
+            return original(
+                waypoints,
+                time_sec=time_sec,
+                speed_percent=speed_percent,
+            )
+
+        arm.set_joint_waypoints = record
+        bridge = bridge_module.RobotBridge()
+        try:
+            start = [0.1, 0.1, -0.1, 0.1, 0.1, 0.1]
+            first = [0.2, 0.2, -0.2, 0.2, 0.2, 0.2]
+            final = [0.3, 0.3, -0.3, 0.3, 0.3, 0.3]
+            arm.joints = list(start)
+            bridge.arm = arm
+            bridge.connected = True
+            bridge.state_ready = True
+            bridge.last_valid_joints = list(start)
+            bridge.enqueue_motion(
+                {
+                    "cmd": "move_joint_path",
+                    "waypoints_rad": [first, final],
+                    "time_sec": 0.2,
+                    "request_id": "path-1",
+                    "source": "test:continuous",
+                }
+            )
+            deadline = time.monotonic() + 2.0
+            while not calls and time.monotonic() < deadline:
+                time.sleep(0.01)
+            self.assertEqual(len(calls), 1)
+            self.assertEqual(
+                calls[0],
+                [start, first, final],
+            )
+        finally:
+            bridge.shutdown()
+
+    def test_bridge_rejects_invalid_continuous_paths(self):
+        bridge_path = ROOT / "web-control" / "server" / "startouch_bridge.py"
+        bridge_spec = importlib.util.spec_from_file_location(
+            "invalid_continuous_path_bridge",
+            bridge_path,
+        )
+        assert bridge_spec and bridge_spec.loader
+        bridge_module = importlib.util.module_from_spec(bridge_spec)
+        bridge_spec.loader.exec_module(bridge_module)
+        bridge = bridge_module.RobotBridge()
+        messages = []
+        original_emit = bridge_module.emit
+        bridge_module.emit = lambda event, **payload: messages.append(
+            {"type": event, **payload}
+        )
+        try:
+            bridge.connected = True
+            bridge.state_ready = True
+            bridge.last_valid_joints = [0.1, 0.1, -0.1, 0.1, 0.1, 0.1]
+            cases = [
+                ([], "at least one"),
+                ([[0.1, 0.1, -0.1]], "six values"),
+                (
+                    [[0.1, 0.1, float("nan"), 0.1, 0.1, 0.1]],
+                    "non-finite",
+                ),
+                ([[0.0] * 6], "all-zero"),
+                (
+                    [[10.0, 0.1, -0.1, 0.1, 0.1, 0.1]],
+                    "outside",
+                ),
+            ]
+            for waypoints, expected in cases:
+                with self.subTest(expected=expected):
+                    messages.clear()
+                    bridge.enqueue_motion(
+                        {
+                            "cmd": "move_joint_path",
+                            "waypoints_rad": waypoints,
+                            "source": "test:invalid",
+                        }
+                    )
+                    self.assertTrue(bridge.motion_queue.empty())
+                    self.assertTrue(
+                        any(
+                            expected in item.get("message", "")
+                            for item in messages
+                        ),
+                        messages,
+                    )
+        finally:
+            bridge_module.emit = original_emit
+            bridge.shutdown()
 
 
 if __name__ == "__main__":

@@ -697,23 +697,51 @@ class RobotBridge:
             emit("error", message="a joint motion is already active")
             return
 
-        joints = command.get("joints_rad")
-        if not isinstance(joints, list) or len(joints) != 6:
-            emit("error", message="joints_rad must contain six values")
-            return
-        try:
-            target = [float(value) for value in joints]
-        except (TypeError, ValueError):
-            emit("error", message="joints_rad contains a non-numeric value")
-            return
-        if not all(math.isfinite(value) for value in target):
-            emit("error", message="joints_rad contains a non-finite value")
-            return
-
-        for index, (value, limits) in enumerate(zip(target, JOINT_LIMITS_RAD), start=1):
-            if value < limits[0] or value > limits[1]:
-                emit("error", message=f"J{index} is outside the Startouch joint limit")
+        command_name = str(command.get("cmd", "move_joint"))
+        if command_name == "move_joint_path":
+            raw_waypoints = command.get("waypoints_rad")
+            if not isinstance(raw_waypoints, list) or not raw_waypoints:
+                emit("error", message="waypoints_rad must contain at least one waypoint")
                 return
+        else:
+            raw_waypoints = [command.get("joints_rad")]
+        waypoints: list[list[float]] = []
+        for point_index, joints in enumerate(raw_waypoints, start=1):
+            if not isinstance(joints, list) or len(joints) != 6:
+                emit(
+                    "error",
+                    message=f"waypoint {point_index} must contain six values",
+                )
+                return
+            try:
+                point = [float(value) for value in joints]
+            except (TypeError, ValueError):
+                emit(
+                    "error",
+                    message=f"waypoint {point_index} contains a non-numeric value",
+                )
+                return
+            if not all(math.isfinite(value) for value in point):
+                emit(
+                    "error",
+                    message=f"waypoint {point_index} contains a non-finite value",
+                )
+                return
+            for joint_index, (value, limits) in enumerate(
+                zip(point, JOINT_LIMITS_RAD),
+                start=1,
+            ):
+                if value < limits[0] or value > limits[1]:
+                    emit(
+                        "error",
+                        message=(
+                            f"waypoint {point_index} J{joint_index} is outside "
+                            "the Startouch joint limit"
+                        ),
+                    )
+                    return
+            waypoints.append(point)
+        target = waypoints[-1]
 
         source = str(command.get("source", "servo"))
         if (
@@ -730,9 +758,11 @@ class RobotBridge:
         item = {
             "start_joints_rad": start_joints,
             "joints_rad": target,
+            "waypoints_rad": waypoints,
             "time_sec": max(0.2, min(30.0, float(command.get("time_sec", 2.0)))),
             "request_id": command.get("request_id"),
             "source": source,
+            "command": command_name,
         }
         self.motion_queue.put_nowait(item)
         self._emit_joint_log(
@@ -743,7 +773,7 @@ class RobotBridge:
         )
         emit(
             "command_accepted",
-            command="move_joint",
+            command=command_name,
             request_id=item["request_id"],
             source=source,
         )
@@ -902,7 +932,7 @@ class RobotBridge:
                 # Do not hold arm_lock during a blocking trajectory. cleanup()
                 # must be able to call the SDK stop-and-disable path concurrently.
                 duration = arm.set_joint_waypoints(
-                    [command["start_joints_rad"], command["joints_rad"]],
+                    [command["start_joints_rad"], *command["waypoints_rad"]],
                     time_sec=command["time_sec"],
                 )
                 if not self.stop_requested.is_set():
@@ -910,7 +940,7 @@ class RobotBridge:
                         self.last_valid_joints = list(command["joints_rad"])
                     emit(
                         "command_complete",
-                        command="move_joint",
+                        command=command["command"],
                         duration_sec=float(duration),
                         request_id=command["request_id"],
                     )
@@ -966,7 +996,7 @@ def main() -> None:
                 bridge.disconnect(str(command.get("reason", "requested")))
             elif name == "software_stop":
                 bridge.disconnect("software_stop")
-            elif name == "move_joint":
+            elif name in {"move_joint", "move_joint_path"}:
                 bridge.enqueue_motion(command)
             elif name == "gripper":
                 bridge.set_gripper(

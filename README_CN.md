@@ -1,4 +1,4 @@
-﻿# ThirdHand VLA -- 桌面级机械臂 VLA 系统
+# ThirdHand VLA -- 桌面级机械臂 VLA 系统
 
 > **UIEA 俱乐部** | Lumos Touch R1 + Lumos Ego + 云端VLA + 本地语音
 
@@ -63,3 +63,24 @@ web-control/scripts/start_ubuntu.sh
 ## 开源协议
 
 MIT — 详见 [LICENSE](LICENSE)
+# 固定 A/B 点 Pick and Place 一键演示
+
+独立真机 worktree 当前配置为：垂直抬升 25 cm、移动速度 15%、低刚度自适应夹瓶，
+并尝试连续执行 3 次 A→B→A 循环。请勿同时启动网页控制服务。
+
+Ubuntu 本机启动：
+
+```bash
+cd /home/nieqingcao/arm/UIEAclub_ThirdHand_VLA-fixed-pick-place
+bash scripts/demo_fixed_pick_place.sh
+```
+
+Windows PowerShell 远程启动：
+
+```powershell
+ssh -t robot-ubuntu "cd /home/nieqingcao/arm/UIEAclub_ThirdHand_VLA-fixed-pick-place && bash scripts/demo_fixed_pick_place.sh"
+```
+
+脚本会在运动前检查 worktree、分支、`can0`、点位、关节限位、速度、日志目录及
+其他用户/控制进程。发生冲突时只输出 `RESOURCE_CONFLICT` 并退出，不干预对方。
+正常和异常退出都会调用 cleanup；失败时会报告具体阶段和原因。

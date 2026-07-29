@@ -29,6 +29,8 @@ POINT_NAMES = (
     "pre_place",
     "place",
     "retreat",
+    "a_up",
+    "b_up",
 )
 
 ACTION_SEQUENCE = (
@@ -43,6 +45,44 @@ ACTION_SEQUENCE = (
     ("MOVE_RETREAT", "move", "retreat"),
     ("RETURN_HOME", "move", "home"),
 )
+
+SIMPLE_AB_ACTION_SEQUENCE = (
+    ("OPEN_GRIPPER_READY", "gripper", "open"),
+    ("MOVE_A", "move", "pre_pick"),
+    ("CLOSE_GRIPPER", "gripper", "close"),
+    ("MOVE_B", "move", "place"),
+    ("OPEN_GRIPPER", "gripper", "open"),
+)
+
+HOME_TRANSIT_AB_ACTION_SEQUENCE = (
+    ("OPEN_GRIPPER_READY", "gripper", "open"),
+    ("MOVE_HOME_START", "move", "home"),
+    ("MOVE_A", "move", "pre_pick"),
+    ("ADAPTIVE_GRASP_A", "adaptive_gripper", "grasp"),
+    ("LIFT_A", "move", "a_up"),
+    ("TRANSFER_A_UP_TO_B_UP", "move", "b_up"),
+    ("DESCEND_TO_B", "move", "place"),
+    ("RELEASE_AT_B", "gripper", "open"),
+    ("LIFT_AFTER_RELEASE_B", "move", "b_up"),
+    ("RETURN_B_UP_TO_HOME", "move", "home"),
+    ("MOVE_HOME_TO_B_UP", "move", "b_up"),
+    ("DESCEND_TO_B_RETURN", "move", "place"),
+    ("ADAPTIVE_GRASP_B", "adaptive_gripper", "grasp"),
+    ("LIFT_B", "move", "b_up"),
+    ("TRANSFER_B_UP_TO_A_UP", "move", "a_up"),
+    ("DESCEND_TO_A", "move", "pre_pick"),
+    ("RELEASE_AT_A", "gripper", "open"),
+    ("LIFT_AFTER_RELEASE_A", "move", "a_up"),
+    ("RETURN_A_UP_TO_HOME", "move", "home"),
+)
+
+
+def action_sequence_for(config: dict[str, Any]) -> tuple[tuple[str, str, str], ...]:
+    if config.get("workflow") == "home_transit_ab":
+        return HOME_TRANSIT_AB_ACTION_SEQUENCE
+    if config.get("workflow") == "simple_ab":
+        return SIMPLE_AB_ACTION_SEQUENCE
+    return ACTION_SEQUENCE
 
 
 class PickPlaceError(RuntimeError):
@@ -122,12 +162,32 @@ def load_config(path: Path, *, require_all_points: bool = True) -> dict[str, Any
     waypoints = raw.get("waypoints")
     if not isinstance(waypoints, dict):
         raise ConfigurationError("waypoints must be a mapping")
+    workflow = str(raw.get("workflow", "full"))
+    if workflow not in {"full", "simple_ab", "home_transit_ab"}:
+        raise ConfigurationError(
+            "workflow must be 'full', 'simple_ab', or 'home_transit_ab'"
+        )
+    required_points = (
+        {"home", "pre_pick", "place"}
+        if workflow == "simple_ab"
+        else {"home", "pre_pick", "place", "a_up", "b_up"}
+        if workflow == "home_transit_ab"
+        else {
+            "home",
+            "pre_pick",
+            "pick",
+            "lift",
+            "pre_place",
+            "place",
+            "retreat",
+        }
+    )
     normalized: dict[str, list[float] | None] = {}
     for name in POINT_NAMES:
         value = waypoints.get(name)
         normalized[name] = (
             validate_waypoint(name, value, limits)
-            if value is not None or require_all_points
+            if value is not None or (require_all_points and name in required_points)
             else None
         )
 
@@ -142,29 +202,106 @@ def load_config(path: Path, *, require_all_points: bool = True) -> dict[str, Any
     min_time = float(motion.get("min_time_s", 0.5))
     timeout = float(motion.get("timeout_s", 45.0))
     settle = float(motion.get("settle_s", 0.2))
+    target_tolerance = float(motion.get("target_tolerance_deg", 2.0))
     gripper_timeout = float(gripper.get("timeout_s", 5.0))
     open_position = float(gripper.get("open_position", 1.0))
     close_position = float(gripper.get("close_position", 0.0))
-    if min_time <= 0 or timeout <= 0 or settle < 0 or gripper_timeout <= 0:
+    grasp_position = float(gripper.get("grasp_position", close_position))
+    adaptive_grasp = raw.get("adaptive_grasp", {})
+    if not isinstance(adaptive_grasp, dict):
+        raise ConfigurationError("adaptive_grasp must be a mapping")
+    adaptive_preload = float(adaptive_grasp.get("preload_position", 0.025))
+    adaptive_min_contact = float(
+        adaptive_grasp.get("min_contact_position", 0.08)
+    )
+    adaptive_kp = float(adaptive_grasp.get("kp", 2.0))
+    adaptive_kd = float(adaptive_grasp.get("kd", 0.1))
+    open_kp = float(gripper.get("open_kp", 8.0))
+    if (
+        min_time <= 0
+        or timeout <= 0
+        or settle < 0
+        or target_tolerance <= 0
+        or gripper_timeout <= 0
+    ):
         raise ConfigurationError("motion/gripper timing values are invalid")
-    if not 0 <= open_position <= 1 or not 0 <= close_position <= 1:
+    if (
+        not 0 <= open_position <= 1
+        or not 0 <= close_position <= 1
+        or not 0 <= grasp_position <= 1
+    ):
         raise ConfigurationError("gripper positions must be between 0 and 1")
+    if (
+        not 0 < adaptive_preload <= 0.10
+        or not 0 < adaptive_min_contact < 1
+        or not 0.1 <= adaptive_kp <= 20.0
+        or not 0.1 <= adaptive_kd <= 1.0
+        or not 0.1 <= open_kp <= 20.0
+    ):
+        raise ConfigurationError("adaptive gripper values are invalid")
 
     raw["joint_limits_deg"] = limits
     raw["joint_max_speeds_deg_s"] = max_speeds
     raw["waypoints"] = normalized
+    raw["workflow"] = workflow
     raw["speed_scale"] = speed_scale
     raw["motion"] = {
         **motion,
         "min_time_s": min_time,
         "timeout_s": timeout,
         "settle_s": settle,
+        "target_tolerance_deg": target_tolerance,
     }
+    max_segment_delta = motion.get("max_segment_delta_deg")
+    if max_segment_delta is not None:
+        if not isinstance(max_segment_delta, list) or len(max_segment_delta) != 6:
+            raise ConfigurationError(
+                "motion.max_segment_delta_deg must contain six values"
+            )
+        max_segment_delta = [float(value) for value in max_segment_delta]
+        if any(
+            not math.isfinite(value) or value <= 0
+            for value in max_segment_delta
+        ):
+            raise ConfigurationError(
+                "motion.max_segment_delta_deg must be finite and positive"
+            )
+        raw["motion"]["max_segment_delta_deg"] = max_segment_delta
     raw["gripper"] = {
         **gripper,
         "timeout_s": gripper_timeout,
         "open_position": open_position,
         "close_position": close_position,
+        "grasp_position": grasp_position,
+        "open_kp": open_kp,
+    }
+    raw["adaptive_grasp"] = {
+        **adaptive_grasp,
+        "preload_position": adaptive_preload,
+        "min_contact_position": adaptive_min_contact,
+        "kp": adaptive_kp,
+        "kd": adaptive_kd,
+    }
+    demo = raw.get("demo", {})
+    if not isinstance(demo, dict):
+        raise ConfigurationError("demo must be a mapping")
+    validated_cycles = int(demo.get("validated_real_cycles", 0))
+    if validated_cycles < 0:
+        raise ConfigurationError("demo.validated_real_cycles cannot be negative")
+    cycles = int(demo.get("cycles", 1))
+    if not 1 <= cycles <= 100:
+        raise ConfigurationError("demo.cycles must be between 1 and 100")
+    demo_speed = float(demo.get("speed_scale", speed_scale))
+    if not math.isfinite(demo_speed) or not 0 < demo_speed <= 0.20:
+        raise ConfigurationError("demo.speed_scale must be in (0, 0.20]")
+    raw["demo"] = {
+        **demo,
+        "cycles": cycles,
+        "validated_real_cycles": validated_cycles,
+        "speed_scale": demo_speed,
+        "require_step_confirmation": bool(
+            demo.get("require_step_confirmation", validated_cycles < 3)
+        ),
     }
     return raw
 
@@ -180,6 +317,8 @@ class BridgeClient:
         self.events: queue.Queue[dict[str, Any]] = queue.Queue()
         self.latest_joints_deg: list[float] | None = None
         self.latest_gripper_position: float | None = None
+        self.latest_tcp_position_m: list[float] | None = None
+        self.latest_tcp_euler_rad: list[float] | None = None
         self._event_stream = None
         self._reader_threads: list[threading.Thread] = []
 
@@ -245,6 +384,16 @@ class BridgeClient:
                 position = event.get("gripper_position")
                 if isinstance(position, (int, float)) and math.isfinite(position):
                     self.latest_gripper_position = float(position)
+                tcp_position = event.get("tcp_position_m")
+                tcp_euler = event.get("tcp_euler_rad")
+                if isinstance(tcp_position, list) and len(tcp_position) == 3:
+                    self.latest_tcp_position_m = [
+                        float(value) for value in tcp_position
+                    ]
+                if isinstance(tcp_euler, list) and len(tcp_euler) == 3:
+                    self.latest_tcp_euler_rad = [
+                        float(value) for value in tcp_euler
+                    ]
             if event.get("type") in {
                 "connection",
                 "motion_state",
@@ -303,13 +452,17 @@ class BridgeClient:
         max_speeds_deg_s: list[float],
         min_time_s: float,
         timeout_s: float,
+        target_tolerance_deg: float,
         source: str,
     ) -> None:
         if self.latest_joints_deg is None:
             raise BridgeError("current joint state is unavailable")
+        # The SDK uses a smooth quintic trajectory whose peak velocity is
+        # 1.875 times average delta/duration. Account for that factor so the
+        # requested speed scale is also a peak-speed limit.
         duration = max(
             min_time_s,
-            max(
+            1.875 * max(
                 abs(target - current) / (speed * speed_scale)
                 for target, current, speed in zip(
                     target_deg,
@@ -341,10 +494,53 @@ class BridgeClient:
             ),
             min(timeout_s, duration + 10.0),
         )
-        self.latest_joints_deg = list(target_deg)
+        if self.mode == "dry-run":
+            self.latest_joints_deg = list(target_deg)
+            return
+        requested_after_ms = int(time.time() * 1000)
+        self._send({"cmd": "get_state"})
+        self._wait_for(
+            lambda item: (
+                item.get("type") == "robot_state"
+                and int(item.get("ts", 0)) >= requested_after_ms
+            ),
+            3.0,
+        )
+        if self.latest_joints_deg is None:
+            raise BridgeError("post-motion joint feedback is unavailable")
+        errors = [
+            abs(actual - target)
+            for actual, target in zip(self.latest_joints_deg, target_deg)
+        ]
+        if max(errors) > target_tolerance_deg:
+            details = ", ".join(
+                f"J{index + 1}={error:.3f}deg"
+                for index, error in enumerate(errors)
+            )
+            raise BridgeError(
+                "post-motion target error exceeds "
+                f"{target_tolerance_deg:.3f}deg: {details}"
+            )
+        self.log.info(
+            "post-motion feedback target_error_deg=%s",
+            ", ".join(f"{error:.3f}" for error in errors),
+        )
 
-    def set_gripper(self, position: float, timeout_s: float) -> None:
-        self._send({"cmd": "gripper", "position": position})
+    def set_gripper(
+        self,
+        position: float,
+        timeout_s: float,
+        *,
+        kp: float | None = None,
+        kd: float | None = None,
+    ) -> None:
+        start = self.latest_gripper_position
+        command: dict[str, Any] = {"cmd": "gripper", "position": position}
+        if kp is not None:
+            command["kp"] = kp
+        if kd is not None:
+            command["kd"] = kd
+        self._send(command)
         event = self._wait_for(
             lambda item: (
                 item.get("type") == "command_complete"
@@ -352,8 +548,82 @@ class BridgeClient:
             ),
             timeout_s,
         )
-        if not event.get("reached", False):
-            raise BridgeError(str(event.get("message", "gripper failed to reach target")))
+        if event.get("reached", False):
+            return
+        # A close command normally stops on the object (or the gripper's
+        # mechanical minimum), so exact zero-position convergence is not a
+        # valid success requirement.  Still require meaningful motion and a
+        # substantially closed feedback position; opening remains strict.
+        actual = event.get("actual_position")
+        closing = (
+            isinstance(start, (int, float))
+            and math.isfinite(start)
+            and position < start
+        )
+        if (
+            closing
+            and event.get("moved", False)
+            and isinstance(actual, (int, float))
+            and math.isfinite(actual)
+            and actual <= start - 0.03
+        ):
+            self.log.info(
+                "gripper close accepted on obstruction "
+                "target=%.3f actual_position=%.3f",
+                position,
+                actual,
+            )
+            return
+        raise BridgeError(str(event.get("message", "gripper failed to reach target")))
+
+    def adaptive_grasp(
+        self,
+        timeout_s: float,
+        *,
+        preload_position: float,
+        min_contact_position: float,
+        kp: float,
+        kd: float,
+    ) -> None:
+        if self.mode == "dry-run":
+            self.set_gripper(0.5, timeout_s)
+            self.log.info("adaptive grasp dry-run contact_position=0.500")
+            return
+        start = self.latest_gripper_position
+        if not isinstance(start, (int, float)) or not math.isfinite(start):
+            raise BridgeError("gripper feedback is unavailable before adaptive grasp")
+        self._send(
+            {"cmd": "gripper", "position": 0.0, "kp": kp, "kd": kd}
+        )
+        contact = self._wait_for(
+            lambda item: (
+                item.get("type") == "command_complete"
+                and item.get("command") == "gripper"
+            ),
+            timeout_s,
+        )
+        actual = contact.get("actual_position")
+        if not isinstance(actual, (int, float)) or not math.isfinite(actual):
+            raise BridgeError("adaptive grasp did not produce valid feedback")
+        if (
+            contact.get("reached", False)
+            or actual < min_contact_position
+            or actual > 0.95
+        ):
+            raise BridgeError(
+                "adaptive grasp reached the closed limit without detecting an object"
+            )
+        if not contact.get("moved", False):
+            self.log.info(
+                "adaptive grasp detected pre-existing contact at %.3f",
+                actual,
+            )
+        self.log.info(
+            "adaptive grasp contact_position=%.3f "
+            "holding_with_low_stiffness_kp=%.3f",
+            actual,
+            kp,
+        )
 
     def software_stop(self) -> None:
         try:
@@ -410,6 +680,9 @@ class FixedPickPlaceRunner:
         logger: logging.Logger,
         *,
         confirm_each_step: bool = False,
+        motion_only: bool = False,
+        resume_at_adaptive_a: bool = False,
+        resume_at_adaptive_b: bool = False,
         confirm: Callable[[str], str] = input,
     ):
         self.bridge = bridge
@@ -417,6 +690,9 @@ class FixedPickPlaceRunner:
         self.mode = mode
         self.log = logger
         self.confirm_each_step = confirm_each_step
+        self.motion_only = motion_only
+        self.resume_at_adaptive_a = resume_at_adaptive_a
+        self.resume_at_adaptive_b = resume_at_adaptive_b
         self.confirm = confirm
 
     def _confirm_step(self, state: str) -> None:
@@ -428,6 +704,108 @@ class FixedPickPlaceRunner:
         if answer.strip().upper() == "STOP":
             raise UserAbort(f"operator aborted before {state}")
 
+    def _move_closed_loop(self, target: str, joints: list[float]) -> None:
+        motion = self.config["motion"]
+        chunk_deg = float(motion.get("execution_chunk_deg", 0.0))
+        final_tolerance = float(
+            motion.get("final_target_tolerance_deg", 1.0)
+        )
+        if self.mode == "simulate" or chunk_deg <= 0:
+            self.bridge.move(
+                joints,
+                speed_scale=self.config["speed_scale"],
+                max_speeds_deg_s=self.config["joint_max_speeds_deg_s"],
+                min_time_s=motion["min_time_s"],
+                timeout_s=motion["timeout_s"],
+                target_tolerance_deg=motion.get(
+                    "target_tolerance_deg",
+                    2.0,
+                ),
+                source=f"fixed_pick_place:{target}",
+            )
+            return
+
+        stalled_chunks = 0
+        for chunk_index in range(1, 101):
+            current = getattr(self.bridge, "latest_joints_deg", None)
+            if current is None:
+                raise BridgeError("current joint feedback is unavailable")
+            differences = [
+                goal - actual for goal, actual in zip(joints, current)
+            ]
+            remaining = max(abs(value) for value in differences)
+            if remaining <= final_tolerance:
+                self.log.info(
+                    "%s reached final_tolerance_deg=%.3f remaining=%.3f",
+                    target,
+                    final_tolerance,
+                    remaining,
+                )
+                tcp_position = getattr(
+                    self.bridge, "latest_tcp_position_m", None
+                )
+                tcp_euler = getattr(self.bridge, "latest_tcp_euler_rad", None)
+                if tcp_position is not None and tcp_euler is not None:
+                    self.log.info(
+                        "%s tcp_pose=%s",
+                        target,
+                        ",".join(
+                            f"{value:.9f}"
+                            for value in [*tcp_position, *tcp_euler]
+                        ),
+                    )
+                return
+            fraction = min(1.0, chunk_deg / remaining)
+            chunk_target = [
+                actual + difference * fraction
+                for actual, difference in zip(current, differences)
+            ]
+            self.log.info(
+                "%s chunk=%d remaining_deg=%.3f target=%s",
+                target,
+                chunk_index,
+                remaining,
+                ", ".join(f"{value:.3f}" for value in chunk_target),
+            )
+            self.bridge.move(
+                chunk_target,
+                speed_scale=self.config["speed_scale"],
+                max_speeds_deg_s=self.config["joint_max_speeds_deg_s"],
+                min_time_s=motion["min_time_s"],
+                timeout_s=motion["timeout_s"],
+                target_tolerance_deg=motion.get(
+                    "target_tolerance_deg",
+                    2.0,
+                ),
+                source=f"fixed_pick_place:{target}:chunk-{chunk_index}",
+            )
+            updated = getattr(self.bridge, "latest_joints_deg", None)
+            if updated is None:
+                raise BridgeError("post-motion joint feedback is unavailable")
+            updated_remaining = max(
+                abs(goal - actual)
+                for goal, actual in zip(joints, updated)
+            )
+            progress = remaining - updated_remaining
+            if progress < 0.10:
+                stalled_chunks += 1
+                self.log.warning(
+                    "%s low progress chunk=%d progress_deg=%.3f "
+                    "consecutive=%d",
+                    target,
+                    chunk_index,
+                    progress,
+                    stalled_chunks,
+                )
+                if stalled_chunks >= 3:
+                    raise BridgeError(
+                        f"{target} made less than 0.10deg progress for "
+                        "three consecutive chunks"
+                    )
+            else:
+                stalled_chunks = 0
+        raise BridgeError(f"{target} did not converge within 100 chunks")
+
     def run(self) -> None:
         failed = True
         self.log.info("STATE IDLE mode=%s", self.mode)
@@ -437,34 +815,117 @@ class FixedPickPlaceRunner:
                 "connected current_joints_deg=%s",
                 ", ".join(f"{value:.3f}" for value in current),
             )
-            for state, kind, target in ACTION_SEQUENCE:
-                self.log.info("STATE %s", state)
-                self._confirm_step(state)
-                if kind == "move":
-                    joints = self.config["waypoints"][target]
-                    assert joints is not None
-                    self.log.info(
-                        "%s target=%s speed_scale=%.4f",
-                        target,
-                        ", ".join(f"{value:.3f}" for value in joints),
-                        self.config["speed_scale"],
+            sequence = action_sequence_for(self.config)
+            if self.resume_at_adaptive_a:
+                current = getattr(self.bridge, "latest_joints_deg", None)
+                target_a = self.config["waypoints"]["pre_pick"]
+                if current is None or max(
+                    abs(actual - target)
+                    for actual, target in zip(current, target_a)
+                ) > 1.0:
+                    raise ConfigurationError(
+                        "--resume-at-adaptive-a requires the arm to be at A "
+                        "within 1 degree"
                     )
-                    self.bridge.move(
-                        joints,
-                        speed_scale=self.config["speed_scale"],
-                        max_speeds_deg_s=self.config["joint_max_speeds_deg_s"],
-                        min_time_s=self.config["motion"]["min_time_s"],
-                        timeout_s=self.config["motion"]["timeout_s"],
-                        source=f"fixed_pick_place:{target}",
+                start_index = next(
+                    index
+                    for index, action in enumerate(sequence)
+                    if action[0] == "ADAPTIVE_GRASP_A"
+                )
+                sequence = sequence[start_index:]
+                self.log.info("resuming sequence at ADAPTIVE_GRASP_A")
+            elif self.resume_at_adaptive_b:
+                current = getattr(self.bridge, "latest_joints_deg", None)
+                target_b = self.config["waypoints"]["place"]
+                if current is None or max(
+                    abs(actual - target)
+                    for actual, target in zip(current, target_b)
+                ) > 1.0:
+                    raise ConfigurationError(
+                        "--resume-at-adaptive-b requires the arm to be at B "
+                        "within 1 degree"
                     )
-                    time.sleep(self.config["motion"]["settle_s"])
-                else:
-                    position = self.config["gripper"][f"{target}_position"]
-                    self.log.info("gripper %s target=%.3f", target, position)
-                    self.bridge.set_gripper(
-                        position,
-                        self.config["gripper"]["timeout_s"],
-                    )
+                start_index = next(
+                    index
+                    for index, action in enumerate(sequence)
+                    if action[0] == "ADAPTIVE_GRASP_B"
+                )
+                sequence = sequence[start_index:]
+                self.log.info("resuming sequence at ADAPTIVE_GRASP_B")
+            cycles = (
+                1
+                if (self.resume_at_adaptive_a or self.resume_at_adaptive_b)
+                else self.config.get("demo", {}).get("cycles", 1)
+            )
+            first_move = True
+            for cycle_index in range(1, cycles + 1):
+                self.log.info("CYCLE %d/%d START", cycle_index, cycles)
+                for state, kind, target in sequence:
+                    self.log.info("STATE %s", state)
+                    self._confirm_step(f"CYCLE_{cycle_index}_{state}")
+                    if kind == "move":
+                        joints = self.config["waypoints"][target]
+                        assert joints is not None
+                        max_segment_delta = self.config["motion"].get(
+                            "max_segment_delta_deg"
+                        )
+                        current = getattr(self.bridge, "latest_joints_deg", None)
+                        if (
+                            max_segment_delta is not None
+                            and current is not None
+                            and (self.mode == "real" or not first_move)
+                        ):
+                            deltas = [
+                                abs(goal - actual)
+                                for goal, actual in zip(joints, current)
+                            ]
+                            violations = [
+                                f"J{index + 1}={delta:.3f}>{limit:.3f}"
+                                for index, (delta, limit) in enumerate(
+                                    zip(deltas, max_segment_delta)
+                                )
+                                if delta > limit
+                            ]
+                            if violations:
+                                raise ConfigurationError(
+                                    "segment jump rejected: " + ", ".join(violations)
+                                )
+                        self.log.info(
+                            "%s target=%s speed_scale=%.4f",
+                            target,
+                            ", ".join(f"{value:.3f}" for value in joints),
+                            self.config["speed_scale"],
+                        )
+                        self._move_closed_loop(target, joints)
+                        first_move = False
+                        time.sleep(self.config["motion"]["settle_s"])
+                    elif kind == "gripper":
+                        position = self.config["gripper"][f"{target}_position"]
+                        self.log.info("gripper %s target=%.3f", target, position)
+                        self.bridge.set_gripper(
+                            position,
+                            self.config["gripper"]["timeout_s"],
+                            kp=(
+                                self.config["gripper"].get("open_kp", 8.0)
+                                if target == "open"
+                                else None
+                            ),
+                        )
+                    else:
+                        if self.motion_only:
+                            self.log.info(
+                                "adaptive grasp skipped for empty trajectory validation"
+                            )
+                            continue
+                        adaptive = self.config["adaptive_grasp"]
+                        self.bridge.adaptive_grasp(
+                            self.config["gripper"]["timeout_s"],
+                            preload_position=adaptive["preload_position"],
+                            min_contact_position=adaptive["min_contact_position"],
+                            kp=adaptive["kp"],
+                            kd=adaptive["kd"],
+                        )
+                self.log.info("CYCLE %d/%d COMPLETE", cycle_index, cycles)
             self.log.info("STATE COMPLETE")
             failed = False
         finally:
@@ -501,6 +962,21 @@ def build_parser(root: Path) -> argparse.ArgumentParser:
     mode.add_argument("--real", action="store_true")
     parser.add_argument("--speed-scale", type=float)
     parser.add_argument("--confirm-each-step", action="store_true")
+    parser.add_argument(
+        "--motion-only",
+        action="store_true",
+        help="skip adaptive grasps for supervised empty-trajectory validation",
+    )
+    parser.add_argument(
+        "--resume-at-adaptive-a",
+        action="store_true",
+        help="resume a supervised run with the arm already positioned at A",
+    )
+    parser.add_argument(
+        "--resume-at-adaptive-b",
+        action="store_true",
+        help="resume a supervised run with the arm already positioned at B",
+    )
     return parser
 
 
@@ -517,11 +993,18 @@ def main() -> int:
                 raise ConfigurationError("--speed-scale must be in (0, 1]")
             config["speed_scale"] = args.speed_scale
         if mode == "real":
-            if config["speed_scale"] > 0.05:
-                raise ConfigurationError("real-arm speed scale must not exceed 0.05")
-            if not args.confirm_each_step:
+            if config["speed_scale"] > 0.20:
+                raise ConfigurationError("real-arm speed scale must not exceed 0.20")
+            if (
+                not args.confirm_each_step
+                and (
+                    config["demo"]["validated_real_cycles"] < 3
+                    or config["demo"]["require_step_confirmation"]
+                )
+            ):
                 raise ConfigurationError(
-                    "real mode requires --confirm-each-step for the first safe run"
+                    "real mode requires --confirm-each-step until three "
+                    "validated real cycles are recorded"
                 )
         bridge = BridgeClient(
             root / "web-control" / "server" / "startouch_bridge.py",
@@ -534,6 +1017,9 @@ def main() -> int:
             mode,
             logger,
             confirm_each_step=args.confirm_each_step,
+            motion_only=args.motion_only,
+            resume_at_adaptive_a=args.resume_at_adaptive_a,
+            resume_at_adaptive_b=args.resume_at_adaptive_b,
         )
 
         def handle_interrupt(_signum, _frame):

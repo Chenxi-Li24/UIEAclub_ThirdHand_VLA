@@ -2,6 +2,50 @@
 
 Audit date: 2026-07-29 (Asia/Shanghai)
 
+## Final demo entry and latest validation
+
+Current task settings:
+
+- workflow: `home_transit_ab`
+- vertical lift above A and B: 0.250 m
+- motion speed scale: 0.15
+- requested cycles per launch: 3
+- adaptive grasp stiffness: `kp=2.0`, `kd=0.1`
+- step confirmation remains enabled because three consecutive real cycles
+  have not yet completed successfully
+
+Ubuntu local launch:
+
+```bash
+cd /home/nieqingcao/arm/UIEAclub_ThirdHand_VLA-fixed-pick-place
+bash scripts/demo_fixed_pick_place.sh
+```
+
+Windows PowerShell remote launch:
+
+```powershell
+ssh -t robot-ubuntu "cd /home/nieqingcao/arm/UIEAclub_ThirdHand_VLA-fixed-pick-place && bash scripts/demo_fixed_pick_place.sh"
+```
+
+On 2026-07-29 at 20:40, the 15%/25 cm real run completed cycle 1
+(A→B→A). Adaptive contact was detected at normalized gripper positions 0.749
+at A and 0.786 at B. Cycle 2 stopped safely at `ADAPTIVE_GRASP_A`: after the
+first return, the unfixtured bottle no longer remained centered at the taught
+A point, and the gripper reached about 6.25 mm without contact. Cleanup
+disabled the motors and left no control process running. This run is therefore
+recorded as failed, not as three-cycle validation.
+
+Relevant logs:
+
+```text
+logs/fixed_pick_place/demo-20260729-204025.log
+logs/fixed_pick_place/run-20260729-204046.log
+```
+
+For reliable unattended repetition, A and B require a physical locating
+fixture or another mechanism that guarantees the released bottle remains
+centered. The software deliberately does not guess a shifted object position.
+
 ## Host and environment
 
 - SSH host: `robot-ubuntu`

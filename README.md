@@ -1,4 +1,4 @@
-﻿# ThirdHand VLA -- Desktop Robotic Arm Vision-Language-Action System
+# ThirdHand VLA -- Desktop Robotic Arm Vision-Language-Action System
 
 > **UIEA Club** | Lumos Touch R1 + Lumos Ego + Cloud VLA + Local ASR/TTS
 
@@ -65,3 +65,26 @@ Edit `configs/*.yaml` for your hardware setup. See `docs/setup_guide.md`.
 ## License
 
 MIT — see [LICENSE](LICENSE)
+# Fixed A/B Pick and Place demo
+
+The isolated real-arm workflow is configured for a 25 cm vertical lift,
+15% motion speed, adaptive low-stiffness bottle grasping, and three requested
+A-to-B-to-A cycles. Do not run the web controller at the same time.
+
+Ubuntu local launch:
+
+```bash
+cd /home/nieqingcao/arm/UIEAclub_ThirdHand_VLA-fixed-pick-place
+bash scripts/demo_fixed_pick_place.sh
+```
+
+Windows PowerShell remote launch:
+
+```powershell
+ssh -t robot-ubuntu "cd /home/nieqingcao/arm/UIEAclub_ThirdHand_VLA-fixed-pick-place && bash scripts/demo_fixed_pick_place.sh"
+```
+
+The launcher checks the worktree, branch, `can0`, point validity, joint
+limits, speed, logs, and competing users/processes before motion. On a
+conflict it prints `RESOURCE_CONFLICT` and does not interfere with the other
+process. A failed run executes cleanup and reports the failed stage and cause.

@@ -13,8 +13,9 @@ vision, Cartesian IK, ROS, or the unfinished VLA control wrappers.
 - The existing bridge retains CAN preflight, stable-state checks, motion
   serialization, all-zero rejection, CAN receive monitoring, and its exclusive
   `/tmp/startouch-web-can0.lock`.
-- Real mode is hard-limited to a speed scale of 5% and requires
-  `--confirm-each-step`.
+- Real mode is hard-limited to a speed scale of 20%. The current validated
+  configuration uses 15% and still requires `--confirm-each-step` until three
+  consecutive real cycles succeed.
 - An error or Ctrl+C stops the remaining sequence and requests the bridge's
   SDK `cleanup()` path. This software stop is not a substitute for a reachable
   hardware E-stop or power disconnect.
@@ -71,18 +72,26 @@ reachable, and no other control process is running:
 cd ~/arm/UIEAclub_ThirdHand_VLA-fixed-pick-place
 ~/miniconda3/envs/LumosTouch/bin/python \
   web-control/scripts/fixed_pick_place.py \
-  --real --speed-scale 0.05 --confirm-each-step
+  --real --speed-scale 0.15 --confirm-each-step
 ```
 
-The sequence is:
+The current A/B sequence repeats three times and uses 25 cm raised transfer
+points:
 
 ```text
-MOVE_HOME -> MOVE_PRE_PICK -> MOVE_PICK -> CLOSE_GRIPPER
--> MOVE_LIFT -> MOVE_PRE_PLACE -> MOVE_PLACE -> OPEN_GRIPPER
--> MOVE_RETREAT -> RETURN_HOME -> COMPLETE
+OPEN -> HOME -> A -> ADAPTIVE_GRASP_A -> A_UP -> B_UP -> B -> OPEN
+-> B_UP -> HOME -> B_UP -> B -> ADAPTIVE_GRASP_B -> B_UP -> A_UP
+-> A -> OPEN -> A_UP -> HOME
 ```
 
 Per-run logs are saved under `logs/fixed_pick_place/`.
+
+The one-click entry is:
+
+```bash
+cd /home/nieqingcao/arm/UIEAclub_ThirdHand_VLA-fixed-pick-place
+bash scripts/demo_fixed_pick_place.sh
+```
 
 ## Stop and recovery
 

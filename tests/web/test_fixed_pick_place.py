@@ -60,15 +60,21 @@ class FakeBridge:
 
     def connect(self):
         self.calls.append(("connect",))
-        return [1, 2, -3, 4, 5, 6]
+        self.latest_joints_deg = [1, 2, -3, 4, 5, 6]
+        return list(self.latest_joints_deg)
 
     def move(self, joints, **kwargs):
         self.calls.append(("move", list(joints), kwargs["source"]))
         if self.failure == kwargs["source"]:
             raise fixed.MotionTimeout("motion timeout")
 
-    def set_gripper(self, position, timeout_s):
+    def set_gripper(self, position, timeout_s, **kwargs):
         self.calls.append(("gripper", position))
+        if self.failure == "gripper":
+            raise fixed.BridgeError("gripper failure")
+
+    def adaptive_grasp(self, timeout_s, **kwargs):
+        self.calls.append(("adaptive_gripper", kwargs))
         if self.failure == "gripper":
             raise fixed.BridgeError("gripper failure")
 
@@ -176,6 +182,151 @@ class FixedPickPlaceTests(unittest.TestCase):
         )
         runner.run()
         self.assertIs(bridge.closed_failed, False)
+
+    def test_simple_ab_requires_only_home_a_b_and_moves_directly_a_to_b(self):
+        data = config_dict()
+        data["workflow"] = "simple_ab"
+        data["demo"] = {
+            "speed_scale": 0.03,
+            "require_step_confirmation": True,
+            "validated_real_cycles": 0,
+        }
+        data["waypoints"]["pick"] = None
+        data["waypoints"]["lift"] = None
+        data["waypoints"]["pre_place"] = None
+        data["waypoints"]["retreat"] = None
+        with tempfile.TemporaryDirectory() as directory:
+            config = fixed.load_config(write_config(Path(directory), data))
+        bridge = FakeBridge()
+        runner = fixed.FixedPickPlaceRunner(
+            bridge,
+            config,
+            "simulate",
+            logging.getLogger("test"),
+        )
+        runner.run()
+        sources = [
+            call[2]
+            for call in bridge.calls
+            if call[0] == "move"
+        ]
+        self.assertEqual(
+            sources,
+            [
+                "fixed_pick_place:pre_pick",
+                "fixed_pick_place:place",
+            ],
+        )
+
+    def test_home_transit_ab_moves_bottle_both_directions_via_home(self):
+        data = config_dict()
+        data["workflow"] = "home_transit_ab"
+        data["gripper"]["grasp_position"] = 0.5
+        data["waypoints"]["pick"] = None
+        data["waypoints"]["lift"] = None
+        data["waypoints"]["pre_place"] = None
+        data["waypoints"]["retreat"] = None
+        with tempfile.TemporaryDirectory() as directory:
+            config = fixed.load_config(write_config(Path(directory), data))
+        bridge = FakeBridge()
+        fixed.FixedPickPlaceRunner(
+            bridge,
+            config,
+            "simulate",
+            logging.getLogger("test"),
+        ).run()
+        self.assertEqual(
+            [call[2] for call in bridge.calls if call[0] == "move"],
+            [
+                "fixed_pick_place:home",
+                "fixed_pick_place:pre_pick",
+                "fixed_pick_place:a_up",
+                "fixed_pick_place:b_up",
+                "fixed_pick_place:place",
+                "fixed_pick_place:b_up",
+                "fixed_pick_place:home",
+                "fixed_pick_place:b_up",
+                "fixed_pick_place:place",
+                "fixed_pick_place:b_up",
+                "fixed_pick_place:a_up",
+                "fixed_pick_place:pre_pick",
+                "fixed_pick_place:a_up",
+                "fixed_pick_place:home",
+            ],
+        )
+        self.assertEqual(
+            [call[1] for call in bridge.calls if call[0] == "gripper"],
+            [1.0, 1.0, 1.0],
+        )
+        self.assertEqual(
+            len([call for call in bridge.calls if call[0] == "adaptive_gripper"]),
+            2,
+        )
+
+    def test_home_transit_ab_repeats_configured_cycles(self):
+        data = config_dict()
+        data["workflow"] = "home_transit_ab"
+        data["demo"] = {"cycles": 3}
+        for name in ("pick", "lift", "pre_place", "retreat"):
+            data["waypoints"][name] = None
+        with tempfile.TemporaryDirectory() as directory:
+            config = fixed.load_config(write_config(Path(directory), data))
+        bridge = FakeBridge()
+        fixed.FixedPickPlaceRunner(
+            bridge,
+            config,
+            "simulate",
+            logging.getLogger("test"),
+        ).run()
+        self.assertEqual(
+            len([call for call in bridge.calls if call[0] == "adaptive_gripper"]),
+            6,
+        )
+        self.assertEqual(
+            len([call for call in bridge.calls if call[0] == "move"]),
+            42,
+        )
+
+    def test_motion_only_skips_adaptive_grasps(self):
+        data = config_dict()
+        data["workflow"] = "home_transit_ab"
+        for name in ("pick", "lift", "pre_place", "retreat"):
+            data["waypoints"][name] = None
+        with tempfile.TemporaryDirectory() as directory:
+            config = fixed.load_config(write_config(Path(directory), data))
+        bridge = FakeBridge()
+        fixed.FixedPickPlaceRunner(
+            bridge,
+            config,
+            "simulate",
+            logging.getLogger("test"),
+            motion_only=True,
+        ).run()
+        self.assertFalse(
+            any(call[0] == "adaptive_gripper" for call in bridge.calls)
+        )
+
+    def test_segment_jump_limit_rejects_unexpected_starting_pose(self):
+        data = config_dict()
+        data["workflow"] = "simple_ab"
+        data["motion"]["max_segment_delta_deg"] = [10, 10, 10, 10, 10, 10]
+        data["waypoints"]["place"] = [-20.0, 20.0, -30.0, 5.0, -5.0, 10.0]
+        data["waypoints"]["pick"] = None
+        data["waypoints"]["lift"] = None
+        data["waypoints"]["pre_place"] = None
+        data["waypoints"]["retreat"] = None
+        with tempfile.TemporaryDirectory() as directory:
+            config = fixed.load_config(write_config(Path(directory), data))
+        bridge = FakeBridge()
+        runner = fixed.FixedPickPlaceRunner(
+            bridge,
+            config,
+            "simulate",
+            logging.getLogger("test"),
+        )
+        with self.assertRaisesRegex(fixed.ConfigurationError, "segment jump rejected"):
+            runner.run()
+        self.assertIs(bridge.closed_failed, True)
 
     def test_keyboard_interrupt_runs_cleanup(self):
         bridge = FakeBridge()

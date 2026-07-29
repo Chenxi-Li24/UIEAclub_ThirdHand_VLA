@@ -748,7 +748,12 @@ class RobotBridge:
             source=source,
         )
 
-    def set_gripper(self, position: Any) -> None:
+    def set_gripper(
+        self,
+        position: Any,
+        kp: Any = None,
+        kd: Any = None,
+    ) -> None:
         if not self.connected or self.arm is None:
             emit("error", message="Startouch SDK is not connected")
             return
@@ -764,11 +769,25 @@ class RobotBridge:
             emit("error", message="gripper position must be between 0 and 1")
             return
         try:
+            kp_value = GRIPPER_KP if kp is None else float(kp)
+            kd_value = GRIPPER_KD if kd is None else float(kd)
+        except (TypeError, ValueError):
+            emit("error", message="gripper kp/kd must be numeric")
+            return
+        if (
+            not math.isfinite(kp_value)
+            or not 0.1 <= kp_value <= 20.0
+            or not math.isfinite(kd_value)
+            or not 0.1 <= kd_value <= 1.0
+        ):
+            emit("error", message="gripper kp/kd is outside the safe SDK range")
+            return
+        try:
             with self.arm_lock:
                 before_position = float(self.arm.get_gripper_position())
                 before_distance = float(self.arm.get_gripper_distance())
                 target_distance = value * GRIPPER_MAX_DISTANCE_M
-                self.arm.setGripperDistance(target_distance, GRIPPER_KP, GRIPPER_KD)
+                self.arm.setGripperDistance(target_distance, kp_value, kd_value)
                 self.gripper_target = value
                 self.gripper_start_position = before_position
                 self.gripper_started_monotonic = time.monotonic()
@@ -782,7 +801,7 @@ class RobotBridge:
                     f"{target_distance * 1000:.1f}mm, "
                     f"before={before_position * 100:.1f}%/"
                     f"{before_distance * 1000:.1f}mm, "
-                    f"kp={GRIPPER_KP:g}, kd={GRIPPER_KD:g}"
+                    f"kp={kp_value:g}, kd={kd_value:g}"
                 ),
             )
             emit("command_accepted", command="gripper", position=value)
@@ -950,7 +969,11 @@ def main() -> None:
             elif name == "move_joint":
                 bridge.enqueue_motion(command)
             elif name == "gripper":
-                bridge.set_gripper(command.get("position"))
+                bridge.set_gripper(
+                    command.get("position"),
+                    command.get("kp"),
+                    command.get("kd"),
+                )
             elif name == "get_state":
                 bridge.publish_state()
             elif name == "shutdown":

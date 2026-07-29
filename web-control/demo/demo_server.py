@@ -44,6 +44,7 @@ class DemoController:
         self._log_tail: deque[str] = deque(maxlen=500)
         self._stop_requested = False
         self._resource_conflict = False
+        self._run_mode: str | None = None
 
     def status(self) -> dict[str, Any]:
         with self._lock:
@@ -55,13 +56,19 @@ class DemoController:
                 "message": self._message,
                 "pid": process.pid if owned else self._last_pid,
                 "owned": owned,
+                "run_mode": self._run_mode,
                 "log_tail": list(self._log_tail),
                 "last_log": self._last_log,
             }
 
-    def start(self) -> bool:
+    def start(self, mode: str = "manual") -> bool:
         with self._lock:
             if self._process is not None and self._process.poll() is None:
+                return False
+            if mode not in {"manual", "automatic-three-cycle"}:
+                self._state = "FAILED"
+                self._stage = "MODE_CHECK"
+                self._message = f"不支持的运行模式：{mode}"
                 return False
             self._state = "PREFLIGHT"
             self._stage = "RESOURCE_PREFLIGHT"
@@ -70,6 +77,15 @@ class DemoController:
             self._log_tail.clear()
             self._stop_requested = False
             self._resource_conflict = False
+            env = os.environ.copy()
+            if mode == "automatic-three-cycle":
+                env.update(
+                    {
+                        "DEMO_RUN_MODE": "automatic-three-cycle",
+                        "DEMO_CYCLES": "3",
+                        "DEMO_CONFIRM_EACH_STEP": "0",
+                    }
+                )
             try:
                 process = self._popen_factory(
                     [
@@ -83,14 +99,17 @@ class DemoController:
                     text=True,
                     bufsize=1,
                     start_new_session=True,
+                    env=env,
                 )
             except OSError as exc:
                 self._state = "FAILED"
                 self._stage = "PROCESS_LAUNCH"
                 self._message = f"无法启动演示进程：{exc}"
+                self._run_mode = None
                 return False
             self._process = process
             self._last_pid = process.pid
+            self._run_mode = mode
             monitor = threading.Thread(
                 target=self._monitor,
                 args=(process,),
@@ -132,6 +151,7 @@ class DemoController:
                 process is None
                 or process.poll() is not None
                 or self._state != "WAITING_CONFIRMATION"
+                or self._run_mode != "manual"
                 or process.stdin is None
             ):
                 return False
@@ -215,6 +235,7 @@ class DemoController:
                 }:
                     self._message = f"演示进程退出，代码 {returncode}"
             self._process = None
+            self._run_mode = None
 
 
 class DemoRequestHandler(SimpleHTTPRequestHandler):
@@ -242,7 +263,14 @@ class DemoRequestHandler(SimpleHTTPRequestHandler):
     def do_POST(self) -> None:
         path = urlparse(self.path).path
         if path == "/api/start":
-            started = self.controller.start()
+            started = self.controller.start("manual")
+            self._json(
+                HTTPStatus.ACCEPTED if started else HTTPStatus.CONFLICT,
+                {"accepted": started, **self.controller.status()},
+            )
+            return
+        if path == "/api/start-auto":
+            started = self.controller.start("automatic-three-cycle")
             self._json(
                 HTTPStatus.ACCEPTED if started else HTTPStatus.CONFLICT,
                 {"accepted": started, **self.controller.status()},

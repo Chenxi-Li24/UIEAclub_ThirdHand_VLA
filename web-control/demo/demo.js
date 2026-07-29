@@ -8,6 +8,7 @@ const elements = {
   log: document.getElementById('demo-log'),
   lastLog: document.getElementById('last-log'),
   start: document.getElementById('start-demo'),
+  startAuto: document.getElementById('start-auto-demo'),
   continue: document.getElementById('continue-demo'),
   stop: document.getElementById('stop-demo'),
 };
@@ -31,8 +32,11 @@ function render(data) {
     lastText = text;
   }
   elements.start.disabled = data.owned;
+  elements.startAuto.disabled = data.owned;
   elements.continue.disabled =
-    !data.owned || data.state !== 'WAITING_CONFIRMATION';
+    !data.owned ||
+    data.run_mode !== 'manual' ||
+    data.state !== 'WAITING_CONFIRMATION';
   elements.stop.disabled = !data.owned;
 }
 
@@ -54,6 +58,7 @@ async function poll() {
     elements.status.dataset.state = 'FAILED';
     elements.message.textContent = `控制服务不可用：${error.message}`;
     elements.start.disabled = true;
+    elements.startAuto.disabled = true;
     elements.stop.disabled = true;
   }
 }
@@ -64,6 +69,15 @@ elements.start.addEventListener('click', () => {
     '并确认现场人员和物理急停均已就绪。是否开始？'
   );
   if (confirmed) request('/api/start');
+});
+
+elements.startAuto.addEventListener('click', () => {
+  const confirmed = window.confirm(
+    '将以 30% 速度自动执行 3 次完整 A→B→A 循环，过程中无需点击下一步。' +
+    '请把测试物体放在固定 A 点，清空机械臂工作区，' +
+    '并确认现场人员和物理急停均已就绪。是否开始？'
+  );
+  if (confirmed) request('/api/start-auto');
 });
 
 elements.stop.addEventListener('click', () => {

@@ -147,6 +147,60 @@ class DemoServerTests(unittest.TestCase):
             server.server_close()
             thread.join(2)
 
+    def test_http_auto_start_injects_fixed_mode_and_disables_continue(self):
+        module = load_server()
+        process = FakeProcess()
+        popen_calls = []
+
+        def popen(*args, **kwargs):
+            popen_calls.append((args, kwargs))
+            return process
+
+        def killpg(_pid, signum):
+            process.finish(-signum)
+
+        controller = module.DemoController(
+            ROOT,
+            popen_factory=popen,
+            killpg=killpg,
+        )
+        server = module.create_server(controller, "127.0.0.1", 0)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        base = f"http://127.0.0.1:{server.server_port}"
+
+        def post_status(path):
+            try:
+                with urllib_request.urlopen(
+                    urllib_request.Request(base + path, method="POST"),
+                    timeout=2,
+                ) as response:
+                    return response.status
+            except urllib_error.HTTPError as exc:
+                return exc.code
+
+        try:
+            self.assertEqual(post_status("/api/start-auto"), 202)
+            self.assertEqual(len(popen_calls), 1)
+            env = popen_calls[0][1]["env"]
+            self.assertEqual(env["DEMO_RUN_MODE"], "automatic-three-cycle")
+            self.assertEqual(env["DEMO_CYCLES"], "3")
+            self.assertEqual(env["DEMO_CONFIRM_EACH_STEP"], "0")
+            self.assertEqual(
+                controller.status()["run_mode"],
+                "automatic-three-cycle",
+            )
+            self.assertEqual(post_status("/api/start"), 409)
+            self.assertEqual(post_status("/api/start-auto"), 409)
+            controller._consume_line("AWAITING_CONFIRMATION=AUTO_STEP")
+            self.assertEqual(post_status("/api/continue"), 409)
+            self.assertEqual(process.stdin.getvalue(), "")
+            self.assertEqual(post_status("/api/stop"), 202)
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join(2)
+
     def test_dashboard_drives_complete_real_config_simulation(self):
         module = load_server()
         runner = ROOT / "web-control" / "scripts" / "fixed_pick_place.py"
@@ -201,6 +255,9 @@ class DemoServerTests(unittest.TestCase):
             encoding="utf-8"
         )
         self.assertIn('id="start-demo"', html)
+        self.assertIn('id="start-auto-demo"', html)
+        self.assertIn("手动逐步演示", html)
+        self.assertIn("一键自动循环 3 次", html)
         self.assertIn('id="stop-demo"', html)
         self.assertIn('id="continue-demo"', html)
         self.assertIn('id="demo-status"', html)

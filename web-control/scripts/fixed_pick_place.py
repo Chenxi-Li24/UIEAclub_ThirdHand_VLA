@@ -57,7 +57,8 @@ SIMPLE_AB_ACTION_SEQUENCE = (
 HOME_TRANSIT_AB_ACTION_SEQUENCE = (
     ("OPEN_GRIPPER_READY", "gripper", "open"),
     ("MOVE_HOME_START", "move", "home"),
-    ("MOVE_A", "move", "pre_pick"),
+    ("APPROACH_A_UP", "move", "a_up"),
+    ("DESCEND_TO_A_PICK", "move", "pre_pick"),
     ("ADAPTIVE_GRASP_A", "adaptive_gripper", "grasp"),
     ("LIFT_A", "move", "a_up"),
     ("TRANSFER_A_UP_TO_B_UP", "move", "b_up"),
@@ -83,6 +84,28 @@ def action_sequence_for(config: dict[str, Any]) -> tuple[tuple[str, str, str], .
     if config.get("workflow") == "simple_ab":
         return SIMPLE_AB_ACTION_SEQUENCE
     return ACTION_SEQUENCE
+
+
+def interpolate_joint_path(
+    start_deg: list[float],
+    target_deg: list[float],
+    max_step_deg: float,
+) -> list[list[float]]:
+    """Build a linear joint path with bounded adjacent joint increments."""
+    if max_step_deg <= 0 or not math.isfinite(max_step_deg):
+        raise ConfigurationError("motion.execution_chunk_deg must be positive")
+    remaining = max(
+        abs(target - start)
+        for start, target in zip(start_deg, target_deg)
+    )
+    segment_count = max(1, math.ceil(remaining / max_step_deg))
+    return [
+        [
+            start + (target - start) * index / segment_count
+            for start, target in zip(start_deg, target_deg)
+        ]
+        for index in range(1, segment_count + 1)
+    ]
 
 
 class PickPlaceError(RuntimeError):
@@ -455,8 +478,34 @@ class BridgeClient:
         target_tolerance_deg: float,
         source: str,
     ) -> None:
+        self.move_path(
+            [target_deg],
+            speed_scale=speed_scale,
+            max_speeds_deg_s=max_speeds_deg_s,
+            min_time_s=min_time_s,
+            timeout_s=timeout_s,
+            target_tolerance_deg=target_tolerance_deg,
+            source=source,
+            command="move_joint",
+        )
+
+    def move_path(
+        self,
+        waypoints_deg: list[list[float]],
+        *,
+        speed_scale: float,
+        max_speeds_deg_s: list[float],
+        min_time_s: float,
+        timeout_s: float,
+        target_tolerance_deg: float,
+        source: str,
+        command: str = "move_joint_path",
+    ) -> None:
         if self.latest_joints_deg is None:
             raise BridgeError("current joint state is unavailable")
+        if not waypoints_deg:
+            raise ConfigurationError("joint path must contain at least one waypoint")
+        target_deg = waypoints_deg[-1]
         # The SDK uses a smooth quintic trajectory whose peak velocity is
         # 1.875 times average delta/duration. Account for that factor so the
         # requested speed scale is also a peak-speed limit.
@@ -477,19 +526,26 @@ class BridgeClient:
                 "teach a closer waypoint or increase the non-real test speed"
             )
         request_id = str(uuid.uuid4())
-        self._send(
-            {
-                "cmd": "move_joint",
-                "joints_rad": [math.radians(value) for value in target_deg],
-                "time_sec": duration,
-                "request_id": request_id,
-                "source": source,
-            }
-        )
+        payload: dict[str, Any] = {
+            "cmd": command,
+            "time_sec": duration,
+            "request_id": request_id,
+            "source": source,
+        }
+        if command == "move_joint":
+            payload["joints_rad"] = [
+                math.radians(value) for value in target_deg
+            ]
+        else:
+            payload["waypoints_rad"] = [
+                [math.radians(value) for value in point]
+                for point in waypoints_deg
+            ]
+        self._send(payload)
         self._wait_for(
             lambda item: (
                 item.get("type") == "command_complete"
-                and item.get("command") == "move_joint"
+                and item.get("command") == command
                 and item.get("request_id") == request_id
             ),
             min(timeout_s, duration + 10.0),
@@ -725,86 +781,48 @@ class FixedPickPlaceRunner:
             )
             return
 
-        stalled_chunks = 0
-        for chunk_index in range(1, 101):
-            current = getattr(self.bridge, "latest_joints_deg", None)
-            if current is None:
-                raise BridgeError("current joint feedback is unavailable")
-            differences = [
-                goal - actual for goal, actual in zip(joints, current)
-            ]
-            remaining = max(abs(value) for value in differences)
-            if remaining <= final_tolerance:
-                self.log.info(
-                    "%s reached final_tolerance_deg=%.3f remaining=%.3f",
-                    target,
-                    final_tolerance,
-                    remaining,
-                )
-                tcp_position = getattr(
-                    self.bridge, "latest_tcp_position_m", None
-                )
-                tcp_euler = getattr(self.bridge, "latest_tcp_euler_rad", None)
-                if tcp_position is not None and tcp_euler is not None:
-                    self.log.info(
-                        "%s tcp_pose=%s",
-                        target,
-                        ",".join(
-                            f"{value:.9f}"
-                            for value in [*tcp_position, *tcp_euler]
-                        ),
-                    )
-                return
-            fraction = min(1.0, chunk_deg / remaining)
-            chunk_target = [
-                actual + difference * fraction
-                for actual, difference in zip(current, differences)
-            ]
+        current = getattr(self.bridge, "latest_joints_deg", None)
+        if current is None:
+            raise BridgeError("current joint feedback is unavailable")
+        remaining = max(
+            abs(goal - actual) for goal, actual in zip(joints, current)
+        )
+        if remaining <= final_tolerance:
             self.log.info(
-                "%s chunk=%d remaining_deg=%.3f target=%s",
+                "%s reached final_tolerance_deg=%.3f remaining=%.3f",
                 target,
-                chunk_index,
+                final_tolerance,
                 remaining,
-                ", ".join(f"{value:.3f}" for value in chunk_target),
             )
-            self.bridge.move(
-                chunk_target,
-                speed_scale=self.config["speed_scale"],
-                max_speeds_deg_s=self.config["joint_max_speeds_deg_s"],
-                min_time_s=motion["min_time_s"],
-                timeout_s=motion["timeout_s"],
-                target_tolerance_deg=motion.get(
-                    "target_tolerance_deg",
-                    2.0,
+            return
+        path = interpolate_joint_path(current, joints, chunk_deg)
+        self.log.info(
+            "%s continuous_path points=%d remaining_deg=%.3f max_step_deg=%.3f",
+            target,
+            len(path),
+            remaining,
+            chunk_deg,
+        )
+        self.bridge.move_path(
+            path,
+            speed_scale=self.config["speed_scale"],
+            max_speeds_deg_s=self.config["joint_max_speeds_deg_s"],
+            min_time_s=motion["min_time_s"],
+            timeout_s=motion["timeout_s"],
+            target_tolerance_deg=final_tolerance,
+            source=f"fixed_pick_place:{target}:continuous",
+        )
+        tcp_position = getattr(self.bridge, "latest_tcp_position_m", None)
+        tcp_euler = getattr(self.bridge, "latest_tcp_euler_rad", None)
+        if tcp_position is not None and tcp_euler is not None:
+            self.log.info(
+                "%s tcp_pose=%s",
+                target,
+                ",".join(
+                    f"{value:.9f}"
+                    for value in [*tcp_position, *tcp_euler]
                 ),
-                source=f"fixed_pick_place:{target}:chunk-{chunk_index}",
             )
-            updated = getattr(self.bridge, "latest_joints_deg", None)
-            if updated is None:
-                raise BridgeError("post-motion joint feedback is unavailable")
-            updated_remaining = max(
-                abs(goal - actual)
-                for goal, actual in zip(joints, updated)
-            )
-            progress = remaining - updated_remaining
-            if progress < 0.10:
-                stalled_chunks += 1
-                self.log.warning(
-                    "%s low progress chunk=%d progress_deg=%.3f "
-                    "consecutive=%d",
-                    target,
-                    chunk_index,
-                    progress,
-                    stalled_chunks,
-                )
-                if stalled_chunks >= 3:
-                    raise BridgeError(
-                        f"{target} made less than 0.10deg progress for "
-                        "three consecutive chunks"
-                    )
-            else:
-                stalled_chunks = 0
-        raise BridgeError(f"{target} did not converge within 100 chunks")
 
     def run(self) -> None:
         failed = True

@@ -68,6 +68,12 @@ class FakeBridge:
         if self.failure == kwargs["source"]:
             raise fixed.MotionTimeout("motion timeout")
 
+    def move_path(self, waypoints, **kwargs):
+        self.calls.append(
+            ("move_path", [list(point) for point in waypoints], kwargs["source"])
+        )
+        self.latest_joints_deg = list(waypoints[-1])
+
     def set_gripper(self, position, timeout_s, **kwargs):
         self.calls.append(("gripper", position))
         if self.failure == "gripper":
@@ -83,6 +89,40 @@ class FakeBridge:
 
 
 class FixedPickPlaceTests(unittest.TestCase):
+    def test_interpolate_joint_path_bounds_every_segment(self):
+        path = fixed.interpolate_joint_path(
+            [0.0] * 6,
+            [25.0, -5.0, 0.0, 0.0, 0.0, 0.0],
+            12.0,
+        )
+        self.assertEqual(path[-1], [25.0, -5.0, 0.0, 0.0, 0.0, 0.0])
+        previous = [0.0] * 6
+        for point in path:
+            self.assertLessEqual(
+                max(abs(goal - start) for start, goal in zip(previous, point)),
+                12.0,
+            )
+            previous = point
+
+    def test_real_closed_loop_submits_one_path_command(self):
+        data = config_dict()
+        data["motion"]["execution_chunk_deg"] = 12.0
+        data["motion"]["final_target_tolerance_deg"] = 1.2
+        bridge = FakeBridge()
+        bridge.latest_joints_deg = [0.0] * 6
+        runner = fixed.FixedPickPlaceRunner(
+            bridge,
+            data,
+            "real",
+            logging.getLogger("test"),
+        )
+        runner._move_closed_loop(
+            "a_up",
+            [25.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+        )
+        self.assertEqual([call[0] for call in bridge.calls], ["move_path"])
+        self.assertEqual(len(bridge.calls[0][1]), 3)
+
     def test_normal_action_sequence(self):
         bridge = FakeBridge()
         runner = fixed.FixedPickPlaceRunner(
@@ -239,6 +279,7 @@ class FixedPickPlaceTests(unittest.TestCase):
             [call[2] for call in bridge.calls if call[0] == "move"],
             [
                 "fixed_pick_place:home",
+                "fixed_pick_place:a_up",
                 "fixed_pick_place:pre_pick",
                 "fixed_pick_place:a_up",
                 "fixed_pick_place:b_up",
@@ -284,7 +325,7 @@ class FixedPickPlaceTests(unittest.TestCase):
         )
         self.assertEqual(
             len([call for call in bridge.calls if call[0] == "move"]),
-            42,
+            45,
         )
 
     def test_motion_only_skips_adaptive_grasps(self):

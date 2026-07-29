@@ -998,6 +998,8 @@ def build_parser(root: Path) -> argparse.ArgumentParser:
     mode.add_argument("--dry-run", action="store_true")
     mode.add_argument("--real", action="store_true")
     parser.add_argument("--speed-scale", type=float)
+    parser.add_argument("--cycles", type=int)
+    parser.add_argument("--automatic-three-cycle", action="store_true")
     parser.add_argument("--confirm-each-step", action="store_true")
     parser.add_argument(
         "--motion-only",
@@ -1017,6 +1019,41 @@ def build_parser(root: Path) -> argparse.ArgumentParser:
     return parser
 
 
+def apply_execution_overrides(
+    config: dict[str, Any],
+    *,
+    mode: str,
+    cycles: int | None,
+    automatic_three_cycle: bool,
+    confirm_each_step: bool,
+) -> None:
+    if cycles is not None:
+        if not 1 <= cycles <= 100:
+            raise ConfigurationError("--cycles must be between 1 and 100")
+        config["demo"]["cycles"] = cycles
+    if automatic_three_cycle:
+        if config["demo"]["cycles"] != 3:
+            raise ConfigurationError(
+                "--automatic-three-cycle requires --cycles 3"
+            )
+        if confirm_each_step:
+            raise ConfigurationError(
+                "--automatic-three-cycle cannot use --confirm-each-step"
+            )
+    elif (
+        mode == "real"
+        and not confirm_each_step
+        and (
+            config["demo"]["validated_real_cycles"] < 3
+            or config["demo"]["require_step_confirmation"]
+        )
+    ):
+        raise ConfigurationError(
+            "real mode requires --confirm-each-step until three "
+            "validated real cycles are recorded"
+        )
+
+
 def main() -> int:
     root = Path(__file__).resolve().parents[2]
     args = build_parser(root).parse_args()
@@ -1029,22 +1066,18 @@ def main() -> int:
             if not 0 < args.speed_scale <= 1:
                 raise ConfigurationError("--speed-scale must be in (0, 1]")
             config["speed_scale"] = args.speed_scale
+        apply_execution_overrides(
+            config,
+            mode=mode,
+            cycles=args.cycles,
+            automatic_three_cycle=args.automatic_three_cycle,
+            confirm_each_step=args.confirm_each_step,
+        )
         if mode == "real":
             if config["speed_scale"] > MAX_REAL_SPEED_SCALE:
                 raise ConfigurationError(
                     "real-arm speed scale must not exceed "
                     f"{MAX_REAL_SPEED_SCALE:.2f}"
-                )
-            if (
-                not args.confirm_each_step
-                and (
-                    config["demo"]["validated_real_cycles"] < 3
-                    or config["demo"]["require_step_confirmation"]
-                )
-            ):
-                raise ConfigurationError(
-                    "real mode requires --confirm-each-step until three "
-                    "validated real cycles are recorded"
                 )
         bridge = BridgeClient(
             root / "web-control" / "server" / "startouch_bridge.py",

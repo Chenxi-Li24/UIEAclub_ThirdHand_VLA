@@ -115,6 +115,96 @@ class FixedPickPlaceTests(unittest.TestCase):
         self.assertIn("STATE COMPLETE", output)
         self.assertEqual(output.count("AWAITING_CONFIRMATION="), 20)
 
+    def test_automatic_three_cycle_simulation_runs_60_stages_without_input(self):
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(SCRIPT),
+                "--simulate",
+                "--config",
+                str(ROOT / "configs" / "tasks" / "fixed_pick_place.yaml"),
+                "--speed-scale",
+                "1.0",
+                "--cycles",
+                "3",
+                "--automatic-three-cycle",
+            ],
+            text=True,
+            capture_output=True,
+            timeout=120,
+            check=False,
+        )
+        output = result.stdout + result.stderr
+        self.assertEqual(result.returncode, 0, output)
+        self.assertIn("CYCLE 3/3 COMPLETE", output)
+        self.assertEqual(output.count("AWAITING_CONFIRMATION="), 0)
+
+    def test_automatic_real_mode_requires_exactly_three_cycles(self):
+        for cycles in (1, 2, 4):
+            with self.subTest(cycles=cycles):
+                data = config_dict()
+                data["demo"] = {
+                    "cycles": 1,
+                    "validated_real_cycles": 0,
+                    "require_step_confirmation": True,
+                }
+                with self.assertRaisesRegex(
+                    fixed.ConfigurationError,
+                    "--automatic-three-cycle requires --cycles 3",
+                ):
+                    fixed.apply_execution_overrides(
+                        data,
+                        mode="real",
+                        cycles=cycles,
+                        automatic_three_cycle=True,
+                        confirm_each_step=False,
+                    )
+
+    def test_automatic_real_mode_rejects_step_confirmation(self):
+        data = config_dict()
+        data["demo"] = {
+            "cycles": 1,
+            "validated_real_cycles": 0,
+            "require_step_confirmation": True,
+        }
+        with self.assertRaisesRegex(
+            fixed.ConfigurationError,
+            "--automatic-three-cycle cannot use --confirm-each-step",
+        ):
+            fixed.apply_execution_overrides(
+                data,
+                mode="real",
+                cycles=3,
+                automatic_three_cycle=True,
+                confirm_each_step=True,
+            )
+
+    def test_manual_real_mode_still_requires_confirmation(self):
+        data = config_dict()
+        data["demo"] = {
+            "cycles": 1,
+            "validated_real_cycles": 0,
+            "require_step_confirmation": True,
+        }
+        with self.assertRaisesRegex(
+            fixed.ConfigurationError,
+            "real mode requires --confirm-each-step",
+        ):
+            fixed.apply_execution_overrides(
+                data,
+                mode="real",
+                cycles=None,
+                automatic_three_cycle=False,
+                confirm_each_step=False,
+            )
+        fixed.apply_execution_overrides(
+            data,
+            mode="real",
+            cycles=None,
+            automatic_three_cycle=False,
+            confirm_each_step=True,
+        )
+
     def test_resource_guard_matches_executables_not_diagnostic_text(self):
         guard = ROOT / "scripts" / "fixed_pick_place_resource_guard.sh"
 

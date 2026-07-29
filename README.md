@@ -88,3 +88,22 @@ The launcher checks the worktree, branch, `can0`, point validity, joint
 limits, speed, logs, and competing users/processes before motion. On a
 conflict it prints `RESOURCE_CONFLICT` and does not interfere with the other
 process. A failed run executes cleanup and reports the failed stage and cause.
+
+Ubuntu desktop Start/Stop page:
+
+```bash
+cd /home/nieqingcao/arm/UIEAclub_ThirdHand_VLA-fixed-pick-place
+bash scripts/open_fixed_pick_place_control.sh
+```
+
+The page opens at `http://127.0.0.1:8766/`. Its service does not connect to
+`can0` while idle. “开始演示” launches the guarded script above; “停止并失能”
+interrupts only the process launched by this page, runs cleanup, disables the
+motors, and leaves the arm at its current pose. It never stops another user's
+process. If the manual web controller or another robot task is active, the
+page reports `RESOURCE_CONFLICT`.
+
+Each safe logical route now sends one multi-waypoint SDK trajectory, so the
+12° interpolation points no longer cause repeated stop/start motion. The arm
+still stops at Home, the A/B raised points, and the grasp/release points where
+a task action requires it.

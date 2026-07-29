@@ -13,6 +13,18 @@ CAN_INTERFACE="can0"
 export STARTOUCH_GRIPPER_KP="2.0"
 export STARTOUCH_GRIPPER_KD="0.1"
 
+runner_pid=""
+
+forward_stop() {
+  echo "STOP_REQUESTED=1"
+  if [[ -n "$runner_pid" ]] && kill -0 "$runner_pid" 2>/dev/null; then
+    echo "FORWARDING_SIGINT_TO_RUNNER=$runner_pid"
+    kill -INT "$runner_pid"
+  fi
+}
+
+trap forward_stop INT TERM
+
 mkdir -p "$LOG_DIR"
 LAUNCH_LOG="$LOG_DIR/demo-$(date +%Y%m%d-%H%M%S).log"
 exec > >(tee -a "$LAUNCH_LOG") 2>&1
@@ -128,7 +140,8 @@ b = config["waypoints"]["place"]
 a_up = config["waypoints"]["a_up"]
 b_up = config["waypoints"]["b_up"]
 segments = (
-    ("HOME_TO_A", home, a),
+    ("HOME_TO_A_UP", home, a_up),
+    ("A_UP_TO_A", a_up, a),
     ("A_TO_A_UP", a, a_up),
     ("A_UP_TO_B_UP", a_up, b_up),
     ("B_UP_TO_B", b_up, b),
@@ -207,8 +220,15 @@ if [[ "$require_confirmation" == "1" || "$validated_cycles" -lt 3 ]]; then
 fi
 
 echo "RUN_COMMAND=$PYTHON ${runner_args[*]}"
-"$PYTHON" "${runner_args[@]}"
+"$PYTHON" "${runner_args[@]}" &
+runner_pid=$!
+wait "$runner_pid"
 rc=$?
+while kill -0 "$runner_pid" 2>/dev/null; do
+  wait "$runner_pid"
+  rc=$?
+done
+runner_pid=""
 if (( rc == 0 )); then
   echo "PICK AND PLACE COMPLETE"
   echo "LOG=$LAUNCH_LOG"

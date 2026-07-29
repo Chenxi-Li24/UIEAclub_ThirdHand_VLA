@@ -90,6 +90,30 @@ class FakeBridge:
 
 
 class FixedPickPlaceTests(unittest.TestCase):
+    def test_final_docs_include_exact_launch_commands_and_dashboard(self):
+        required = [
+            "cd /home/nieqingcao/arm/UIEAclub_ThirdHand_VLA-fixed-pick-place",
+            "bash scripts/demo_fixed_pick_place.sh",
+            (
+                'ssh -t robot-ubuntu "cd '
+                "/home/nieqingcao/arm/UIEAclub_ThirdHand_VLA-fixed-pick-place "
+                '&& bash scripts/demo_fixed_pick_place.sh"'
+            ),
+            "bash scripts/open_fixed_pick_place_control.sh",
+        ]
+        for relative in ("README.md", "docs/fixed_pick_place_audit.md"):
+            text = (ROOT / relative).read_text(encoding="utf-8")
+            with self.subTest(document=relative):
+                for command in required:
+                    self.assertIn(command, text)
+
+    def test_demo_launcher_forwards_signals_to_owned_runner(self):
+        script = (ROOT / "scripts" / "demo_fixed_pick_place.sh").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("trap forward_stop INT TERM", script)
+        self.assertIn('kill -INT "$runner_pid"', script)
+
     def test_interpolate_joint_path_bounds_every_segment(self):
         path = fixed.interpolate_joint_path(
             [0.0] * 6,

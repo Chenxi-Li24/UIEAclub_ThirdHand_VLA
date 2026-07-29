@@ -79,7 +79,7 @@ The current A/B sequence repeats three times and uses 25 cm raised transfer
 points:
 
 ```text
-OPEN -> HOME -> A -> ADAPTIVE_GRASP_A -> A_UP -> B_UP -> B -> OPEN
+OPEN -> HOME -> A_UP -> A -> ADAPTIVE_GRASP_A -> A_UP -> B_UP -> B -> OPEN
 -> B_UP -> HOME -> B_UP -> B -> ADAPTIVE_GRASP_B -> B_UP -> A_UP
 -> A -> OPEN -> A_UP -> HOME
 ```
@@ -92,6 +92,24 @@ The one-click entry is:
 cd /home/nieqingcao/arm/UIEAclub_ThirdHand_VLA-fixed-pick-place
 bash scripts/demo_fixed_pick_place.sh
 ```
+
+The Ubuntu-local Start/Stop page is:
+
+```bash
+cd /home/nieqingcao/arm/UIEAclub_ThirdHand_VLA-fixed-pick-place
+bash scripts/open_fixed_pick_place_control.sh
+```
+
+It binds only to `127.0.0.1:8766` and does not connect to `can0` while idle.
+The Start button launches the guarded one-click entry. The Stop button sends
+SIGINT only to the page-owned process group; the runner executes SDK cleanup
+and motor disable, and the arm remains at its current pose. It does not offer
+any function to terminate an unrelated controller.
+
+For smooth motion, each logical route is interpolated into points no farther
+than 12° apart and submitted as one SDK `set_joint_waypoints` call. This keeps
+the bounds check without forcing the arm to decelerate to zero at every
+interpolation point.
 
 ## Stop and recovery
 

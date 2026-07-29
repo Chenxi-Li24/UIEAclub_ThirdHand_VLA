@@ -10,6 +10,9 @@ Current task settings:
 - vertical lift above A and B: 0.250 m
 - motion speed scale: 0.15
 - requested cycles per launch: 3
+- every bottle approach is vertical (`HOME -> A_UP -> A` and
+  `HOME -> B_UP -> B`); every departure first returns vertically to the
+  corresponding raised point
 - adaptive grasp stiffness: `kp=2.0`, `kd=0.1`
 - step confirmation remains enabled because three consecutive real cycles
   have not yet completed successfully
@@ -26,6 +29,41 @@ Windows PowerShell remote launch:
 ```powershell
 ssh -t robot-ubuntu "cd /home/nieqingcao/arm/UIEAclub_ThirdHand_VLA-fixed-pick-place && bash scripts/demo_fixed_pick_place.sh"
 ```
+
+Ubuntu desktop Start/Stop page:
+
+```bash
+cd /home/nieqingcao/arm/UIEAclub_ThirdHand_VLA-fixed-pick-place
+bash scripts/open_fixed_pick_place_control.sh
+```
+
+The dashboard binds to `127.0.0.1:8766`, remains detached from `can0` while
+idle, and owns only the demo process it launches. Stop forwards SIGINT to that
+owned process, which performs cleanup and motor disable; it does not return
+Home automatically and cannot terminate an unrelated process.
+
+## Continuous trajectory improvement
+
+The prior real-run logs show every 12° subcommand alternating
+`motion_state=MOVING` and `motion_state=IDLE`, which caused the visible
+stop/start motion. The improved runner retains the 12° maximum interpolation
+increment but sends all interpolation points for one logical route in one
+`set_joint_waypoints` SDK call. Grasp, release and safe A/B raised waypoints
+remain deliberate task boundaries.
+
+Software-only coverage verifies:
+
+- each logical route emits one bridge path command;
+- every adjacent interpolated joint increment is no greater than 12°;
+- empty, malformed, NaN, all-zero and out-of-limit paths are rejected;
+- the bridge calls the SDK trajectory function exactly once;
+- the dashboard is idle without spawning a robot process;
+- Stop signals only the dashboard-owned process group;
+- `RESOURCE_CONFLICT` is reported without signalling the conflicting process.
+
+Continuous real motion has not yet been validated. The first true-arm check
+must be supervised, empty-load, step-by-step and limited to 3%. Only after
+that succeeds may the existing 15% bottle task be retried.
 
 On 2026-07-29 at 20:40, the 15%/25 cm real run completed cycle 1
 (A→B→A). Adaptive contact was detected at normalized gripper positions 0.749
@@ -110,16 +148,18 @@ stable initial-state check, six-axis joint limits, non-finite/all-zero target
 rejection, single-motion queue, CAN receive watchdog, gripper feedback checks,
 exclusive control lock, logging events, signal handling, and SDK `cleanup()`.
 
-Real points are intentionally unset in
-`configs/tasks/fixed_pick_place.yaml`. They must be obtained by physical
-teaching. The simulation fixture is isolated under `tests/fixtures/` and is
-documented as forbidden for real mode.
+The current `home_transit_ab` task contains taught Home, A, B, A-up and B-up
+points. Legacy points unused by this workflow may remain unset. Every point
+update is backed up under `configs/tasks/.fixed_pick_place_backups/`. The
+simulation fixture remains isolated under `tests/fixtures/` and is forbidden
+for real mode.
 
 ## Verification completed
 
 - Python compilation: passed.
 - Git whitespace/error check: passed.
-- Standard-library automated tests: 9 passed.
+- Standard-library automated tests: 25 passed at the continuous-dashboard
+  implementation checkpoint.
 - Tests cover normal sequence, missing/invalid/all-zero/non-finite/out-of-limit
   points, timeout, gripper failure, operator abort, Ctrl+C cleanup, dry-run
   orchestration, point-file backup/update, and exclusive lock conflict.
@@ -131,24 +171,22 @@ documented as forbidden for real mode.
   motors. At audit time the angles were approximately
   `[26.021, 139.283, -53.145, -89.034, -2.109, 0.186]` degrees and all six
   motor feedback error codes were zero.
-- `can0` and process inspection found no active Startouch web, bridge, ROS, or
-  other robot-control process.
-
-No real joint, Cartesian, or gripper motion was executed. The SDK exposes
-gripper feedback through `SingleArm`, but no separate proven passive gripper
-reader was found; the existing `test_gripper_raw.py` sends multiple real
-gripper commands and was not run.
+- Earlier baseline inspection found no active Startouch web, bridge, ROS, or
+  other robot-control process. Resource ownership is rechecked before every
+  run because this Ubuntu host is shared.
+- Subsequent supervised hardware work completed two full A→B→A cycles at
+  15%/25 cm in one attempt; the third cycle placed A→B, then stopped safely
+  when the bottle drifted away from the taught B regrasp center. This is not
+  recorded as three consecutive successful cycles.
 
 ## Remaining gated work
 
-The seven real waypoints are not taught, so real execution is correctly blocked.
-The next physical stage requires:
-
-1. An operator beside the arm, clear workspace, and reachable hardware
-   E-stop/power disconnect.
-2. Web/manual low-speed positioning followed by safe point recording.
-3. A separate passive gripper-status method or an explicitly approved,
-   supervised SDK connection.
-4. Explicit `CONFIRM_REAL_ARM_TEST` approval before any real motion.
-5. Step-confirmed <=5% small-range run, then empty full sequence, object run,
-   and three-repeat validation.
+1. Ensure the other manual web controller has been voluntarily released by
+   its owner; never terminate it from this demo.
+2. Confirm an operator is beside the arm, the work area is clear, and the
+   hardware E-stop/power disconnect is reachable.
+3. Validate the new continuous path empty-load at 3% with step confirmation.
+4. Only after the 3% path succeeds, restore the verified 15% limit and retry
+   the bottle task.
+5. Record unattended mode only after three consecutive real cycles succeed
+   with the bottle remaining centered at both physical fixtures.

@@ -204,6 +204,16 @@ async function run() {
   const defaultEndpoint = await evaluate(
     `document.getElementById('voice-ai-endpoint')?.value`
   );
+  const defaultRouteState = await evaluate(`(() => ({
+    optionCount: document.querySelectorAll('[data-voice-endpoint]').length,
+    gpuPressed: document.querySelector(
+      '[data-voice-endpoint="ws://192.168.58.43:3002/v1/voice"]'
+    )?.getAttribute('aria-pressed'),
+    cpuPressed: document.querySelector(
+      '[data-voice-endpoint="ws://192.168.58.43:3001/v1/voice"]'
+    )?.getAttribute('aria-pressed'),
+    description: document.getElementById('voice-route-description')?.textContent
+  }))()`);
 
   await command('Page.addScriptToEvaluateOnNewDocument', {
     source: `(() => {
@@ -226,6 +236,7 @@ async function run() {
     })();`
   });
   await evaluate(`localStorage.setItem('voiceAiEndpoint', '${VOICE_ENDPOINT}')`);
+  await evaluate(`localStorage.setItem('voiceAiEndpointDefaultV3', '1')`);
   await command('Page.reload', { ignoreCache: true });
   await waitFor(`document.readyState === 'complete'`);
   await waitFor(`document.querySelectorAll('#three-container canvas').length === 1`, 12000);
@@ -290,7 +301,9 @@ async function run() {
   const busyState = await evaluate(`(() => ({
     formBusy: document.getElementById('voice-text-form').getAttribute('aria-busy'),
     sendDisabled: document.getElementById('voice-text-send').disabled,
-    recordDisabled: document.getElementById('voice-record-toggle').disabled
+    recordDisabled: document.getElementById('voice-record-toggle').disabled,
+    routesDisabled: [...document.querySelectorAll('[data-voice-endpoint]')]
+      .every(button => button.disabled)
   }))()`);
   await waitFor(
     `document.getElementById('voice-intent-source').textContent.includes('回到初始位置')`
@@ -316,6 +329,9 @@ async function run() {
     await new Promise(resolve => setTimeout(resolve, 80));
     return {
       disabledWhilePending,
+      routesDisabledWhilePending:
+        [...document.querySelectorAll('[data-voice-endpoint]')]
+          .every(button => button.disabled),
       candidateStillVisible: !document.getElementById('voice-intent-card').hidden,
       draftPreserved: input.value === '这条不应发送',
       userMessageCountUnchanged:
@@ -562,7 +578,12 @@ async function run() {
   fs.writeFileSync(SCREENSHOT_PATH, Buffer.from(screenshot.result.data, 'base64'));
 
   const checks = {
-    defaultJetsonEndpoint: defaultEndpoint === 'ws://192.168.58.43:3001/v1/voice',
+    defaultJetsonEndpoint: defaultEndpoint === 'ws://192.168.58.43:3002/v1/voice',
+    cpuAndGpuRoutesAvailable:
+      defaultRouteState.optionCount === 2 &&
+      defaultRouteState.gpuPressed === 'true' &&
+      defaultRouteState.cpuPressed === 'false' &&
+      defaultRouteState.description.includes('GPU 3002'),
     voiceOpenClosesOtherPanels:
       overlayState.drawerCollapsed && overlayState.logClosed,
     textEmptyDisabled: emptyTextDisabled,
@@ -579,7 +600,8 @@ async function run() {
     textBusyBlocksOtherInput:
       busyState.formBusy === 'true' &&
       busyState.sendDisabled &&
-      busyState.recordDisabled,
+      busyState.recordDisabled &&
+      busyState.routesDisabled,
     textThinkingCleared:
       textResult.thinkingCount === 0 && textResult.formBusy === 'false',
     pendingCandidateCannotBeBypassed:

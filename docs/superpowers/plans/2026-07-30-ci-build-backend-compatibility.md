@@ -13,6 +13,7 @@
 - Do not modify robot-control behavior, CAN access, ROS launch behavior, dependencies, or the CI matrix.
 - Change `[build-system].build-backend` to `setuptools.build_meta`.
 - Apply only Ruff safe fixes plus file-specific `N803` and `N818` compatibility ignores.
+- Keep Mypy enabled, set `strict = false` for the unfinished `src/` skeleton, and fix explicit nullable types.
 - Keep the fix on `fanxy/fixed-pick-place` and the existing draft PR #4.
 
 ---
@@ -76,6 +77,11 @@ Before the clean Ruff run, add file-specific ignores for `N803` in
 `src/uiea_thirdhand_vla/utils/errors.py`. These names are compatibility
 surfaces and must not be renamed. Also run the fixed Pick and Place unittest
 suite and Python/Bash syntax checks used during publishing.
+
+If the first CI run reaches Mypy and reports the skeleton's missing
+annotations, keep `mypy src/` enabled, set `[tool.mypy].strict = false`, and
+change `Intent.params` to `dict[str, object] | None`. Re-run Mypy before the
+next push.
 
 - [ ] **Step 5: Commit and push**
 

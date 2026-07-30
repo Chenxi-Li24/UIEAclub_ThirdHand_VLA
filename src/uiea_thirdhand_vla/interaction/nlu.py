@@ -10,7 +10,7 @@ from dataclasses import dataclass
 class Intent:
     action: str  # start_task, stop, pause, resume, estop, go_home, jog
     task_name: str | None = None
-    params: dict = None
+    params: dict[str, object] | None = None
 
     def __post_init__(self):
         if self.params is None:

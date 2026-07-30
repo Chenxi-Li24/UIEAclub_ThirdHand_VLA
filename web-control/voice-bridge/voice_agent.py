@@ -693,6 +693,11 @@ class ClaudeAgent:
                     "content": f"执行成功: {block.name}"}]})
 
         reply = " ".join(reply_parts) if reply_parts else ""
+
+        # FUTURE: 真机上机验证时，根据 RobotExecutor 执行结果改写回复
+        # - 成功：直接返回 LLM 自然语言回复或 "已执行: <动作描述>"
+        # - 失败：返回具体失败原因，例如 "夹爪打开失败: CAN 总线无响应"
+        # 当前仅生成占位摘要，不反映实际执行结果。
         if not reply and actions:
             reply = f"执行 {len(actions)} 个操作"
         self._history.append({"role": "assistant", "content": reply})
@@ -707,6 +712,11 @@ class RobotExecutor:
     """
     Execute robot actions from Claude tool calls.
     Uses TTSEngine for voice responses, WebSocket for robot control.
+
+    FUTURE: 真机上机验证时，execute() 应返回 (success: bool, message: str)
+    - 成功 → (True, "已执行: 夹爪打开至 0.05m")，由上层改写 ClaudeAgent 回复
+    - 失败 → (False, "夹爪打开失败: CAN 总线超时")，同样反馈到用户界面
+    当前各工具方法均 return True，未连接硬件验证实际执行结果。
     """
 
     def __init__(self, proxy_url: str = "ws://localhost:3000/ws",

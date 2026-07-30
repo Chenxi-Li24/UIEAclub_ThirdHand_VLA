@@ -1,5 +1,22 @@
 # ThirdHand Startouch Web Control
 
+## 快速启动 / Quick Start
+
+```powershell
+# Windows PowerShell（开发模式，不控制机械臂）
+cd web-control\server
+npm install
+$env:STARTOUCH_SIMULATE = "1"
+npm start
+```
+
+浏览器打开 `http://127.0.0.1:3000/`。
+
+> 语音 AI 需要 Ubuntu PC 上运行 `voice_bridge.py --host 0.0.0.0 --port 3001`。
+> 详见下方"语音和文字 AI"一节。
+
+---
+
 在 Ubuntu 上通过网页直接控制 Startouch FastTouchV3 机械臂。控制链路不使用法奥
 SDK，也不经过 ESP32-P4 或其他控制开发板。
 

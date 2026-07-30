@@ -1,7 +1,7 @@
 # Fixed Pick and Place 网页控制与连续轨迹设计
 
-日期：2026-07-29  
-工作树：`/home/nieqingcao/arm/UIEAclub_ThirdHand_VLA-fixed-pick-place`  
+日期：2026-07-29
+工作树：`/home/nieqingcao/arm/UIEAclub_ThirdHand_VLA-fixed-pick-place`
 分支：`fanxy/fixed-pick-place`
 
 ## 目标

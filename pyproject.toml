@@ -1,6 +1,6 @@
 [build-system]
 requires = ["setuptools>=75.0", "wheel"]
-build-backend = "setuptools.backends._legacy:_Backend"
+build-backend = "setuptools.build_meta"
 
 [project]
 name = "uiea-thirdhand-vla"
@@ -93,6 +93,10 @@ exclude = ["web/"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "N", "W", "UP"]
+
+[tool.ruff.lint.per-file-ignores]
+"src/uiea_thirdhand_vla/perception/detectors/base.py" = ["N803"]
+"src/uiea_thirdhand_vla/utils/errors.py" = ["N818"]
 
 [tool.mypy]
 python_version = "3.10"

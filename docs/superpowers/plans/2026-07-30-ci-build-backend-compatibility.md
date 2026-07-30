@@ -11,7 +11,8 @@
 ## Global Constraints
 
 - Do not modify robot-control behavior, CAN access, ROS launch behavior, dependencies, or the CI matrix.
-- Change `[build-system].build-backend` only to `setuptools.build_meta`.
+- Change `[build-system].build-backend` to `setuptools.build_meta`.
+- Apply only Ruff safe fixes plus file-specific `N803` and `N818` compatibility ignores.
 - Keep the fix on `fanxy/fixed-pick-place` and the existing draft PR #4.
 
 ---
@@ -64,13 +65,17 @@ Expected after the fix: exit code 0 and an editable wheel for
 - [ ] **Step 4: Run repository verification**
 
 ```bash
+ruff check src/ tests/ --fix
 ruff check src/ tests/
 mypy src/
 pytest tests/ -v --ignore=tests/e2e/
 ```
 
-Also run the fixed Pick and Place unittest suite and Python/Bash syntax checks
-used during publishing.
+Before the clean Ruff run, add file-specific ignores for `N803` in
+`src/uiea_thirdhand_vla/perception/detectors/base.py` and `N818` in
+`src/uiea_thirdhand_vla/utils/errors.py`. These names are compatibility
+surfaces and must not be renamed. Also run the fixed Pick and Place unittest
+suite and Python/Bash syntax checks used during publishing.
 
 - [ ] **Step 5: Commit and push**
 
@@ -84,4 +89,3 @@ git push upstream fanxy/fixed-pick-place
 
 Wait for both `test (3.10)` and `test (3.11)` on PR #4. Success requires both
 checks to conclude `SUCCESS` and the commit status to show no red cross.
-

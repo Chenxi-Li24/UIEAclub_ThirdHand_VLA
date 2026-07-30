@@ -5,8 +5,9 @@ States: IDLE -> DETECT -> APPROACH -> GRASP -> LIFT -> TRANSFER -> PLACE -> RETU
 Error states: ERROR (recoverable), EMERGENCY_STOP (manual reset required)
 """
 
-from enum import Enum, auto
 from dataclasses import dataclass, field
+from enum import Enum, auto
+
 from ..utils.errors import IllegalTransition
 
 

@@ -2,7 +2,6 @@
 Camera REST API  /api/camera/*
 """
 from fastapi import APIRouter
-from fastapi.responses import StreamingResponse
 
 router = APIRouter(prefix="/api/camera", tags=["camera"])
 

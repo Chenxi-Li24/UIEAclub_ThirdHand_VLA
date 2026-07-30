@@ -7,8 +7,8 @@ result, failure_reason, elapsed_time
 """
 
 from dataclasses import dataclass
-from pathlib import Path
 from datetime import datetime
+from pathlib import Path
 
 
 @dataclass

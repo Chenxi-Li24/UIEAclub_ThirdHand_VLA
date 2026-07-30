@@ -6,7 +6,7 @@ and supports environment variable overrides.
 """
 
 from pathlib import Path
-from typing import Optional, TypeVar
+from typing import TypeVar
 
 import yaml
 
@@ -47,7 +47,7 @@ class ConfigLoader:
         data = yaml.safe_load(path.read_text(encoding="utf-8"))
         return model_cls(**data)
 
-    def _try_load(self, filename: str, model_cls: type[T]) -> Optional[T]:
+    def _try_load(self, filename: str, model_cls: type[T]) -> T | None:
         path = self.config_dir / filename
         if not path.exists():
             return None

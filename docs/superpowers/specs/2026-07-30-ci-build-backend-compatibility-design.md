@@ -10,6 +10,11 @@ after upgrading to pip 26.2. The configured backend
 `setuptools.backends._legacy:_Backend` cannot be imported. The Python 3.10
 matrix job is then cancelled by fail-fast.
 
+After reproducing and correcting that boundary, the next CI command exposes
+32 pre-existing Ruff findings that were previously hidden by the install
+failure. Repository history confirms every `main` CI run has stopped at the
+same invalid backend before reaching lint.
+
 ## Considered approaches
 
 1. Pin pip below 26.2 in CI. This hides the invalid backend configuration and
@@ -20,18 +25,26 @@ matrix job is then cancelled by fail-fast.
 3. Replace the project packaging configuration. This is unnecessary and would
    expand the change beyond the observed failure.
 
+For the newly exposed lint layer, apply Ruff's safe mechanical fixes for
+imports, unused imports, and Python 3.10 union annotations. Preserve public
+exception class names and the camera-matrix compatibility parameter by adding
+file-specific ignores for `N818` and `N803`; renaming those symbols would risk
+breaking callers.
+
 ## Change
 
 Change only `[build-system].build-backend` in `pyproject.toml` to
-`setuptools.build_meta`. Do not change project dependencies, CI versions,
-robot-control code, or hardware behavior.
+`setuptools.build_meta`. Apply only behavior-preserving Ruff fixes and the two
+file-specific compatibility ignores. Do not change project dependencies, CI
+versions, robot-control behavior, or hardware behavior.
 
 ## Verification
 
 1. Reproduce the existing failure with pip 26.2 and an editable no-dependency
    install.
 2. Apply the one-line backend correction and repeat the same install.
-3. Run the repository's complete test suite, Ruff, Mypy, and syntax checks.
-4. Push to the existing PR and wait for both Python 3.10 and 3.11 GitHub
+3. Verify Ruff fails on the pre-existing findings, apply the safe fixes and
+   compatibility ignores, and verify Ruff is clean.
+4. Run the repository's complete test suite, Mypy, and syntax checks.
+5. Push to the existing PR and wait for both Python 3.10 and 3.11 GitHub
    Actions jobs to complete successfully.
-

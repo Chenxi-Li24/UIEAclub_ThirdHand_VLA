@@ -6,7 +6,6 @@ pose representations, joint states, detection results, etc.
 """
 
 from dataclasses import dataclass, field
-from typing import Optional
 
 
 @dataclass
@@ -44,8 +43,8 @@ class Detection:
     confidence: float                # 0.0–1.0
     corners_2d: list[tuple[float, float]] = field(default_factory=list)
     center_pixel: tuple[int, int] = (0, 0)
-    pose_camera: Optional[Pose] = None  # in camera frame (if solvePnP)
-    pose_base: Optional[Pose] = None    # in robot base frame
+    pose_camera: Pose | None = None  # in camera frame (if solvePnP)
+    pose_base: Pose | None = None    # in robot base frame
 
 
 @dataclass

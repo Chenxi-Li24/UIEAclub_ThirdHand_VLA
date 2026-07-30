@@ -2,7 +2,6 @@
 Image recorder  timestamped frame capture during task execution.
 """
 from pathlib import Path
-from datetime import datetime
 
 
 class ImageRecorder:

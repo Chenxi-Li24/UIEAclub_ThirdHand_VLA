@@ -3,15 +3,14 @@ from __future__ import annotations
 import importlib.util
 import logging
 import os
-from pathlib import Path
 import subprocess
 import sys
 import tempfile
 import time
 import unittest
+from pathlib import Path
 
 import yaml
-
 
 ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = ROOT / "web-control" / "scripts" / "fixed_pick_place.py"

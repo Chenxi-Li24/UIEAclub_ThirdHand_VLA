@@ -3,7 +3,6 @@ Base detector interface  all detectors implement this abstract class.
 """
 
 from abc import ABC, abstractmethod
-from ..utils.types import Detection
 
 
 class BaseDetector(ABC):

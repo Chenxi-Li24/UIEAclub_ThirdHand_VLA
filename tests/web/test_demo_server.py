@@ -4,6 +4,7 @@ import importlib.util
 import io
 import shlex
 import signal
+import sys
 import tempfile
 import threading
 import time
@@ -212,7 +213,7 @@ class DemoServerTests(unittest.TestCase):
             command = " ".join(
                 shlex.quote(value)
                 for value in (
-                    "/home/nieqingcao/miniconda3/envs/LumosTouch/bin/python",
+                    sys.executable,
                     str(runner),
                     "--simulate",
                     "--config",
@@ -261,7 +262,7 @@ class DemoServerTests(unittest.TestCase):
             command = " ".join(
                 shlex.quote(value)
                 for value in (
-                    "/home/nieqingcao/miniconda3/envs/LumosTouch/bin/python",
+                    sys.executable,
                     str(runner),
                     "--simulate",
                     "--config",

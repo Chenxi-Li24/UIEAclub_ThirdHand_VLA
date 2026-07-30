@@ -1,0 +1,28 @@
+# ============================================================
+# ThirdHand Voice Bridge — 完整依赖
+# 用于 Ubuntu PC / Jetson 部署语音后端
+# ============================================================
+# 安装: pip install -r requirements.txt
+# 推荐 Python >= 3.10
+
+# --- Bridge 核心（voice_bridge.py）---
+numpy>=1.24,<3
+websockets>=12,<16
+
+# --- ASR 语音识别（voice_agent.py WhisperASR）---
+faster-whisper>=1.2        # Whisper ASR 包装器
+ctranslate2>=4.8            # CTranslate2 推理引擎（自动检测 CUDA）
+
+# --- VAD 语音活动检测（voice_agent.py SileroVAD）---
+torch>=2.0                  # PyTorch（Silero VAD 需要）
+
+# --- 音频处理（voice_agent.py AudioCapture / TTS）---
+sounddevice>=0.4            # 音频设备 I/O
+soundfile>=0.12             # 音频文件读写
+scipy>=1.11                 # 信号处理（resample）
+
+# --- LLM（voice_agent.py ClaudeAgent）---
+anthropic>=0.30             # Anthropic Claude API 客户端
+
+# --- TTS（voice_agent.py TTSEngine）---
+edge-tts>=7.2               # Microsoft Edge TTS（需网络）

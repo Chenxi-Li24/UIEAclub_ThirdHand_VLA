@@ -24,25 +24,41 @@
 Jetson 本地麦克风、播放 TTS 或连接 Node.js 机器人控制代理。候选动作只代表
 Claude 的理解结果，不代表机械臂已经执行。
 
-## 部署到 Jetson
-
-Bridge 的仓库源文件位于：
+## 仓库文件
 
 ```text
 web-control/voice-bridge/
+├── voice_agent.py                  # Jetson 语音核心（WhisperASR + ClaudeAgent + …）
+├── voice_bridge.py                 # WebSocket 桥接服务
+├── test_voice_bridge.py            # 28 项协议与安全测试
+├── requirements.txt                # 完整依赖（部署用）
+├── requirements-voice-bridge.txt   # 最小依赖（仅 Bridge 测试用）
+└── README.md
 ```
 
-把 `voice_bridge.py` 和 `requirements-voice-bridge.txt` 复制到 Jetson 的现有
-项目目录，并与 `voice_agent.py` 放在同一级。从仓库根目录的 Windows
-PowerShell 可以执行：
+`voice_agent.py` 从 Jetson 仓库备份并纳入版本控制，部署时与 `voice_bridge.py`
+放在同一目录即可。
 
-```powershell
-scp ".\web-control\voice-bridge\voice_bridge.py" <JETSON_USER>@<JETSON_IP>:~/d435-yolo-project/
-scp ".\web-control\voice-bridge\requirements-voice-bridge.txt" <JETSON_USER>@<JETSON_IP>:~/d435-yolo-project/
+## 部署（Ubuntu PC / Jetson）
+
+### 方式一：完整部署（推荐，GPU 可用时）
+
+```bash
+cd ~/thirdhand-voice                    # 或 ~/d435-yolo-project
+python3 -m venv .venv-voice
+source .venv-voice/bin/activate
+pip install -r requirements.txt
+
+# 验证 GPU 已被 CTranslate2 检测到
+python3 -c "import ctranslate2; print('CUDA devices:', ctranslate2.get_cuda_device_count())"
+
+# 启动 GPU 路径
+python voice_bridge.py --host 0.0.0.0 --port 3002
 ```
 
-然后在 Jetson 上创建一个能够复用现有语音依赖的虚拟环境。不要使用
-`--break-system-packages`：
+### 方式二：Jetson 部署（复用系统包）
+
+在 Jetson 上已有 voice_agent.py 及其系统依赖时，只需安装 Bridge 自身依赖：
 
 ```bash
 cd ~/d435-yolo-project
@@ -54,14 +70,17 @@ python3 -m venv --system-site-packages .venv-voice-bridge
 服务地址：
 
 ```text
-ws://<JETSON_IP>:3001/v1/voice
+ws://<HOST_IP>:3001/v1/voice        # CPU (int8)
+ws://<HOST_IP>:3002/v1/voice        # GPU (CUDA / float16)
 WebSocket subprotocol: thirdhand.voice.v1
 ```
+
+### --no-llm 模式
 
 如果暂时只想验证 ASR、不调用 Claude/CC-Switch：
 
 ```bash
-.venv-voice-bridge/bin/python voice_bridge.py --host 0.0.0.0 --port 3001 --no-llm
+python voice_bridge.py --host 0.0.0.0 --port 3001 --no-llm
 ```
 
 `--no-llm` 模式只能验证语音转写；文字输入会返回 `LLM_UNAVAILABLE`。

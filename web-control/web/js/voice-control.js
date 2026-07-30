@@ -1,6 +1,7 @@
 const VOICE_PROTOCOL = 'thirdhand.voice.v1';
-const GPU_ENDPOINT = 'ws://192.168.58.43:3002/v1/voice';
-const CPU_ENDPOINT = 'ws://192.168.58.43:3001/v1/voice';
+const PC_ENDPOINT = 'ws://192.168.58.68:3001/v1/voice';
+const GPU_ENDPOINT = PC_ENDPOINT;
+const CPU_ENDPOINT = PC_ENDPOINT;
 const DEFAULT_ENDPOINT = GPU_ENDPOINT;
 const LEGACY_DEFAULT_ENDPOINT = 'ws://127.0.0.1:3001/v1/voice';
 const ENDPOINT_MIGRATION_KEY = 'voiceAiEndpointDefaultV3';
@@ -713,7 +714,7 @@ export class VoiceControl {
 
     if (this.endpointDescription) {
       if (endpoint === GPU_ENDPOINT) {
-        this.endpointDescription.textContent = 'GPU 3002 · CUDA / float16';
+        this.endpointDescription.textContent = 'RTX 5060 · CUDA float16';
       } else if (endpoint === CPU_ENDPOINT || endpoint === LEGACY_DEFAULT_ENDPOINT) {
         this.endpointDescription.textContent = 'CPU 3001 · int8 兼容回退';
       } else {

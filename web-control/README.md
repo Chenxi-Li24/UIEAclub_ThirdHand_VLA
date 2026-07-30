@@ -23,34 +23,55 @@ Python VLA 框架自带的 FastAPI 控制台使用端口 `8000`，两者用途�
 
 ## 语音和文字 AI / Voice & Text AI
 
-网页控制台现在提供麦克风和文字对话入口：
+网页控制台提供麦克风和文字对话入口：
 
 ```text
 浏览器麦克风或文字
-  -> Voice Protocol v1 WebSocket
-  -> Jetson Voice Bridge
-  -> WhisperASR（仅语音）
-  -> ClaudeAgent
-  -> 最终转写、AI 回复和候选动作
-  -> 网页显示与本地 3D 预览
+  → Voice Protocol v1 WebSocket
+  → voice_bridge.py（Ubuntu PC）
+  → WhisperASR（仅语音）→ RTX 5060 GPU · CUDA float16
+  → ClaudeAgent → DeepSeek v4-pro
+  → 最终转写、AI 回复和候选动作
+  → 网页显示与本地 3D 预览
 ```
 
 Voice Bridge 与 Startouch 真实控制链隔离。它不导入 `RobotExecutor`，不连接
-机器人 `/ws` 控制代理，也不会将 AI 候选动作直接发送给机械臂。用户确认候选
-动作时，目前只更新本地 3D 模型和日志。
+机器人 `/ws` 控制代理，也不会将 AI 候选动作直接发送给机械臂。
 
-当前状态：
+### 启动语音后端
 
-- Task 1：Jetson ASR GPU 加速基线已经完成。
-- Task 2：final-only Voice Bridge 已在隔离的 GPU 端口 `3002` 完成验收。
-- 正式 `3001` 服务、原始 `voice_agent.py`、系统 Python 和 CPU 环境未被替换。
-- VAD、分段增量 ASR 和实时 `transcript.partial` 属于后续工作。
+```bash
+cd ~/thirdhand-voice
+conda activate voice-bridge
+python voice_bridge.py --host 0.0.0.0 --port 3001
+```
+
+模型文件在 HuggingFace 上首次下载约 2 GB（`Systran/faster-whisper-small`）。
+国内网络慢时可从已有设备复制缓存：
+
+```bash
+scp -r <已有缓存的主机>@<IP>:~/.cache/huggingface ~/.cache/
+```
+
+端口 `3001` 上启动后，`WhisperASR` 自动检测 CUDA 并启用 GPU 推理。
+
+### 语音模块文件
+
+```text
+web-control/voice-bridge/
+├── voice_agent.py           # WhisperASR + ClaudeAgent + 全部语音类
+├── voice_bridge.py           # WebSocket 桥接服务
+├── test_voice_bridge.py      # 28 项协议与安全测试
+├── requirements.txt          # 完整 Python 依赖
+├── requirements-voice-bridge.txt  # 最小依赖（仅测试用）
+└── README.md                 # 部署与测试说明
+```
 
 相关文档：
 
 - [Voice Protocol v1](docs/voice-protocol-v1.md)
 - [本次 Voice Bridge 更新日志](docs/voice-bridge-update-2026-07-30.md)
-- [Jetson Voice Bridge 部署与测试](voice-bridge/README.md)
+- [Voice Bridge 部署与测试](voice-bridge/README.md)
 
 ## 支持环境
 
@@ -102,6 +123,21 @@ ip -details link show can0
 网页连接前会使用只读 `0xCC` 查询验证 J1-J6 反馈。
 
 ## 启动
+
+### 开发模式（仅网页，不控制机械臂）
+
+```powershell
+cd web-control\server
+npm install
+$env:STARTOUCH_SIMULATE = "1"
+$env:WEB_HOST = "127.0.0.1"
+npm start
+```
+
+浏览器打开 `http://127.0.0.1:3000/`。语音面板填写 PC 的 Bridge 地址
+`ws://<PC_IP>:3001/v1/voice` 后点击重连。
+
+### 真机模式（Ubuntu，连接机械臂）
 
 ```bash
 cd ~/arm/UIEAclub_ThirdHand_VLA

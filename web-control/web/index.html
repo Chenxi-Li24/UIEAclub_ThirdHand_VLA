@@ -248,14 +248,14 @@
         </div>
         <div class="voice-route-options" role="group" aria-label="选择语音识别计算路径">
           <button class="voice-route-option" type="button"
-                  data-voice-endpoint="ws://192.168.58.43:3002/v1/voice"
+                  data-voice-endpoint="ws://192.168.58.68:3001/v1/voice"
                   aria-pressed="true">
             <span class="voice-route-kicker">GPU</span>
             <strong>高速识别</strong>
-            <small>端口 3002 · 推荐</small>
+            <small>端口 3001</small>
           </button>
           <button class="voice-route-option" type="button"
-                  data-voice-endpoint="ws://192.168.58.43:3001/v1/voice"
+                  data-voice-endpoint="ws://192.168.58.68:3001/v1/voice"
                   aria-pressed="false">
             <span class="voice-route-kicker">CPU</span>
             <strong>兼容回退</strong>
@@ -264,8 +264,8 @@
         </div>
         <div class="voice-route-control">
           <input id="voice-ai-endpoint" type="hidden"
-                 value="ws://192.168.58.43:3002/v1/voice">
-          <span id="voice-route-description">GPU 3002 · CUDA / float16</span>
+                 value="ws://192.168.58.68:3001/v1/voice">
+          <span id="voice-route-description">RTX 5060 · CUDA float16</span>
           <button id="voice-ai-reconnect" type="button">重新连接</button>
         </div>
       </section>

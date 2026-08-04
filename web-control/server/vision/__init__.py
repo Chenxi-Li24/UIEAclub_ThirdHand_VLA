@@ -18,6 +18,7 @@ from .identity import (
     PersistentIdentityConfig,
     PersistentIdentityMemory,
 )
+from .instance_pose import InstancePoseConfig, estimate_instance_pose
 from .object_memory import ObjectMemory, ObjectMemoryConfig
 from .safety import SafetyConfig, evaluate_target_safety
 from .tracking import MultiObjectTracker, TrackerConfig
@@ -43,6 +44,7 @@ __all__ = [
     "IdentitySnapshot",
     "IdentityStatus",
     "IdentityUpdate",
+    "InstancePoseConfig",
     "InvalidDataError",
     "MultiObjectTracker",
     "ObjectMemory",
@@ -62,6 +64,7 @@ __all__ = [
     "TrackerConfig",
     "build_dry_run_report",
     "evaluate_target_safety",
+    "estimate_instance_pose",
     "generate_top_down_candidates",
     "invert_transform",
     "make_transform",

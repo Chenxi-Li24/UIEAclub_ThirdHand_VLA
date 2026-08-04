@@ -13,9 +13,10 @@ Routes:
   WS   /ws                    Real-time status + frames
 """
 
+from pathlib import Path
+
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
-from pathlib import Path
 
 
 def create_app(config=None) -> FastAPI:

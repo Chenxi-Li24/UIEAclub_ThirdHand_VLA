@@ -1,54 +1,34 @@
-﻿"""
-YAML configuration loader with Pydantic validation.
-
-Loads configs/ *.yaml files, validates against Pydantic models,
-and supports environment variable overrides.
+"""
+YAML configuration loader.
 """
 
 from pathlib import Path
-from typing import Optional, TypeVar
 
 import yaml
 
-from .models import (
-    AppConfig,
-    AsrTtsConfig,
-    CameraConfig,
-    RobotConfig,
-    VLAConfig,
-    WebConfig,
-    WorkspaceConfig,
-)
 
-T = TypeVar("T")
+def load_config(config_path: str = None) -> dict:
+    """Load and merge config from YAML files. Returns a unified dict."""
+    if config_path:
+        path = Path(config_path)
+        if path.exists():
+            return yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        return {}
 
+    # Try to load from default configs/ directory
+    config_dir = Path(__file__).parent.parent.parent.parent / "configs"
+    if not config_dir.exists():
+        config_dir = Path("configs")
 
-class ConfigLoader:
-    """Loads YAML configs with Pydantic validation."""
+    config = {}
+    for name in ["camera", "robot", "workspace", "vla", "web"]:
+        fpath = config_dir / f"{name}.yaml"
+        if fpath.exists():
+            try:
+                data = yaml.safe_load(fpath.read_text(encoding="utf-8"))
+                if data:
+                    config[name] = data
+            except Exception:
+                pass
 
-    def __init__(self, config_dir: str = "configs"):
-        self.config_dir = Path(config_dir)
-
-    def load_app_config(self) -> AppConfig:
-        """Load and merge all domain configs into AppConfig."""
-        return AppConfig(
-            robot=self._load("robot.yaml", RobotConfig),
-            camera=self._load("camera.yaml", CameraConfig),
-            workspace=self._load("workspace.yaml", WorkspaceConfig),
-            asr_tts=self._try_load("asr_tts.yaml", AsrTtsConfig),
-            vla=self._try_load("vla.yaml", VLAConfig),
-            web=self._load("web.yaml", WebConfig),
-        )
-
-    def _load(self, filename: str, model_cls: type[T]) -> T:
-        path = self.config_dir / filename
-        if not path.exists():
-            return model_cls()
-        data = yaml.safe_load(path.read_text(encoding="utf-8"))
-        return model_cls(**data)
-
-    def _try_load(self, filename: str, model_cls: type[T]) -> Optional[T]:
-        path = self.config_dir / filename
-        if not path.exists():
-            return None
-        return self._load(filename, model_cls)
+    return config

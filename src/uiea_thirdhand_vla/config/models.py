@@ -5,8 +5,9 @@ Each YAML config file maps to one Pydantic BaseModel.
 Validation happens at load time (fail-fast).
 """
 
+from typing import Literal
+
 from pydantic import BaseModel, Field
-from typing import Optional, Literal
 
 
 class JointLimits(BaseModel):
@@ -24,7 +25,7 @@ class GripperConfig(BaseModel):
 class EStopConfig(BaseModel):
     method: str = "keyboard"
     keyboard_key: str = "space"
-    gpio_pin: Optional[int] = None
+    gpio_pin: int | None = None
 
 
 class RobotConfig(BaseModel):
@@ -48,7 +49,7 @@ class CameraConfig(BaseModel):
     height: int = 720
     fps: int = 30
     pixel_format: str = "RGB"
-    calibration_file: Optional[str] = None
+    calibration_file: str | None = None
     camera_model: Literal["seucm", "fisheye", "pinhole"] = "seucm"
     depth_enabled: bool = False
     depth_width: int = 640
@@ -56,7 +57,7 @@ class CameraConfig(BaseModel):
     depth_fps: int = 15
     depth_unit: str = "mm"
     depth_invalid_value: int = 0
-    tof_extrinsics: Optional[list[list[float]]] = None
+    tof_extrinsics: list[list[float]] | None = None
 
 
 class Bounds(BaseModel):
@@ -91,7 +92,7 @@ class ASRConfig(BaseModel):
 
 class NLUConfig(BaseModel):
     engine: str = "local"
-    local_model: Optional[str] = None
+    local_model: str | None = None
     intent_labels: list[str] = Field(default_factory=lambda: [
         "start_task", "stop", "pause", "resume", "emergency_stop", "go_home", "jog"
     ])
@@ -106,7 +107,7 @@ class TTSConfig(BaseModel):
 
 
 class MicConfig(BaseModel):
-    device_index: Optional[int] = None
+    device_index: int | None = None
     chunk_size: int = 1024
     channels: int = 1
 
@@ -161,7 +162,7 @@ class VideoConfig(BaseModel):
 
 
 class Robot3DConfig(BaseModel):
-    urdf_path: Optional[str] = None
+    urdf_path: str | None = None
 
 
 class WebConfig(BaseModel):
@@ -177,6 +178,6 @@ class AppConfig(BaseModel):
     robot: RobotConfig = Field(default_factory=RobotConfig)
     camera: CameraConfig = Field(default_factory=CameraConfig)
     workspace: WorkspaceConfig = Field(default_factory=WorkspaceConfig)
-    asr_tts: Optional[AsrTtsConfig] = None
-    vla: Optional[VLAConfig] = None
+    asr_tts: AsrTtsConfig | None = None
+    vla: VLAConfig | None = None
     web: WebConfig = Field(default_factory=WebConfig)

@@ -1,120 +1,101 @@
-# ThirdHand VLA -- Desktop Robotic Arm Vision-Language-Action System
+# ThirdHand VLA
 
-> **UIEA Club** | Lumos Touch R1 + Lumos Ego + Cloud VLA + Local ASR/TTS
+ThirdHand VLA is a desktop robotic-arm platform for the Lumos Touch R1 and
+Lumos Ego camera. It combines local perception, guarded robot control, optional
+cloud VLA reasoning, and browser-based operator tools.
 
-A Python framework for controlling the Lumos Touch R1 desktop robotic arm
-with vision-based perception (ArUco / YOLO), cloud VLA reasoning,
-local ASR/TTS voice interaction, and a web-based control console.
+Chinese documentation: [README_CN.md](README_CN.md)
 
-## Architecture
+## Repository layout
 
-```
-Camera -> Perception (ArUco/YOLO) -> FSM -> Control (Robot Arm)
-   |                                     |
-   +-- Cloud VLA (reasoning) ------------+
-   +-- Voice (ASR -> NLU -> Intent) -----+
-   +-- Web Console (FastAPI + Three.js) -+
-```
+| Path | Responsibility |
+| --- | --- |
+| `src/uiea_thirdhand_vla/` | Installable Python VLA application and FastAPI console |
+| `web-control/` | Standalone Startouch SDK bridge, camera services, and operator UI |
+| `configs/` | Portable robot, camera, task, and vision configuration |
+| `scripts/` | Calibration, deployment, demo, and validation entry points |
+| `tests/` | Offline application and workflow tests |
+| `docs/` | Architecture, setup, API, safety, and research records |
 
-## Quick Start
+See [docs/architecture.md](docs/architecture.md) for component boundaries and
+data flow.
+
+## Quick start
+
+Python 3.10 or newer is required.
 
 ```bash
-git clone https://github.com/Chenxi-Li24/UIEAclub_ThirdHand_VLA
+git clone https://github.com/Oliveirah007/UIEAclub_ThirdHand_VLA.git
 cd UIEAclub_ThirdHand_VLA
+python -m venv .venv
+. .venv/bin/activate
 pip install -e ".[core]"
 cp .env.example .env
 python -m uiea_thirdhand_vla
-# Open http://localhost:8000
 ```
 
-### Startouch Hardware Web Control
+Open `http://localhost:8000` for the packaged FastAPI console.
 
-`web-control/` contains the hardware-tested Startouch SDK control page. The
-browser connects to an Ubuntu WebSocket service, which controls the robot
-directly through `can0`. It is separate from the VLA FastAPI console above and
-uses port `3000` by default.
+## Startouch hardware web control
+
+The independently deployable `web-control/` service controls the robot through
+the Startouch SDK and `can0`. Read
+[web-control/README.md](web-control/README.md) and verify the hardware stop
+before enabling motion.
 
 ```bash
 cp web-control/.env.example web-control/.env
 web-control/scripts/setup_ubuntu.sh
 web-control/scripts/start_ubuntu.sh
-# Open http://<Ubuntu-IP>:3000
 ```
 
-See [`web-control/README.md`](web-control/README.md) for installation, CAN bus,
-gripper, and safety details.
+Open `http://<robot-host>:3000`. The UI proxies the Startouch bridge and D435
+stream; the Lumos HTTP stream listens on port `3001` when enabled.
 
-## Module Map
+## Fixed A/B pick-and-place demo
 
-| Module | Path | Purpose |
-|--------|------|---------|
-| perception | src/.../perception/ | Camera, calibration, detection |
-| control | src/.../control/ | Robot arm, gripper, safety |
-| interaction | src/.../interaction/ | ASR, TTS, NLU |
-| reasoning | src/.../reasoning/ | Cloud VLA API client |
-| orchestration | src/.../orchestration/ | State machine, tasks |
-| web | src/.../web/ | FastAPI + frontend |
-| logging | src/.../logging/ | Per-run data recording |
-| config | src/.../config/ | YAML + Pydantic |
-| web-control | web-control/ | Hardware-tested Startouch SDK control page |
-
-## Configuration
-
-Edit `configs/*.yaml` for your hardware setup. See `docs/setup_guide.md`.
-
-## License
-
-MIT — see [LICENSE](LICENSE)
-# Fixed A/B Pick and Place demo
-
-The isolated real-arm workflow is configured for a 25 cm vertical lift,
-15% current motion speed with a 30% hard limit, adaptive low-stiffness grasping,
-and one continuous SDK path per logical route. The dashboard offers one
-manual step-by-step cycle and a separate one-click automatic mode that runs
-exactly three A-to-B-to-A cycles without pressing Continue. Do not run another
-CAN controller at the same time.
-
-Ubuntu local launch:
+The fixed-point demo has an independent loopback-only control page. It checks
+the branch, `can0`, point validity, joint limits, speed, logs, and competing
+control processes before motion.
 
 ```bash
-cd /home/nieqingcao/arm/UIEAclub_ThirdHand_VLA-fixed-pick-place
-bash scripts/demo_fixed_pick_place.sh
-```
-
-Windows PowerShell remote launch:
-
-```powershell
-ssh -t robot-ubuntu "cd /home/nieqingcao/arm/UIEAclub_ThirdHand_VLA-fixed-pick-place && bash scripts/demo_fixed_pick_place.sh"
-```
-
-The launcher checks the worktree, branch, `can0`, point validity, joint
-limits, speed, logs, and competing users/processes before motion. On a
-conflict it prints `RESOURCE_CONFLICT` and does not interfere with the other
-process. A failed run executes cleanup and reports the failed stage and cause.
-
-Ubuntu desktop Start/Stop page:
-
-```bash
-cd /home/nieqingcao/arm/UIEAclub_ThirdHand_VLA-fixed-pick-place
 bash scripts/open_fixed_pick_place_control.sh
 ```
 
-The page opens at `http://127.0.0.1:8766/`. Its service does not connect to
-`can0` while idle. `手动逐步演示` runs the one-cycle confirmation workflow.
-`一键自动循环 3 次` runs three cycles without pressing Continue. Both buttons
-use the same preflight, 30% hard limit, three-second countdown, logs and
-cleanup. `停止并失能` interrupts only the process launched by this page,
-disables the motors, and leaves the arm at its current pose. It never stops
-another user's process. If another controller is active, the page reports
-`RESOURCE_CONFLICT`.
+Open `http://127.0.0.1:8766`. Do not run it alongside another CAN controller.
+Detailed operating and safety instructions are in
+[web-control/FIXED_PICK_PLACE.md](web-control/FIXED_PICK_PLACE.md).
 
-While supervised step confirmation is required, the page enters
-`WAITING_CONFIRMATION` before each logical action and enables the yellow
-“执行下一步” button. The button confirms only the currently displayed stage.
-The automatic button is the only path that bypasses per-step confirmation,
-and it is fixed to exactly three cycles.
+## Service ports
 
-Each safe logical route now sends one multi-waypoint SDK trajectory, so the
-12° interpolation points no longer cause repeated stop/start motion. The arm
-still stops at Home, the A/B raised points, and the grasp/release points where
-a task action requires it.
+| Port | Bind/default | Service |
+| --- | --- | --- |
+| `8000` | `0.0.0.0` | Packaged VLA FastAPI console |
+| `3000` | `0.0.0.0` | Startouch proxy and browser UI |
+| `3001` | `0.0.0.0` | Lumos camera HTTP/MJPEG service |
+| `8766` | `127.0.0.1` | Fixed-point demo control page |
+
+Override ports through the corresponding YAML or environment configuration.
+
+## Models and runtime data
+
+Downloaded `*.pt` and `*.onnx` weights, logs, PID files, captured frames, and
+operator point backups are local runtime artifacts and are not committed. See
+[docs/model_assets.md](docs/model_assets.md) for model setup and configuration.
+
+## Development verification
+
+```bash
+pip install -e ".[core,dev]"
+ruff check src/ tests/
+mypy src/
+STARTOUCH_CAN_INTERFACE=thirdhand-test pytest tests/ -q --ignore=tests/e2e/
+pytest web-control/server/tests/ -q
+```
+
+The test interface name prevents offline lock tests from competing with a live
+`can0` controller.
+
+## License
+
+MIT — see [LICENSE](LICENSE).

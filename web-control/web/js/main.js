@@ -333,6 +333,7 @@ class UIControls {
     this.sliders = [];
     this.inputs = [];
     this.syncMode = true;
+    this._draggingSlider = false;
     this.presets = {};
     this.robotStateReady = false;
     this.gripperTargetEdited = false;
@@ -352,24 +353,36 @@ class UIControls {
       const sliderMax = Math.floor(limits[i][1] * 10) / 10;
       const row = document.createElement('div');
       row.className = 'joint-row';
-      row.innerHTML = `
-        <div class="joint-label">
-          <span class="joint-name">${jointNames[i]}</span>
-          <span class="joint-value" id="jval-${i}">0.0°</span>
-        </div>
-        <input type="range" class="joint-slider"
-               id="slider-j${i}"
-               min="${sliderMin}" max="${sliderMax}" step="0.1" value="0">
-      `;
+      const label = document.createElement('div');
+      label.className = 'joint-label';
+      const name = document.createElement('span');
+      name.className = 'joint-name';
+      name.textContent = jointNames[i];
+      const valEl = document.createElement('span');
+      valEl.className = 'joint-value';
+      valEl.id = `jval-${i}`;
+      valEl.textContent = '0.0°';
+      label.append(name, valEl);
+
+      const slider = document.createElement('input');
+      slider.type = 'range';
+      slider.className = 'joint-slider';
+      slider.id = `slider-j${i}`;
+      slider.min = sliderMin;
+      slider.max = sliderMax;
+      slider.step = '0.1';
+      slider.value = '0';
+      row.append(label, slider);
       body.appendChild(row);
 
-      const slider = row.querySelector('.joint-slider');
-      const valEl = row.querySelector('.joint-value');
       this.sliders.push(slider);
       const defaultVal = 0;
       slider.value = defaultVal;
       valEl.textContent = defaultVal.toFixed(1) + '°';
 
+      slider.addEventListener('pointerdown', () => { this._draggingSlider = true; });
+      slider.addEventListener('pointerup', () => { this._draggingSlider = false; });
+      slider.addEventListener('pointerleave', () => { this._draggingSlider = false; });
       slider.addEventListener('input', () => {
         const val = parseFloat(slider.value);
         valEl.textContent = val.toFixed(1) + '°';
@@ -564,9 +577,7 @@ class UIControls {
         this._setMotionControlsEnabled(true);
         this._updateRTAngles(data.joints);
         // 同步滑块
-        if (this.syncMode) {
-          this.setJointValues(data.joints);
-        }
+        // Don't overwrite user's slider edits with actual angles
       }
       // 更新状态徽章
       if (data.stateName) {
@@ -632,6 +643,165 @@ class UIControls {
     });
     this.ws.on('error', (data) => this._log('⚠ ' + data.msg));
     this.ws.on('sdk_log', (data) => this._log(`SDK: ${data.msg}`));
+
+    // ── D435 Vision handlers ──────────────────────────────
+    const cameraFeed = document.getElementById('camera-feed');
+    const lumosFeed = document.getElementById('lumos-feed');
+    let cameraFeedLoaded = false;
+    let cameraRetryTimer = null;
+    let cameraRetryCount = 0;
+    let lumosRetryTimer = null;
+    let lumosRetryCount = 0;
+    const lumosStreamUrl = `${window.location.protocol}//${window.location.hostname}:3001/camera_lumos`;
+
+    // The page can request /camera before the Python bridge becomes ready.
+    // An <img> does not retry a failed MJPEG request when camera_status later
+    // changes to Ready, so reconnect it with bounded exponential backoff.
+    const reloadCameraFeed = (resetBackoff = false) => {
+      if (!cameraFeed) return;
+      if (resetBackoff) cameraRetryCount = 0;
+      if (cameraRetryTimer) clearTimeout(cameraRetryTimer);
+      cameraRetryTimer = null;
+      cameraFeedLoaded = false;
+      cameraFeed.src = `/camera?stream=${Date.now()}`;
+    };
+
+    if (cameraFeed) {
+      cameraFeed.addEventListener('load', () => {
+        cameraFeedLoaded = true;
+        cameraRetryCount = 0;
+        if (cameraRetryTimer) clearTimeout(cameraRetryTimer);
+        cameraRetryTimer = null;
+      });
+      cameraFeed.addEventListener('error', () => {
+        cameraFeedLoaded = false;
+        if (cameraRetryTimer) return;
+        const delayMs = Math.min(1000 * (2 ** cameraRetryCount), 10000);
+        cameraRetryCount += 1;
+        cameraRetryTimer = setTimeout(() => {
+          cameraRetryTimer = null;
+          reloadCameraFeed();
+        }, delayMs);
+      });
+      // Retry once after listeners are attached, covering an early 503 that
+      // may already have happened while the module was loading.
+      reloadCameraFeed(true);
+    }
+
+    const reloadLumosFeed = (resetBackoff = false) => {
+      if (!lumosFeed) return;
+      if (resetBackoff) lumosRetryCount = 0;
+      if (lumosRetryTimer) clearTimeout(lumosRetryTimer);
+      lumosRetryTimer = null;
+      lumosFeed.src = `${lumosStreamUrl}?stream=${Date.now()}`;
+    };
+
+    if (lumosFeed) {
+      lumosFeed.addEventListener('load', () => {
+        lumosRetryCount = 0;
+        lumosFeed.title = 'Lumos stream connected';
+        if (lumosRetryTimer) clearTimeout(lumosRetryTimer);
+        lumosRetryTimer = null;
+      });
+      lumosFeed.addEventListener('error', () => {
+        lumosFeed.title = 'Lumos stream reconnecting';
+        if (lumosRetryTimer) return;
+        const delayMs = Math.min(1000 * (2 ** lumosRetryCount), 10000);
+        lumosRetryCount += 1;
+        lumosRetryTimer = setTimeout(() => {
+          lumosRetryTimer = null;
+          reloadLumosFeed();
+        }, delayMs);
+      });
+      reloadLumosFeed(true);
+    }
+
+    this.ws.on('detection_result', (data) => {
+      const list = document.getElementById('detection-list');
+      if (!list) return;
+      list.replaceChildren();
+      for (const obj of (data.objects || [])) {
+        const item = document.createElement('div');
+        item.className = 'detection-item';
+        const label = document.createElement('span');
+        label.className = 'det-label';
+        label.textContent = `#${obj.id} ${obj.label}`;
+        const confidence = document.createElement('span');
+        confidence.className = 'det-conf';
+        confidence.textContent = `${(Number(obj.conf) * 100).toFixed(0)}%`;
+        const coordinates = document.createElement('div');
+        coordinates.className = 'det-coords';
+        coordinates.textContent = `base (${obj.bx}, ${obj.by}, z=${obj.bz})m`;
+        const depth = document.createElement('div');
+        depth.className = 'det-depth';
+        depth.textContent = `depth: ${obj.depth_m}m`;
+        const btn = document.createElement('button');
+        btn.className = 'det-grasp-btn';
+        btn.textContent = `🎯 Grasp #${obj.id}`;
+        btn.addEventListener('click', () => {
+          this.ws.send({
+            cmd: 'grasp_object',
+            id: Number.parseInt(obj.id, 10),
+            bx: obj.bx,
+            by: obj.by,
+            bz: obj.bz,
+          });
+          this._log(`→ Grasp object #${obj.id}`);
+        });
+        item.append(label, confidence, coordinates, depth, btn);
+        list.appendChild(item);
+      }
+      if (!list.childElementCount) {
+        const empty = document.createElement('div');
+        empty.className = 'cam-label';
+        empty.textContent = 'No objects detected';
+        list.appendChild(empty);
+      }
+    });
+
+    const applyCameraStatus = (data) => {
+      const dot = document.getElementById('cam-dot');
+      const label = document.getElementById('cam-label');
+      if (dot) dot.className = 'cam-dot ' + (data.d435_ready ? 'connected' : '');
+      if (label) {
+        label.textContent = 'D435: ' + (data.d435_ready
+          ? (data.status_text || (data.calibration_loaded ? 'Ready ✓' : 'Ready (no calib)'))
+          : (data.error || 'Initializing...'));
+      }
+      if (data.d435_ready && !cameraFeedLoaded && !cameraRetryTimer) {
+        reloadCameraFeed();
+      }
+    };
+
+    this.ws.on('camera_status', applyCameraStatus);
+
+    // camera_status is emitted when the bridge starts, so a browser opened
+    // later can miss it. Recover the current read-only state from /diag.
+    fetch('/diag', { cache: 'no-store' })
+      .then(response => {
+        if (!response.ok) throw new Error(`diag HTTP ${response.status}`);
+        return response.json();
+      })
+      .then(diag => applyCameraStatus({
+        d435_ready: Boolean(diag.processes?.cameraReady),
+        status_text: diag.processes?.cameraReady ? 'Streaming ✓' : undefined,
+      }))
+      .catch(error => this._log(`Camera status: ${error.message}`));
+
+    this.ws.on('grasp_status', (data) => {
+      this._log(`Grasp #${data.tid}: ${data.status} — ${data.msg || ''}`);
+    });
+
+    this.ws.on('camera_error', (data) => {
+      this._log('⚠ Camera: ' + (data.msg || data.message || 'error'));
+    });
+
+    // Camera refresh button
+    document.getElementById('btn-camera-refresh')?.addEventListener('click', () => {
+      this.ws.send({ cmd: 'camera_refresh' });
+      reloadCameraFeed(true);
+      reloadLumosFeed(true);
+    });
 
     // 如有预设提前到达，补渲染
     if (Object.keys(this.presets).length) {

@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>ThirdHand - Startouch 机械臂控制</title>
-  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="css/style.css?v=2">
 </head>
 <body>
   <!-- 软件停止提示 -->
@@ -196,6 +196,30 @@
           </div>
         </div>
       </div>
+      <!-- D435 视觉 -->
+      <div class="drawer-section" id="sec-d435">
+        <div class="sec-header">
+          <span>D435 视觉</span>
+          <button class="sec-toggle">▾</button>
+        </div>
+        <div class="sec-body">
+          <div class="camera-status" id="camera-status">
+            <span class="cam-dot" id="cam-dot"></span>
+            <span class="cam-label" id="cam-label">D435: --</span>
+          </div>
+          <div class="camera-feed-container">
+            <img id="camera-feed" src="/camera" alt="D435 feed" />
+          </div>
+          <div class="camera-label-small">Lumos 鱼眼</div>
+          <div class="camera-feed-container" style="min-height:100px">
+            <img id="lumos-feed" src="/camera_lumos" alt="Lumos feed" style="min-height:100px" />
+          </div>
+          <div id="detection-list" class="detection-list">
+            <div style="color:var(--text-secondary);font-size:0.7rem">双路视频已启用自动重连</div>
+          </div>
+          <button class="action-btn action-primary" id="btn-camera-refresh">刷新检测</button>
+        </div>
+      </div>
     </div>
   </aside>
 
@@ -216,6 +240,6 @@
     }
   }
   </script>
-  <script type="module" src="js/main.js"></script>
+  <script type="module" src="js/main.js?v=4"></script>
 </body>
 </html>

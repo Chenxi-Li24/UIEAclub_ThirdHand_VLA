@@ -2,16 +2,15 @@ from __future__ import annotations
 
 import importlib.util
 import io
-from pathlib import Path
 import shlex
 import signal
 import tempfile
 import threading
 import time
 import unittest
+from pathlib import Path
 from urllib import error as urllib_error
 from urllib import request as urllib_request
-
 
 ROOT = Path(__file__).resolve().parents[2]
 SERVER = ROOT / "web-control" / "demo" / "demo_server.py"

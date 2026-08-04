@@ -1052,3 +1052,107 @@ html, body {
 
   .sjoint:nth-child(n+4) { display: none; }
 }
+
+/* ── D435 Vision ──────────────────────────────────────────── */
+.camera-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.cam-dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: var(--danger);
+  flex-shrink: 0;
+}
+
+.cam-dot.connected { background: var(--success); }
+
+.cam-label {
+  font-size: 0.72rem;
+  font-family: 'Consolas', monospace;
+  color: var(--text-secondary);
+}
+
+.camera-feed-container {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  margin-bottom: 8px;
+  background: #000;
+  width: 100%;
+  min-height: 180px;
+  display: block;
+}
+
+.camera-feed-container img {
+  width: 100%;
+  height: auto;
+  display: block;
+  min-height: 180px;
+}
+
+.camera-label-small {
+  font-size: 0.65rem;
+  color: var(--text-secondary);
+  margin-bottom: 2px;
+  margin-top: 4px;
+}
+
+.detection-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 300px;
+  overflow-y: auto;
+  margin-bottom: 8px;
+}
+
+.detection-item {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 6px 8px;
+  font-size: 0.7rem;
+}
+
+.detection-item .det-label {
+  color: var(--success);
+  font-weight: bold;
+}
+
+.detection-item .det-coords {
+  color: var(--text-secondary);
+  font-family: 'Consolas', monospace;
+  font-size: 0.65rem;
+}
+
+.detection-item .det-conf {
+  color: var(--warning);
+  font-size: 0.65rem;
+}
+
+.detection-item .det-grasp-btn {
+  margin-top: 4px;
+  padding: 4px 8px;
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+  background: var(--accent-dim);
+  color: var(--accent);
+  cursor: pointer;
+  font-size: 0.68rem;
+  width: 100%;
+}
+
+.detection-item .det-grasp-btn:hover {
+  background: var(--accent);
+  color: var(--bg-primary);
+}
+
+.detection-item .det-depth {
+  color: var(--warning);
+  font-size: 0.6rem;
+  margin-top: 2px;
+}

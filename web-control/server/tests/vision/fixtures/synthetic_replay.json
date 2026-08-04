@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "calibration_id": "sha256:synthetic-v1",
+  "depth_npz": "synthetic_depth.npz",
+  "min_target_cloud_points": 20,
+  "frames": [
+    {
+      "frame_id": 0,
+      "monotonic_ns": 1000000000,
+      "calibration_id": "sha256:synthetic-v1",
+      "depth_key": "depth_0",
+      "object_tracks": {"cup-a": 1},
+      "target_cloud_points": 0,
+      "latency_ms": 10.0,
+      "dry_run": {"approved": false, "reasons": ["target_stale"]}
+    },
+    {
+      "frame_id": 1,
+      "monotonic_ns": 1100000000,
+      "calibration_id": "sha256:synthetic-v1",
+      "depth_key": "depth_1",
+      "object_tracks": {"cup-a": 1},
+      "target_cloud_points": 25,
+      "latency_ms": 20.0,
+      "dry_run": {"approved": true, "reasons": []}
+    },
+    {
+      "frame_id": 2,
+      "monotonic_ns": 1200000000,
+      "calibration_id": "sha256:synthetic-v1",
+      "depth_key": "depth_2",
+      "object_tracks": {"cup-a": 1},
+      "target_cloud_points": 10,
+      "latency_ms": 30.0,
+      "dry_run": {"approved": false, "reasons": ["target_cloud_too_small"]}
+    }
+  ]
+}
+

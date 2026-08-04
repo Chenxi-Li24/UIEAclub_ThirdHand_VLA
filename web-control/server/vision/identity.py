@@ -332,11 +332,24 @@ class PersistentIdentityMemory:
 
         records = [self._records[key] for key in sorted(self._records)]
         costs = self._association_cost(records, observation_list)
-        ambiguous_columns: set[int] = set()
+        ambiguous_reasons: dict[int, str] = {}
         for column in range(len(observation_list)):
             finite = np.sort(costs[np.isfinite(costs[:, column]), column])
             if len(finite) >= 2 and finite[1] - finite[0] <= self.config.ambiguity_margin:
-                ambiguous_columns.add(column)
+                ambiguous_reasons[column] = "appearance_candidates_within_margin"
+        for row in range(len(records)):
+            finite_columns = np.flatnonzero(np.isfinite(costs[row]))
+            if len(finite_columns) < 2:
+                continue
+            ranked = finite_columns[np.argsort(costs[row, finite_columns])]
+            best_cost = costs[row, ranked[0]]
+            if costs[row, ranked[1]] - best_cost > self.config.ambiguity_margin:
+                continue
+            for column in ranked:
+                if costs[row, column] - best_cost > self.config.ambiguity_margin:
+                    break
+                ambiguous_reasons.setdefault(column, "observations_compete_for_identity")
+        ambiguous_columns = set(ambiguous_reasons)
 
         matches: list[tuple[int, int]] = []
         eligible_columns = [
@@ -389,7 +402,7 @@ class PersistentIdentityMemory:
                     identity_id=None,
                     status=IdentityStatus.AMBIGUOUS,
                     cost=None,
-                    reason="appearance_candidates_within_margin",
+                    reason=ambiguous_reasons[column],
                 )
             elif column not in matched_columns:
                 record = self._new_record(observation, now_ns)

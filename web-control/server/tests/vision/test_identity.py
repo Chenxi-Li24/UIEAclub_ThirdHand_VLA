@@ -107,6 +107,31 @@ def test_equal_candidates_are_ambiguous_without_forced_id_or_memory_mutation():
     assert after == before
 
 
+def test_two_equal_observations_competing_for_one_identity_are_both_ambiguous():
+    memory = PersistentIdentityMemory(config(min_confirmed_hits=1))
+    memory.update([observation(1, [1, 0, 0], 0)], 0)
+
+    result = memory.update(
+        [
+            observation(2, [1.0, 0.01, 0.0], 100_000_000),
+            observation(3, [1.0, -0.01, 0.0], 100_000_000),
+        ],
+        100_000_000,
+    )
+
+    assert [item.identity_id for item in result.assignments] == [None, None]
+    assert [item.status for item in result.assignments] == [
+        IdentityStatus.AMBIGUOUS,
+        IdentityStatus.AMBIGUOUS,
+    ]
+    assert [item.reason for item in result.assignments] == [
+        "observations_compete_for_identity",
+        "observations_compete_for_identity",
+    ]
+    assert [item.identity_id for item in result.snapshots] == [1]
+    assert result.snapshots[0].hits == 1
+
+
 def test_global_assignment_keeps_two_similar_instances_one_to_one():
     memory = PersistentIdentityMemory(config(min_confirmed_hits=1))
     memory.update(

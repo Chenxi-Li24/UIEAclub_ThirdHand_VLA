@@ -8,6 +8,7 @@ from vision.identity import (
     IdentityStatus,
     PersistentIdentityConfig,
     PersistentIdentityMemory,
+    _fixed_point_assignment,
     _global_ambiguity_reasons,
 )
 from vision.types import CalibrationRef, FrameStamp, InvalidDataError, PoseEstimate
@@ -35,6 +36,7 @@ def config(**overrides):
         "reacquire_confirmed_hits": 2,
         "max_actionable_position_std_m": 0.025,
         "max_actionable_pose_age_ns": 200_000_000,
+        "min_actionable_pose_hits": 2,
     }
     values.update(overrides)
     return PersistentIdentityConfig(**values)
@@ -163,6 +165,21 @@ def test_global_ambiguity_detects_near_equal_swapped_assignments():
     }
 
 
+def test_ambiguity_resolution_iterates_until_the_remaining_matrix_is_stable():
+    reasons, matches = _fixed_point_assignment(
+        np.asarray(
+            [
+                [0.12, 0.03, 0.50],
+                [0.12, 0.18, 0.86],
+                [0.48, 0.18, 0.67],
+            ]
+        ),
+        ambiguity_margin=0.03,
+    )
+    assert set(reasons) == {0, 1, 2}
+    assert matches == []
+
+
 def test_global_assignment_keeps_two_similar_instances_one_to_one():
     memory = PersistentIdentityMemory(config(min_confirmed_hits=1))
     memory.update(
@@ -246,6 +263,24 @@ def test_low_quality_match_does_not_update_prototype_banks():
     assert not result.actionable
 
 
+def test_low_quality_duplicate_cannot_make_trusted_observation_ambiguous():
+    memory = PersistentIdentityMemory(config(min_confirmed_hits=1))
+    memory.update([observation(1, [1, 0, 0], 0)], 0)
+
+    result = memory.update(
+        [
+            observation(2, [1, 0.01, 0], 100_000_000),
+            observation(3, [1, 0.01, 0], 100_000_000, confidence=0.50),
+        ],
+        100_000_000,
+    )
+
+    assert result.assignments[0].identity_id == 1
+    assert result.assignments[0].status is IdentityStatus.CONFIRMED
+    assert result.assignments[1].identity_id is None
+    assert result.assignments[1].reason == "observation_below_memory_quality"
+
+
 def test_low_quality_observation_cannot_create_a_persistent_identity():
     memory = PersistentIdentityMemory(config(min_confirmed_hits=1))
     result = memory.update(
@@ -271,12 +306,47 @@ def test_low_quality_first_observation_cannot_lock_descriptor_dimension():
     assert result.assignments[0].identity_id == 1
 
 
+def test_low_quality_first_observation_cannot_lock_calibration_id():
+    memory = PersistentIdentityMemory(config(min_confirmed_hits=1))
+    memory.update(
+        [
+            observation(
+                1,
+                [1, 0, 0],
+                0,
+                confidence=0.50,
+                xyz=[0.0, 0.0, 0.5],
+                calibration_id="sha256:low-quality-calibration",
+            )
+        ],
+        0,
+    )
+    result = memory.update(
+        [
+            observation(
+                2,
+                [1, 0, 0],
+                100_000_000,
+                xyz=[0.0, 0.0, 0.5],
+                calibration_id="sha256:trusted-calibration",
+            )
+        ],
+        100_000_000,
+    )
+    assert result.assignments[0].identity_id == 1
+
+
 def test_inactive_identity_requires_two_fresh_rgbd_hits_before_actionable():
     memory = PersistentIdentityMemory(config(min_confirmed_hits=1))
     memory.set_calibration(validated_calibration())
-    seeded = memory.update(
+    first_seed = memory.update(
         [observation(1, [1, 0, 0], 0, xyz=[0.0, 0.0, 0.5])],
         0,
+    )
+    assert not first_seed.snapshots[0].actionable
+    seeded = memory.update(
+        [observation(2, [1, 0.01, 0], 100_000_000, xyz=[0.01, 0.0, 0.5])],
+        100_000_000,
     )
     assert seeded.snapshots[0].actionable
     memory.update([], 1_200_000_000)
@@ -300,7 +370,11 @@ def test_inactive_identity_requires_two_fresh_rgbd_hits_before_actionable():
 
 def test_reacquire_hit_threshold_of_one_unlocks_on_first_valid_rgbd_frame():
     memory = PersistentIdentityMemory(
-        config(min_confirmed_hits=1, reacquire_confirmed_hits=1)
+        config(
+            min_confirmed_hits=1,
+            reacquire_confirmed_hits=1,
+            min_actionable_pose_hits=1,
+        )
     )
     memory.set_calibration(validated_calibration())
     memory.update(
@@ -319,14 +393,18 @@ def test_reacquire_hit_threshold_of_one_unlocks_on_first_valid_rgbd_frame():
 
 
 def test_actionable_requires_validated_matching_calibration_and_low_uncertainty():
-    memory = PersistentIdentityMemory(config(min_confirmed_hits=1))
+    memory = PersistentIdentityMemory(
+        config(min_confirmed_hits=1, min_actionable_pose_hits=1)
+    )
     no_calibration = memory.update(
         [observation(1, [1, 0, 0], 0, xyz=[0.0, 0.0, 0.5])],
         0,
     )
     assert not no_calibration.snapshots[0].actionable
 
-    memory = PersistentIdentityMemory(config(min_confirmed_hits=1))
+    memory = PersistentIdentityMemory(
+        config(min_confirmed_hits=1, min_actionable_pose_hits=1)
+    )
     memory.set_calibration(validated_calibration())
     good = memory.update(
         [observation(1, [1, 0, 0], 0, xyz=[0.0, 0.0, 0.5])],
@@ -352,6 +430,29 @@ def test_actionable_requires_validated_matching_calibration_and_low_uncertainty(
     )
     result = memory.update([uncertain], 100_000_000)
     assert not result.snapshots[0].actionable
+
+
+def test_first_depth_after_rgb_only_confirmation_needs_a_second_rgbd_hit():
+    memory = PersistentIdentityMemory(config(min_confirmed_hits=2))
+    memory.set_calibration(validated_calibration())
+    memory.update([observation(1, [1, 0, 0], 0)], 0)
+    rgb_confirmed = memory.update(
+        [observation(2, [1, 0.01, 0], 100_000_000)],
+        100_000_000,
+    )
+    assert rgb_confirmed.snapshots[0].status is IdentityStatus.CONFIRMED
+
+    first_depth = memory.update(
+        [observation(3, [1, 0.01, 0], 200_000_000, xyz=[0.0, 0.0, 0.5])],
+        200_000_000,
+    )
+    assert not first_depth.snapshots[0].actionable
+
+    second_depth = memory.update(
+        [observation(4, [1, 0.01, 0], 300_000_000, xyz=[0.01, 0.0, 0.5])],
+        300_000_000,
+    )
+    assert second_depth.snapshots[0].actionable
 
 
 def test_prototype_banks_are_bounded_after_many_views():
@@ -435,6 +536,15 @@ def test_update_rejects_dimension_change_duplicate_ids_future_stamps_and_time_re
         memory.update([], 39)
 
 
+def test_update_rejects_delayed_observation_without_rewinding_identity_state():
+    memory = PersistentIdentityMemory(config(min_confirmed_hits=1))
+    memory.update([observation(1, [1, 0, 0], 100)], 100)
+    memory.update([], 200)
+    with pytest.raises(InvalidDataError, match="strictly increase"):
+        memory.update([observation(2, [1, 0, 0], 50)], 250)
+    assert memory.snapshots(250)[0].last_seen_ns == 100
+
+
 @pytest.mark.parametrize(
     "overrides",
     [
@@ -452,6 +562,7 @@ def test_update_rejects_dimension_change_duplicate_ids_future_stamps_and_time_re
         {"reacquire_confirmed_hits": 0},
         {"max_actionable_position_std_m": 0.0},
         {"max_actionable_pose_age_ns": -1},
+        {"min_actionable_pose_hits": 0},
     ],
 )
 def test_identity_config_rejects_unsafe_values(overrides):

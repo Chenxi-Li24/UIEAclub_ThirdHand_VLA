@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import io
 import json
 import shutil
 from pathlib import Path
@@ -10,6 +11,7 @@ import pytest
 from vision_models.offline_replay import (
     IdentityReplayFormatError,
     ReplayLimits,
+    _validate_npy_header,
     load_remind3d_config,
     run_identity_replay,
     write_report_atomic,
@@ -139,8 +141,28 @@ def test_replay_wraps_object_descriptor_load_failure_as_format_error(tmp_path):
     arrays = {key: np.asarray([object()], dtype=object) for key in keys}
     np.savez(npz_path, **arrays)
 
-    with pytest.raises(IdentityReplayFormatError, match="cannot load descriptor array"):
+    with pytest.raises(IdentityReplayFormatError, match="numeric scalar dtype"):
         run_identity_replay(write_manifest(tmp_path, payload))
+
+
+def test_npy_header_is_validated_before_declared_shape_can_allocate_memory():
+    stream = io.BytesIO()
+    np.lib.format.write_array_header_1_0(
+        stream,
+        {
+            "descr": np.dtype("float32").str,
+            "fortran_order": False,
+            "shape": (1_000_000_000,),
+        },
+    )
+    payload = stream.getvalue()
+
+    with pytest.raises(IdentityReplayFormatError, match="descriptor dimension"):
+        _validate_npy_header(
+            io.BytesIO(payload),
+            entry_size=len(payload),
+            limits=ReplayLimits(),
+        )
 
 
 def test_deployment_config_is_fail_closed_and_matches_selected_stack():

@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 import time
 from pathlib import Path
@@ -83,6 +84,13 @@ def evaluate_smoke_limits(
     }
 
 
+def _cuda_device_index(value: str) -> int:
+    match = re.fullmatch(r"cuda(?::(0|[1-9][0-9]*))?", str(value).strip())
+    if match is None:
+        raise RuntimeError("model smoke requires a CUDA device such as cuda:0")
+    return 0 if match.group(1) is None else int(match.group(1))
+
+
 def run_model_smoke(arguments: argparse.Namespace) -> dict[str, Any]:
     import cv2
     import numpy as np
@@ -92,9 +100,17 @@ def run_model_smoke(arguments: argparse.Namespace) -> dict[str, Any]:
     from vision_models.rtmdet import RTMDetInstanceSegmenter
 
     config = load_remind3d_config(arguments.config)
+    device_index = _cuda_device_index(arguments.device)
     if not torch.cuda.is_available():
         raise RuntimeError("CUDA is unavailable in the REMIND-3D model environment")
-    capability = torch.cuda.get_device_capability()
+    if device_index >= torch.cuda.device_count():
+        raise RuntimeError(
+            f"CUDA device index {device_index} is unavailable; "
+            f"device_count={torch.cuda.device_count()}"
+        )
+    torch.cuda.set_device(device_index)
+    model_device = f"cuda:{device_index}"
+    capability = torch.cuda.get_device_capability(device_index)
     architecture = f"sm_{capability[0]}{capability[1]}"
     supported_architectures = tuple(torch.cuda.get_arch_list())
     if architecture not in supported_architectures:
@@ -114,28 +130,28 @@ def run_model_smoke(arguments: argparse.Namespace) -> dict[str, Any]:
         config_path=arguments.detector_config,
         checkpoint_path=arguments.detector_checkpoint,
         labels=labels,
-        device=arguments.device,
+        device=model_device,
         min_score=arguments.min_score,
     )
     encoder = DinoMaskEncoder(
         model_id=arguments.descriptor_model or config.fallback_descriptor,
-        device=arguments.device,
+        device=model_device,
         min_patch_coverage=arguments.min_patch_coverage,
         max_long_side=config.dino_max_long_side,
     )
 
-    torch.cuda.reset_peak_memory_stats()
+    torch.cuda.reset_peak_memory_stats(device_index)
     latencies_ms = []
     detection_count = 0
     descriptors = ()
     for iteration in range(arguments.iterations + 1):
-        torch.cuda.synchronize()
+        torch.cuda.synchronize(device_index)
         started = time.perf_counter()
         detections = segmenter.predict(image_rgb)
         if not detections:
             raise RuntimeError("RTMDet smoke inference returned no instance masks")
         descriptors = encoder.encode(image_rgb, [item.mask for item in detections])
-        torch.cuda.synchronize()
+        torch.cuda.synchronize(device_index)
         elapsed_ms = (time.perf_counter() - started) * 1000.0
         detection_count = len(detections)
         if iteration > 0:
@@ -149,8 +165,8 @@ def run_model_smoke(arguments: argparse.Namespace) -> dict[str, Any]:
         raise RuntimeError(f"DINO descriptors are not unit normalized: {descriptor_norms}")
     limit_metrics = evaluate_smoke_limits(
         latencies_ms,
-        allocated_memory_gib=torch.cuda.max_memory_allocated() / 1024**3,
-        reserved_memory_gib=torch.cuda.max_memory_reserved() / 1024**3,
+        allocated_memory_gib=torch.cuda.max_memory_allocated(device_index) / 1024**3,
+        reserved_memory_gib=torch.cuda.max_memory_reserved(device_index) / 1024**3,
         latency_p95_limit_ms=config.latency_p95_limit_ms,
         gpu_memory_limit_gib=config.gpu_memory_limit_gib,
     )
@@ -162,8 +178,8 @@ def run_model_smoke(arguments: argparse.Namespace) -> dict[str, Any]:
         "descriptor_norm_min": min(descriptor_norms),
         "descriptor_norm_max": max(descriptor_norms),
         "detection_count": detection_count,
-        "device": arguments.device,
-        "gpu": torch.cuda.get_device_name(),
+        "device": model_device,
+        "gpu": torch.cuda.get_device_name(device_index),
         "robot_execution_enabled": False,
         "smoke_passed": True,
         "supported_architectures": list(supported_architectures),

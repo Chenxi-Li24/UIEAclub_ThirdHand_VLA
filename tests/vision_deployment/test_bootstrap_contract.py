@@ -8,7 +8,6 @@ from pathlib import Path
 
 import pytest
 
-
 ROOT = Path(__file__).parents[2]
 BOOTSTRAP = ROOT / "scripts/vision/bootstrap_remind3d_env.sh"
 SMOKE = ROOT / "scripts/vision/smoke_remind3d_models.py"
@@ -16,7 +15,7 @@ CONFIG = ROOT / "configs/vision/remind3d.yaml"
 SERVER = ROOT / "web-control/server"
 sys.path.insert(0, str(ROOT / "scripts/vision"))
 
-from smoke_remind3d_models import evaluate_smoke_limits  # noqa: E402
+from smoke_remind3d_models import _cuda_device_index, evaluate_smoke_limits  # noqa: E402
 
 
 def test_bootstrap_print_plan_is_isolated_and_blackwell_compatible():
@@ -77,8 +76,11 @@ def test_requirements_and_runtime_artifacts_are_outside_robot_environment():
     assert "startouch" not in requirements.lower()
 
     bootstrap = BOOTSTRAP.read_text(encoding="utf-8")
+    assert "/home/" not in bootstrap
     assert "from mmcv.ops import nms" in bootstrap
     assert "MMCV_OP_GATE=PASS" in bootstrap
+    assert "PYTHON_PRE_GATE=PASS" in bootstrap
+    assert "PYTHON_POST_GATE=PASS" in bootstrap
 
 
 def test_smoke_limits_enforce_latency_and_reserved_gpu_memory():
@@ -109,3 +111,17 @@ def test_smoke_limits_enforce_latency_and_reserved_gpu_memory():
             latency_p95_limit_ms=300.0,
             gpu_memory_limit_gib=7.2,
         )
+
+
+@pytest.mark.parametrize(
+    "value,expected",
+    [("cuda", 0), ("cuda:0", 0), ("cuda:2", 2)],
+)
+def test_smoke_cuda_device_parser_uses_one_explicit_cuda_device(value, expected):
+    assert _cuda_device_index(value) == expected
+
+
+@pytest.mark.parametrize("value", ["cpu", "cuda:-1", "cuda:x", "cuda:1:2", "mps"])
+def test_smoke_cuda_device_parser_rejects_non_cuda_or_malformed_devices(value):
+    with pytest.raises(RuntimeError, match="CUDA device"):
+        _cuda_device_index(value)

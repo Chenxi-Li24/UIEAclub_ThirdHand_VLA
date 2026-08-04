@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import zipfile
 from dataclasses import dataclass
 from pathlib import Path
@@ -183,6 +184,45 @@ def _relative_artifact(manifest_path: Path, value: Any) -> Path:
     return resolved
 
 
+def _validate_npy_header(
+    stream: Any,
+    entry_size: int,
+    limits: ReplayLimits,
+) -> tuple[tuple[int, ...], np.dtype[Any]]:
+    try:
+        version = np.lib.format.read_magic(stream)
+        if version == (1, 0):
+            shape, _, dtype = np.lib.format.read_array_header_1_0(
+                stream,
+                max_header_size=64 * 1024,
+            )
+        elif version == (2, 0):
+            shape, _, dtype = np.lib.format.read_array_header_2_0(
+                stream,
+                max_header_size=64 * 1024,
+            )
+        else:
+            raise IdentityReplayFormatError(
+                f"descriptor array uses unsupported NPY version {version}"
+            )
+    except IdentityReplayFormatError:
+        raise
+    except (EOFError, OSError, ValueError) as error:
+        raise IdentityReplayFormatError("descriptor array has an invalid NPY header") from error
+    if dtype.hasobject or dtype.kind not in "fiu":
+        raise IdentityReplayFormatError("descriptor array must use a numeric scalar dtype")
+    if len(shape) != 1 or shape[0] < 1 or shape[0] > limits.max_descriptor_dimension:
+        raise IdentityReplayFormatError("descriptor dimension exceeds replay limit")
+    payload_bytes = math.prod(shape) * dtype.itemsize
+    if payload_bytes > limits.max_array_bytes:
+        raise IdentityReplayFormatError("descriptor array exceeds byte limit")
+    if stream.tell() + payload_bytes != entry_size:
+        raise IdentityReplayFormatError(
+            "descriptor NPY shape does not match its archived byte size"
+        )
+    return shape, dtype
+
+
 def _validate_descriptor_archive(path: Path, limits: ReplayLimits) -> None:
     if path.stat().st_size > limits.max_artifact_bytes:
         raise IdentityReplayFormatError("descriptor artifact exceeds byte limit")
@@ -212,6 +252,8 @@ def _validate_descriptor_archive(path: Path, limits: ReplayLimits) -> None:
                     raise IdentityReplayFormatError(
                         "descriptor artifact exceeds compression-ratio limit"
                     )
+                with archive.open(entry) as stream:
+                    _validate_npy_header(stream, entry.file_size, limits)
     except (OSError, zipfile.BadZipFile, zipfile.LargeZipFile) as error:
         raise IdentityReplayFormatError(
             f"descriptor artifact is not a valid NPZ archive: {error}"

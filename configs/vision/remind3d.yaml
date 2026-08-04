@@ -29,6 +29,7 @@ identity:
   reacquire_confirmed_hits: 2
   max_actionable_position_std_m: 0.025
   max_actionable_pose_age_ns: 200000000
+  min_actionable_pose_hits: 2
 
 instance_pose:
   min_points: 80

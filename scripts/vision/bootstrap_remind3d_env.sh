@@ -57,6 +57,8 @@ if [[ ! -x "$ENV_PREFIX/bin/python" ]]; then
   "$CONDA_EXE" create --name "$ENV_NAME" "python=$PYTHON_VERSION" pip -y
 fi
 
+"$CONDA_EXE" run --name "$ENV_NAME" python -c \
+  'import sys; assert sys.version_info[:2] == (3, 11), sys.version; print("PYTHON_PRE_GATE=PASS"); print("PYTHON_ACTUAL=" + sys.version.split()[0])'
 "$CONDA_EXE" run --name "$ENV_NAME" python -m pip install \
   "pip==$PIP_VERSION" "setuptools==$SETUPTOOLS_VERSION" "wheel==$WHEEL_VERSION"
 "$CONDA_EXE" run --name "$ENV_NAME" python -m pip install \
@@ -70,5 +72,7 @@ fi
   'import torch; assert torch.cuda.is_available(), "CUDA unavailable"; capability=torch.cuda.get_device_capability(); arch=f"sm_{capability[0]}{capability[1]}"; assert arch in torch.cuda.get_arch_list(), (arch, torch.cuda.get_arch_list()); print("GPU_GATE=PASS"); print("GPU=" + torch.cuda.get_device_name()); print("CAPABILITY=" + str(capability))'
 "$CONDA_EXE" run --name "$ENV_NAME" python -c \
   'import torch; from mmcv.ops import nms; boxes=torch.tensor([[0.0,0.0,10.0,10.0],[1.0,1.0,9.0,9.0]],device="cuda"); scores=torch.tensor([0.9,0.8],device="cuda"); detections,keep=nms(boxes,scores,0.5); assert detections.is_cuda and keep.tolist()==[0], (detections,keep); print("MMCV_OP_GATE=PASS")'
+"$CONDA_EXE" run --name "$ENV_NAME" python -c \
+  'import sys; assert sys.version_info[:2] == (3, 11), sys.version; print("PYTHON_POST_GATE=PASS")'
 
 printf 'REMIND3D_ENV_READY=%s\n' "$ENV_PREFIX"

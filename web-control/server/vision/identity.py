@@ -91,6 +91,34 @@ def _global_ambiguity_reasons(
     return reasons
 
 
+def _fixed_point_assignment(
+    costs: np.ndarray,
+    ambiguity_margin: float,
+) -> tuple[dict[int, str], list[tuple[int, int]]]:
+    """Remove ambiguous columns until the remaining assignment is stable."""
+
+    remaining_columns = list(range(costs.shape[1]))
+    reasons: dict[int, str] = {}
+    while remaining_columns:
+        reduced = costs[:, remaining_columns]
+        reduced_reasons = _global_ambiguity_reasons(reduced, ambiguity_margin)
+        if not reduced_reasons:
+            matches = [
+                (row, remaining_columns[column])
+                for row, column in _finite_assignment(reduced)
+            ]
+            return reasons, matches
+        ambiguous_columns = {
+            remaining_columns[column]: reason
+            for column, reason in reduced_reasons.items()
+        }
+        reasons.update(ambiguous_columns)
+        remaining_columns = [
+            column for column in remaining_columns if column not in ambiguous_columns
+        ]
+    return reasons, []
+
+
 def _normalized_descriptor(value: object) -> np.ndarray:
     array = np.asarray(value, dtype=float)
     if array.ndim != 1 or array.size == 0:
@@ -153,6 +181,7 @@ class PersistentIdentityConfig:
     reacquire_confirmed_hits: int = 2
     max_actionable_position_std_m: float = 0.025
     max_actionable_pose_age_ns: int = 200_000_000
+    min_actionable_pose_hits: int = 2
 
     def __post_init__(self) -> None:
         finite = (
@@ -197,6 +226,8 @@ class PersistentIdentityConfig:
             raise InvalidDataError("max_actionable_position_std_m must be positive")
         if self.max_actionable_pose_age_ns < 0:
             raise InvalidDataError("max_actionable_pose_age_ns must be non-negative")
+        if self.min_actionable_pose_hits < 1:
+            raise InvalidDataError("min_actionable_pose_hits must be at least one")
 
 
 @dataclass(frozen=True)
@@ -241,6 +272,7 @@ class _IdentityRecord:
     confirmed: bool
     reacquiring: bool
     reacquire_hits: int
+    pose_hits: int
 
 
 class PersistentIdentityMemory:
@@ -252,6 +284,7 @@ class PersistentIdentityMemory:
         self._next_identity_id = 1
         self._descriptor_dimension: Optional[int] = None
         self._last_now_ns: Optional[int] = None
+        self._last_frame_ns: Optional[int] = None
         self._calibration: Optional[CalibrationRef] = None
 
     def _validate_now(self, now_ns: int) -> None:
@@ -264,13 +297,19 @@ class PersistentIdentityMemory:
         self,
         observations: list[IdentityObservation],
         now_ns: int,
-    ) -> None:
+    ) -> Optional[str]:
         observation_ids = [item.observation_id for item in observations]
         if len(set(observation_ids)) != len(observation_ids):
             raise InvalidDataError("observation IDs must be unique within an update")
         timestamps = {item.stamp.monotonic_ns for item in observations}
         if len(timestamps) > 1:
             raise InvalidDataError("one identity update cannot mix frame timestamps")
+        if (
+            timestamps
+            and self._last_frame_ns is not None
+            and next(iter(timestamps)) <= self._last_frame_ns
+        ):
+            raise InvalidDataError("identity observation timestamps must strictly increase")
         calibration_ids = set()
         for item in observations:
             if item.stamp.monotonic_ns > now_ns:
@@ -286,10 +325,17 @@ class PersistentIdentityMemory:
             raise InvalidDataError("one identity update cannot mix calibration IDs")
         if calibration_ids:
             incoming = next(iter(calibration_ids))
-            if self._calibration is None:
-                self._calibration = CalibrationRef(incoming, False, None)
-            elif incoming != self._calibration.calibration_id:
+            if (
+                self._calibration is not None
+                and incoming != self._calibration.calibration_id
+            ):
                 raise InvalidDataError("call set_calibration before using a new calibration")
+            if self._calibration is None and any(
+                item.pose is not None and self._quality_allows_memory_update(item)
+                for item in observations
+            ):
+                return incoming
+        return None
 
     def _status(self, record: _IdentityRecord, now_ns: int) -> IdentityStatus:
         age = now_ns - record.last_seen_ns
@@ -397,6 +443,7 @@ class PersistentIdentityMemory:
             confirmed=confirmed,
             reacquiring=False,
             reacquire_hits=0,
+            pose_hits=1 if observation.pose is not None else 0,
         )
         self._records[identity_id] = record
         return record
@@ -422,6 +469,7 @@ class PersistentIdentityMemory:
             and now_ns - pose.stamp.monotonic_ns
             <= self.config.max_actionable_pose_age_ns
             and position_std_m <= self.config.max_actionable_position_std_m
+            and record.pose_hits >= self.config.min_actionable_pose_hits
         )
         return IdentitySnapshot(
             identity_id=record.identity_id,
@@ -442,7 +490,7 @@ class PersistentIdentityMemory:
     ) -> IdentityUpdate:
         observation_list = list(observations)
         self._validate_now(now_ns)
-        self._validate_observations(observation_list, now_ns)
+        incoming_calibration_id = self._validate_observations(observation_list, now_ns)
         trusted_dimensions = {
             len(item.descriptor)
             for item in observation_list
@@ -455,45 +503,87 @@ class PersistentIdentityMemory:
                 )
             if trusted_dimensions:
                 self._descriptor_dimension = next(iter(trusted_dimensions))
+        if incoming_calibration_id is not None:
+            self._calibration = CalibrationRef(incoming_calibration_id, False, None)
 
         records = [self._records[key] for key in sorted(self._records)]
         costs = self._association_cost(records, observation_list)
-        ambiguous_reasons = _global_ambiguity_reasons(
-            costs,
-            self.config.ambiguity_margin,
-        )
+        trusted_columns = [
+            column
+            for column, observation in enumerate(observation_list)
+            if self._quality_allows_memory_update(observation)
+        ]
+        low_quality_columns = [
+            column
+            for column, observation in enumerate(observation_list)
+            if not self._quality_allows_memory_update(observation)
+        ]
+        ambiguous_reasons: dict[int, str] = {}
+        matches: list[tuple[int, int]] = []
+        if records and trusted_columns:
+            trusted_reasons, trusted_matches = _fixed_point_assignment(
+                costs[:, trusted_columns],
+                self.config.ambiguity_margin,
+            )
+            ambiguous_reasons.update(
+                {
+                    trusted_columns[column]: reason
+                    for column, reason in trusted_reasons.items()
+                }
+            )
+            matches.extend(
+                (row, trusted_columns[column])
+                for row, column in trusted_matches
+            )
+
+        low_quality_matches: list[tuple[int, int]] = []
+        trusted_rows = {row for row, _ in matches}
+        available_rows = [row for row in range(len(records)) if row not in trusted_rows]
+        if available_rows and low_quality_columns:
+            low_reasons, local_low_matches = _fixed_point_assignment(
+                costs[np.ix_(available_rows, low_quality_columns)],
+                self.config.ambiguity_margin,
+            )
+            ambiguous_reasons.update(
+                {
+                    low_quality_columns[column]: reason
+                    for column, reason in low_reasons.items()
+                }
+            )
+            low_quality_matches.extend(
+                (available_rows[row], low_quality_columns[column])
+                for row, column in local_low_matches
+            )
         ambiguous_columns = set(ambiguous_reasons)
 
-        matches: list[tuple[int, int]] = []
-        eligible_columns = [
-            column for column in range(len(observation_list)) if column not in ambiguous_columns
-        ]
-        if records and eligible_columns:
-            eligible_costs = costs[:, eligible_columns]
-            for row, local_column in _finite_assignment(eligible_costs):
-                column = eligible_columns[int(local_column)]
-                matches.append((int(row), column))
-
         assignments: dict[int, IdentityAssignment] = {}
-        matched_columns = {column for _, column in matches}
+        matched_columns = {
+            column for _, column in matches + low_quality_matches
+        }
         for row, column in matches:
             record = records[row]
             observation = observation_list[column]
-            if not self._quality_allows_memory_update(observation):
-                assignments[column] = IdentityAssignment(
-                    observation_id=observation.observation_id,
-                    identity_id=record.identity_id,
-                    status=IdentityStatus.TENTATIVE,
-                    cost=float(costs[row, column]),
-                    reason="low_quality_association",
-                )
-                continue
             was_inactive = self._status(record, observation.stamp.monotonic_ns) is (
                 IdentityStatus.INACTIVE
+            )
+            pose_chain_broken = (
+                observation.pose is not None
+                and (
+                    record.association_pose is None
+                    or record.association_pose_ns is None
+                    or observation.stamp.monotonic_ns - record.association_pose_ns
+                    > self.config.position_gate_max_age_ns
+                )
             )
             record.hits += 1
             record.last_seen_ns = observation.stamp.monotonic_ns
             record.current_pose = observation.pose
+            if observation.pose is None:
+                record.pose_hits = 0
+            elif was_inactive or pose_chain_broken:
+                record.pose_hits = 1
+            else:
+                record.pose_hits += 1
             if observation.pose is not None:
                 record.association_pose = observation.pose
                 record.association_pose_ns = observation.stamp.monotonic_ns
@@ -528,6 +618,17 @@ class PersistentIdentityMemory:
                 if record.confirmed and not record.reacquiring
                 else IdentityStatus.TENTATIVE,
                 cost=float(costs[row, column]),
+            )
+
+        for row, column in low_quality_matches:
+            record = records[row]
+            observation = observation_list[column]
+            assignments[column] = IdentityAssignment(
+                observation_id=observation.observation_id,
+                identity_id=record.identity_id,
+                status=IdentityStatus.TENTATIVE,
+                cost=float(costs[row, column]),
+                reason="low_quality_association",
             )
 
         for column, observation in enumerate(observation_list):
@@ -570,6 +671,8 @@ class PersistentIdentityMemory:
                     )
 
         self._last_now_ns = now_ns
+        if observation_list:
+            self._last_frame_ns = observation_list[0].stamp.monotonic_ns
         return IdentityUpdate(
             assignments=tuple(assignments[index] for index in range(len(observation_list))),
             snapshots=tuple(
@@ -597,4 +700,5 @@ class PersistentIdentityMemory:
                 record.association_pose_ns = None
                 record.reacquiring = record.confirmed
                 record.reacquire_hits = 0
+                record.pose_hits = 0
         self._calibration = calibration

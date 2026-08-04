@@ -4,7 +4,7 @@ import numpy as np
 import pytest
 
 from vision_models.contracts import ModelContractError
-from vision_models.rtmdet import detections_from_mmdet
+from vision_models.rtmdet import detections_from_mmdet, validate_model_labels
 
 
 class FakeTensor:
@@ -64,6 +64,24 @@ def test_mmdet_conversion_fails_closed_without_instance_masks():
     )
     with pytest.raises(ModelContractError, match="instance masks"):
         detections_from_mmdet(instances, ("cup",), (6, 8), 0.5)
+
+
+def test_model_labels_must_exactly_match_checkpoint_metadata():
+    assert validate_model_labels(
+        ("cup", "bottle"),
+        {"classes": ("cup", "bottle")},
+    ) == ("cup", "bottle")
+    with pytest.raises(ModelContractError, match="dataset metadata"):
+        validate_model_labels(("cup",), {})
+    with pytest.raises(ModelContractError, match="do not match"):
+        validate_model_labels(
+            ("cup", "bottle"),
+            {"classes": ("bottle", "cup")},
+        )
+    with pytest.raises(ModelContractError, match="valid class names"):
+        validate_model_labels(("cup",), {"classes": None})
+    with pytest.raises(ModelContractError, match="valid class names"):
+        validate_model_labels(("cup",), {"classes": ("",)})
 
 
 def test_mmdet_conversion_rejects_length_shape_and_label_mismatches():

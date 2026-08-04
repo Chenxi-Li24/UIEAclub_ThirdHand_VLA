@@ -83,7 +83,6 @@ def estimate_instance_pose(
     center_base = np.median(points_base, axis=0)
     if len(points_base) > 1:
         covariance = np.asarray(np.cov(points_base, rowvar=False, ddof=1), dtype=float)
-        covariance = covariance / len(points_base)
     else:
         covariance = np.zeros((3, 3), dtype=float)
     covariance = covariance + np.eye(3) * config.noise_floor_m**2

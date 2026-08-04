@@ -26,6 +26,9 @@ identity:
   work_bank_size: 8
   stable_bank_size: 12
   max_identities: 64
+  reacquire_confirmed_hits: 2
+  max_actionable_position_std_m: 0.025
+  max_actionable_pose_age_ns: 200000000
 
 instance_pose:
   min_points: 80

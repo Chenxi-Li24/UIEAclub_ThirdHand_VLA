@@ -111,6 +111,25 @@ def test_covariance_is_finite_symmetric_positive_semidefinite_with_noise_floor()
     assert np.min(np.linalg.eigvalsh(pose.covariance_m2)) >= 0.002**2 - 1e-15
 
 
+def test_covariance_conservatively_keeps_inlier_spread_for_median_center():
+    points = np.array(
+        [
+            [[-0.01, 0.0, 0.5], [0.01, 0.0, 0.5]],
+            [[-0.01, 0.0, 0.5], [0.01, 0.0, 0.5]],
+        ]
+    )
+    result = estimate_instance_pose(
+        registered(points),
+        mask=np.ones((2, 2), dtype=bool),
+        t_base_from_lumos=np.eye(4),
+        stamp=stamp(),
+        calibration_id="sha256:pose-test",
+        config=config(erosion_px=0),
+    )
+    sample_variance_x = np.var(points[..., 0], ddof=1)
+    assert result.covariance_m2[0, 0] >= sample_variance_x
+
+
 def test_sparse_or_fully_eroded_mask_is_rejected():
     points = np.zeros((3, 3, 3), dtype=float)
     points[..., 2] = 0.5

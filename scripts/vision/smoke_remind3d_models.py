@@ -36,6 +36,53 @@ def check_config(path: Path) -> dict[str, Any]:
     }
 
 
+def evaluate_smoke_limits(
+    latencies_ms: Sequence[float],
+    allocated_memory_gib: float,
+    reserved_memory_gib: float,
+    latency_p95_limit_ms: float,
+    gpu_memory_limit_gib: float,
+) -> dict[str, float]:
+    import numpy as np
+
+    values = np.asarray(latencies_ms, dtype=float)
+    memory_values = np.asarray(
+        [allocated_memory_gib, reserved_memory_gib],
+        dtype=float,
+    )
+    limits = np.asarray([latency_p95_limit_ms, gpu_memory_limit_gib], dtype=float)
+    if (
+        values.ndim != 1
+        or len(values) == 0
+        or not np.isfinite(values).all()
+        or np.any(values < 0.0)
+    ):
+        raise RuntimeError("smoke latencies must be finite non-negative values")
+    if not np.isfinite(memory_values).all() or np.any(memory_values < 0.0):
+        raise RuntimeError("GPU smoke memory values must be finite and non-negative")
+    if not np.isfinite(limits).all() or np.any(limits <= 0.0):
+        raise RuntimeError("smoke limits must be finite and positive")
+    latency_p50, latency_p95 = np.percentile(values, [50, 95])
+    peak_memory_gib = float(np.max(memory_values))
+    if latency_p95 > latency_p95_limit_ms:
+        raise RuntimeError(
+            f"latency p95 {latency_p95:.3f} ms exceeds "
+            f"{latency_p95_limit_ms:.3f} ms"
+        )
+    if peak_memory_gib > gpu_memory_limit_gib:
+        raise RuntimeError(
+            f"GPU reserved/allocated peak {peak_memory_gib:.3f} GiB exceeds "
+            f"{gpu_memory_limit_gib:.3f} GiB"
+        )
+    return {
+        "gpu_peak_allocated_gib": float(allocated_memory_gib),
+        "gpu_peak_reserved_gib": float(reserved_memory_gib),
+        "gpu_peak_gib": peak_memory_gib,
+        "latency_p50_ms": float(latency_p50),
+        "latency_p95_ms": float(latency_p95),
+    }
+
+
 def run_model_smoke(arguments: argparse.Namespace) -> dict[str, Any]:
     import cv2
     import numpy as np
@@ -100,12 +147,13 @@ def run_model_smoke(arguments: argparse.Namespace) -> dict[str, Any]:
         raise RuntimeError("DINO returned missing or non-finite descriptors")
     if not np.allclose(descriptor_norms, 1.0, atol=1e-5):
         raise RuntimeError(f"DINO descriptors are not unit normalized: {descriptor_norms}")
-    peak_memory_gib = torch.cuda.max_memory_allocated() / 1024**3
-    if peak_memory_gib > config.gpu_memory_limit_gib:
-        raise RuntimeError(
-            f"GPU peak {peak_memory_gib:.3f} GiB exceeds {config.gpu_memory_limit_gib:.3f} GiB"
-        )
-    latency_p50, latency_p95 = np.percentile(np.asarray(latencies_ms), [50, 95])
+    limit_metrics = evaluate_smoke_limits(
+        latencies_ms,
+        allocated_memory_gib=torch.cuda.max_memory_allocated() / 1024**3,
+        reserved_memory_gib=torch.cuda.max_memory_reserved() / 1024**3,
+        latency_p95_limit_ms=config.latency_p95_limit_ms,
+        gpu_memory_limit_gib=config.gpu_memory_limit_gib,
+    )
     return {
         "capability": list(capability),
         "descriptor_count": len(descriptors),
@@ -116,13 +164,11 @@ def run_model_smoke(arguments: argparse.Namespace) -> dict[str, Any]:
         "detection_count": detection_count,
         "device": arguments.device,
         "gpu": torch.cuda.get_device_name(),
-        "gpu_peak_gib": peak_memory_gib,
-        "latency_p50_ms": float(latency_p50),
-        "latency_p95_ms": float(latency_p95),
         "robot_execution_enabled": False,
         "smoke_passed": True,
         "supported_architectures": list(supported_architectures),
         "torch": torch.__version__,
+        **limit_metrics,
     }
 
 

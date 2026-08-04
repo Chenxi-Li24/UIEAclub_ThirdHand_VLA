@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import zipfile
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping, Optional, Sequence
@@ -21,6 +22,38 @@ from vision.types import FrameStamp, InvalidDataError, PoseEstimate
 
 class IdentityReplayFormatError(ValueError):
     """Raised when identity replay input is unsafe or malformed."""
+
+
+@dataclass(frozen=True)
+class ReplayLimits:
+    max_manifest_bytes: int = 4 * 1024**2
+    max_artifact_bytes: int = 256 * 1024**2
+    max_uncompressed_bytes: int = 512 * 1024**2
+    max_array_bytes: int = 64 * 1024**2
+    max_frames: int = 10_000
+    max_observations_per_frame: int = 256
+    max_descriptor_arrays: int = 10_000
+    max_descriptor_dimension: int = 4_096
+    max_compression_ratio: float = 200.0
+
+    def __post_init__(self) -> None:
+        integer_limits = (
+            self.max_manifest_bytes,
+            self.max_artifact_bytes,
+            self.max_uncompressed_bytes,
+            self.max_array_bytes,
+            self.max_frames,
+            self.max_observations_per_frame,
+            self.max_descriptor_arrays,
+            self.max_descriptor_dimension,
+        )
+        if any(not isinstance(value, int) or value < 1 for value in integer_limits):
+            raise ValueError("replay integer limits must be positive integers")
+        if (
+            not np.isfinite(self.max_compression_ratio)
+            or self.max_compression_ratio <= 0.0
+        ):
+            raise ValueError("max_compression_ratio must be finite and positive")
 
 
 @dataclass(frozen=True)
@@ -150,6 +183,41 @@ def _relative_artifact(manifest_path: Path, value: Any) -> Path:
     return resolved
 
 
+def _validate_descriptor_archive(path: Path, limits: ReplayLimits) -> None:
+    if path.stat().st_size > limits.max_artifact_bytes:
+        raise IdentityReplayFormatError("descriptor artifact exceeds byte limit")
+    try:
+        with zipfile.ZipFile(path) as archive:
+            entries = archive.infolist()
+            if len(entries) > limits.max_descriptor_arrays:
+                raise IdentityReplayFormatError("descriptor artifact has too many arrays")
+            total_uncompressed = 0
+            for entry in entries:
+                if (
+                    entry.flag_bits & 0x1
+                    or not entry.filename.endswith(".npy")
+                    or Path(entry.filename).name != entry.filename
+                    or "\\" in entry.filename
+                ):
+                    raise IdentityReplayFormatError("descriptor artifact has an unsafe entry")
+                if entry.file_size > limits.max_array_bytes:
+                    raise IdentityReplayFormatError("descriptor array exceeds byte limit")
+                total_uncompressed += entry.file_size
+                if total_uncompressed > limits.max_uncompressed_bytes:
+                    raise IdentityReplayFormatError(
+                        "descriptor artifact exceeds uncompressed byte limit"
+                    )
+                ratio = entry.file_size / max(1, entry.compress_size)
+                if ratio > limits.max_compression_ratio:
+                    raise IdentityReplayFormatError(
+                        "descriptor artifact exceeds compression-ratio limit"
+                    )
+    except (OSError, zipfile.BadZipFile, zipfile.LargeZipFile) as error:
+        raise IdentityReplayFormatError(
+            f"descriptor artifact is not a valid NPZ archive: {error}"
+        ) from error
+
+
 def _finite_probability(value: Any, name: str) -> float:
     if isinstance(value, bool):
         raise IdentityReplayFormatError(f"{name} must be numeric")
@@ -200,10 +268,20 @@ def _identity_config(value: Any) -> PersistentIdentityConfig:
         raise IdentityReplayFormatError(f"invalid identity_config: {error}") from error
 
 
-def run_identity_replay(manifest_path: Path | str) -> IdentityReplayReport:
+def run_identity_replay(
+    manifest_path: Path | str,
+    limits: ReplayLimits | None = None,
+) -> IdentityReplayReport:
+    limits = ReplayLimits() if limits is None else limits
+    if not isinstance(limits, ReplayLimits):
+        raise IdentityReplayFormatError("limits must be a ReplayLimits value")
     path = Path(manifest_path).resolve()
     try:
+        if path.stat().st_size > limits.max_manifest_bytes:
+            raise IdentityReplayFormatError("identity replay manifest exceeds byte limit")
         manifest = json.loads(path.read_text(encoding="utf-8"))
+    except IdentityReplayFormatError:
+        raise
     except (OSError, json.JSONDecodeError) as error:
         raise IdentityReplayFormatError(f"cannot read identity replay manifest: {error}") from error
     manifest = _mapping(manifest, "manifest")
@@ -217,7 +295,10 @@ def run_identity_replay(manifest_path: Path | str) -> IdentityReplayReport:
     frames = manifest.get("frames")
     if not isinstance(frames, list) or not frames:
         raise IdentityReplayFormatError("frames must be a non-empty array")
+    if len(frames) > limits.max_frames:
+        raise IdentityReplayFormatError("identity replay has too many frames")
     descriptor_path = _relative_artifact(path, manifest.get("descriptor_npz"))
+    _validate_descriptor_archive(descriptor_path, limits)
 
     try:
         archive = np.load(descriptor_path, allow_pickle=False)
@@ -252,6 +333,8 @@ def run_identity_replay(manifest_path: Path | str) -> IdentityReplayReport:
             observation_values = frame.get("observations")
             if not isinstance(observation_values, list):
                 raise IdentityReplayFormatError("observations must be an array")
+            if len(observation_values) > limits.max_observations_per_frame:
+                raise IdentityReplayFormatError("frame has too many observations")
 
             observations = []
             object_keys: dict[int, str] = {}
@@ -274,7 +357,22 @@ def run_identity_replay(manifest_path: Path | str) -> IdentityReplayReport:
                     raise IdentityReplayFormatError(
                         f"descriptor key is missing from artifact: {descriptor_key!r}"
                     )
-                descriptor = np.asarray(archive[descriptor_key], dtype=float)
+                try:
+                    raw_descriptor = archive[descriptor_key]
+                except (OSError, ValueError) as error:
+                    raise IdentityReplayFormatError(
+                        f"cannot load descriptor array: {descriptor_key!r}"
+                    ) from error
+                if raw_descriptor.dtype.kind not in "fiu":
+                    raise IdentityReplayFormatError("descriptor array must be numeric")
+                if (
+                    raw_descriptor.ndim != 1
+                    or raw_descriptor.size > limits.max_descriptor_dimension
+                ):
+                    raise IdentityReplayFormatError(
+                        "descriptor dimension exceeds replay limit"
+                    )
+                descriptor = np.asarray(raw_descriptor, dtype=float)
                 appearance_stamp = FrameStamp("lumos", frame_id, monotonic_ns)
                 try:
                     item = IdentityObservation(

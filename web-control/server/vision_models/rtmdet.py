@@ -2,12 +2,43 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Any, Sequence
 
 import numpy as np
 
 from .contracts import InstanceDetection, ModelContractError, validated_rgb_image
+
+
+def validate_model_labels(
+    configured_labels: Sequence[str],
+    dataset_meta: Any,
+) -> tuple[str, ...]:
+    labels = tuple(configured_labels)
+    if not labels or not all(isinstance(label, str) and label for label in labels):
+        raise ModelContractError("RTMDet labels must be non-empty strings")
+    if not isinstance(dataset_meta, Mapping) or "classes" not in dataset_meta:
+        raise ModelContractError("RTMDet checkpoint dataset metadata is missing classes")
+    raw_model_labels = dataset_meta["classes"]
+    if isinstance(raw_model_labels, (str, bytes)):
+        raise ModelContractError("RTMDet dataset metadata must contain valid class names")
+    try:
+        model_labels = tuple(raw_model_labels)
+    except TypeError as error:
+        raise ModelContractError(
+            "RTMDet dataset metadata must contain valid class names"
+        ) from error
+    if not model_labels or not all(
+        isinstance(label, str) and label for label in model_labels
+    ):
+        raise ModelContractError("RTMDet dataset metadata must contain valid class names")
+    if labels != model_labels:
+        raise ModelContractError(
+            f"configured RTMDet labels do not match checkpoint metadata: "
+            f"{labels!r} != {model_labels!r}"
+        )
+    return labels
 
 
 def _to_numpy(value: Any, name: str) -> np.ndarray:
@@ -110,6 +141,10 @@ class RTMDetInstanceSegmenter:
             str(self.config_path),
             str(self.checkpoint_path),
             device=device,
+        )
+        self.labels = validate_model_labels(
+            self.labels,
+            getattr(self.model, "dataset_meta", None),
         )
 
     def predict(self, image_rgb: Any) -> tuple[InstanceDetection, ...]:

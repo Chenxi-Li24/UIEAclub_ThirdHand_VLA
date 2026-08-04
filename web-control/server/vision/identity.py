@@ -9,7 +9,7 @@ from typing import Iterable, Optional
 import numpy as np
 from scipy.optimize import linear_sum_assignment
 
-from .types import FrameStamp, InvalidDataError, PoseEstimate
+from .types import CalibrationRef, FrameStamp, InvalidDataError, PoseEstimate
 
 
 class IdentityStatus(str, Enum):
@@ -18,6 +18,77 @@ class IdentityStatus(str, Enum):
     OCCLUDED = "occluded"
     INACTIVE = "inactive"
     AMBIGUOUS = "ambiguous"
+
+
+def _finite_assignment(costs: np.ndarray) -> list[tuple[int, int]]:
+    """Return a maximum-cardinality, minimum-cost finite assignment."""
+
+    row_count, column_count = costs.shape
+    if row_count == 0 or column_count == 0:
+        return []
+    unmatched_cost = 1e6
+    forbidden_cost = 1e12
+    size = row_count + column_count
+    augmented = np.full((size, size), forbidden_cost, dtype=float)
+    augmented[:row_count, :column_count] = np.where(
+        np.isfinite(costs), costs, forbidden_cost
+    )
+    for row in range(row_count):
+        augmented[row, column_count + row] = unmatched_cost
+    for column in range(column_count):
+        augmented[row_count + column, column] = unmatched_cost
+    augmented[row_count:, column_count:] = 0.0
+    rows, columns = linear_sum_assignment(augmented)
+    return sorted(
+        (int(row), int(column))
+        for row, column in zip(rows, columns)
+        if row < row_count
+        and column < column_count
+        and np.isfinite(costs[int(row), int(column)])
+    )
+
+
+def _global_ambiguity_reasons(
+    costs: np.ndarray,
+    ambiguity_margin: float,
+) -> dict[int, str]:
+    """Reject observations whose full assignment has a near-equal alternative."""
+
+    best = _finite_assignment(costs)
+    if not best:
+        return {}
+    best_cost = sum(float(costs[row, column]) for row, column in best)
+    best_by_column = {column: row for row, column in best}
+    reasons: dict[int, str] = {}
+    for forbidden_row, forbidden_column in best:
+        alternative_costs = np.array(costs, copy=True)
+        alternative_costs[forbidden_row, forbidden_column] = np.inf
+        alternative = _finite_assignment(alternative_costs)
+        if len(alternative) != len(best):
+            continue
+        alternative_cost = sum(
+            float(costs[row, column]) for row, column in alternative
+        )
+        if alternative_cost - best_cost > ambiguity_margin + 1e-12:
+            continue
+        alternative_by_column = {column: row for row, column in alternative}
+        changed_columns = {
+            column
+            for column in range(costs.shape[1])
+            if best_by_column.get(column) != alternative_by_column.get(column)
+        }
+        competition = any(
+            column not in best_by_column or column not in alternative_by_column
+            for column in changed_columns
+        )
+        reason = (
+            "observations_compete_for_identity"
+            if competition
+            else "appearance_candidates_within_margin"
+        )
+        for column in changed_columns:
+            reasons.setdefault(column, reason)
+    return reasons
 
 
 def _normalized_descriptor(value: object) -> np.ndarray:
@@ -79,6 +150,9 @@ class PersistentIdentityConfig:
     work_bank_size: int
     stable_bank_size: int
     max_identities: int
+    reacquire_confirmed_hits: int = 2
+    max_actionable_position_std_m: float = 0.025
+    max_actionable_pose_age_ns: int = 200_000_000
 
     def __post_init__(self) -> None:
         finite = (
@@ -89,6 +163,7 @@ class PersistentIdentityConfig:
             self.max_position_distance_m,
             self.min_memory_confidence,
             self.min_memory_visibility,
+            self.max_actionable_position_std_m,
         )
         if not np.isfinite(finite).all():
             raise InvalidDataError("identity configuration must be finite")
@@ -116,6 +191,12 @@ class PersistentIdentityConfig:
             raise InvalidDataError("prototype bank sizes must be positive")
         if self.max_identities < 1:
             raise InvalidDataError("max_identities must be positive")
+        if self.reacquire_confirmed_hits < 1:
+            raise InvalidDataError("reacquire_confirmed_hits must be at least one")
+        if self.max_actionable_position_std_m <= 0.0:
+            raise InvalidDataError("max_actionable_position_std_m must be positive")
+        if self.max_actionable_pose_age_ns < 0:
+            raise InvalidDataError("max_actionable_pose_age_ns must be non-negative")
 
 
 @dataclass(frozen=True)
@@ -154,8 +235,12 @@ class _IdentityRecord:
     stable_bank: list[np.ndarray]
     hits: int
     last_seen_ns: int
-    pose: Optional[PoseEstimate]
+    current_pose: Optional[PoseEstimate]
+    association_pose: Optional[PoseEstimate]
+    association_pose_ns: Optional[int]
     confirmed: bool
+    reacquiring: bool
+    reacquire_hits: int
 
 
 class PersistentIdentityMemory:
@@ -167,7 +252,7 @@ class PersistentIdentityMemory:
         self._next_identity_id = 1
         self._descriptor_dimension: Optional[int] = None
         self._last_now_ns: Optional[int] = None
-        self._calibration_id: Optional[str] = None
+        self._calibration: Optional[CalibrationRef] = None
 
     def _validate_now(self, now_ns: int) -> None:
         if not isinstance(now_ns, int) or now_ns < 0:
@@ -201,9 +286,9 @@ class PersistentIdentityMemory:
             raise InvalidDataError("one identity update cannot mix calibration IDs")
         if calibration_ids:
             incoming = next(iter(calibration_ids))
-            if self._calibration_id is None:
-                self._calibration_id = incoming
-            elif incoming != self._calibration_id:
+            if self._calibration is None:
+                self._calibration = CalibrationRef(incoming, False, None)
+            elif incoming != self._calibration.calibration_id:
                 raise InvalidDataError("call set_calibration before using a new calibration")
 
     def _status(self, record: _IdentityRecord, now_ns: int) -> IdentityStatus:
@@ -212,6 +297,8 @@ class PersistentIdentityMemory:
             return IdentityStatus.INACTIVE
         if age >= self.config.occluded_after_ns:
             return IdentityStatus.OCCLUDED
+        if record.reacquiring:
+            return IdentityStatus.TENTATIVE
         return IdentityStatus.CONFIRMED if record.confirmed else IdentityStatus.TENTATIVE
 
     @staticmethod
@@ -234,13 +321,18 @@ class PersistentIdentityMemory:
                     continue
                 weighted_cost = self.config.appearance_weight * appearance
                 total_weight = self.config.appearance_weight
-                age = observation.stamp.monotonic_ns - record.last_seen_ns
                 if (
-                    record.pose is not None
+                    record.association_pose is not None
                     and observation.pose is not None
-                    and age <= self.config.position_gate_max_age_ns
+                    and record.association_pose_ns is not None
+                    and observation.stamp.monotonic_ns - record.association_pose_ns
+                    <= self.config.position_gate_max_age_ns
                 ):
-                    distance = float(np.linalg.norm(observation.pose.xyz_m - record.pose.xyz_m))
+                    distance = float(
+                        np.linalg.norm(
+                            observation.pose.xyz_m - record.association_pose.xyz_m
+                        )
+                    )
                     if distance > self.config.max_position_distance_m:
                         continue
                     weighted_cost += self.config.position_weight * (
@@ -297,16 +389,40 @@ class PersistentIdentityMemory:
             stable_bank=stable,
             hits=1,
             last_seen_ns=observation.stamp.monotonic_ns,
-            pose=observation.pose,
+            current_pose=observation.pose,
+            association_pose=observation.pose,
+            association_pose_ns=None
+            if observation.pose is None
+            else observation.stamp.monotonic_ns,
             confirmed=confirmed,
+            reacquiring=False,
+            reacquire_hits=0,
         )
         self._records[identity_id] = record
         return record
 
     def _snapshot(self, record: _IdentityRecord, now_ns: int) -> IdentitySnapshot:
         status = self._status(record, now_ns)
-        pose = record.pose if record.last_seen_ns == now_ns else None
-        actionable = status is IdentityStatus.CONFIRMED and pose is not None
+        pose = record.current_pose if record.last_seen_ns == now_ns else None
+        calibration_valid = (
+            self._calibration is not None
+            and self._calibration.validated
+            and pose is not None
+            and pose.calibration_id == self._calibration.calibration_id
+        )
+        position_std_m = (
+            float(np.sqrt(max(0.0, np.max(np.linalg.eigvalsh(pose.covariance_m2)))))
+            if pose is not None
+            else np.inf
+        )
+        actionable = (
+            status is IdentityStatus.CONFIRMED
+            and pose is not None
+            and calibration_valid
+            and now_ns - pose.stamp.monotonic_ns
+            <= self.config.max_actionable_pose_age_ns
+            and position_std_m <= self.config.max_actionable_position_std_m
+        )
         return IdentitySnapshot(
             identity_id=record.identity_id,
             label=record.label,
@@ -327,28 +443,25 @@ class PersistentIdentityMemory:
         observation_list = list(observations)
         self._validate_now(now_ns)
         self._validate_observations(observation_list, now_ns)
-        if observation_list and self._descriptor_dimension is None:
-            self._descriptor_dimension = len(observation_list[0].descriptor)
+        trusted_dimensions = {
+            len(item.descriptor)
+            for item in observation_list
+            if self._quality_allows_memory_update(item)
+        }
+        if self._descriptor_dimension is None:
+            if len(trusted_dimensions) > 1:
+                raise InvalidDataError(
+                    "trusted observations cannot mix descriptor dimensions"
+                )
+            if trusted_dimensions:
+                self._descriptor_dimension = next(iter(trusted_dimensions))
 
         records = [self._records[key] for key in sorted(self._records)]
         costs = self._association_cost(records, observation_list)
-        ambiguous_reasons: dict[int, str] = {}
-        for column in range(len(observation_list)):
-            finite = np.sort(costs[np.isfinite(costs[:, column]), column])
-            if len(finite) >= 2 and finite[1] - finite[0] <= self.config.ambiguity_margin:
-                ambiguous_reasons[column] = "appearance_candidates_within_margin"
-        for row in range(len(records)):
-            finite_columns = np.flatnonzero(np.isfinite(costs[row]))
-            if len(finite_columns) < 2:
-                continue
-            ranked = finite_columns[np.argsort(costs[row, finite_columns])]
-            best_cost = costs[row, ranked[0]]
-            if costs[row, ranked[1]] - best_cost > self.config.ambiguity_margin:
-                continue
-            for column in ranked:
-                if costs[row, column] - best_cost > self.config.ambiguity_margin:
-                    break
-                ambiguous_reasons.setdefault(column, "observations_compete_for_identity")
+        ambiguous_reasons = _global_ambiguity_reasons(
+            costs,
+            self.config.ambiguity_margin,
+        )
         ambiguous_columns = set(ambiguous_reasons)
 
         matches: list[tuple[int, int]] = []
@@ -357,40 +470,62 @@ class PersistentIdentityMemory:
         ]
         if records and eligible_columns:
             eligible_costs = costs[:, eligible_columns]
-            rows, local_columns = linear_sum_assignment(
-                np.where(np.isfinite(eligible_costs), eligible_costs, 1e12)
-            )
-            for row, local_column in zip(rows, local_columns):
+            for row, local_column in _finite_assignment(eligible_costs):
                 column = eligible_columns[int(local_column)]
-                if np.isfinite(costs[int(row), column]):
-                    matches.append((int(row), column))
+                matches.append((int(row), column))
 
         assignments: dict[int, IdentityAssignment] = {}
         matched_columns = {column for _, column in matches}
         for row, column in matches:
             record = records[row]
             observation = observation_list[column]
+            if not self._quality_allows_memory_update(observation):
+                assignments[column] = IdentityAssignment(
+                    observation_id=observation.observation_id,
+                    identity_id=record.identity_id,
+                    status=IdentityStatus.TENTATIVE,
+                    cost=float(costs[row, column]),
+                    reason="low_quality_association",
+                )
+                continue
+            was_inactive = self._status(record, observation.stamp.monotonic_ns) is (
+                IdentityStatus.INACTIVE
+            )
             record.hits += 1
             record.last_seen_ns = observation.stamp.monotonic_ns
-            record.pose = observation.pose
+            record.current_pose = observation.pose
+            if observation.pose is not None:
+                record.association_pose = observation.pose
+                record.association_pose_ns = observation.stamp.monotonic_ns
             record.confirmed = record.confirmed or record.hits >= self.config.min_confirmed_hits
-            if self._quality_allows_memory_update(observation):
-                self._append_bounded(
-                    record.work_bank,
-                    observation.descriptor,
-                    self.config.work_bank_size,
+            if was_inactive:
+                record.reacquire_hits = 1 if observation.pose is not None else 0
+                record.reacquiring = (
+                    record.reacquire_hits < self.config.reacquire_confirmed_hits
                 )
-                if record.confirmed:
-                    self._append_bounded(
-                        record.stable_bank,
-                        observation.descriptor,
-                        self.config.stable_bank_size,
-                    )
+            elif record.reacquiring:
+                if observation.pose is None:
+                    record.reacquire_hits = 0
+                else:
+                    record.reacquire_hits += 1
+                if record.reacquire_hits >= self.config.reacquire_confirmed_hits:
+                    record.reacquiring = False
+            self._append_bounded(
+                record.work_bank,
+                observation.descriptor,
+                self.config.work_bank_size,
+            )
+            if record.confirmed:
+                self._append_bounded(
+                    record.stable_bank,
+                    observation.descriptor,
+                    self.config.stable_bank_size,
+                )
             assignments[column] = IdentityAssignment(
                 observation_id=observation.observation_id,
                 identity_id=record.identity_id,
                 status=IdentityStatus.CONFIRMED
-                if record.confirmed
+                if record.confirmed and not record.reacquiring
                 else IdentityStatus.TENTATIVE,
                 cost=float(costs[row, column]),
             )
@@ -405,6 +540,15 @@ class PersistentIdentityMemory:
                     reason=ambiguous_reasons[column],
                 )
             elif column not in matched_columns:
+                if not self._quality_allows_memory_update(observation):
+                    assignments[column] = IdentityAssignment(
+                        observation_id=observation.observation_id,
+                        identity_id=None,
+                        status=IdentityStatus.AMBIGUOUS,
+                        cost=None,
+                        reason="observation_below_memory_quality",
+                    )
+                    continue
                 record = self._new_record(observation, now_ns)
                 if record is None:
                     assignments[column] = IdentityAssignment(
@@ -438,10 +582,19 @@ class PersistentIdentityMemory:
         self._last_now_ns = now_ns
         return tuple(self._snapshot(self._records[key], now_ns) for key in sorted(self._records))
 
-    def set_calibration(self, calibration_id: str) -> None:
-        if not calibration_id.startswith("sha256:"):
-            raise InvalidDataError("calibration_id must start with sha256:")
-        if self._calibration_id is not None and calibration_id != self._calibration_id:
+    def set_calibration(self, calibration: CalibrationRef | str) -> None:
+        if isinstance(calibration, str):
+            calibration = CalibrationRef(calibration, False, None)
+        if not isinstance(calibration, CalibrationRef):
+            raise InvalidDataError("calibration must be a CalibrationRef or calibration ID")
+        if (
+            self._calibration is not None
+            and calibration.calibration_id != self._calibration.calibration_id
+        ):
             for record in self._records.values():
-                record.pose = None
-        self._calibration_id = calibration_id
+                record.current_pose = None
+                record.association_pose = None
+                record.association_pose_ns = None
+                record.reacquiring = record.confirmed
+                record.reacquire_hits = 0
+        self._calibration = calibration

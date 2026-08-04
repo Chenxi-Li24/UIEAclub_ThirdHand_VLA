@@ -4,10 +4,12 @@ import json
 import shutil
 from pathlib import Path
 
+import numpy as np
 import pytest
 
 from vision_models.offline_replay import (
     IdentityReplayFormatError,
+    ReplayLimits,
     load_remind3d_config,
     run_identity_replay,
     write_report_atomic,
@@ -97,6 +99,47 @@ def test_replay_rejects_descriptor_path_traversal(tmp_path):
     payload = copied_manifest(tmp_path)
     payload["descriptor_npz"] = "../outside.npz"
     with pytest.raises(IdentityReplayFormatError, match="relative"):
+        run_identity_replay(write_manifest(tmp_path, payload))
+
+
+def test_replay_enforces_manifest_and_frame_resource_limits(tmp_path):
+    payload = copied_manifest(tmp_path)
+    manifest = write_manifest(tmp_path, payload)
+    with pytest.raises(IdentityReplayFormatError, match="manifest exceeds"):
+        run_identity_replay(manifest, limits=ReplayLimits(max_manifest_bytes=20))
+    with pytest.raises(IdentityReplayFormatError, match="too many frames"):
+        run_identity_replay(manifest, limits=ReplayLimits(max_frames=2))
+
+
+def test_replay_rejects_oversized_descriptor_vectors_before_identity_processing(tmp_path):
+    payload = copied_manifest(tmp_path)
+    keys = {
+        item["descriptor_key"]
+        for frame in payload["frames"]
+        for item in frame["observations"]
+    }
+    npz_path = tmp_path / payload["descriptor_npz"]
+    np.savez(npz_path, **{key: np.ones(9, dtype=np.float32) for key in keys})
+
+    with pytest.raises(IdentityReplayFormatError, match="descriptor dimension"):
+        run_identity_replay(
+            write_manifest(tmp_path, payload),
+            limits=ReplayLimits(max_descriptor_dimension=8),
+        )
+
+
+def test_replay_wraps_object_descriptor_load_failure_as_format_error(tmp_path):
+    payload = copied_manifest(tmp_path)
+    keys = {
+        item["descriptor_key"]
+        for frame in payload["frames"]
+        for item in frame["observations"]
+    }
+    npz_path = tmp_path / payload["descriptor_npz"]
+    arrays = {key: np.asarray([object()], dtype=object) for key in keys}
+    np.savez(npz_path, **arrays)
+
+    with pytest.raises(IdentityReplayFormatError, match="cannot load descriptor array"):
         run_identity_replay(write_manifest(tmp_path, payload))
 
 

@@ -6,8 +6,9 @@
 
 ## 当前结论
 
-REMIND-3D 的硬件隔离代码路径、确定性回放、模型适配器、部署配置和独立环境骨架已经建立。
-真实 RTMDet 与 DINO 权重推理尚未通过，因此当前状态不能称为“模型部署完成”，更不能接入机械臂执行。
+REMIND-3D 的硬件隔离代码路径、确定性回放、模型适配器、部署配置和独立环境已经建立。
+官方 COCO RTMDet-Ins tiny 与 DINOv2-small 已在 RTX 5060 上通过真实 Lumos 图像冒烟测试。
+这证明模型运行链路可用，不代表任务专用模型、标定或机械臂闭环已经验收；机械臂执行继续关闭。
 
 状态分级：
 
@@ -15,13 +16,13 @@ REMIND-3D 的硬件隔离代码路径、确定性回放、模型适配器、部�
 |---|---|---|
 | 持久实例身份内存 | 已实现、已测试 | 低质量拒绝、遮挡、重入复核、全局备选分配、歧义拒绝、标定和不确定度门禁 |
 | 掩码内 D435 三维位姿 | 已实现、已测试 | 腐蚀、稀疏拒绝、MAD 离群过滤、基座变换、保守协方差测试 |
-| DINO 掩码描述符适配器 | 代码已实现 | lazy import、patch 覆盖池化、640 px 长边限制；未加载真实权重 |
-| RTMDet 实例分割适配器 | 代码已实现 | 严格要求 masks，转换/阈值/标签/形状测试；未加载真实权重 |
+| DINO 掩码描述符适配器 | GPU 冒烟通过 | DINOv2-small 对 6 个真实实例掩码输出 384 维单位向量 |
+| RTMDet 实例分割适配器 | GPU 冒烟通过 | 官方 COCO RTMDet-Ins tiny 在 Lumos 实帧输出非空实例掩码 |
 | 确定性身份回放 | 已实现、已测试 | 五帧双实例回放，长间隔返回保持 ID，歧义不强制分配 |
-| Python 3.11 独立环境 | 骨架已创建 | `/home/nieqingcao/miniconda3/envs/thirdhand-remind3d` |
-| Torch/cu128、MMCV、MMDetection | 未安装 | shell 外网不可达 |
-| RTMDet+DINO GPU smoke | 未执行 | 依赖与权重缺失 |
-| 机械臂在线接入/运动 | 禁止 | 本轮没有相机、CAN、Startouch、Robot 或 Gripper I/O |
+| Python 3.11 独立环境 | 已部署 | `/home/nieqingcao/miniconda3/envs/thirdhand-remind3d` |
+| Torch/cu128、MMCV、MMDetection | 已安装、门禁通过 | Torch 2.7.0+cu128、MMCV CUDA NMS、`sm_120` 实测通过 |
+| RTMDet+DINO GPU smoke | 已通过 | 6 个实例、p95 48.9 ms、峰值显存 0.469 GiB |
+| 机械臂在线接入/运动 | 禁止 | 本轮仅通过 HTTP 只读采集 Lumos 图像；没有 CAN、Startouch、Robot 或 Gripper I/O |
 
 ## 新增部署面
 
@@ -84,43 +85,61 @@ REMIND-3D 的硬件隔离代码路径、确定性回放、模型适配器、部�
 
 ## 环境安装证据
 
-在线安装命令：
+网络恢复后执行：
 
 ```bash
-timeout 180 bash scripts/vision/bootstrap_remind3d_env.sh --install
+bash scripts/vision/bootstrap_remind3d_env.sh --install
 ```
 
-结果：退出码 `124`。Conda 在访问以下地址时反复返回
-`Network is unreachable`：
+本机没有适配 PyTorch 2.7/cu128 的预编译 MMCV wheel，因此脚本使用 `/usr/local/cuda`
+从源码为 `sm_120` 编译 MMCV 2.1.0 CUDA 算子。构建完成后以下硬门均通过：
 
-- `https://repo.anaconda.com/pkgs/main/terms.json`
-- `https://repo.anaconda.com/pkgs/r/terms.json`
-- 对应 channel 的 notices 地址
-
-随后使用本机 Conda 缓存执行：
-
-```bash
-CONDA_OFFLINE=true /home/nieqingcao/miniconda3/bin/conda create \
-  --name thirdhand-remind3d python=3.11 pip -y
+```text
+TORCH_VERSION_GATE=PASS
+IMPORT_GATE=PASS
+TORCH=2.7.0+cu128
+CUDA_BUILD=12.8
+GPU_GATE=PASS
+GPU=NVIDIA GeForce RTX 5060
+CAPABILITY=(12, 0)
+MMCV_OP_GATE=PASS
+PYTHON_POST_GATE=PASS
 ```
 
-该步骤成功，环境为 Python `3.11.15`。当前仅包含：
+关键版本为 torchvision `0.22.0+cu128`、MMEngine `0.10.7`、MMDetection `3.3.0`、
+MMDeploy `1.3.1`、Transformers `4.56.2` 和 ONNX Runtime GPU `1.22.0`。
+现有 `LumosTouch` 环境没有安装或升级这些模型依赖。
 
-- `packaging==26.0`
-- `pip==26.1.2`
-- `setuptools==83.0.0`
-- `wheel==0.47.0`
+## 真实 Lumos GPU 冒烟证据
 
-以下真实部署依赖均确认缺失：`torch`、`torchvision`、`transformers`、`mmdet`、`mmcv`、
-`onnxruntime`。因此没有运行、也不能声称通过真实 GPU 模型 smoke。
+Lumos HTTP 服务健康检查报告 `/dev/video0`、原始分辨率 `1920x1280`、目标 `15 FPS`、
+`ready: true` 且无采集错误。从实时 MJPEG 流取得一张 480x480 鱼眼帧，SHA-256 为
+`3506630bab90f432b088510e7f1f9469cf67a83326ad996cb513d8af1b63e153`。
 
-现有 `LumosTouch` 环境仍为 Python `3.10.20`、NumPy `2.2.6`、SciPy `1.15.3`、OpenCV
-`5.0.0`；本轮未在该环境安装或升级模型依赖。
+官方 COCO RTMDet-Ins tiny checkpoint SHA-256 为
+`ec670f7ee9e20bd7931e15f15b7016f7fe531baaab81f2e6153382d046111885`。
+在阈值 0.35 下，真实帧输出 6 个实例掩码；其中桌面水瓶标签为 `bottle`、置信度
+`0.7239`、掩码面积 1844 px。DINOv2-small 为每个掩码生成一个 384 维描述符，范数范围
+为 `[0.9999999999999999, 1.0]`。
+
+```text
+smoke_passed=true
+detection_count=6
+descriptor_count=6
+latency_p50_ms=44.724
+latency_p95_ms=48.893
+gpu_peak_allocated_gib=0.370
+gpu_peak_reserved_gib=0.469
+robot_execution_enabled=false
+```
+
+报告位于 `artifacts/vision/remind3d-live-smoke.json`，检测可视化位于
+`artifacts/vision/rtmdet-live-smoke.jpg`；两者为 gitignored 运行产物。
 
 ## 本地验证证据
 
 ```text
-195 passed in 0.61s
+196 passed in 0.68s
 LAZY_IMPORT_GATE=PASS
 ```
 
@@ -128,24 +147,29 @@ LAZY_IMPORT_GATE=PASS
 `web-control/server/tests/vision`、`web-control/server/tests/vision_models` 与
 `tests/vision_deployment`。
 
-## 恢复步骤
+## 复现命令
 
-shell 网络恢复后执行：
-
-```bash
-bash scripts/vision/bootstrap_remind3d_env.sh --install
-```
-
-然后准备 RTMDet 实例分割 config/checkpoint 和一张包含目标物的真实 Lumos RGB 图，执行：
+以下命令复现本次官方 COCO checkpoint 冒烟；完整有序标签直接读取 MMDetection 的 COCO
+元数据，不能缩减为 `cup,bottle`：
 
 ```bash
-/home/nieqingcao/miniconda3/envs/thirdhand-remind3d/bin/python \
+PY=/home/nieqingcao/miniconda3/envs/thirdhand-remind3d/bin/python
+MMDET_ROOT=$("$PY" -c 'import mmdet; from pathlib import Path; print(Path(mmdet.__file__).parent)')
+CFG="$MMDET_ROOT/.mim/configs/rtmdet/rtmdet-ins_tiny_8xb32-300e_coco.py"
+CKPT=models/vision/rtmdet/rtmdet-ins_tiny_8xb32-300e_coco_20221130_151727-ec670f7e.pth
+LABELS=$("$PY" -c "from mmdet.datasets import CocoDataset; print(','.join(CocoDataset.METAINFO['classes']))")
+
+PYTHONPATH="$PWD/web-control/server" "$PY" \
   scripts/vision/smoke_remind3d_models.py \
   --config configs/vision/remind3d.yaml \
-  --image /absolute/path/to/lumos-smoke.png \
-  --detector-config /absolute/path/to/rtmdet-ins-config.py \
-  --detector-checkpoint /absolute/path/to/rtmdet-ins-checkpoint.pth \
-  --labels cup,bottle \
+  --image artifacts/vision/lumos-live-smoke.jpg \
+  --detector-config "$CFG" \
+  --detector-checkpoint "$CKPT" \
+  --labels "$LABELS" \
+  --descriptor-model facebook/dinov2-small \
+  --device cuda:0 \
+  --min-score 0.35 \
+  --iterations 3 \
   --output artifacts/vision/remind3d-smoke.json
 ```
 
@@ -154,13 +178,11 @@ Hugging Face 访问权限，凭据不得写入仓库。
 
 ## 仍未通过的门禁
 
-1. PyTorch 2.7.0 cu128 必须在 RTX 5060 上报告 `sm_120` 并成功分配 CUDA tensor。
-2. 当前依赖只有精确版本 pin，没有可验证的 `--require-hashes` 锁文件；网络恢复并完成解析后，
-   必须生成带 wheel 哈希的锁文件，才可称为完全可复现安装。
-3. MMCV 2.1.0 与 PyTorch 2.7/cu128 没有现成的本机通过证据；若 CUDA ops 无法编译，
-   RTMDet 应改走经过验证的 MMDeploy ONNXRuntime/TensorRT artifact，而不是降低安全检查。
-4. RTMDet 必须在真实 Lumos 图上返回非空实例掩码，box-only 结果一律失败。
-5. DINO 必须对每个 mask 返回有限、单位范数、维度一致的描述符。
-6. 真实回放仍需完成 mask recall、长间隔 ReID、ID switch、绝对位置、静态 jitter、延迟和显存验收。
-7. Lumos 内参、D435-to-Lumos 外参和手眼标定仍需重新采集并独立验证。
-8. 上述项目全部通过前，不接入在线服务、不生成可执行抓取命令、不移动机械臂。
+1. 当前依赖只有精确版本 pin，没有可验证的 `--require-hashes` 锁文件；仍需生成带 wheel
+   哈希的锁文件，才可称为完全可复现安装。
+2. 本次使用官方 COCO checkpoint 验证基础设施；仍需针对任务目标物采集、标注、训练并冻结
+   专用 RTMDet-Ins checkpoint，随后完成 mask recall 与误检验收。
+3. 真实序列仍需完成遮挡、长间隔 ReID、同类实例混淆、ID switch 与静态 jitter 验收；
+   单帧冒烟不能证明持续身份准确率。
+4. Lumos 内参、D435-to-Lumos 外参和手眼标定仍需重新采集并独立验证，随后验收绝对三维位置。
+5. 上述项目全部通过前，不接入在线服务、不生成可执行抓取命令、不移动机械臂。

@@ -9,6 +9,15 @@ from .geometry import (
     rpy_xyz_to_matrix,
     transform_points,
 )
+from .identity import (
+    IdentityAssignment,
+    IdentityObservation,
+    IdentitySnapshot,
+    IdentityStatus,
+    IdentityUpdate,
+    PersistentIdentityConfig,
+    PersistentIdentityMemory,
+)
 from .object_memory import ObjectMemory, ObjectMemoryConfig
 from .safety import SafetyConfig, evaluate_target_safety
 from .tracking import MultiObjectTracker, TrackerConfig
@@ -29,12 +38,19 @@ __all__ = [
     "DryRunReport",
     "FrameStamp",
     "GraspCandidate",
+    "IdentityAssignment",
+    "IdentityObservation",
+    "IdentitySnapshot",
+    "IdentityStatus",
+    "IdentityUpdate",
     "InvalidDataError",
     "MultiObjectTracker",
     "ObjectMemory",
     "ObjectMemoryConfig",
     "PinholeCamera",
     "PoseEstimate",
+    "PersistentIdentityConfig",
+    "PersistentIdentityMemory",
     "RegisteredDepth",
     "ReplayFormatError",
     "ReplayMetrics",

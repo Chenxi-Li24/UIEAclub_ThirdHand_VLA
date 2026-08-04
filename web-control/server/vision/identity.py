@@ -190,7 +190,10 @@ class PersistentIdentityMemory:
         for item in observations:
             if item.stamp.monotonic_ns > now_ns:
                 raise InvalidDataError("identity observation cannot be from the future")
-            if self._descriptor_dimension is not None and len(item.descriptor) != self._descriptor_dimension:
+            if (
+                self._descriptor_dimension is not None
+                and len(item.descriptor) != self._descriptor_dimension
+            ):
                 raise InvalidDataError("descriptor dimension changed; reset the identity process")
             if item.pose is not None:
                 calibration_ids.add(item.pose.calibration_id)
@@ -275,7 +278,11 @@ class PersistentIdentityMemory:
         del self._records[victim.identity_id]
         return True
 
-    def _new_record(self, observation: IdentityObservation, now_ns: int) -> Optional[_IdentityRecord]:
+    def _new_record(
+        self,
+        observation: IdentityObservation,
+        now_ns: int,
+    ) -> Optional[_IdentityRecord]:
         if not self._evict_inactive_for_capacity(now_ns):
             return None
         identity_id = self._next_identity_id

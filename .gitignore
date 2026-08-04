@@ -33,6 +33,8 @@ logs/**/frames/
 # Data (runtime-generated)
 data/calibration/*.npz
 data/calibration/*.yaml
+/models/vision/
+/artifacts/vision/
 
 # OS
 .DS_Store

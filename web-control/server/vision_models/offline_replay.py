@@ -142,7 +142,9 @@ def _relative_artifact(manifest_path: Path, value: Any) -> Path:
     try:
         resolved.relative_to(root)
     except ValueError as error:
-        raise IdentityReplayFormatError("descriptor_npz must remain relative to the manifest") from error
+        raise IdentityReplayFormatError(
+            "descriptor_npz must remain relative to the manifest"
+        ) from error
     if not resolved.is_file():
         raise IdentityReplayFormatError(f"descriptor artifact does not exist: {relative}")
     return resolved
@@ -240,7 +242,9 @@ def run_identity_replay(manifest_path: Path | str) -> IdentityReplayReport:
             frame_id = frame.get("frame_id")
             monotonic_ns = frame.get("monotonic_ns")
             if not isinstance(frame_id, int) or frame_id < 0 or frame_id in seen_frame_ids:
-                raise IdentityReplayFormatError("frame_id values must be unique non-negative integers")
+                raise IdentityReplayFormatError(
+                    "frame_id values must be unique non-negative integers"
+                )
             if not isinstance(monotonic_ns, int) or monotonic_ns <= previous_timestamp:
                 raise IdentityReplayFormatError("frame timestamps must be strictly increasing")
             seen_frame_ids.add(frame_id)
@@ -283,14 +287,18 @@ def run_identity_replay(manifest_path: Path | str) -> IdentityReplayReport:
                         pose=_pose_from_json(raw, frame_id, monotonic_ns, calibration_id),
                     )
                 except InvalidDataError as error:
-                    raise IdentityReplayFormatError(f"invalid identity observation: {error}") from error
+                    raise IdentityReplayFormatError(
+                        f"invalid identity observation: {error}"
+                    ) from error
                 observations.append(item)
                 object_keys[observation_id] = object_key
 
             try:
                 update = engine.update(observations, monotonic_ns)
             except InvalidDataError as error:
-                raise IdentityReplayFormatError(f"identity replay update failed: {error}") from error
+                raise IdentityReplayFormatError(
+                    f"identity replay update failed: {error}"
+                ) from error
             assignments = []
             for item in update.assignments:
                 object_key = object_keys[item.observation_id]

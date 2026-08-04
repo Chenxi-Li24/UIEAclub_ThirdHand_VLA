@@ -1,0 +1,102 @@
+{
+  "schema_version": 1,
+  "calibration_id": "sha256:remind3d-replay-test",
+  "descriptor_npz": "remind3d_descriptors.npz",
+  "identity_config": {
+    "max_cosine_distance": 0.4,
+    "ambiguity_margin": 0.03,
+    "appearance_weight": 0.8,
+    "position_weight": 0.2,
+    "max_position_distance_m": 0.2,
+    "position_gate_max_age_ns": 100,
+    "occluded_after_ns": 50,
+    "inactive_after_ns": 150,
+    "min_confirmed_hits": 1,
+    "min_memory_confidence": 0.8,
+    "min_memory_visibility": 0.5,
+    "work_bank_size": 3,
+    "stable_bank_size": 3,
+    "max_identities": 8
+  },
+  "frames": [
+    {
+      "frame_id": 0,
+      "monotonic_ns": 0,
+      "observations": [
+        {
+          "observation_id": 1,
+          "object_key": "cup_a",
+          "label": "cup",
+          "confidence": 0.95,
+          "visibility": 0.9,
+          "descriptor_key": "frame0_cup_a",
+          "pose_xyz_m": [0.0, 0.0, 0.5],
+          "pose_variance_m2": 0.0001
+        },
+        {
+          "observation_id": 2,
+          "object_key": "cup_b",
+          "label": "cup",
+          "confidence": 0.95,
+          "visibility": 0.9,
+          "descriptor_key": "frame0_cup_b",
+          "pose_xyz_m": [0.15, 0.0, 0.5],
+          "pose_variance_m2": 0.0001
+        }
+      ]
+    },
+    {
+      "frame_id": 1,
+      "monotonic_ns": 100,
+      "observations": [
+        {
+          "observation_id": 3,
+          "object_key": "cup_b",
+          "label": "cup",
+          "confidence": 0.94,
+          "visibility": 0.85,
+          "descriptor_key": "frame1_cup_b",
+          "pose_xyz_m": [0.16, 0.0, 0.5],
+          "pose_variance_m2": 0.0001
+        }
+      ]
+    },
+    {
+      "frame_id": 2,
+      "monotonic_ns": 200,
+      "observations": []
+    },
+    {
+      "frame_id": 3,
+      "monotonic_ns": 300,
+      "observations": [
+        {
+          "observation_id": 4,
+          "object_key": "cup_a",
+          "label": "cup",
+          "confidence": 0.96,
+          "visibility": 0.9,
+          "descriptor_key": "frame3_cup_a",
+          "pose_xyz_m": [0.3, 0.0, 0.5],
+          "pose_variance_m2": 0.0001
+        }
+      ]
+    },
+    {
+      "frame_id": 4,
+      "monotonic_ns": 400,
+      "observations": [
+        {
+          "observation_id": 5,
+          "object_key": "ambiguous_probe",
+          "label": "cup",
+          "confidence": 0.95,
+          "visibility": 0.9,
+          "descriptor_key": "frame4_ambiguous",
+          "pose_xyz_m": null,
+          "pose_variance_m2": null
+        }
+      ]
+    }
+  ]
+}

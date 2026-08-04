@@ -1,0 +1,45 @@
+schema_version: 1
+canonical_image: lumos_native_seucm
+
+models:
+  detector_backend: rtmdet_tiny_ins
+  detector_config: models/rtmdet/rtmdet-ins_tiny_lumos.py
+  detector_checkpoint: models/rtmdet/rtmdet-ins_tiny_lumos.pth
+  primary_descriptor: dinov3_vits16
+  primary_descriptor_id: facebook/dinov3-vits16-pretrain-lvd1689m
+  fallback_descriptor: facebook/dinov2-small
+  dino_max_long_side: 640
+  min_patch_coverage: 0.10
+
+identity:
+  max_cosine_distance: 0.40
+  ambiguity_margin: 0.03
+  appearance_weight: 0.80
+  position_weight: 0.20
+  max_position_distance_m: 0.20
+  position_gate_max_age_ns: 500000000
+  occluded_after_ns: 300000000
+  inactive_after_ns: 1500000000
+  min_confirmed_hits: 2
+  min_memory_confidence: 0.80
+  min_memory_visibility: 0.50
+  work_bank_size: 8
+  stable_bank_size: 12
+  max_identities: 64
+
+instance_pose:
+  min_points: 80
+  erosion_px: 3
+  mad_scale: 3.5
+  noise_floor_m: 0.002
+
+limits:
+  gpu_memory_limit_gib: 7.2
+  latency_p95_limit_ms: 300.0
+
+safety:
+  stop_and_look_only: true
+  require_valid_calibration: true
+  reject_ambiguous_identity: true
+  require_valid_depth_for_action: true
+  robot_execution_enabled: false

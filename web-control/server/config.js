@@ -71,4 +71,9 @@ module.exports = {
     deskZ: Number(process.env.CAMERA_DESK_Z || 0.0),
     safeZ: Number(process.env.CAMERA_SAFE_Z || 0.12),
   },
+
+  visionSafety: {
+    // This release has no validated task checkpoint or calibration chain.
+    robotExecutionEnabled: false,
+  },
 };

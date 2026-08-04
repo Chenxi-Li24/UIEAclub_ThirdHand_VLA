@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""D435 camera + YOLO detection bridge for proxy.js.
+"""D435 registered-depth and RGB-debug bridge for proxy.js.
 
 Communicates via:
   stdin  ← arm_state (JSON-lines, from proxy.js forwarding robot_state)
@@ -22,8 +22,7 @@ import cv2
 import numpy as np
 import pyrealsense2 as rs
 
-# YOLO
-from ultralytics import YOLO
+from vision.calibration_gate import audit_handeye_calibration, sdk_pose_transform
 
 # ── Config from env ──────────────────────────────────────────
 CALIB_FILE = os.path.expanduser(
@@ -31,6 +30,7 @@ CALIB_FILE = os.path.expanduser(
 )
 YOLO_MODEL_PATH = os.environ.get("CAMERA_YOLO_MODEL", "yolov8n.pt")
 DETECT_INTERVAL = int(os.environ.get("CAMERA_DETECT_INTERVAL", "10"))
+DEBUG_DETECTION = os.environ.get("CAMERA_D435_DEBUG_DETECTION", "0") == "1"
 JPEG_QUALITY = int(os.environ.get("CAMERA_JPEG_QUALITY", "70"))
 FRAME_WIDTH = 640
 FRAME_HEIGHT = 480
@@ -62,6 +62,8 @@ DEPTH_SCALE: float | None = None
 
 # ── Calibration ──────────────────────────────────────────────
 T_flange_d435cam: np.ndarray = np.eye(4)
+calibration_validated = False
+calibration_reasons: tuple[str, ...] = ("calibration_not_loaded",)
 
 # ── Shared state ─────────────────────────────────────────────
 rgb_frame: np.ndarray | None = None
@@ -127,11 +129,7 @@ def update_tracking(new_boxes: list[dict]) -> dict[int, dict]:
 
 # ── Coordinate transforms ────────────────────────────────────
 def build_transform(pos: list[float], euler: list[float]) -> np.ndarray:
-    R, _ = cv2.Rodrigues(np.array(euler, dtype=np.float64))
-    T = np.eye(4)
-    T[:3, :3] = R
-    T[:3, 3] = pos
-    return T
+    return sdk_pose_transform(pos, euler)
 
 
 def T_base_d435cam() -> np.ndarray | None:
@@ -139,7 +137,13 @@ def T_base_d435cam() -> np.ndarray | None:
     with arm_lock:
         pos = latest_arm_pos
         euler = latest_arm_euler
-    if pos is None or euler is None:
+        pose_age_s = time.monotonic() - latest_arm_ts
+    if (
+        pos is None
+        or euler is None
+        or pose_age_s > 0.25
+        or not calibration_validated
+    ):
         return None
     T_base_ee = build_transform(pos, euler)
     return T_base_ee @ T_flange_d435cam
@@ -214,19 +218,26 @@ def capture_loop() -> None:
     V0 = intr.ppy
     DEPTH_SCALE = profile.get_device().first_depth_sensor().get_depth_scale()
 
-    # Load YOLO
-    try:
-        yolo_model = YOLO(YOLO_MODEL_PATH)
-        yolo_model.to("cpu")
-        yolo_ready = True
-    except Exception as e:
-        emit("camera_error", message=f"YOLO load failed: {e}")
-        yolo_model = None
-        yolo_ready = False
+    # D435 RGB is debug/calibration only. Semantic identity belongs to Lumos.
+    yolo_model = None
+    yolo_ready = False
+    if DEBUG_DETECTION:
+        try:
+            from ultralytics import YOLO
+
+            yolo_model = YOLO(YOLO_MODEL_PATH)
+            yolo_model.to("cpu")
+            yolo_ready = True
+        except Exception as e:
+            emit("camera_error", message=f"D435 debug detector load failed: {e}")
 
     emit("camera_status",
          d435_ready=True,
          calibration_loaded=not np.array_equal(T_flange_d435cam, np.eye(4)),
+         calibration_validated=calibration_validated,
+         calibration_reasons=list(calibration_reasons),
+         rgb_role="debug_only",
+         depth_role="metric_depth",
          resolution=f"{FRAME_WIDTH}x{FRAME_HEIGHT}",
          fx=FX, fy=FY,
          yolo_ready=yolo_ready,
@@ -277,16 +288,9 @@ def capture_loop() -> None:
                         y2 = int(np.clip(xyxy[3] * 2, 0, FRAME_HEIGHT - 1))
                         cx, cy = (x1 + x2) // 2, (y1 + y2) // 2
 
-                        pt = base_frame_position(cx, cy, x1, y1, x2, y2)
-                        if pt is not None:
-                            bx, by, bz = pt
-                        else:
-                            bx, by, bz = 0.0, 0.0, 0.0
-
                         new_boxes.append({
                             "label": yolo_model.names.get(cls_id, "obj"),
                             "cx": cx, "cy": cy, "conf": conf,
-                            "bx": bx, "by": by, "bz": bz,
                             "box": (x1, y1, x2, y2),
                         })
 
@@ -300,12 +304,18 @@ def capture_loop() -> None:
                     obj_list.append({
                         "id": tid,
                         "label": obj["label"],
-                        "conf": f"{obj['conf']:.2f}",
+                        "conf": obj["conf"],
                         "cx": obj["cx"], "cy": obj["cy"],
-                        "bx": f"{obj['bx']:.4f}",
-                        "by": f"{obj['by']:.4f}",
-                        "bz": f"{obj['bz']:.3f}",
-                        "depth_m": f"{d_mm * DEPTH_SCALE:.3f}" if DEPTH_SCALE else "N/A",
+                        "position_m": None,
+                        "depth_m": d_mm * DEPTH_SCALE if DEPTH_SCALE and d_mm > 0 else None,
+                        "source": "d435_rgb_debug",
+                        "actionable": False,
+                        "calibration_validated": calibration_validated,
+                        "depth_valid": False,
+                        "identity_confirmed": False,
+                        "arm_stationary": False,
+                        "reasons": ["d435_rgb_not_canonical", *calibration_reasons],
+                        "observed_at_ms": int(time.time() * 1000),
                     })
                 emit("detection_result", objects=obj_list, count=len(obj_list))
             else:
@@ -319,7 +329,7 @@ def capture_loop() -> None:
                 x1, y1, x2, y2 = obj["box"]
                 cv2.rectangle(out, (x1, y1), (x2, y2), color, 2)
                 cv2.putText(out,
-                            f"#{tid} {obj['label']} ({obj['bx']:.3f},{obj['by']:.3f})",
+                            f"#{tid} {obj['label']} [D435 RGB debug]",
                             (x1, max(y1 - 8, 12)),
                             cv2.FONT_HERSHEY_SIMPLEX, 0.45, color, 1)
                 cv2.circle(out, (obj["cx"], obj["cy"]), 4, color, -1)
@@ -362,6 +372,7 @@ def capture_loop() -> None:
 # ── Main loop: read stdin commands ───────────────────────────
 def main() -> None:
     global T_flange_d435cam
+    global calibration_validated, calibration_reasons
     global latest_arm_pos, latest_arm_euler, latest_arm_ts
 
     # Load calibration
@@ -369,9 +380,14 @@ def main() -> None:
         try:
             with open(CALIB_FILE) as f:
                 data = json.load(f)
-                T_flange_d435cam = np.array(data["T_flange_d435cam"])
+                audit = audit_handeye_calibration(data, "T_flange_d435cam")
+                T_flange_d435cam = audit.transform
+                calibration_validated = audit.calibration.validated
+                calibration_reasons = audit.reasons
                 emit("camera_status",
                      calibration_loaded=True,
+                     calibration_validated=calibration_validated,
+                     calibration_reasons=list(calibration_reasons),
                      calib_pairs=data.get("pairs", "?"),
                      calib_file=CALIB_FILE,
                 )
@@ -405,7 +421,7 @@ def main() -> None:
                 with arm_lock:
                     latest_arm_pos = [float(v) for v in pos]
                     latest_arm_euler = [float(v) for v in euler]
-                    latest_arm_ts = time.time()
+                    latest_arm_ts = time.monotonic()
 
         elif cmd_type == "shutdown":
             shutdown_flag.set()
@@ -415,6 +431,8 @@ def main() -> None:
             emit("camera_status",
                  d435_ready=FX is not None,
                  calibration_loaded=not np.array_equal(T_flange_d435cam, np.eye(4)),
+                 calibration_validated=calibration_validated,
+                 calibration_reasons=list(calibration_reasons),
                  resolution=f"{FRAME_WIDTH}x{FRAME_HEIGHT}",
             )
 

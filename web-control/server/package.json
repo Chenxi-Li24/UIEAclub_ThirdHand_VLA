@@ -7,8 +7,10 @@
     "start": "node proxy.js",
     "dev": "node proxy.js",
     "test:voice-protocol": "node test/protocol-smoke.js",
+    "test:grasp-authorization": "node test/grasp-authorization-smoke.js",
+    "test:lumos-proxy": "node test/lumos-proxy-smoke.js",
     "test:browser": "node test/browser-smoke.js",
-    "test": "npm run test:voice-protocol && npm run test:browser"
+    "test": "npm run test:voice-protocol && npm run test:grasp-authorization && npm run test:lumos-proxy && npm run test:browser"
   },
   "dependencies": {
     "express": "^4.21.0",

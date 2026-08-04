@@ -2121,6 +2121,12 @@ html, body {
   color: var(--bg-primary);
 }
 
+.detection-item .det-grasp-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+  transform: none;
+}
+
 .detection-item .det-depth {
   margin-top: 2px;
   color: var(--warning);

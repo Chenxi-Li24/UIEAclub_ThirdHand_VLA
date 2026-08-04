@@ -13,6 +13,12 @@ const { WebSocketServer } = require('ws');
 const config = require('./config');
 const { StartouchBridge } = require('./startouch-bridge');
 const { CameraBridge } = require('./camera-bridge');
+const {
+  authorizeGrasp,
+  trustedTargetFromDetection,
+} = require('./grasp-authorization');
+const lumosExternalUrl = process.env.LUMOS_STREAM_URL ||
+  'http://127.0.0.1:3001/camera_lumos';
 
 const app = express();
 app.use(express.static(path.join(__dirname, '..', 'web')));
@@ -27,6 +33,7 @@ let latestTcpPos = null;      // [m] for camera bridge
 let stateReady = false;
 let motionActive = false;
 let connectPending = false;
+let latestVisionTargets = new Map();
 
 // Grasp state machine
 let graspState = null;  // { tid, bx, by, phase, ... }
@@ -34,6 +41,7 @@ let graspState = null;  // { tid, bx, by, phase, ... }
 // ── Lumos streamer (separate process, no pyrealsense2 conflict) ──
 let lumosChild = null;
 function startLumosStream() {
+  if (lumosExternalUrl) return;
   if (lumosChild) return;
   const { spawn: spawnLumos } = require('child_process');
   const lumosPy = require('path').join(__dirname, 'lumos_stream.py');
@@ -201,6 +209,7 @@ app.get('/diag', (req, res) => {
     cameraBridge: cameraBridge.child ? cameraBridge.child.pid : null,
     armConnected: bridge.connected,
     cameraReady: cameraBridge.ready,
+    lumosSource: lumosExternalUrl || 'managed_child',
   };
   res.json(diag);
 });
@@ -220,6 +229,36 @@ app.get('/camera', (req, res) => {
 });
 
 app.get('/camera_lumos', (req, res) => {
+  if (lumosExternalUrl) {
+    let upstreamUrl;
+    try {
+      upstreamUrl = new URL(lumosExternalUrl);
+      if (upstreamUrl.protocol !== 'http:') throw new Error('only http is allowed');
+    } catch (error) {
+      res.status(503).send(`Invalid Lumos stream URL: ${error.message}`);
+      return;
+    }
+    const upstream = http.get(upstreamUrl, response => {
+      if (response.statusCode !== 200) {
+        response.resume();
+        res.status(503).send(`Lumos upstream returned ${response.statusCode}`);
+        return;
+      }
+      res.setHeader(
+        'Content-Type',
+        response.headers['content-type'] || 'multipart/x-mixed-replace; boundary=frame'
+      );
+      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+      res.flushHeaders();
+      response.pipe(res);
+    });
+    upstream.on('error', error => {
+      if (!res.headersSent) res.status(503).send(`Lumos upstream unavailable: ${error.message}`);
+      else res.destroy(error);
+    });
+    req.on('close', () => upstream.destroy());
+    return;
+  }
   const stream = getLumosStream();
   if (!stream) {
     res.status(503).send('Lumos camera not available');
@@ -234,6 +273,12 @@ app.get('/camera_lumos', (req, res) => {
 
 // ── Camera bridge events ────────────────────────────────────
 cameraBridge.on('detection_result', message => {
+  latestVisionTargets = new Map(
+    (message.objects || []).map(target => {
+      const trusted = trustedTargetFromDetection(target);
+      return [trusted.id, trusted];
+    })
+  );
   broadcast(message);
 });
 
@@ -360,6 +405,9 @@ wss.on('connection', ws => {
       maxMoveTimeSec: config.robot.maxMoveTimeSec,
     },
     camera: cameraBridge.getInfo(),
+    visionSafety: {
+      robotExecutionEnabled: config.visionSafety.robotExecutionEnabled,
+    },
   });
   bridge.send({ cmd: 'get_state' });
 
@@ -443,15 +491,28 @@ function handleBrowserCommand(message, ws) {
       break;
 
     case 'grasp_object':
-      if (!bridge.connected) {
-        send(ws, { type: 'error', msg: 'Startouch SDK 尚未连接' });
-        return;
-      }
       if (graspState) {
         send(ws, { type: 'error', msg: '抓取动作正在进行中' });
         return;
       }
-      startGrasp(message);
+      {
+        const targetId = Number(message.id);
+        const authorization = authorizeGrasp({
+          executionEnabled: config.visionSafety.robotExecutionEnabled,
+          bridgeConnected: bridge.connected,
+          armMotionActive: motionActive,
+          target: latestVisionTargets.get(targetId),
+          nowMs: Date.now(),
+        });
+        if (!authorization.approved) {
+          send(ws, {
+            type: 'error',
+            msg: `抓取已被视觉安全门禁拒绝: ${authorization.reason}`,
+          });
+          return;
+        }
+        startGrasp(targetId, authorization.positionM);
+      }
       break;
 
     case 'estop_camera':
@@ -470,15 +531,8 @@ function handleBrowserCommand(message, ws) {
 }
 
 // ── Grasp state machine ─────────────────────────────────────
-function startGrasp(msg) {
-  const bx = parseFloat(msg.bx);
-  const by = parseFloat(msg.by);
-  const bz = parseFloat(msg.bz) || 0;
-  const tid = msg.id;
-  if (!Number.isFinite(bx) || !Number.isFinite(by)) {
-    broadcast({ type: 'error', msg: 'Invalid grasp target coordinates' });
-    return;
-  }
+function startGrasp(tid, positionM) {
+  const [bx, by, bz] = positionM;
   const hoverZ = Math.max(bz + 0.10, 0.15);
   const graspZ = Math.max(bz + 0.01, 0.03);
   const liftZ = Math.max(bz + 0.15, 0.20);

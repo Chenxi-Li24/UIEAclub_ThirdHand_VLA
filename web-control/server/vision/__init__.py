@@ -1,7 +1,17 @@
 """Offline-first vision geometry, tracking, and Dry Run safety core."""
 
 from .camera_models import PinholeCamera, SeucmCamera
+from .calibration_gate import CalibrationAudit, audit_handeye_calibration, sdk_pose_transform
 from .depth_registration import RegisteredDepth, register_depth_to_lumos
+from .dual_camera import (
+    DualCameraCalibrationBundle,
+    DualCameraConfig,
+    DualCameraPerception,
+    DualCameraResult,
+    DualCameraTarget,
+    StampedRobotPose,
+    dual_camera_calibration_id,
+)
 from .dry_run import build_dry_run_report, generate_top_down_candidates
 from .geometry import (
     invert_transform,
@@ -36,7 +46,14 @@ from .types import (
 
 __all__ = [
     "CalibrationRef",
+    "CalibrationAudit",
     "DryRunReport",
+    "DualCameraConfig",
+    "DualCameraCalibrationBundle",
+    "DualCameraPerception",
+    "DualCameraResult",
+    "DualCameraTarget",
+    "StampedRobotPose",
     "FrameStamp",
     "GraspCandidate",
     "IdentityAssignment",
@@ -63,13 +80,16 @@ __all__ = [
     "TrackState",
     "TrackerConfig",
     "build_dry_run_report",
+    "audit_handeye_calibration",
     "evaluate_target_safety",
+    "dual_camera_calibration_id",
     "estimate_instance_pose",
     "generate_top_down_candidates",
     "invert_transform",
     "make_transform",
     "register_depth_to_lumos",
     "rpy_xyz_to_matrix",
+    "sdk_pose_transform",
     "run_replay",
     "transform_points",
 ]

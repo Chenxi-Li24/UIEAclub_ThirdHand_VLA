@@ -1,9 +1,84 @@
 <!DOCTYPE html>
-<html><head><meta charset="utf-8"><title>D435 Camera Test</title>
-<style>
-body{margin:0;background:#000;display:flex;justify-content:center;align-items:center;height:100vh}
-img{max-width:100vw;max-height:100vh}
-</style></head>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ThirdHand Dual Camera Test</title>
+  <style>
+    :root { color-scheme: dark; }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: #101214;
+      color: #f2f4f5;
+      font: 14px/1.4 system-ui, sans-serif;
+    }
+    header {
+      min-height: 52px;
+      padding: 14px 18px;
+      border-bottom: 1px solid #303438;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+    }
+    header strong { font-size: 15px; }
+    header span { color: #a7afb5; }
+    main {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+      min-height: calc(100vh - 52px);
+    }
+    figure {
+      margin: 0;
+      min-width: 0;
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr);
+      border-right: 1px solid #303438;
+    }
+    figure:last-child { border-right: 0; }
+    figcaption {
+      padding: 10px 14px;
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      border-bottom: 1px solid #303438;
+    }
+    figcaption span { color: #a7afb5; }
+    .feed {
+      min-height: 0;
+      display: grid;
+      place-items: center;
+      overflow: hidden;
+      background: #050607;
+    }
+    img {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+    @media (max-width: 760px) {
+      main { grid-template-columns: 1fr; grid-template-rows: 1fr 1fr; }
+      figure { border-right: 0; border-bottom: 1px solid #303438; }
+    }
+  </style>
+</head>
 <body>
-<img src="/camera" onerror="this.alt='FAILED to load camera'" onload="document.title='D435 OK'">
-</body></html>
+  <header>
+    <strong>Dual Camera Monitor</strong>
+    <span>Read only</span>
+  </header>
+  <main>
+    <figure>
+      <figcaption><strong>Lumos</strong><span>canonical RGB / identity</span></figcaption>
+      <div class="feed"><img src="/camera_lumos" alt="Lumos stream"></div>
+    </figure>
+    <figure>
+      <figcaption><strong>D435</strong><span>registered metric depth</span></figcaption>
+      <div class="feed"><img src="/camera" alt="D435 stream"></div>
+    </figure>
+  </main>
+</body>
+</html>

@@ -683,7 +683,7 @@ class UIControls {
     let cameraRetryCount = 0;
     let lumosRetryTimer = null;
     let lumosRetryCount = 0;
-    const lumosStreamUrl = `${window.location.protocol}//${window.location.hostname}:3001/camera_lumos`;
+    const lumosStreamUrl = '/camera_lumos';
 
     // The page can request /camera before the Python bridge becomes ready.
     // An <img> does not retry a failed MJPEG request when camera_status later
@@ -762,20 +762,27 @@ class UIControls {
         confidence.textContent = `${(Number(obj.conf) * 100).toFixed(0)}%`;
         const coordinates = document.createElement('div');
         coordinates.className = 'det-coords';
-        coordinates.textContent = `base (${obj.bx}, ${obj.by}, z=${obj.bz})m`;
+        coordinates.textContent = Array.isArray(obj.position_m)
+          ? `base (${obj.position_m.map(value => Number(value).toFixed(3)).join(', ')})m`
+          : 'base position unavailable';
         const depth = document.createElement('div');
         depth.className = 'det-depth';
-        depth.textContent = `depth: ${obj.depth_m}m`;
+        depth.textContent = obj.depth_m !== null && obj.depth_m !== undefined &&
+          Number.isFinite(Number(obj.depth_m))
+          ? `depth: ${Number(obj.depth_m).toFixed(3)}m`
+          : 'depth: unavailable';
         const btn = document.createElement('button');
         btn.className = 'det-grasp-btn';
-        btn.textContent = `🎯 Grasp #${obj.id}`;
+        const actionable = obj.actionable === true;
+        btn.textContent = actionable ? `Grasp #${obj.id}` : 'Safety locked';
+        btn.disabled = !actionable;
+        btn.title = actionable
+          ? `Grasp confirmed target #${obj.id}`
+          : (obj.reasons || ['target_not_actionable']).join(', ');
         btn.addEventListener('click', () => {
           this.ws.send({
             cmd: 'grasp_object',
             id: Number.parseInt(obj.id, 10),
-            bx: obj.bx,
-            by: obj.by,
-            bz: obj.bz,
           });
           this._log(`→ Grasp object #${obj.id}`);
         });

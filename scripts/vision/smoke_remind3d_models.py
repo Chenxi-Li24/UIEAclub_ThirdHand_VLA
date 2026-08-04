@@ -178,6 +178,15 @@ def run_model_smoke(arguments: argparse.Namespace) -> dict[str, Any]:
         "descriptor_norm_min": min(descriptor_norms),
         "descriptor_norm_max": max(descriptor_norms),
         "detection_count": detection_count,
+        "detections": [
+            {
+                "detection_id": item.detection_id,
+                "label": item.label,
+                "mask_area_px": int(item.mask.sum()),
+                "score": item.score,
+            }
+            for item in detections
+        ],
         "device": model_device,
         "gpu": torch.cuda.get_device_name(device_index),
         "robot_execution_enabled": False,

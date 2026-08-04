@@ -2,8 +2,8 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-CONDA_EXE="${CONDA_EXE:-/home/nieqingcao/miniconda3/bin/conda}"
-CONDA_ROOT="$(cd "$(dirname "$CONDA_EXE")/.." && pwd)"
+CONDA_ROOT="${CONDA_ROOT:-${HOME}/miniconda3}"
+CONDA_EXE="${CONDA_EXE:-${CONDA_ROOT}/bin/conda}"
 ENV_NAME="thirdhand-remind3d"
 ENV_PREFIX="$CONDA_ROOT/envs/$ENV_NAME"
 PYTHON_VERSION="3.11"

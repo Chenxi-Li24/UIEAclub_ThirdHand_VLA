@@ -58,4 +58,17 @@ module.exports = {
     name: 'Startouch FastTouchV3',
     source: 'models/startouch-v3/FastTouchV3.SLDASM.urdf',
   },
+
+  camera: {
+    enabled: process.env.CAMERA_ENABLED !== '0',
+    python: process.env.CAMERA_PYTHON || process.env.STARTOUCH_PYTHON ||
+      path.join(os.homedir(), 'miniconda3', 'bin', 'python'),
+    yoloModel: process.env.CAMERA_YOLO_MODEL || path.join(__dirname, 'yolov8n.pt'),
+    calibrationFile: process.env.CAMERA_CALIB_FILE ||
+      path.join(os.homedir(), 'calibration', 'd435_handeye_result.json'),
+    detectionInterval: Number(process.env.CAMERA_DETECT_INTERVAL || 10),
+    jpegQuality: Number(process.env.CAMERA_JPEG_QUALITY || 70),
+    deskZ: Number(process.env.CAMERA_DESK_Z || 0.0),
+    safeZ: Number(process.env.CAMERA_SAFE_Z || 0.12),
+  },
 };

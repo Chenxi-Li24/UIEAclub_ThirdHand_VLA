@@ -12,6 +12,7 @@ const { randomUUID } = require('crypto');
 const { WebSocketServer } = require('ws');
 const config = require('./config');
 const { StartouchBridge } = require('./startouch-bridge');
+const { CameraBridge } = require('./camera-bridge');
 
 const app = express();
 app.use(express.static(path.join(__dirname, '..', 'web')));
@@ -19,10 +20,37 @@ const server = http.createServer(app);
 const wss = new WebSocketServer({ server, path: '/ws' });
 const clients = new Set();
 const bridge = new StartouchBridge(config.robot);
+const cameraBridge = new CameraBridge(config.camera || {});
 let latestJointsDeg = null;
+let latestTcpEuler = null;    // [rad] for camera bridge
+let latestTcpPos = null;      // [m] for camera bridge
 let stateReady = false;
 let motionActive = false;
 let connectPending = false;
+
+// Grasp state machine
+let graspState = null;  // { tid, bx, by, phase, ... }
+
+// ── Lumos streamer (separate process, no pyrealsense2 conflict) ──
+let lumosChild = null;
+function startLumosStream() {
+  if (lumosChild) return;
+  const { spawn: spawnLumos } = require('child_process');
+  const lumosPy = require('path').join(__dirname, 'lumos_stream.py');
+  const lumosPython = config.camera.python || process.env.STARTOUCH_PYTHON || 'python3';
+  lumosChild = spawnLumos(lumosPython, ['-u', lumosPy], {
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  lumosChild.stderr.on('data', d => console.warn('[Lumos]', d.toString().trim()));
+  lumosChild.on('exit', (code) => {
+    console.warn(`[Lumos] exited with code ${code}, restarting in 2s...`);
+    lumosChild = null;
+    setTimeout(startLumosStream, 2000);
+  });
+}
+function getLumosStream() {
+  return lumosChild ? lumosChild.stdout : null;
+}
 
 function broadcast(data) {
   const json = JSON.stringify(data);
@@ -141,6 +169,87 @@ bridge.on('connection', message => {
   });
 });
 
+// ── Diagnostic endpoint ─────────────────────────────────────
+app.get('/diag', (req, res) => {
+  const { execSync } = require('child_process');
+  const diag = {
+    time: new Date().toISOString(),
+    can: {},
+    usb: {},
+    processes: {},
+  };
+  try {
+    diag.can.interface = require('child_process')
+      .execSync('ip -br link show can0 2>/dev/null || echo DOWN', { timeout: 2000 })
+      .toString().trim();
+  } catch (_) { diag.can.interface = 'DOWN'; }
+  try {
+    diag.can.lock = require('fs').existsSync('/tmp/startouch-web-can0.lock');
+    if (diag.can.lock) {
+      diag.can.lockPid = require('fs').readFileSync('/tmp/startouch-web-can0.lock', 'utf8').trim();
+    }
+  } catch (_) { diag.can.lock = 'error'; }
+  try {
+    const out = require('child_process')
+      .execSync('for d in /sys/bus/usb/devices/*/idVendor; do d=$(dirname "$d"); id=$(cat "$d/idVendor" 2>/dev/null)$(cat "$d/idProduct" 2>/dev/null); if [ "$id" = "80860b07" ]; then echo "$(basename $d) control=$(cat $d/power/control) status=$(cat $d/power/runtime_status)"; fi; done', { timeout: 2000 })
+      .toString().trim();
+    diag.usb.d435 = out || 'not found';
+  } catch (_) { diag.usb.d435 = 'error'; }
+  diag.processes = {
+    proxy: process.pid,
+    startouchBridge: bridge.child ? bridge.child.pid : null,
+    cameraBridge: cameraBridge.child ? cameraBridge.child.pid : null,
+    armConnected: bridge.connected,
+    cameraReady: cameraBridge.ready,
+  };
+  res.json(diag);
+});
+
+// ── Camera MJPEG routes ─────────────────────────────────────
+app.get('/camera', (req, res) => {
+  const stream = cameraBridge.getMjpegStream();
+  if (!stream) {
+    res.status(503).send('Camera not ready');
+    return;
+  }
+  res.setHeader('Content-Type', 'multipart/x-mixed-replace; boundary=frame');
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+  res.flushHeaders();
+  stream.pipe(res);
+  req.on('close', () => { try { stream.unpipe(res); } catch (_) { /* ok */ } });
+});
+
+app.get('/camera_lumos', (req, res) => {
+  const stream = getLumosStream();
+  if (!stream) {
+    res.status(503).send('Lumos camera not available');
+    return;
+  }
+  res.setHeader('Content-Type', 'multipart/x-mixed-replace; boundary=frame');
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+  res.flushHeaders();
+  stream.pipe(res);
+  req.on('close', () => { try { stream.unpipe(res); } catch (_) { /* ok */ } });
+});
+
+// ── Camera bridge events ────────────────────────────────────
+cameraBridge.on('detection_result', message => {
+  broadcast(message);
+});
+
+cameraBridge.on('camera_status', message => {
+  broadcast(message);
+});
+
+cameraBridge.on('camera_error', message => {
+  broadcast({ type: 'camera_error', msg: message.message });
+});
+
+cameraBridge.on('log', message => {
+  console.warn(`[Camera] ${message.message}`);
+});
+
+// Forward arm state to camera bridge for coordinate transforms
 bridge.on('robot_state', message => {
   const jointsDeg = radiansToDegrees(message.joints_rad);
   if (jointsDeg.length !== 6 || !jointsDeg.every(Number.isFinite)) {
@@ -148,7 +257,15 @@ bridge.on('robot_state', message => {
     return;
   }
   latestJointsDeg = jointsDeg;
+  latestTcpEuler = message.tcp_euler_rad;
+  latestTcpPos = message.tcp_position_m;
   stateReady = true;
+
+  // Forward arm state to camera bridge for coordinate transforms
+  if (cameraBridge.ready) {
+    cameraBridge.sendArmState(message.tcp_position_m, message.tcp_euler_rad);
+  }
+
   broadcast({
     type: 'robot_state',
     joints: latestJointsDeg,
@@ -242,6 +359,7 @@ wss.on('connection', ws => {
       minMoveTimeSec: config.robot.minMoveTimeSec,
       maxMoveTimeSec: config.robot.maxMoveTimeSec,
     },
+    camera: cameraBridge.getInfo(),
   });
   bridge.send({ cmd: 'get_state' });
 
@@ -260,6 +378,7 @@ wss.on('connection', ws => {
 });
 
 function handleBrowserCommand(message, ws) {
+  console.log(`[WS cmd] ${message.cmd}`, JSON.stringify(message).slice(0, 120));
   switch (message.cmd) {
     case 'connect':
       if (bridge.connected) {
@@ -323,10 +442,148 @@ function handleBrowserCommand(message, ws) {
       send(ws, { type: 'pong', ts: Date.now() });
       break;
 
+    case 'grasp_object':
+      if (!bridge.connected) {
+        send(ws, { type: 'error', msg: 'Startouch SDK 尚未连接' });
+        return;
+      }
+      if (graspState) {
+        send(ws, { type: 'error', msg: '抓取动作正在进行中' });
+        return;
+      }
+      startGrasp(message);
+      break;
+
+    case 'estop_camera':
+      cameraBridge.shutdown();
+      broadcast({ type: 'camera_status', d435_ready: false, calibration_loaded: false,
+        error: 'E-STOP by user' });
+      break;
+
+    case 'camera_refresh':
+      cameraBridge.send({ cmd: 'get_status' });
+      break;
+
     default:
       send(ws, { type: 'error', msg: `未知命令: ${message.cmd}` });
   }
 }
+
+// ── Grasp state machine ─────────────────────────────────────
+function startGrasp(msg) {
+  const bx = parseFloat(msg.bx);
+  const by = parseFloat(msg.by);
+  const bz = parseFloat(msg.bz) || 0;
+  const tid = msg.id;
+  if (!Number.isFinite(bx) || !Number.isFinite(by)) {
+    broadcast({ type: 'error', msg: 'Invalid grasp target coordinates' });
+    return;
+  }
+  const hoverZ = Math.max(bz + 0.10, 0.15);
+  const graspZ = Math.max(bz + 0.01, 0.03);
+  const liftZ = Math.max(bz + 0.15, 0.20);
+
+  if (!latestTcpEuler) {
+    broadcast({ type: 'error', msg: 'No arm orientation data available' });
+    return;
+  }
+
+  graspState = {
+    tid,
+    bx, by, bz,
+    hoverZ, graspZ, liftZ,
+    euler: [...latestTcpEuler],
+    phase: 'hover',
+  };
+
+  broadcast({ type: 'grasp_status', tid, status: 'hover',
+    msg: `Moving to hover (${bx.toFixed(3)}, ${by.toFixed(3)}, ${hoverZ.toFixed(3)})` });
+
+  bridge.send({
+    cmd: 'move_l',
+    position: [bx, by, hoverZ],
+    euler: graspState.euler,
+    time_sec: 2.5,
+    request_id: `grasp_${tid}_hover`,
+  });
+}
+
+function advanceGrasp() {
+  if (!graspState) return;
+
+  switch (graspState.phase) {
+    case 'hover':
+      graspState.phase = 'descend';
+      broadcast({ type: 'grasp_status', tid: graspState.tid, status: 'descend',
+        msg: `Descending to grasp Z=${graspState.graspZ.toFixed(3)}` });
+      bridge.send({
+        cmd: 'move_l',
+        position: [graspState.bx, graspState.by, graspState.graspZ],
+        euler: graspState.euler,
+        time_sec: 1.5,
+        request_id: `grasp_${graspState.tid}_descend`,
+      });
+      break;
+
+    case 'descend':
+      graspState.phase = 'close';
+      broadcast({ type: 'grasp_status', tid: graspState.tid, status: 'close',
+        msg: 'Closing gripper' });
+      bridge.send({ cmd: 'gripper', position: 0.15 });
+      break;
+
+    case 'close':
+      graspState.phase = 'lift';
+      broadcast({ type: 'grasp_status', tid: graspState.tid, status: 'lift',
+        msg: `Lifting to Z=${graspState.liftZ.toFixed(3)}` });
+      bridge.send({
+        cmd: 'move_l',
+        position: [graspState.bx, graspState.by, graspState.liftZ],
+        euler: graspState.euler,
+        time_sec: 2.0,
+        request_id: `grasp_${graspState.tid}_lift`,
+      });
+      break;
+
+    case 'lift':
+      graspState.phase = 'home';
+      broadcast({ type: 'grasp_status', tid: graspState.tid, status: 'home',
+        msg: 'Going home' });
+      bridge.send({ cmd: 'go_home' });
+      break;
+
+    case 'home':
+      broadcast({ type: 'grasp_status', tid: graspState.tid, status: 'open',
+        msg: 'Opening gripper' });
+      bridge.send({ cmd: 'gripper', position: 1.0 });
+      graspState.phase = 'done';
+      break;
+
+    case 'done':
+      broadcast({ type: 'grasp_status', tid: graspState.tid, status: 'complete',
+        msg: 'Grasp complete!' });
+      graspState = null;
+      break;
+
+    default:
+      graspState = null;
+  }
+}
+
+// Hook into command_complete to advance grasp sequence
+bridge.on('command_complete', message => {
+  if (graspState && message.command && !message.command.startsWith('gripper')) {
+    advanceGrasp();
+  }
+});
+
+// Gripper completion must also advance
+bridge.on('command_complete', message => {
+  if (graspState && message.command === 'gripper') {
+    // Small delay to let gripper settle
+    setTimeout(() => advanceGrasp(), 400);
+  }
+});
 
 function getLocalIPs() {
   const addresses = [];
@@ -345,11 +602,19 @@ server.listen(config.web.port, config.web.host, () => {
   console.log(`Robot:   Startouch SDK -> ${config.robot.canInterface}`);
   console.log(`SDK:     ${config.robot.sdkPath}`);
   if (config.robot.simulate) console.log('Mode:    simulator');
+  if (config.camera && config.camera.enabled !== false) {
+    console.log('Camera:  D435 bridge enabled');
+    cameraBridge.start();
+  }
+  // Lumos disabled until USB hardware issue resolved
+  // startLumosStream();
   bridge.start();
 });
 
 function shutdown() {
   console.log('\n[shutdown] closing...');
+  if (lumosChild) { lumosChild.kill('SIGTERM'); lumosChild = null; }
+  cameraBridge.shutdown();
   bridge.shutdown();
   server.close(() => process.exit(0));
   setTimeout(() => process.exit(1), 1000).unref();

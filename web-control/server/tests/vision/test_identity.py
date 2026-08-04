@@ -355,7 +355,9 @@ def test_actionable_requires_validated_matching_calibration_and_low_uncertainty(
 
 
 def test_prototype_banks_are_bounded_after_many_views():
-    memory = PersistentIdentityMemory(config(min_confirmed_hits=1, work_bank_size=2, stable_bank_size=2))
+    memory = PersistentIdentityMemory(
+        config(min_confirmed_hits=1, work_bank_size=2, stable_bank_size=2)
+    )
     descriptors = ([1.0, 0.0, 0.0], [0.99, 0.1, 0.0], [0.98, 0.2, 0.0], [0.97, 0.25, 0.0])
     for index, descriptor in enumerate(descriptors):
         memory.update(

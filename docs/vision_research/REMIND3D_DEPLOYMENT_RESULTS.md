@@ -13,8 +13,8 @@ REMIND-3D 的硬件隔离代码路径、确定性回放、模型适配器、部�
 
 | 项目 | 状态 | 证据 |
 |---|---|---|
-| 持久实例身份内存 | 已实现、已测试 | 遮挡、重入、相似实例、全局分配、歧义拒绝、容量和标定测试 |
-| 掩码内 D435 三维位姿 | 已实现、已测试 | 腐蚀、稀疏拒绝、MAD 离群过滤、基座变换、协方差测试 |
+| 持久实例身份内存 | 已实现、已测试 | 低质量拒绝、遮挡、重入复核、全局备选分配、歧义拒绝、标定和不确定度门禁 |
+| 掩码内 D435 三维位姿 | 已实现、已测试 | 腐蚀、稀疏拒绝、MAD 离群过滤、基座变换、保守协方差测试 |
 | DINO 掩码描述符适配器 | 代码已实现 | lazy import、patch 覆盖池化、640 px 长边限制；未加载真实权重 |
 | RTMDet 实例分割适配器 | 代码已实现 | 严格要求 masks，转换/阈值/标签/形状测试；未加载真实权重 |
 | 确定性身份回放 | 已实现、已测试 | 五帧双实例回放，长间隔返回保持 ID，歧义不强制分配 |
@@ -35,7 +35,22 @@ REMIND-3D 的硬件隔离代码路径、确定性回放、模型适配器、部�
 - `scripts/vision/bootstrap_remind3d_env.sh`：只创建 `thirdhand-remind3d`，固定 Python 3.11、
   PyTorch 2.7.0、torchvision 0.22.0 和官方 cu128 index。
 - `scripts/vision/smoke_remind3d_models.py`：只有 RTMDet 返回真实 mask、DINO 返回有限单位向量、
-  GPU 架构受支持且峰值显存不超过 7.2 GiB 时才输出 `smoke_passed: true`。
+  GPU 架构受支持、p95 延迟不超过 300 ms，且 allocated/reserved 峰值显存均不超过
+  7.2 GiB 时才输出 `smoke_passed: true`。
+
+## 安全复审修正
+
+独立代码复审后已完成以下修正，提交为 `1a29b9f`：
+
+1. 低置信度或低可见度观测不能创建 ID、增加确认次数、更新原型或锁定特征维度。
+2. 缺失深度只清除当前可操作位姿，保留最近有效三维关联位姿，不能绕过短时位移门禁。
+3. `INACTIVE` 身份重入后默认需要连续两帧高质量 RGB-D 观测，首帧保持 `TENTATIVE`。
+4. 身份层可操作状态要求标定已验证、标定 ID 匹配、位姿新鲜且位置标准差不超限；
+   工作空间、可达性和点云数量仍由已有 `vision.safety` 末级门禁负责。
+5. 歧义检测比较完整 Hungarian 分配与禁用已选边后的近优完整分配，不再使用局部行列差值。
+6. RTMDet 启动时要求配置标签与 checkpoint 的 `dataset_meta.classes` 顺序完全一致。
+7. 回放限制 manifest、NPZ、解压体积、压缩比、帧数、观测数和描述符维度。
+8. 环境启动脚本固定打包工具版本，并在 CUDA 上实际执行 MMCV NMS 算子门禁。
 
 ## 确定性回放证据
 
@@ -55,7 +70,9 @@ REMIND-3D 的硬件隔离代码路径、确定性回放、模型适配器、部�
 | forced ambiguous assignments | 0 |
 
 两次 CLI 输出经 `cmp` 字节一致。报告 SHA-256：
-`3384648daa639779047e8ce74f54fa0cc1c405e8afc97f52954e4304fae9550a`。
+`6bc7b41d81b1c526668dea57c5556aa95ad395cbf3509a997e385039dbec5da8`。
+
+长期重入帧现在保持原 ID，但状态为 `tentative`，这正是哈希相较首次实现变化的原因。
 
 这只证明身份状态机、关联和指标代码的确定性，不代表真实 Lumos 图像上的 ReID 准确率。
 
@@ -94,6 +111,17 @@ CONDA_OFFLINE=true /home/nieqingcao/miniconda3/bin/conda create \
 现有 `LumosTouch` 环境仍为 Python `3.10.20`、NumPy `2.2.6`、SciPy `1.15.3`、OpenCV
 `5.0.0`；本轮未在该环境安装或升级模型依赖。
 
+## 本地验证证据
+
+```text
+180 passed in 0.62s
+LAZY_IMPORT_GATE=PASS
+```
+
+同时通过 `compileall`、`bash -n`、`git diff --check` 和双次确定性回放。测试范围为
+`web-control/server/tests/vision`、`web-control/server/tests/vision_models` 与
+`tests/vision_deployment`。
+
 ## 恢复步骤
 
 shell 网络恢复后执行：
@@ -121,10 +149,12 @@ Hugging Face 访问权限，凭据不得写入仓库。
 ## 仍未通过的门禁
 
 1. PyTorch 2.7.0 cu128 必须在 RTX 5060 上报告 `sm_120` 并成功分配 CUDA tensor。
-2. MMCV 2.1.0 与 PyTorch 2.7/cu128 没有现成的本机通过证据；若 CUDA ops 无法编译，
+2. 当前依赖只有精确版本 pin，没有可验证的 `--require-hashes` 锁文件；网络恢复并完成解析后，
+   必须生成带 wheel 哈希的锁文件，才可称为完全可复现安装。
+3. MMCV 2.1.0 与 PyTorch 2.7/cu128 没有现成的本机通过证据；若 CUDA ops 无法编译，
    RTMDet 应改走经过验证的 MMDeploy ONNXRuntime/TensorRT artifact，而不是降低安全检查。
-3. RTMDet 必须在真实 Lumos 图上返回非空实例掩码，box-only 结果一律失败。
-4. DINO 必须对每个 mask 返回有限、单位范数、维度一致的描述符。
-5. 真实回放仍需完成 mask recall、长间隔 ReID、ID switch、绝对位置、静态 jitter、延迟和显存验收。
-6. Lumos 内参、D435-to-Lumos 外参和手眼标定仍需重新采集并独立验证。
-7. 上述项目全部通过前，不接入在线服务、不生成可执行抓取命令、不移动机械臂。
+4. RTMDet 必须在真实 Lumos 图上返回非空实例掩码，box-only 结果一律失败。
+5. DINO 必须对每个 mask 返回有限、单位范数、维度一致的描述符。
+6. 真实回放仍需完成 mask recall、长间隔 ReID、ID switch、绝对位置、静态 jitter、延迟和显存验收。
+7. Lumos 内参、D435-to-Lumos 外参和手眼标定仍需重新采集并独立验证。
+8. 上述项目全部通过前，不接入在线服务、不生成可执行抓取命令、不移动机械臂。

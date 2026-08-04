@@ -62,4 +62,3 @@ AprilGrid/平面/已测量对象，不动作或由用户手动拖动/摆放。�
 ## 结果产物
 
 每次 benchmark 输出机器可读 JSON/CSV、版本/commit、模型 hash、标定 id、数据 manifest、命令与环境摘要。图表只从机器可读结果生成，不手填成功率。
-

@@ -100,4 +100,3 @@ def transform_points(transform: Any, points_m: Any) -> np.ndarray:
         raise InvalidDataError("points must contain only finite values")
     transformed = batch @ source[:3, :3].T + source[:3, 3]
     return transformed[0] if single else transformed
-

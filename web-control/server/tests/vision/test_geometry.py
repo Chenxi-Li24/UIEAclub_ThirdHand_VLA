@@ -90,4 +90,3 @@ def test_transform_points_rejects_nonfinite_or_bad_shape():
         transform_points(np.eye(4), np.array([1.0, 2.0]))
     with pytest.raises(InvalidDataError):
         transform_points(np.eye(4), np.array([[1.0, np.inf, 2.0]]))
-

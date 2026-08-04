@@ -191,4 +191,3 @@ class DryRunReport:
             "target_track_id": self.target_track_id,
             "calibration_id": self.calibration_id,
         }
-

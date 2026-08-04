@@ -116,4 +116,3 @@ def evaluate_target_safety(
     if not reachable:
         reasons.append("target_not_reachable")
     return SafetyDecision(approved=not reasons, reasons=tuple(reasons))
-

@@ -329,13 +329,7 @@ class FixedPickPlaceTests(unittest.TestCase):
 
     def test_final_docs_include_exact_launch_commands_and_dashboard(self):
         required = [
-            "cd /home/nieqingcao/arm/UIEAclub_ThirdHand_VLA-fixed-pick-place",
             "bash scripts/demo_fixed_pick_place.sh",
-            (
-                'ssh -t robot-ubuntu "cd '
-                "/home/nieqingcao/arm/UIEAclub_ThirdHand_VLA-fixed-pick-place "
-                '&& bash scripts/demo_fixed_pick_place.sh"'
-            ),
             "bash scripts/open_fixed_pick_place_control.sh",
         ]
         for relative in ("README.md", "docs/fixed_pick_place_audit.md"):

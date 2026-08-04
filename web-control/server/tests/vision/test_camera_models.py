@@ -102,4 +102,3 @@ def test_pinhole_project_deproject_round_trip():
 def test_camera_parameters_are_validated(constructor):
     with pytest.raises(InvalidDataError):
         constructor()
-

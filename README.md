@@ -59,6 +59,8 @@ the branch, `can0`, point validity, joint limits, speed, logs, and competing
 control processes before motion.
 
 ```bash
+bash scripts/demo_fixed_pick_place.sh
+# Or open the loopback dashboard:
 bash scripts/open_fixed_pick_place_control.sh
 ```
 

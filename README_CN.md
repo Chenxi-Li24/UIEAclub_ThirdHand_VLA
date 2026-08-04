@@ -52,6 +52,8 @@ Lumos HTTP 视频服务后，其默认端口为 `3001`。
 速度、日志目录以及竞争控制进程。
 
 ```bash
+bash scripts/demo_fixed_pick_place.sh
+# 或打开本机控制页面：
 bash scripts/open_fixed_pick_place_control.sh
 ```
 

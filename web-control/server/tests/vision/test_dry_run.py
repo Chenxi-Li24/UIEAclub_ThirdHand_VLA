@@ -101,4 +101,3 @@ def test_report_schema_contains_no_transport_or_execution_instructions():
     }
     for forbidden in ("command_complete", "websocket", "can_frame", "move_joints", "set_gripper"):
         assert forbidden not in encoded
-

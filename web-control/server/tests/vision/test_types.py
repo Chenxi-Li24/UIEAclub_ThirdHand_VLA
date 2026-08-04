@@ -122,4 +122,3 @@ def test_safety_and_dry_run_reports_are_json_serializable():
     encoded = json.dumps(report.to_dict(), sort_keys=True)
     assert '"approved": false' in encoded
     assert "target_stale" in encoded
-

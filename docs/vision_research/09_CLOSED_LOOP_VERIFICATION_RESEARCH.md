@@ -51,4 +51,3 @@ ABORTED --explicit reset + new observation--> IDLE
 - 状态机属性测试：无事件顺序可越过批准；错误后不会被迟到完成复活；重复消息幂等。
 - 故障注入：丢 ack、错误 request id、完成超时、`reached=false`、相机 stale、目标换 ID、网络断开。
 - 执行日志可重放，包含所有输入、状态转换、拒绝原因和版本。
-

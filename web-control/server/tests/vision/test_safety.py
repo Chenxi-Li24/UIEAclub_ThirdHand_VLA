@@ -154,4 +154,3 @@ def test_safety_rejects_invalid_time_cloud_and_config():
             travel_weight=1.0,
             nominal_pose_m=np.zeros(3),
         )
-

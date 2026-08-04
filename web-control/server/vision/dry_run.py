@@ -103,4 +103,3 @@ def build_dry_run_report(
         target_track_id=target.track_id,
         calibration_id=target.pose.calibration_id,
     )
-

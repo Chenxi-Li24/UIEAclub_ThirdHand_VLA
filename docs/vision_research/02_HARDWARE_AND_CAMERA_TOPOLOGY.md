@@ -56,4 +56,3 @@ Phase 1 采用 stop-and-look：只在机械臂静止、RGB/depth 年龄与时间
 - 相机服务单实例并持有显式锁；健康检查不得通过打开第二条 RealSense pipeline 实现。
 - 进程所有权清晰：父服务负责启动、监控和回收子进程；禁止孤立流进程。
 - CAN bridge 与视觉服务解耦。视觉离线测试不导入或初始化 Startouch SDK。
-

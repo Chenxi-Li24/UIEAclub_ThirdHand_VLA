@@ -165,4 +165,3 @@ def select_masked_cloud(registered: RegisteredDepth, mask: Any) -> np.ndarray:
         raise InvalidDataError("mask must be a boolean array matching the Lumos image")
     selected = registered.valid & mask_array
     return np.array(registered.points_lumos_m[selected], copy=True)
-

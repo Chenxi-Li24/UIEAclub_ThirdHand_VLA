@@ -115,4 +115,3 @@ class ObjectMemory:
                 key=lambda item: (float(np.trace(item.pose.covariance_m2)), item.track_id),
             )
         )
-

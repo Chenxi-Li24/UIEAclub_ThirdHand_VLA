@@ -70,4 +70,3 @@ def test_manifest_validation_fails_closed(tmp_path, mutation, match):
     path.write_text(json.dumps(data), encoding="utf-8")
     with pytest.raises(ReplayFormatError, match=match):
         run_replay(path)
-

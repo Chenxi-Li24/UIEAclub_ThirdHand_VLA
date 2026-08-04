@@ -1,8 +1,8 @@
 # Offline Vision Safety Core — Implementation Results
 
-记录日期：2026-08-04（Asia/Shanghai）  
-Ubuntu 项目：`/home/nieqingcao/arm/UIEAclub_ThirdHand_VLA-fixed-pick-place`  
-实现分支：`codex/vision-safety-core-20260804`  
+记录日期：2026-08-04（Asia/Shanghai）
+Ubuntu 项目：`/home/nieqingcao/arm/UIEAclub_ThirdHand_VLA-fixed-pick-place`
+实现分支：`codex/vision-safety-core-20260804`
 审计基线：`1fe9da3d2256`
 
 ## 本轮结果
@@ -58,7 +58,7 @@ PYTHONPATH=/tmp/thirdhand-vision-test-deps:. \
 
 ## 合成回放结果
 
-manifest：`web-control/server/tests/vision/fixtures/synthetic_replay.json`  
+manifest：`web-control/server/tests/vision/fixtures/synthetic_replay.json`
 metrics SHA-256：`220ef79e6a5810ba5c42a07ac7b02739f5065980020006e76927056cc6c7b7a7`
 
 两次独立执行的 JSON 经 `cmp` 字节完全相同：
@@ -104,4 +104,3 @@ metrics SHA-256：`220ef79e6a5810ba5c42a07ac7b02739f5065980020006e76927056cc6c7b
 6. 用户现场逐级批准的预抓取安全高度、接近不闭合、低速单物体抓取和放置测试。
 
 在上述门禁全部通过并获得新的明确授权前，真实运动保持禁止。
-

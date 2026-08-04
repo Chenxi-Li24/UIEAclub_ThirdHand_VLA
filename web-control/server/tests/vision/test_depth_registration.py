@@ -126,4 +126,3 @@ def test_registration_validates_image_shape_range_and_mask():
     )
     with pytest.raises(InvalidDataError):
         select_masked_cloud(result, np.ones((3, 3), dtype=bool))
-

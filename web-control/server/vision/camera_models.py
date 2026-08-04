@@ -144,4 +144,3 @@ class SeucmCamera:
         rays = np.full((len(pixels), 3), np.nan, dtype=float)
         rays[valid] = vectors[valid] / norms[valid, None]
         return rays, valid
-

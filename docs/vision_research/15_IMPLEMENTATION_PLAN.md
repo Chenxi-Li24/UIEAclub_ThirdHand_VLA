@@ -615,4 +615,3 @@ The following remain explicitly manual and are not authorized by this plan:
 4. Review Dry Run overlays, proposed grasp/pregrasp/retreat poses, reachability, uncertainty, and collision margins.
 5. Approve any future live-service integration as a separate change.
 6. Approve any future real-arm movement as a separate, supervised procedure with an emergency stop and low-speed limits.
-

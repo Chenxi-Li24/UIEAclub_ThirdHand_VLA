@@ -187,4 +187,3 @@ class MultiObjectTracker:
             )
             for record in (self._records[track_id] for track_id in sorted(self._records))
         )
-

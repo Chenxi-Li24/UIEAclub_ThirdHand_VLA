@@ -141,4 +141,3 @@ def test_tracker_rejects_calibration_change_until_reset():
 def test_tracker_config_is_validated(kwargs):
     with pytest.raises(InvalidDataError):
         TrackerConfig(**kwargs)
-

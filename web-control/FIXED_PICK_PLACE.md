@@ -89,14 +89,12 @@ Per-run logs are saved under `logs/fixed_pick_place/`.
 The one-click entry is:
 
 ```bash
-cd /home/nieqingcao/arm/UIEAclub_ThirdHand_VLA-fixed-pick-place
 bash scripts/demo_fixed_pick_place.sh
 ```
 
 The Ubuntu-local Start/Stop page is:
 
 ```bash
-cd /home/nieqingcao/arm/UIEAclub_ThirdHand_VLA-fixed-pick-place
 bash scripts/open_fixed_pick_place_control.sh
 ```
 

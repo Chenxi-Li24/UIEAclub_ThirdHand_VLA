@@ -22,20 +22,18 @@ Current task settings:
 Ubuntu local launch:
 
 ```bash
-cd /home/nieqingcao/arm/UIEAclub_ThirdHand_VLA-fixed-pick-place
 bash scripts/demo_fixed_pick_place.sh
 ```
 
 Windows PowerShell remote launch:
 
 ```powershell
-ssh -t robot-ubuntu "cd /home/nieqingcao/arm/UIEAclub_ThirdHand_VLA-fixed-pick-place && bash scripts/demo_fixed_pick_place.sh"
+ssh -t robot-ubuntu "cd UIEAclub_ThirdHand_VLA && bash scripts/demo_fixed_pick_place.sh"
 ```
 
 Ubuntu desktop Start/Stop page:
 
 ```bash
-cd /home/nieqingcao/arm/UIEAclub_ThirdHand_VLA-fixed-pick-place
 bash scripts/open_fixed_pick_place_control.sh
 ```
 
@@ -110,11 +108,11 @@ centered. The software deliberately does not guess a shifted object position.
 - Address/user: `nieqingcao@192.168.58.68`
 - Ubuntu hostname: `ubuntu`
 - OS: Ubuntu 20.04.6 LTS, Linux 6.14.6-custom x86_64
-- Project: `/home/nieqingcao/arm/UIEAclub_ThirdHand_VLA`
+- Main checkout: `<main-checkout>`
 - Isolated worktree:
-  `/home/nieqingcao/arm/UIEAclub_ThirdHand_VLA-fixed-pick-place`
-- Startouch SDK: `/home/nieqingcao/arm/startouch_sdk`
-- Python: `/home/nieqingcao/miniconda3/envs/LumosTouch/bin/python`
+  `<repository-worktree>`
+- Startouch SDK: `$STARTOUCH_SDK_PATH`
+- Python: `$THIRDHAND_PYTHON`
   (Python 3.10.20)
 - Node/npm: v24.18.0 / 11.16.0
 - CAN: `can0`, UP, ERROR-ACTIVE, 1 Mbit/s, zero TX/RX error
@@ -148,7 +146,7 @@ were preserved as found.
 The pre-change audit and backup are under:
 
 ```text
-/home/nieqingcao/arm/backups/fixed-pick-place-20260729-173727/
+<backup-directory>/fixed-pick-place-20260729-173727/
 ```
 
 That directory contains commit/status/diff/untracked records for both

@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
 set -uo pipefail
 
-WORKTREE="/home/nieqingcao/arm/UIEAclub_ThirdHand_VLA-fixed-pick-place"
-PYTHON="/home/nieqingcao/miniconda3/envs/LumosTouch/bin/python"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+WORKTREE="${THIRDHAND_WORKTREE:-$(cd "$SCRIPT_DIR/.." && pwd)}"
+PYTHON="${THIRDHAND_PYTHON:-${STARTOUCH_PYTHON:-python3}}"
 CONFIG="$WORKTREE/configs/tasks/fixed_pick_place.yaml"
 RUNNER="$WORKTREE/web-control/scripts/fixed_pick_place.py"
 LOG_DIR="$WORKTREE/logs/fixed_pick_place"
-EXPECTED_BRANCH="fanxy/fixed-pick-place"
+EXPECTED_BRANCH="${THIRDHAND_EXPECTED_BRANCH:-main}"
 CAN_INTERFACE="can0"
 RESOURCE_GUARD="$WORKTREE/scripts/fixed_pick_place_resource_guard.sh"
 # Low-stiffness bottle grasp. Adaptive contact detection adds only a small
@@ -86,7 +87,8 @@ fi
 
 cd "$WORKTREE" || fail "DIRECTORY_CHECK" "cannot enter $WORKTREE"
 [[ "$PWD" == "$WORKTREE" ]] || fail "DIRECTORY_CHECK" "unexpected directory: $PWD"
-[[ -x "$PYTHON" ]] || fail "PYTHON_CHECK" "Python is not executable: $PYTHON"
+command -v "$PYTHON" >/dev/null 2>&1 ||
+  fail "PYTHON_CHECK" "Python is not executable: $PYTHON"
 
 branch="$(git branch --show-current 2>/dev/null)" ||
   fail "GIT_CHECK" "cannot read current branch"

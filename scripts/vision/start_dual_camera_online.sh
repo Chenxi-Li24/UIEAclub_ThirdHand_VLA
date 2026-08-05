@@ -38,9 +38,9 @@ validate_owned_pid() {
   task_environment="$(tr '\0' '\n' < "/proc/$task_pid/environ")"
   [[ "$task_cwd" == "$TASK_SERVER_DIR" ]] || return 2
   [[ "$task_cmdline" == *"node"* && "$task_cmdline" == *"proxy.js"* ]] || return 2
-  [[ "$task_environment" == *$'WEB_PORT=3100\n'* ]] || return 2
-  [[ "$task_environment" == *$'STARTOUCH_SIMULATE=1\n'* ]] || return 2
-  [[ "$task_environment" == *$'VISION_ONLINE_ENABLED=1\n'* ]] || return 2
+  grep -Fxq 'WEB_PORT=3100' <<<"$task_environment" || return 2
+  grep -Fxq 'STARTOUCH_SIMULATE=1' <<<"$task_environment" || return 2
+  grep -Fxq 'VISION_ONLINE_ENABLED=1' <<<"$task_environment" || return 2
   printf '%s\n' "$task_pid"
 }
 
@@ -95,7 +95,7 @@ preflight() {
   rm -f "$task_headers"
   PYTHONPATH="$TASK_SERVER_DIR" "$TASK_MODEL_PYTHON" - "$TASK_CONFIG" <<'PY'
 import pathlib
-import pyrealsense2
+import pyrealsense2 as rs
 import sys
 from vision_models.online import load_online_vision_config
 config = load_online_vision_config(pathlib.Path(sys.argv[1]))
@@ -103,6 +103,20 @@ assert config.robot_execution_enabled is False
 assert config.roles.canonical_rgb_source == "lumos_rgb"
 assert config.roles.metric_depth_source == "d435_depth"
 print("VISION_PREFLIGHT=PASS")
+PY
+  "$TASK_MODEL_PYTHON" - <<'PY'
+import pyrealsense2 as rs
+pipeline = rs.pipeline()
+config = rs.config()
+config.enable_stream(rs.stream.depth, 640, 480, rs.format.z16, 30)
+config.enable_stream(rs.stream.color, 640, 480, rs.format.bgr8, 30)
+profile = pipeline.start(config)
+try:
+    frames = pipeline.wait_for_frames(3000)
+    assert frames.get_depth_frame() and frames.get_color_frame()
+    print("D435_RGBD_PREFLIGHT=PASS")
+finally:
+    pipeline.stop()
 PY
   "$TASK_MODEL_PYTHON" - <<'PY'
 import socket

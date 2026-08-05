@@ -3,12 +3,32 @@ from __future__ import annotations
 from http.server import ThreadingHTTPServer
 import threading
 import urllib.request
+from pathlib import Path
 
 import cv2
 import numpy as np
 import pytest
 
-from lumos_http_server import decode_lumos_frame, make_handler
+from lumos_http_server import decode_lumos_frame, discover_lumos_device, make_handler
+
+
+def test_device_discovery_uses_xvisio_capture_interface_after_uvc_reenumeration(tmp_path):
+    sys_class = tmp_path / "video4linux"
+    dev_root = tmp_path / "dev"
+    sys_class.mkdir()
+    dev_root.mkdir()
+    for name, product, index in (
+        ("video0", "Intel(R) RealSense(TM) Depth Camera 435", "0"),
+        ("video6", "XVisio vSLAM: XVisio vSLAM", "0"),
+        ("video7", "XVisio vSLAM: XVisio vSLAM", "1"),
+    ):
+        entry = sys_class / name
+        entry.mkdir()
+        (entry / "name").write_text(product, encoding="utf-8")
+        (entry / "index").write_text(index, encoding="utf-8")
+        (dev_root / name).touch()
+
+    assert discover_lumos_device(sys_class, dev_root) == str(dev_root / "video6")
 
 
 def test_decode_accepts_already_converted_bgr_frame():

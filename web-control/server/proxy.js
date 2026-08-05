@@ -227,7 +227,7 @@ app.get('/camera', (req, res) => {
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
   res.flushHeaders();
   stream.pipe(res);
-  req.on('close', () => { try { stream.unpipe(res); } catch (_) { /* ok */ } });
+  req.on('close', () => cameraBridge.releaseMjpegStream(stream, res));
 });
 
 app.get('/camera_lumos', (req, res) => {
@@ -270,7 +270,7 @@ app.get('/camera_lumos', (req, res) => {
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
   res.flushHeaders();
   stream.pipe(res);
-  req.on('close', () => { try { stream.unpipe(res); } catch (_) { /* ok */ } });
+  req.on('close', () => cameraBridge.releaseMjpegStream(stream, res));
 });
 
 app.get('/camera_lumos_vision', (req, res) => {
@@ -283,7 +283,7 @@ app.get('/camera_lumos_vision', (req, res) => {
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
   res.flushHeaders();
   stream.pipe(res);
-  req.on('close', () => { try { stream.unpipe(res); } catch (_) { /* ok */ } });
+  req.on('close', () => cameraBridge.releaseMjpegStream(stream, res));
 });
 
 app.get('/api/vision/status', (_req, res) => {

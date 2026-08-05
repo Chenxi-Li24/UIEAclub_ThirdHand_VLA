@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import os
+from pathlib import Path
 import signal
 import sys
 import threading
@@ -18,6 +19,28 @@ from typing import Optional, Tuple
 
 import cv2
 import numpy as np
+
+
+def discover_lumos_device(
+    sys_class: Path = Path("/sys/class/video4linux"),
+    dev_root: Path = Path("/dev"),
+) -> str:
+    """Find the XVisio capture node without relying on V4L enumeration order."""
+
+    try:
+        entries = sorted(sys_class.glob("video*"), key=lambda item: item.name)
+    except OSError:
+        entries = []
+    for entry in entries:
+        try:
+            product = (entry / "name").read_text(encoding="utf-8").strip().lower()
+            interface_index = (entry / "index").read_text(encoding="utf-8").strip()
+        except OSError:
+            continue
+        device = dev_root / entry.name
+        if "xvisio" in product and interface_index == "0" and device.exists():
+            return str(device)
+    raise RuntimeError("cannot discover the XVisio Lumos capture interface")
 
 
 def decode_lumos_frame(frame: np.ndarray, *, width: int, height: int) -> np.ndarray:
@@ -254,7 +277,7 @@ def make_handler(capture: LumosCapture):
 
 
 def main() -> int:
-    device = os.environ.get("LUMOS_DEVICE", "/dev/video0")
+    device = os.environ.get("LUMOS_DEVICE") or discover_lumos_device()
     width = int(os.environ.get("LUMOS_WIDTH", "1280"))
     height = int(os.environ.get("LUMOS_HEIGHT", "1280"))
     output_size = int(os.environ.get("LUMOS_OUTPUT_SIZE", "480"))

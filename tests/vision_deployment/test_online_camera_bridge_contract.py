@@ -61,6 +61,31 @@ def test_stdin_contract_rejects_targets_detections_and_motion_commands():
         assert bridge.accepted_command_type({"type": forbidden}) is None
 
 
+def test_d435_capture_supervisor_retries_after_transient_start_failure(monkeypatch):
+    bridge = load_python_bridge()
+    attempts = []
+
+    def fake_once():
+        attempts.append(len(attempts) + 1)
+        if len(attempts) == 2:
+            bridge.shutdown_flag.set()
+
+    monkeypatch.setattr(bridge, "_capture_d435_once", fake_once)
+    bridge.shutdown_flag.clear()
+    try:
+        bridge.capture_d435(retry_initial_s=0.0)
+    finally:
+        bridge.shutdown_flag.clear()
+
+    assert attempts == [1, 2]
+
+
+def test_d435_and_lumos_outputs_cannot_block_each_other():
+    bridge = load_python_bridge()
+
+    assert bridge._d435_output_lock is not bridge._overlay_lock
+
+
 def test_python_bridge_import_graph_has_no_robot_can_or_motion_dependency():
     tree = ast.parse(PYTHON_BRIDGE.read_text(encoding="utf-8"))
     imports = set()
@@ -94,6 +119,9 @@ bridge.child = {{
 const spec = bridge.buildSpawnSpec();
 const rejected = bridge.send({{ type: 'detection_result', targets: [{{ actionable: true }}] }});
 const accepted = bridge.send({{ type: 'arm_state', tcp_position_m: [0,0,0], tcp_euler_rad: [0,0,0] }});
+const paused = new PassThrough();
+paused.pause();
+bridge.releaseMjpegStream(paused, new PassThrough());
 process.stdout.write(JSON.stringify({{
   stdioLength: spec.stdio.length,
   overlayMatches: bridge.getVisionMjpegStream() === overlay,
@@ -103,7 +131,8 @@ process.stdout.write(JSON.stringify({{
   onlineEnabled: spec.env.VISION_ONLINE_ENABLED,
   visionConfig: spec.env.VISION_CONFIG,
   lumosUrl: spec.env.LUMOS_SNAPSHOT_URL,
-  overlayFd: spec.env.VISION_OVERLAY_FD
+  overlayFd: spec.env.VISION_OVERLAY_FD,
+  releasedStreamFlowing: paused.readableFlowing
 }}));
 """
     result = subprocess.run(
@@ -129,4 +158,5 @@ process.stdout.write(JSON.stringify({{
         "visionConfig": "/tmp/vision.yaml",
         "lumosUrl": "http://127.0.0.1:3001/frame.jpg",
         "overlayFd": "4",
+        "releasedStreamFlowing": True,
     }

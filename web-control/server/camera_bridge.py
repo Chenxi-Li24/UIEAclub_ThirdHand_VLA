@@ -57,6 +57,7 @@ VISION_OVERLAY_FD = int(os.environ.get("VISION_OVERLAY_FD", "4"))
 _event_file = None
 _overlay_file = None
 _event_lock = threading.Lock()
+_d435_output_lock = threading.Lock()
 _overlay_lock = threading.Lock()
 shutdown_flag = threading.Event()
 
@@ -214,7 +215,7 @@ def _d435_debug_frame(frame_bgr: np.ndarray, raw_depth: np.ndarray, sequence: in
     return encoded.tobytes()
 
 
-def capture_d435() -> None:
+def _capture_d435_once() -> None:
     """Own the D435 exactly once and publish aligned depth in metres."""
 
     pipeline = None
@@ -282,7 +283,7 @@ def capture_d435() -> None:
             )
             sequence = d435_latest.publish(sample)
             _update_state(d435_sequence=sequence)
-            _write_mjpeg(sys.stdout.buffer, debug_jpeg, _overlay_lock)
+            _write_mjpeg(sys.stdout.buffer, debug_jpeg, _d435_output_lock)
     except Exception as error:
         _update_state(d435_ready=False, vision_online=False, vision_error=str(error))
         emit("camera_error", message=f"D435 capture failed: {error}")
@@ -294,6 +295,25 @@ def capture_d435() -> None:
             except Exception:
                 pass
         _update_state(d435_ready=False)
+
+
+def capture_d435(retry_initial_s: float = 0.5) -> None:
+    """Retry transient USB/UVC startup failures without growing a frame queue."""
+
+    backoff_s = max(0.0, float(retry_initial_s))
+    while not shutdown_flag.is_set():
+        _capture_d435_once()
+        if shutdown_flag.is_set():
+            return
+        emit(
+            "camera_status",
+            d435_ready=False,
+            retrying=True,
+            retry_after_s=backoff_s,
+        )
+        if shutdown_flag.wait(backoff_s):
+            return
+        backoff_s = min(2.0, max(0.1, backoff_s * 2.0))
 
 
 def _load_online_engine():

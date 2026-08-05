@@ -108,6 +108,13 @@ class CameraBridge extends EventEmitter {
     return this.child && this.child.stdio ? this.child.stdio[4] : null;
   }
 
+  /** Detach a browser without leaving the long-lived child pipe paused. */
+  releaseMjpegStream(stream, destination) {
+    if (!stream) return;
+    try { stream.unpipe(destination); } catch (_) { /* already detached */ }
+    stream.resume();
+  }
+
   /** Send a command to the Python camera bridge via stdin */
   send(message) {
     const command = message && (message.type || message.cmd);

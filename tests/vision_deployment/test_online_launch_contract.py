@@ -58,6 +58,7 @@ def test_launcher_is_fixed_to_simulation_placeholder_can_online_models_and_port_
     assert "WEB_PORT=3100" in source
     assert "systemd-run --user" in source
     assert "thirdhand-dual-camera-online" in source
+    assert "D435_RGBD_PREFLIGHT=PASS" in source
     assert "pkill" not in source
     assert "killall" not in source
     assert "fuser -k" not in source

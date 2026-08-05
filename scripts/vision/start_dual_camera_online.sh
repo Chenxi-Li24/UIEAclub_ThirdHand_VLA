@@ -141,7 +141,7 @@ server_environment() {
     VISION_CONFIG="$TASK_CONFIG" \
     LUMOS_SNAPSHOT_URL="$TASK_LUMOS_FRAME" \
     LUMOS_STREAM_URL=http://127.0.0.1:3001/camera_lumos \
-    WEB_HOST=127.0.0.1 \
+    WEB_HOST=0.0.0.0 \
     WEB_PORT=3100 \
     "$TASK_NODE" proxy.js
 }
@@ -179,7 +179,7 @@ start_background() {
     --setenv=VISION_CONFIG="$TASK_CONFIG" \
     --setenv=LUMOS_SNAPSHOT_URL="$TASK_LUMOS_FRAME" \
     --setenv=LUMOS_STREAM_URL=http://127.0.0.1:3001/camera_lumos \
-    --setenv=WEB_HOST=127.0.0.1 \
+    --setenv=WEB_HOST=0.0.0.0 \
     --setenv=WEB_PORT=3100 \
     "$TASK_NODE" proxy.js
   local task_pid=""

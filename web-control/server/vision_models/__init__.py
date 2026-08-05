@@ -13,9 +13,30 @@ __all__ = [
     "DinoMaskEncoder",
     "InstanceDetection",
     "ModelContractError",
+    "OnlinePerceptionEngine",
+    "OnlinePerceptionResult",
+    "OnlineVisionConfig",
     "RTMDetInstanceSegmenter",
     "detections_from_mmdet",
     "mask_to_patch_coverage",
+    "load_online_vision_config",
     "pool_patch_descriptor",
     "prepare_model_input",
+    "render_overlay",
 ]
+
+
+def __getattr__(name):
+    """Keep online orchestration lazy so core vision imports cannot form a cycle."""
+
+    if name in {
+        "OnlinePerceptionEngine",
+        "OnlinePerceptionResult",
+        "OnlineVisionConfig",
+        "load_online_vision_config",
+        "render_overlay",
+    }:
+        from . import online
+
+        return getattr(online, name)
+    raise AttributeError(name)

@@ -7,6 +7,7 @@ from pathlib import Path
 
 import numpy as np
 import pytest
+import yaml
 
 from vision_models.offline_replay import (
     IdentityReplayFormatError,
@@ -16,6 +17,7 @@ from vision_models.offline_replay import (
     run_identity_replay,
     write_report_atomic,
 )
+from vision_models.online import load_online_vision_config
 
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -169,9 +171,72 @@ def test_deployment_config_is_fail_closed_and_matches_selected_stack():
     config = load_remind3d_config(PROJECT_ROOT / "configs/vision/remind3d.yaml")
     assert config.canonical_image == "lumos_native_seucm"
     assert config.detector_backend == "rtmdet_tiny_ins"
-    assert config.primary_descriptor == "dinov3_vits16"
+    assert config.primary_descriptor == "dinov2_small"
     assert config.fallback_descriptor == "facebook/dinov2-small"
     assert config.dino_max_long_side == 640
     assert config.gpu_memory_limit_gib == 7.2
     assert config.latency_p95_limit_ms == 300.0
     assert not config.robot_execution_enabled
+
+
+def test_online_config_has_exact_roles_local_models_and_latest_only_schedule():
+    config = load_online_vision_config(PROJECT_ROOT / "configs/vision/remind3d.yaml")
+
+    assert config.roles.canonical_rgb_source == "lumos_rgb"
+    assert config.roles.metric_depth_source == "d435_depth"
+    assert config.roles.debug_rgb_source == "d435_rgb"
+    assert config.roles.fusion_mode == "cross_camera"
+    assert config.detector_config_path.is_file()
+    assert config.detector_checkpoint_path.is_file()
+    assert config.detector_device == config.descriptor_device == "cuda:0"
+    assert config.descriptor_model_id == "facebook/dinov2-small"
+    assert config.task_checkpoint_validated is False
+    assert config.latest_only is True
+    assert config.max_pending_frames == 1
+    assert config.max_targets_per_frame == 256
+    assert config.perception_config.max_frame_skew_ns == 50_000_000
+    assert config.perception_config.max_frame_age_ns == 200_000_000
+    assert config.perception_config.max_robot_pose_skew_ns == 50_000_000
+    assert config.identity_config.min_confirmed_hits == 2
+    assert config.robot_execution_enabled is False
+
+
+@pytest.mark.parametrize(
+    "mutation,error",
+    [
+        (
+            lambda raw: raw["models"].update(
+                detector_checkpoint="https://example.invalid/model.pth"
+            ),
+            "local file",
+        ),
+        (
+            lambda raw: raw["models"].update(detector_config="missing.py"),
+            "does not exist",
+        ),
+        (
+            lambda raw: raw["online"].update(detector_device="cpu"),
+            "CUDA",
+        ),
+        (
+            lambda raw: raw["online"].update(max_pending_frames="one"),
+            "max_pending_frames",
+        ),
+        (
+            lambda raw: raw["safety"].update(robot_execution_enabled=True),
+            "remain false",
+        ),
+    ],
+)
+def test_online_config_rejects_unsafe_or_wrongly_typed_values(tmp_path, mutation, error):
+    source = PROJECT_ROOT / "configs/vision/remind3d.yaml"
+    raw = yaml.safe_load(source.read_text(encoding="utf-8"))
+    for key in ("detector_config", "detector_checkpoint"):
+        value = raw["models"][key]
+        raw["models"][key] = str((source.parent / value).resolve())
+    mutation(raw)
+    candidate = tmp_path / "remind3d.yaml"
+    candidate.write_text(yaml.safe_dump(raw), encoding="utf-8")
+
+    with pytest.raises(IdentityReplayFormatError, match=error):
+        load_online_vision_config(candidate)

@@ -3,13 +3,38 @@ canonical_image: lumos_native_seucm
 
 models:
   detector_backend: rtmdet_tiny_ins
-  detector_config: models/vision/rtmdet/rtmdet-ins_tiny_lumos.py
-  detector_checkpoint: models/vision/rtmdet/rtmdet-ins_tiny_lumos.pth
-  primary_descriptor: dinov3_vits16
-  primary_descriptor_id: facebook/dinov3-vits16-pretrain-lvd1689m
+  detector_config: ../../../miniconda3/envs/thirdhand-remind3d/lib/python3.11/site-packages/mmdet/.mim/configs/rtmdet/rtmdet-ins_tiny_8xb32-300e_coco.py
+  detector_checkpoint: ../../models/vision/rtmdet/rtmdet-ins_tiny_8xb32-300e_coco_20221130_151727-ec670f7e.pth
+  detector_min_score: 0.35
+  label_set: coco
+  primary_descriptor: dinov2_small
+  primary_descriptor_id: facebook/dinov2-small
   fallback_descriptor: facebook/dinov2-small
   dino_max_long_side: 640
   min_patch_coverage: 0.10
+
+roles:
+  canonical_rgb_source: lumos_rgb
+  metric_depth_source: d435_depth
+  debug_rgb_source: d435_rgb
+  fusion_mode: cross_camera
+
+online:
+  enabled: true
+  scheduling: latest_only
+  max_pending_frames: 1
+  max_targets_per_frame: 256
+  detector_device: cuda:0
+  descriptor_device: cuda:0
+  task_checkpoint_validated: false
+  min_depth_m: 0.10
+  max_depth_m: 2.0
+
+timing:
+  max_frame_skew_ns: 50000000
+  max_frame_age_ns: 200000000
+  max_robot_pose_skew_ns: 50000000
+  stale_after_ns: 2000000000
 
 identity:
   max_cosine_distance: 0.40

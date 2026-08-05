@@ -1,0 +1,224 @@
+from __future__ import annotations
+
+import json
+
+import numpy as np
+
+from vision.dual_camera import DualCameraConfig, DualCameraPerception
+from vision.identity import PersistentIdentityConfig, PersistentIdentityMemory
+from vision.instance_pose import InstancePoseConfig
+from vision.online_frames import CameraRoleMap, FramePair, RgbFrame
+from vision.types import FrameStamp
+from vision_models.contracts import InstanceDetection, ModelContractError
+from vision_models.online import OnlinePerceptionEngine, OnlineVisionConfig, render_overlay
+
+
+class FakeSegmenter:
+    def __init__(self, detections=(), error: Exception | None = None):
+        self.detections = tuple(detections)
+        self.error = error
+        self.calls = 0
+
+    def predict(self, image_rgb):
+        self.calls += 1
+        if self.error is not None:
+            raise self.error
+        return self.detections
+
+
+class FakeEncoder:
+    def __init__(self):
+        self.calls = 0
+
+    def encode(self, image_rgb, masks):
+        self.calls += 1
+        return tuple(np.array([1.0, 0.0, 0.0]) for _ in masks)
+
+
+def roles() -> CameraRoleMap:
+    return CameraRoleMap("lumos_rgb", "d435_depth", "d435_rgb", "cross_camera")
+
+
+def identity_config() -> PersistentIdentityConfig:
+    return PersistentIdentityConfig(
+        max_cosine_distance=0.40,
+        ambiguity_margin=0.03,
+        appearance_weight=0.80,
+        position_weight=0.20,
+        max_position_distance_m=0.20,
+        position_gate_max_age_ns=500_000_000,
+        occluded_after_ns=300_000_000,
+        inactive_after_ns=1_500_000_000,
+        min_confirmed_hits=2,
+        min_memory_confidence=0.80,
+        min_memory_visibility=0.50,
+        work_bank_size=4,
+        stable_bank_size=4,
+        max_identities=8,
+        reacquire_confirmed_hits=2,
+        max_actionable_position_std_m=0.025,
+        max_actionable_pose_age_ns=200_000_000,
+        min_actionable_pose_hits=2,
+    )
+
+
+def detection() -> InstanceDetection:
+    mask = np.zeros((5, 5), dtype=bool)
+    mask[1:4, 1:4] = True
+    return InstanceDetection(
+        detection_id=7,
+        label="bottle",
+        score=0.95,
+        bbox_xyxy=np.array([1.0, 1.0, 4.0, 4.0]),
+        mask=mask,
+    )
+
+
+def pair(frame_id: int = 1, timestamp_ns: int = 1_000_000_000) -> FramePair:
+    image = np.zeros((5, 5, 3), dtype=np.uint8)
+    image[1:4, 1:4, 1] = 255
+    rgb = RgbFrame(FrameStamp("lumos_rgb", frame_id, timestamp_ns), image)
+    return FramePair(rgb, None, timestamp_ns, None, ("depth_unavailable",))
+
+
+def config() -> OnlineVisionConfig:
+    fusion = perception().config
+    return OnlineVisionConfig(
+        roles=roles(),
+        detector_backend="rtmdet_tiny_ins",
+        detector_config_path=None,
+        detector_checkpoint_path=None,
+        detector_labels=("bottle",),
+        descriptor_model_id="facebook/dinov2-small",
+        detector_device="cuda:0",
+        descriptor_device="cuda:0",
+        detector_min_score=0.35,
+        dino_max_long_side=640,
+        min_patch_coverage=0.10,
+        task_checkpoint_validated=False,
+        latest_only=True,
+        max_pending_frames=1,
+        max_targets_per_frame=256,
+        latency_p95_limit_ms=300.0,
+        gpu_memory_limit_gib=7.2,
+        robot_execution_enabled=False,
+        identity_config=identity_config(),
+        perception_config=fusion,
+    )
+
+
+def perception() -> DualCameraPerception:
+    return DualCameraPerception(
+        PersistentIdentityMemory(identity_config()),
+        DualCameraConfig(
+            max_frame_skew_ns=50_000_000,
+            max_frame_age_ns=200_000_000,
+            max_robot_pose_skew_ns=50_000_000,
+            min_depth_m=0.10,
+            max_depth_m=2.0,
+            pose=InstancePoseConfig(4, 0, 3.5, 0.002),
+            roles=roles(),
+        ),
+    )
+
+
+def engine(detections=(None,), error=None) -> OnlinePerceptionEngine:
+    selected = (detection(),) if detections == (None,) else detections
+    return OnlinePerceptionEngine(
+        FakeSegmenter(selected, error=error),
+        FakeEncoder(),
+        perception(),
+        config(),
+    )
+
+
+def test_engine_uses_lumos_identity_and_rejects_missing_geometry_and_task_checkpoint():
+    result = engine().process(
+        pair(),
+        robot_pose=None,
+        calibration=None,
+        arm_stationary=True,
+        now_ns=1_020_000_000,
+    )
+
+    target = result.targets[0]
+    assert result.canonical_rgb_source == "lumos_rgb"
+    assert result.metric_depth_source == "d435_depth"
+    assert target.identity_id == 1
+    assert target.actionable is False
+    assert "calibration_unavailable" in target.reasons
+    assert "task_checkpoint_unvalidated" in target.reasons
+    assert result.model_ready is True
+
+
+def test_second_frame_confirms_same_identity_but_execution_stays_locked():
+    online = engine()
+    first = online.process(pair(1, 1_000_000_000), None, None, True, 1_010_000_000)
+    second = online.process(pair(2, 1_100_000_000), None, None, True, 1_110_000_000)
+
+    assert first.targets[0].identity_id == second.targets[0].identity_id == 1
+    assert second.targets[0].identity_status.value == "confirmed"
+    assert second.targets[0].actionable is False
+    assert second.robot_execution_enabled is False
+
+
+def test_empty_detections_skip_encoder_and_serialize_as_empty_targets():
+    segmenter = FakeSegmenter(())
+    encoder = FakeEncoder()
+    online = OnlinePerceptionEngine(segmenter, encoder, perception(), config())
+
+    result = online.process(pair(), None, None, True, 1_010_000_000)
+
+    assert result.targets == ()
+    assert encoder.calls == 0
+    assert result.to_event()["targets"] == []
+
+
+def test_model_error_is_reported_without_stale_targets_or_actionability():
+    online = engine(error=ModelContractError("synthetic detector failure"))
+
+    result = online.process(pair(), None, None, True, 1_010_000_000)
+
+    assert result.model_ready is False
+    assert result.targets == ()
+    assert result.model_error == "synthetic detector failure"
+    assert "model_unavailable" in result.blockers
+    assert result.to_event()["robot_execution_enabled"] is False
+
+
+def test_latency_history_is_bounded_to_256_and_reports_p95(monkeypatch):
+    online = engine(detections=())
+    ticks = iter(
+        tick
+        for index in range(300)
+        for tick in (10_000_000_000, 10_000_000_000 + index * 1_000_000)
+    )
+    monkeypatch.setattr("vision_models.online.time.perf_counter_ns", lambda: next(ticks))
+
+    for index in range(300):
+        timestamp_ns = 1_000_000_000 + index * 1_000_000
+        result = online.process(
+            pair(index + 1, timestamp_ns),
+            None,
+            None,
+            True,
+            timestamp_ns,
+        )
+
+    assert online.latency_sample_count == 256
+    assert 285.0 < result.latency_p95_ms < 288.0
+
+
+def test_overlay_keeps_native_dimensions_and_event_contains_plain_finite_json():
+    source = pair().rgb.image_rgb
+    result = engine().process(pair(), None, None, True, 1_010_000_000)
+
+    overlay = render_overlay(source, result)
+    payload = result.to_event()
+
+    assert overlay.shape == source.shape
+    assert overlay.dtype == np.uint8
+    assert not np.shares_memory(overlay, source)
+    assert json.loads(json.dumps(payload, allow_nan=False)) == payload
+    assert payload["targets"][0]["identity_id"] == 1
+    assert payload["canonical_rgb_source"] == "lumos_rgb"

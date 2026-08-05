@@ -3,6 +3,7 @@
 numpy==2.2.6
 scipy==1.15.3
 opencv-python-headless==4.11.0.86
+pyrealsense2==2.57.7.10387
 PyYAML==6.0.2
 psutil==7.0.0
 scikit-learn==1.7.1

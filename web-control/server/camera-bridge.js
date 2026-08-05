@@ -4,7 +4,6 @@ const { EventEmitter } = require('events');
 const { spawn } = require('child_process');
 const readline = require('readline');
 const path = require('path');
-const os = require('os');
 
 class CameraBridge extends EventEmitter {
   constructor(config) {
@@ -26,29 +25,13 @@ class CameraBridge extends EventEmitter {
       execSync('for d in /sys/bus/usb/devices/*/idVendor; do d=$(dirname "$d"); [ "$(cat "$d/idVendor" 2>/dev/null)$(cat "$d/idProduct" 2>/dev/null)" = "80860b07" ] && echo on | sudo -n tee "$d/power/control" > /dev/null 2>&1 && echo -1 | sudo -n tee "$d/power/autosuspend" > /dev/null 2>&1; done', { timeout: 3000 });
     } catch (_) { /* sudo -n may fail if not passwordless, ignore */ }
 
-    const python = this.config.python || process.env.STARTOUCH_PYTHON || 'python3';
-    const script = path.join(__dirname, 'camera_bridge.py');
-    const calibFile = this.config.calibrationFile ||
-      path.join(os.homedir(), 'calibration', 'd435_handeye_result.json');
-    const yoloModel = this.config.yoloModel || path.join(__dirname, 'yolov8n.pt');
-
-    const env = {
-      ...process.env,
-      PYTHONUNBUFFERED: '1',
-      CAMERA_CALIB_FILE: calibFile,
-      CAMERA_YOLO_MODEL: yoloModel,
-      CAMERA_DETECT_INTERVAL: String(this.config.detectionInterval || 10),
-      CAMERA_JPEG_QUALITY: String(this.config.jpegQuality || 70),
-      CAMERA_DESK_Z: String(this.config.deskZ || 0.0),
-      CAMERA_SAFE_Z: String(this.config.safeZ || 0.12),
-      CAMERA_EVENT_FD: '3',
-    };
+    const spec = this.buildSpawnSpec();
 
     this.stopping = false;
-    this.child = spawn(python, ['-u', script], {
-      cwd: __dirname,
-      env,
-      stdio: ['pipe', 'pipe', 'pipe', 'pipe'],  // stdin, stdout(MJPEG D435), stderr, fd:3(events)
+    this.child = spawn(spec.python, spec.args, {
+      cwd: spec.cwd,
+      env: spec.env,
+      stdio: spec.stdio,
     });
 
     const child = this.child;
@@ -81,13 +64,49 @@ class CameraBridge extends EventEmitter {
     });
   }
 
+  buildSpawnSpec() {
+    const python = this.config.python || process.env.CAMERA_PYTHON ||
+      process.env.STARTOUCH_PYTHON || 'python3';
+    const script = path.join(__dirname, 'camera_bridge.py');
+    const visionConfig = this.config.visionConfig || process.env.VISION_CONFIG ||
+      path.resolve(__dirname, '../../configs/vision/remind3d.yaml');
+    const lumosSnapshotUrl = this.config.lumosSnapshotUrl ||
+      process.env.LUMOS_SNAPSHOT_URL || 'http://127.0.0.1:3001/frame.jpg';
+    const onlineEnabled = this.config.onlineEnabled === undefined
+      ? process.env.VISION_ONLINE_ENABLED === '1'
+      : Boolean(this.config.onlineEnabled);
+    return {
+      python,
+      args: ['-u', script],
+      cwd: __dirname,
+      env: {
+        ...process.env,
+        PYTHONUNBUFFERED: '1',
+        CAMERA_JPEG_QUALITY: String(this.config.jpegQuality || 70),
+        CAMERA_EVENT_FD: '3',
+        VISION_OVERLAY_FD: '4',
+        VISION_ONLINE_ENABLED: onlineEnabled ? '1' : '0',
+        VISION_CONFIG: visionConfig,
+        LUMOS_SNAPSHOT_URL: lumosSnapshotUrl,
+      },
+      stdio: ['pipe', 'pipe', 'pipe', 'pipe', 'pipe'],
+    };
+  }
+
   /** Get the MJPEG stream (child's stdout) for HTTP piping */
   getMjpegStream() {
     return this.child ? this.child.stdout : null;
   }
 
+  /** Canonical Lumos overlay stream from the dedicated child fd 4. */
+  getVisionMjpegStream() {
+    return this.child && this.child.stdio ? this.child.stdio[4] : null;
+  }
+
   /** Send a command to the Python camera bridge via stdin */
   send(message) {
+    const command = message && (message.type || message.cmd);
+    if (!['arm_state', 'get_status', 'shutdown'].includes(command)) return false;
     if (!this.child || !this.child.stdin.writable) {
       this.emit('bridge_error', { message: 'Camera bridge not ready' });
       return false;

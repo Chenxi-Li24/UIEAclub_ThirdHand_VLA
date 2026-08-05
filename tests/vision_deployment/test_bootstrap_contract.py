@@ -7,6 +7,7 @@ import sys
 from pathlib import Path
 
 import pytest
+from packaging.requirements import Requirement
 
 ROOT = Path(__file__).parents[2]
 BOOTSTRAP = ROOT / "scripts/vision/bootstrap_remind3d_env.sh"
@@ -75,6 +76,15 @@ def test_requirements_and_runtime_artifacts_are_outside_robot_environment():
     assert "mmdet==3.3.0" in requirements
     assert "LumosTouch" not in requirements
     assert "startouch" not in requirements.lower()
+    parsed = {
+        item.name: item
+        for item in (
+            Requirement(line)
+            for line in requirements.splitlines()
+            if line and not line.startswith("#")
+        )
+    }
+    assert str(parsed["pyrealsense2"].specifier) == "==2.57.7.10387"
 
     bootstrap = BOOTSTRAP.read_text(encoding="utf-8")
     assert "/home/" not in bootstrap
@@ -89,6 +99,7 @@ def test_requirements_and_runtime_artifacts_are_outside_robot_environment():
     assert "EXPECTED_TORCHVISION_VERSION" in bootstrap
     assert "EXPECTED_CUDA_BUILD" in bootstrap
     assert 'torch.version.cuda == os.environ["EXPECTED_CUDA_BUILD"]' in bootstrap
+    assert "import pyrealsense2" in bootstrap
 
 
 def test_bootstrap_rebuilds_mmcv_from_source_after_cuda_op_gate_failure(tmp_path):

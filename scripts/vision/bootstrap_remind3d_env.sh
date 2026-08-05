@@ -109,7 +109,7 @@ if ! mmcv_op_gate; then
 fi
 
 "$CONDA_EXE" run --name "$ENV_NAME" python -c \
-  'import cv2, mmcv, mmdeploy, mmdet, mmengine, numpy, scipy, torch, transformers; print("IMPORT_GATE=PASS"); print("TORCH=" + torch.__version__); print("CUDA_BUILD=" + str(torch.version.cuda)); print("MMCV=" + mmcv.__version__)'
+  'import pyrealsense2; import cv2, mmcv, mmdeploy, mmdet, mmengine, numpy, scipy, torch, transformers; print("IMPORT_GATE=PASS"); print("TORCH=" + torch.__version__); print("CUDA_BUILD=" + str(torch.version.cuda)); print("MMCV=" + mmcv.__version__)'
 "$CONDA_EXE" run --name "$ENV_NAME" python -c \
   'import sys; assert sys.version_info[:2] == (3, 11), sys.version; print("PYTHON_POST_GATE=PASS")'
 

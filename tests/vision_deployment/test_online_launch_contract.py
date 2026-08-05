@@ -56,6 +56,8 @@ def test_launcher_is_fixed_to_simulation_placeholder_can_online_models_and_port_
     assert "STARTOUCH_GRIPPER=0" in source
     assert "VISION_ONLINE_ENABLED=1" in source
     assert "WEB_PORT=3100" in source
+    assert "systemd-run --user" in source
+    assert "thirdhand-dual-camera-online" in source
     assert "pkill" not in source
     assert "killall" not in source
     assert "fuser -k" not in source

@@ -12,6 +12,7 @@ TASK_NODE="$(command -v node || true)"
 TASK_CONFIG="$TASK_ROOT_DIR/configs/vision/remind3d.yaml"
 TASK_LUMOS_HEALTH="http://127.0.0.1:3001/health"
 TASK_LUMOS_FRAME="http://127.0.0.1:3001/frame.jpg"
+TASK_SYSTEMD_UNIT="thirdhand-dual-camera-online"
 
 usage() {
   printf 'usage: %s [--foreground|--background|--stop|--status]\n' "$0" >&2
@@ -138,12 +139,47 @@ start_background() {
   fi
   preflight
   mkdir -p "$TASK_RUNTIME_DIR"
-  (
-    cd "$TASK_SERVER_DIR"
-    exec >>"$TASK_LOG_FILE" 2>&1
-    server_environment
-  ) &
-  local task_pid=$!
+  command -v systemd-run >/dev/null
+  command -v systemctl >/dev/null
+  if systemctl --user is-active --quiet "$TASK_SYSTEMD_UNIT.service"; then
+    printf 'systemd unit is already active without a verified PID file: %s\n' \
+      "$TASK_SYSTEMD_UNIT.service" >&2
+    return 1
+  fi
+  systemctl --user reset-failed "$TASK_SYSTEMD_UNIT.service" 2>/dev/null || true
+  systemd-run --user \
+    --unit="$TASK_SYSTEMD_UNIT" \
+    --collect \
+    --service-type=exec \
+    --working-directory="$TASK_SERVER_DIR" \
+    --property="StandardOutput=append:$TASK_LOG_FILE" \
+    --property="StandardError=append:$TASK_LOG_FILE" \
+    --setenv=STARTOUCH_SIMULATE=1 \
+    --setenv=STARTOUCH_CAN_INTERFACE=thirdhand-vision-test \
+    --setenv=STARTOUCH_GRIPPER=0 \
+    --setenv=STARTOUCH_REQUIRE_CAN_RX=0 \
+    --setenv=STARTOUCH_PYTHON=python3 \
+    --setenv=CAMERA_ENABLED=1 \
+    --setenv=CAMERA_PYTHON="$TASK_MODEL_PYTHON" \
+    --setenv=VISION_ONLINE_ENABLED=1 \
+    --setenv=VISION_CONFIG="$TASK_CONFIG" \
+    --setenv=LUMOS_SNAPSHOT_URL="$TASK_LUMOS_FRAME" \
+    --setenv=LUMOS_STREAM_URL=http://127.0.0.1:3001/camera_lumos \
+    --setenv=WEB_HOST=127.0.0.1 \
+    --setenv=WEB_PORT=3100 \
+    "$TASK_NODE" proxy.js
+  local task_pid=""
+  for _ in $(seq 1 30); do
+    task_pid="$(systemctl --user show "$TASK_SYSTEMD_UNIT.service" -p MainPID --value)"
+    if [[ "$task_pid" =~ ^[1-9][0-9]*$ ]]; then
+      break
+    fi
+    sleep 0.1
+  done
+  if [[ ! "$task_pid" =~ ^[1-9][0-9]*$ ]]; then
+    printf 'systemd did not report an owned service PID\n' >&2
+    return 1
+  fi
   printf '%s\n' "$task_pid" > "$TASK_PID_FILE"
   for _ in $(seq 1 50); do
     if ! kill -0 "$task_pid" 2>/dev/null; then
@@ -158,6 +194,8 @@ start_background() {
     sleep 0.1
   done
   printf 'server did not expose status API; see %s\n' "$TASK_LOG_FILE" >&2
+  kill -TERM "$task_pid" 2>/dev/null || true
+  rm -f "$TASK_PID_FILE"
   return 1
 }
 

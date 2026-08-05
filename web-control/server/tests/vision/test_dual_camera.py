@@ -14,6 +14,7 @@ from vision.dual_camera import (
 from vision.calibration_gate import audit_handeye_calibration
 from vision.identity import PersistentIdentityConfig, PersistentIdentityMemory
 from vision.instance_pose import InstancePoseConfig
+from vision.online_frames import CameraRoleMap
 from vision.types import FrameStamp, InvalidDataError
 from vision_models.contracts import InstanceDetection
 
@@ -55,6 +56,12 @@ def pipeline() -> DualCameraPerception:
                 erosion_px=0,
                 mad_scale=3.5,
                 noise_floor_m=0.002,
+            ),
+            roles=CameraRoleMap(
+                "lumos_rgb",
+                "d435_depth",
+                "d435_rgb",
+                "cross_camera",
             ),
         ),
     )
@@ -119,8 +126,8 @@ def process_frame(
     robot_timestamp_ns = timestamp_ns + robot_pose_skew_ns
     fusion_timestamp_ns = max(timestamp_ns, d435_timestamp_ns)
     return perception.process(
-        lumos_stamp=FrameStamp("lumos_rgb", timestamp_ns // 10_000_000, timestamp_ns),
-        d435_stamp=FrameStamp(
+        rgb_stamp=FrameStamp("lumos_rgb", timestamp_ns // 10_000_000, timestamp_ns),
+        depth_stamp=FrameStamp(
             "d435_depth",
             timestamp_ns // 10_000_000,
             d435_timestamp_ns,
@@ -136,7 +143,7 @@ def process_frame(
         detections=(detection(score),),
         descriptors=(np.array([1.0, 0.0, 0.0]),),
         visibilities=(0.95,),
-        d435_depth_z_m=depth_image,
+        depth_z_m=depth_image,
         calibration=calibration_override or calibration_bundle(validated),
         arm_stationary=arm_stationary,
         now_ns=max(fusion_timestamp_ns, robot_timestamp_ns) + now_lag_ns,
@@ -157,6 +164,54 @@ def test_roles_are_explicit_and_valid_second_observation_becomes_actionable():
     assert second.targets[0].registered_depth_points == 9
     assert second.targets[0].actionable
     assert second.targets[0].reasons == ()
+
+
+def test_missing_geometry_keeps_lumos_identity_but_never_becomes_actionable():
+    perception = pipeline()
+    timestamp_ns = 100_000_000
+    result = perception.process(
+        rgb_stamp=FrameStamp("lumos_rgb", 10, timestamp_ns),
+        depth_stamp=None,
+        robot_pose=None,
+        detections=(detection(),),
+        descriptors=(np.array([1.0, 0.0, 0.0]),),
+        visibilities=(0.95,),
+        depth_z_m=None,
+        calibration=None,
+        arm_stationary=True,
+        now_ns=timestamp_ns,
+    )
+
+    target = result.targets[0]
+    assert result.canonical_rgb_source == "lumos_rgb"
+    assert result.metric_depth_source == "d435_depth"
+    assert result.frame_skew_ns is None
+    assert target.identity_id == 1
+    assert target.pose is None
+    assert target.actionable is False
+    assert target.reasons == (
+        "calibration_unavailable",
+        "depth_unavailable",
+        "robot_pose_unavailable",
+        "identity_not_actionable",
+    )
+
+
+def test_configured_roles_reject_frames_from_a_different_rgb_source():
+    perception = pipeline()
+    with pytest.raises(InvalidDataError, match="canonical RGB source"):
+        perception.process(
+            rgb_stamp=FrameStamp("d435_rgb", 10, 100_000_000),
+            depth_stamp=None,
+            robot_pose=None,
+            detections=(detection(),),
+            descriptors=(np.array([1.0, 0.0, 0.0]),),
+            visibilities=(0.95,),
+            depth_z_m=None,
+            calibration=None,
+            arm_stationary=True,
+            now_ns=100_000_000,
+        )
 
 
 def test_unvalidated_calibration_preserves_appearance_identity_but_never_pose():

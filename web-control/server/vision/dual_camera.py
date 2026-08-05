@@ -21,6 +21,7 @@ from .identity import (
 )
 from .instance_pose import InstancePoseConfig, estimate_instance_pose
 from .geometry import validate_transform
+from .online_frames import CameraRoleMap
 from .types import CalibrationRef, FrameStamp, InvalidDataError, PoseEstimate
 
 
@@ -180,6 +181,7 @@ class DualCameraConfig:
     min_depth_m: float
     max_depth_m: float
     pose: InstancePoseConfig
+    roles: CameraRoleMap
 
     def __post_init__(self) -> None:
         time_limits = (
@@ -192,6 +194,8 @@ class DualCameraConfig:
         limits = np.asarray([self.min_depth_m, self.max_depth_m], dtype=float)
         if not np.isfinite(limits).all() or not 0.0 < limits[0] < limits[1]:
             raise InvalidDataError("depth limits must satisfy 0 < min < max")
+        if not isinstance(self.roles, CameraRoleMap):
+            raise InvalidDataError("dual-camera config requires a camera role map")
 
 
 @dataclass(frozen=True)
@@ -211,7 +215,7 @@ class DualCameraTarget:
 class DualCameraResult:
     canonical_rgb_source: str
     metric_depth_source: str
-    frame_skew_ns: int
+    frame_skew_ns: Optional[int]
     targets: tuple[DualCameraTarget, ...]
 
 
@@ -229,29 +233,35 @@ class DualCameraPerception:
     def process(
         self,
         *,
-        lumos_stamp: FrameStamp,
-        d435_stamp: FrameStamp,
-        robot_pose: StampedRobotPose,
+        rgb_stamp: FrameStamp,
+        depth_stamp: Optional[FrameStamp],
+        robot_pose: Optional[StampedRobotPose],
         detections: Iterable[InstanceDetection],
         descriptors: Iterable[np.ndarray],
         visibilities: Iterable[float],
-        d435_depth_z_m: np.ndarray,
-        calibration: DualCameraCalibrationBundle,
+        depth_z_m: Optional[np.ndarray],
+        calibration: Optional[DualCameraCalibrationBundle],
         arm_stationary: bool,
         now_ns: int,
     ) -> DualCameraResult:
-        if lumos_stamp.source != "lumos_rgb":
+        if rgb_stamp.source != self.config.roles.canonical_rgb_source:
             raise InvalidDataError("canonical RGB source must be lumos_rgb")
-        if d435_stamp.source != "d435_depth":
+        if depth_stamp is not None and depth_stamp.source != self.config.roles.metric_depth_source:
             raise InvalidDataError("metric depth source must be d435_depth")
-        if not isinstance(calibration, DualCameraCalibrationBundle):
-            raise InvalidDataError("calibration must be a DualCameraCalibrationBundle")
-        calibration.verify_integrity()
-        if not isinstance(robot_pose, StampedRobotPose):
-            raise InvalidDataError("robot_pose must be a StampedRobotPose")
-        if robot_pose.stamp.source != "robot_flange_pose":
-            raise InvalidDataError("robot pose source must be robot_flange_pose")
-        robot_transform = validate_transform(robot_pose.t_base_from_flange)
+        if (depth_stamp is None) != (depth_z_m is None):
+            raise InvalidDataError("depth stamp and depth image must be provided together")
+        if calibration is not None:
+            if not isinstance(calibration, DualCameraCalibrationBundle):
+                raise InvalidDataError("calibration must be a DualCameraCalibrationBundle or None")
+            calibration.verify_integrity()
+        if robot_pose is not None:
+            if not isinstance(robot_pose, StampedRobotPose):
+                raise InvalidDataError("robot_pose must be a StampedRobotPose or None")
+            if robot_pose.stamp.source != "robot_flange_pose":
+                raise InvalidDataError("robot pose source must be robot_flange_pose")
+            robot_transform = validate_transform(robot_pose.t_base_from_flange)
+        else:
+            robot_transform = None
         if not isinstance(arm_stationary, (bool, np.bool_)):
             raise InvalidDataError("arm_stationary must be an explicit boolean")
 
@@ -265,41 +275,72 @@ class DualCameraPerception:
                 "detections, descriptors, and visibilities must have equal length"
             )
         for item in detection_list:
-            if item.mask.shape != (calibration.lumos.height, calibration.lumos.width):
+            if calibration is not None and item.mask.shape != (
+                calibration.lumos.height,
+                calibration.lumos.width,
+            ):
                 raise InvalidDataError("instance masks must use native Lumos pixels")
 
-        frame_skew_ns = abs(lumos_stamp.monotonic_ns - d435_stamp.monotonic_ns)
-        fusion_ns = max(lumos_stamp.monotonic_ns, d435_stamp.monotonic_ns)
-        robot_pose_skew_ns = abs(robot_pose.stamp.monotonic_ns - fusion_ns)
-        if now_ns < max(fusion_ns, robot_pose.stamp.monotonic_ns):
+        frame_skew_ns = (
+            None
+            if depth_stamp is None
+            else abs(rgb_stamp.monotonic_ns - depth_stamp.monotonic_ns)
+        )
+        fusion_ns = (
+            rgb_stamp.monotonic_ns
+            if depth_stamp is None
+            else max(rgb_stamp.monotonic_ns, depth_stamp.monotonic_ns)
+        )
+        robot_pose_skew_ns = (
+            None
+            if robot_pose is None
+            else abs(robot_pose.stamp.monotonic_ns - fusion_ns)
+        )
+        latest_observation_ns = max(
+            fusion_ns,
+            0 if robot_pose is None else robot_pose.stamp.monotonic_ns,
+        )
+        if now_ns < latest_observation_ns:
             raise InvalidDataError("now_ns cannot precede camera or robot observations")
         fusion_stamp = FrameStamp(
-            "lumos_rgb+d435_depth",
-            lumos_stamp.frame_id,
+            f"{self.config.roles.canonical_rgb_source}+{self.config.roles.metric_depth_source}",
+            rgb_stamp.frame_id,
             fusion_ns,
         )
 
         common_reasons: list[str] = []
-        if not calibration.calibration.validated:
+        if calibration is None:
+            common_reasons.append("calibration_unavailable")
+        elif not calibration.calibration.validated:
             common_reasons.append("calibration_not_validated")
+        if depth_stamp is None:
+            common_reasons.append("depth_unavailable")
+        if robot_pose is None:
+            common_reasons.append("robot_pose_unavailable")
         if not arm_stationary:
             common_reasons.append("arm_not_stationary")
-        if frame_skew_ns > self.config.max_frame_skew_ns:
+        if frame_skew_ns is not None and frame_skew_ns > self.config.max_frame_skew_ns:
             common_reasons.append("frame_skew_exceeded")
         if now_ns - fusion_ns > self.config.max_frame_age_ns:
             common_reasons.append("camera_frames_stale")
-        if robot_pose_skew_ns > self.config.max_robot_pose_skew_ns:
+        if (
+            robot_pose_skew_ns is not None
+            and robot_pose_skew_ns > self.config.max_robot_pose_skew_ns
+        ):
             common_reasons.append("robot_pose_skew_exceeded")
 
         can_fuse_depth = not common_reasons
         registered = None
-        t_base_from_lumos = robot_transform @ (
-            calibration.t_flange_from_lumos
-        )
-        t_base_from_lumos = validate_transform(t_base_from_lumos)
+        t_base_from_lumos = None
         if can_fuse_depth:
+            assert calibration is not None
+            assert robot_transform is not None
+            assert depth_z_m is not None
+            t_base_from_lumos = validate_transform(
+                robot_transform @ calibration.t_flange_from_lumos
+            )
             registered = register_depth_to_lumos(
-                d435_depth_z_m,
+                depth_z_m,
                 calibration.d435,
                 calibration.t_lumos_from_d435,
                 calibration.lumos,
@@ -318,6 +359,7 @@ class DualCameraPerception:
             point_count = 0
             depth_reason = None
             if registered is not None:
+                assert t_base_from_lumos is not None
                 point_count = int(np.count_nonzero(registered.valid & item.mask))
                 try:
                     pose = estimate_instance_pose(
@@ -345,7 +387,8 @@ class DualCameraPerception:
                 )
             )
 
-        self.identity_memory.set_calibration(calibration.calibration)
+        if calibration is not None:
+            self.identity_memory.set_calibration(calibration.calibration)
         update = self.identity_memory.update(observations, fusion_ns)
         snapshots = {item.identity_id: item for item in update.snapshots}
         targets: list[DualCameraTarget] = []
@@ -375,8 +418,8 @@ class DualCameraPerception:
                 )
             )
         return DualCameraResult(
-            canonical_rgb_source="lumos_rgb",
-            metric_depth_source="d435_depth",
+            canonical_rgb_source=self.config.roles.canonical_rgb_source,
+            metric_depth_source=self.config.roles.metric_depth_source,
             frame_skew_ns=frame_skew_ns,
             targets=tuple(targets),
         )

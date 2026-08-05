@@ -12,6 +12,13 @@ from .dual_camera import (
     StampedRobotPose,
     dual_camera_calibration_id,
 )
+from .online_frames import (
+    CameraRoleMap,
+    DepthFrame,
+    FramePair,
+    LatestFramePairer,
+    RgbFrame,
+)
 from .dry_run import build_dry_run_report, generate_top_down_candidates
 from .geometry import (
     invert_transform,
@@ -83,6 +90,11 @@ __all__ = [
     "audit_handeye_calibration",
     "evaluate_target_safety",
     "dual_camera_calibration_id",
+    "CameraRoleMap",
+    "DepthFrame",
+    "FramePair",
+    "LatestFramePairer",
+    "RgbFrame",
     "estimate_instance_pose",
     "generate_top_down_candidates",
     "invert_transform",

@@ -55,6 +55,7 @@ class LumosCapture:
         self.jpeg: Optional[bytes] = None
         self.sequence = 0
         self.last_frame_monotonic = 0.0
+        self.last_frame_monotonic_ns = 0
         self.last_error: Optional[str] = None
         self.raw_shape: Optional[Tuple[int, ...]] = None
 
@@ -120,7 +121,8 @@ class LumosCapture:
                 with self.condition:
                     self.jpeg = jpeg.tobytes()
                     self.sequence += 1
-                    self.last_frame_monotonic = time.monotonic()
+                    self.last_frame_monotonic_ns = time.monotonic_ns()
+                    self.last_frame_monotonic = self.last_frame_monotonic_ns / 1_000_000_000
                     self.last_error = None
                     self.raw_shape = tuple(raw.shape)
                     self.condition.notify_all()
@@ -131,6 +133,14 @@ class LumosCapture:
             capture.release()
 
     def wait_for_frame(self, after_sequence: int, timeout: float) -> tuple[Optional[bytes], int]:
+        jpeg, sequence, _ = self.wait_for_snapshot(after_sequence, timeout)
+        return jpeg, sequence
+
+    def wait_for_snapshot(
+        self,
+        after_sequence: int,
+        timeout: float,
+    ) -> tuple[Optional[bytes], int, int]:
         deadline = time.monotonic() + timeout
         with self.condition:
             while self.running and self.sequence <= after_sequence:
@@ -138,7 +148,7 @@ class LumosCapture:
                 if remaining <= 0.0:
                     break
                 self.condition.wait(remaining)
-            return self.jpeg, self.sequence
+            return self.jpeg, self.sequence, self.last_frame_monotonic_ns
 
     def status(self) -> dict:
         with self.condition:
@@ -174,6 +184,31 @@ def make_handler(capture: LumosCapture):
                 self._cors()
                 self.end_headers()
                 self.wfile.write(payload)
+                return
+            if path == "/frame.jpg":
+                jpeg, sequence, monotonic_ns = capture.wait_for_snapshot(
+                    -1,
+                    timeout=5.0,
+                )
+                if jpeg is None or monotonic_ns <= 0:
+                    payload = (json.dumps(capture.status(), sort_keys=True) + "\n").encode(
+                        "utf-8"
+                    )
+                    self.send_response(503)
+                    self.send_header("Content-Type", "application/json")
+                    self.send_header("Content-Length", str(len(payload)))
+                    self._cors()
+                    self.end_headers()
+                    self.wfile.write(payload)
+                    return
+                self.send_response(200)
+                self.send_header("Content-Type", "image/jpeg")
+                self.send_header("Content-Length", str(len(jpeg)))
+                self.send_header("X-Lumos-Sequence", str(sequence))
+                self.send_header("X-Lumos-Monotonic-Ns", str(monotonic_ns))
+                self._cors()
+                self.end_headers()
+                self.wfile.write(jpeg)
                 return
             if path != "/camera_lumos":
                 self.send_error(404)

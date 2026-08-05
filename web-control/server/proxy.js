@@ -13,6 +13,7 @@ const { WebSocketServer } = require('ws');
 const config = require('./config');
 const { StartouchBridge } = require('./startouch-bridge');
 const { CameraBridge } = require('./camera-bridge');
+const { VisionStatusStore } = require('./vision-status');
 const {
   authorizeGrasp,
   trustedTargetFromDetection,
@@ -27,6 +28,7 @@ const wss = new WebSocketServer({ server, path: '/ws' });
 const clients = new Set();
 const bridge = new StartouchBridge(config.robot);
 const cameraBridge = new CameraBridge(config.camera || {});
+const visionStatus = new VisionStatusStore({ staleAfterMs: 2000, maxTargets: 256 });
 let latestJointsDeg = null;
 let latestTcpEuler = null;    // [rad] for camera bridge
 let latestTcpPos = null;      // [m] for camera bridge
@@ -271,8 +273,27 @@ app.get('/camera_lumos', (req, res) => {
   req.on('close', () => { try { stream.unpipe(res); } catch (_) { /* ok */ } });
 });
 
+app.get('/camera_lumos_vision', (req, res) => {
+  const stream = cameraBridge.getVisionMjpegStream();
+  if (!stream) {
+    res.status(503).send('Lumos vision overlay not ready');
+    return;
+  }
+  res.setHeader('Content-Type', 'multipart/x-mixed-replace; boundary=frame');
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+  res.flushHeaders();
+  stream.pipe(res);
+  req.on('close', () => { try { stream.unpipe(res); } catch (_) { /* ok */ } });
+});
+
+app.get('/api/vision/status', (_req, res) => {
+  res.setHeader('Cache-Control', 'no-store');
+  res.json(visionStatus.snapshot(Date.now()));
+});
+
 // ── Camera bridge events ────────────────────────────────────
 cameraBridge.on('detection_result', message => {
+  visionStatus.updateTargets(message);
   latestVisionTargets = new Map(
     (message.objects || []).map(target => {
       const trusted = trustedTargetFromDetection(target);
@@ -283,11 +304,23 @@ cameraBridge.on('detection_result', message => {
 });
 
 cameraBridge.on('camera_status', message => {
+  visionStatus.updateCamera(message);
   broadcast(message);
 });
 
 cameraBridge.on('camera_error', message => {
+  visionStatus.updateCamera(message);
   broadcast({ type: 'camera_error', msg: message.message });
+});
+
+cameraBridge.on('vision_status', message => {
+  visionStatus.updateStatus(message);
+  broadcast(message);
+});
+
+cameraBridge.on('vision_error', message => {
+  visionStatus.updateStatus(message);
+  broadcast(message);
 });
 
 cameraBridge.on('log', message => {

@@ -1,84 +1,136 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="zh-CN">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>ThirdHand Dual Camera Test</title>
+  <title>ThirdHand 双相机视觉状态</title>
   <style>
-    :root { color-scheme: dark; }
+    :root { color-scheme: dark; font-family: Inter, system-ui, sans-serif; }
     * { box-sizing: border-box; }
-    body {
-      margin: 0;
-      min-height: 100vh;
-      background: #101214;
-      color: #f2f4f5;
-      font: 14px/1.4 system-ui, sans-serif;
-    }
-    header {
-      min-height: 52px;
-      padding: 14px 18px;
-      border-bottom: 1px solid #303438;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 16px;
-    }
-    header strong { font-size: 15px; }
-    header span { color: #a7afb5; }
-    main {
-      display: grid;
-      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-      min-height: calc(100vh - 52px);
-    }
-    figure {
-      margin: 0;
-      min-width: 0;
-      display: grid;
-      grid-template-rows: auto minmax(0, 1fr);
-      border-right: 1px solid #303438;
-    }
-    figure:last-child { border-right: 0; }
-    figcaption {
-      padding: 10px 14px;
-      display: flex;
-      align-items: baseline;
-      justify-content: space-between;
-      border-bottom: 1px solid #303438;
-    }
-    figcaption span { color: #a7afb5; }
-    .feed {
-      min-height: 0;
-      display: grid;
-      place-items: center;
-      overflow: hidden;
-      background: #050607;
-    }
-    img {
-      display: block;
-      width: 100%;
-      height: 100%;
-      object-fit: contain;
-    }
-    @media (max-width: 760px) {
-      main { grid-template-columns: 1fr; grid-template-rows: 1fr 1fr; }
-      figure { border-right: 0; border-bottom: 1px solid #303438; }
-    }
+    body { margin: 0; min-height: 100vh; background: #0c1014; color: #eef3f6; }
+    header { padding: 16px 20px; border-bottom: 1px solid #26323b; display: flex;
+      justify-content: space-between; align-items: center; gap: 16px; }
+    header h1 { margin: 0; font-size: 17px; }
+    .lock { color: #ffbd5b; font-weight: 700; }
+    main { display: grid; grid-template-columns: minmax(0, 2fr) minmax(300px, 1fr);
+      gap: 14px; padding: 14px; }
+    .camera-grid { display: grid; grid-template-rows: minmax(360px, 2fr) minmax(240px, 1fr);
+      gap: 14px; min-width: 0; }
+    figure, aside { margin: 0; border: 1px solid #26323b; border-radius: 10px;
+      background: #121920; overflow: hidden; }
+    figcaption { padding: 10px 13px; display: flex; justify-content: space-between;
+      border-bottom: 1px solid #26323b; }
+    figcaption span, .muted { color: #91a1ad; }
+    .feed { height: calc(100% - 43px); min-height: 200px; display: grid;
+      place-items: center; background: #030608; }
+    img { display: block; width: 100%; height: 100%; object-fit: contain; }
+    aside { padding: 15px; }
+    aside h2 { margin: 0 0 12px; font-size: 15px; }
+    dl { display: grid; grid-template-columns: 130px 1fr; gap: 8px 12px; margin: 0 0 18px; }
+    dt { color: #91a1ad; } dd { margin: 0; overflow-wrap: anywhere; }
+    .ok { color: #6ee7a0; } .bad { color: #ff817a; }
+    #blockers { margin: 8px 0 0; padding-left: 20px; color: #ffbd5b; }
+    #targets { font-variant-numeric: tabular-nums; }
+    @media (max-width: 900px) { main { grid-template-columns: 1fr; }
+      .camera-grid { grid-template-rows: 55vh 38vh; } }
   </style>
 </head>
 <body>
   <header>
-    <strong>Dual Camera Monitor</strong>
-    <span>Read only</span>
+    <h1>双相机在线视觉</h1>
+    <span class="lock">只读 · robotExecutionEnabled = false</span>
   </header>
   <main>
-    <figure>
-      <figcaption><strong>Lumos</strong><span>canonical RGB / identity</span></figcaption>
-      <div class="feed"><img src="/camera_lumos" alt="Lumos stream"></div>
-    </figure>
-    <figure>
-      <figcaption><strong>D435</strong><span>registered metric depth</span></figcaption>
-      <div class="feed"><img src="/camera" alt="D435 stream"></div>
-    </figure>
+    <section class="camera-grid" aria-label="camera streams">
+      <figure>
+        <figcaption><strong>Lumos 主视图</strong><span>canonical RGB / identity</span></figcaption>
+        <div class="feed"><img id="lumos" src="/camera_lumos_vision"
+          data-stream="/camera_lumos_vision" alt="Lumos inference overlay"></div>
+      </figure>
+      <figure>
+        <figcaption><strong>D435 辅助视图</strong><span>metric depth / debug RGB</span></figcaption>
+        <div class="feed"><img id="d435" src="/camera" data-stream="/camera"
+          alt="D435 depth debug stream"></div>
+      </figure>
+    </section>
+    <aside>
+      <h2>部署状态</h2>
+      <dl>
+        <dt>在线</dt><dd id="online">等待状态</dd>
+        <dt>模型</dt><dd id="model">等待状态</dd>
+        <dt>Lumos 序列</dt><dd id="lumos-seq">—</dd>
+        <dt>D435 序列</dt><dd id="d435-seq">—</dd>
+        <dt>端到端延迟</dt><dd id="latency">—</dd>
+        <dt>GPU 预留</dt><dd id="gpu">—</dd>
+        <dt>状态年龄</dt><dd id="age">—</dd>
+        <dt>目标</dt><dd id="targets">0</dd>
+      </dl>
+      <h2>闭锁原因 / blockers</h2>
+      <ul id="blockers"><li>vision_not_started</li></ul>
+      <p class="muted">Lumos 用于广角识别与身份连续性；D435 用于近场度量深度。当前页面不会发送运动、坐标或抓取命令。</p>
+    </aside>
   </main>
+  <script>
+    'use strict';
+    const byId = id => document.getElementById(id);
+    const text = (id, value) => { byId(id).textContent = value; };
+    const finite = value => Number.isFinite(value) ? value : null;
+
+    function bindRetry(image) {
+      let attempts = 0;
+      image.addEventListener('load', () => { attempts = 0; });
+      image.addEventListener('error', () => {
+        attempts += 1;
+        const delay = Math.min(10000, 500 * (2 ** Math.min(attempts, 5)));
+        const source = image.dataset.stream;
+        image.removeAttribute('src');
+        setTimeout(() => { image.src = `${source}?retry=${Date.now()}`; }, delay);
+      });
+    }
+    document.querySelectorAll('img[data-stream]').forEach(bindRetry);
+
+    function render(status) {
+      text('online', status.online && !status.stale ? '是' : '否');
+      byId('online').className = status.online && !status.stale ? 'ok' : 'bad';
+      text('model', status.modelReady ? 'ready' : 'unavailable');
+      byId('model').className = status.modelReady ? 'ok' : 'bad';
+      text('lumos-seq', status.sequences.lumos ?? '—');
+      text('d435-seq', status.sequences.d435 ?? '—');
+      const latency = finite(status.metrics.latencyP95Ms);
+      text('latency', latency === null ? '—' : `p95 ${latency.toFixed(1)} ms`);
+      const gpu = finite(status.metrics.gpuMemoryReservedGib);
+      text('gpu', gpu === null ? '—' : `${gpu.toFixed(2)} GiB`);
+      text('age', status.sourceAgeMs === null ? '—' : `${status.sourceAgeMs.toFixed(0)} ms`);
+      text('targets', String(status.targets.length));
+      const list = byId('blockers');
+      list.replaceChildren(...status.blockers.map(value => {
+        const item = document.createElement('li');
+        item.textContent = value;
+        return item;
+      }));
+      if (!status.blockers.length) {
+        const item = document.createElement('li');
+        item.textContent = 'none';
+        list.replaceChildren(item);
+      }
+      if (status.robotExecutionEnabled !== false) {
+        text('online', '安全配置错误');
+        byId('online').className = 'bad';
+      }
+    }
+
+    async function refresh() {
+      try {
+        const response = await fetch('/api/vision/status', { cache: 'no-store' });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        render(await response.json());
+      } catch (error) {
+        text('online', `状态不可用: ${error.message}`);
+        byId('online').className = 'bad';
+      }
+    }
+    refresh();
+    setInterval(refresh, 1000);
+  </script>
 </body>
 </html>

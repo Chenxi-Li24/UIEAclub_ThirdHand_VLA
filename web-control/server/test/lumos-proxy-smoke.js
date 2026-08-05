@@ -77,7 +77,7 @@ async function run() {
     const page = await fetch(`http://${HOST}:${PROXY_PORT}/camera-test.html`).then(
       value => value.text()
     );
-    assert.match(page, /src="\/camera_lumos"/);
+    assert.match(page, /src="\/camera_lumos_vision"/);
     assert.match(page, /src="\/camera"/);
     console.log('PASS same-origin Lumos proxy and dual-camera page are live');
   } catch (error) {

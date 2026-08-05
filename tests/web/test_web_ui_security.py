@@ -30,11 +30,27 @@ def test_camera_test_page_exposes_both_camera_roles_without_motion_controls() ->
         Path(__file__).parents[2] / "web-control/web/camera-test.html"
     ).read_text(encoding="utf-8")
 
-    assert 'src="/camera_lumos"' in source
+    assert 'data-stream="/camera_lumos_vision"' in source
     assert 'src="/camera"' in source
     assert "Lumos" in source
     assert "D435" in source
+    assert "canonical RGB / identity" in source
+    assert "metric depth / debug RGB" in source
+    assert "/api/vision/status" in source
+    assert "blockers" in source
+    assert "robotExecutionEnabled" in source
     assert "grasp_object" not in source
+    assert "contenteditable" not in source
+
+
+def test_proxy_exposes_read_only_vision_status_and_overlay_routes() -> None:
+    source = (
+        Path(__file__).parents[2] / "web-control/server/proxy.js"
+    ).read_text(encoding="utf-8")
+
+    assert "'/api/vision/status'" in source
+    assert "'/camera_lumos_vision'" in source
+    assert "getVisionMjpegStream" in source
 
 
 def test_vision_robot_execution_is_hard_locked_in_this_release() -> None:

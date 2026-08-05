@@ -61,8 +61,13 @@ module.exports = {
 
   camera: {
     enabled: process.env.CAMERA_ENABLED !== '0',
-    python: process.env.CAMERA_PYTHON || process.env.STARTOUCH_PYTHON ||
-      path.join(os.homedir(), 'miniconda3', 'bin', 'python'),
+    python: process.env.CAMERA_PYTHON ||
+      path.join(os.homedir(), 'miniconda3', 'envs', 'thirdhand-remind3d', 'bin', 'python'),
+    onlineEnabled: process.env.VISION_ONLINE_ENABLED === '1',
+    visionConfig: process.env.VISION_CONFIG ||
+      path.resolve(__dirname, '../../configs/vision/remind3d.yaml'),
+    lumosSnapshotUrl: process.env.LUMOS_SNAPSHOT_URL ||
+      'http://127.0.0.1:3001/frame.jpg',
     yoloModel: process.env.CAMERA_YOLO_MODEL || path.join(__dirname, 'yolov8n.pt'),
     calibrationFile: process.env.CAMERA_CALIB_FILE ||
       path.join(os.homedir(), 'calibration', 'd435_handeye_result.json'),

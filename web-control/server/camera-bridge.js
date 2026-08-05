@@ -36,6 +36,11 @@ class CameraBridge extends EventEmitter {
 
     const child = this.child;
 
+    // Keep both child video pipes drained even when no browser is connected.
+    // Future HTTP pipe() consumers still receive all subsequent chunks.
+    child.stdout.on('data', () => {});
+    child.stdio[4].on('data', () => {});
+
     // fd:4 → JSON events
     const eventLines = readline.createInterface({ input: child.stdio[3] });
     eventLines.on('line', line => this._handleLine(line));

@@ -1,14 +1,15 @@
-# REMIND-3D Offline Deployment Results
+# REMIND-3D Offline and Online Deployment Results
 
-记录日期：2026-08-04（Asia/Shanghai）
+记录日期：2026-08-04 至 2026-08-05（Asia/Shanghai）
 工作区：`/home/nieqingcao/TH-Fanxy`
 分支：`codex/vision-safety-core-20260804`
 
 ## 当前结论
 
 REMIND-3D 的硬件隔离代码路径、确定性回放、模型适配器、部署配置和独立环境已经建立。
-官方 COCO RTMDet-Ins tiny 与 DINOv2-small 已在 RTX 5060 上通过真实 Lumos 图像冒烟测试。
-这证明模型运行链路可用，不代表任务专用模型、标定或机械臂闭环已经验收；机械臂执行继续关闭。
+官方 COCO RTMDet-Ins tiny 与 DINOv2-small 已接入真实 Lumos 与 D435，并作为持续在线服务运行。
+这证明双相机采集、GPU 模型、只读状态与恢复链路可用，不代表任务专用模型、跨相机标定、
+手眼标定或机械臂闭环已经验收；机械臂执行继续关闭。
 
 状态分级：
 
@@ -22,7 +23,78 @@ REMIND-3D 的硬件隔离代码路径、确定性回放、模型适配器、部�
 | Python 3.11 独立环境 | 已部署 | `/home/nieqingcao/miniconda3/envs/thirdhand-remind3d` |
 | Torch/cu128、MMCV、MMDetection | 已安装、门禁通过 | Torch 2.7.0+cu128、MMCV CUDA NMS、`sm_120` 实测通过 |
 | RTMDet+DINO GPU smoke | 已通过 | 6 个实例、p95 48.9 ms、峰值显存 0.469 GiB |
+| 双相机在线 Dry Run | 已部署、30 分钟验收通过 | 1801 个样本零错误，两路序号持续增长，执行始终关闭 |
+| 局域网只读页面 | 已部署 | `http://192.168.58.68:3100/camera-test.html` |
 | 机械臂在线接入/运动 | 禁止 | 本轮仅通过 HTTP 只读采集 Lumos 图像；没有 CAN、Startouch、Robot 或 Gripper I/O |
+
+## 2026-08-05 双相机在线部署结果
+
+已按确认的逻辑角色部署：
+
+| 逻辑角色 | 当前设备 | 在线行为 |
+|---|---|---|
+| `canonical_rgb` | Lumos/XVisio 鱼眼 RGB | 唯一主视觉；RTMDet 实例分割、DINO 描述符、身份和叠加画面 |
+| `metric_depth` | Intel RealSense D435 Depth | 实时米制深度、时间配对和健康检查 |
+| `debug_rgb` | Intel RealSense D435 RGB | 只用于调试画面，不决定目标身份 |
+
+未来换成带深度的鱼眼时，上层仍使用 `canonical_rgb` 与 `metric_depth` 两个角色，只替换
+设备适配器和标定配置；检测、身份、目标状态和 fail-closed 门禁无需重写。
+
+### 实机与服务状态
+
+- USB 设备：XVisio `040e:f408`；D435 `8086:0b07`，SDK 序列号 `349622074226`，
+  固件 `5.17.3.10`，USB 3.2。
+- UVC 重新枚举后，D435 使用 `/dev/video0` 至 `/dev/video5`，Lumos 使用
+  `/dev/video6` 与 `/dev/video7`；Lumos 服务按 XVisio 产品名和接口 index 0 自动发现采集节点，
+  不再依赖 `/dev/videoN` 的枚举顺序。
+- `thirdhand-lumos-online.service` 提供 3001 端口时间戳快照和 MJPEG；
+  `thirdhand-dual-camera-online.service` 提供 3100 端口在线模型、状态和双画面。
+- 当前入口：Ubuntu 本机 `http://127.0.0.1:3100/camera-test.html`；局域网/Windows
+  `http://192.168.58.68:3100/camera-test.html`。
+- 新服务固定为 `STARTOUCH_SIMULATE=1`、占位 CAN 接口 `thirdhand-vision-test`、
+  `STARTOUCH_GRIPPER=0` 和 `robot_execution_enabled:false`。原 3000 服务 PID `2761127`
+  在部署、UVC 恢复和验收期间始终未被停止或替换。
+- D435 启动前执行真实 640x480@30 RGB-D 预检；运行时遇到 USB/UVC 瞬态失败会退避重连。
+  MJPEG 浏览器断开后会恢复排空，D435 与 Lumos 输出使用独立锁，避免调试流阻塞模型事件。
+
+### 30 分钟真实硬件 Dry Run
+
+端口 3100 的在线服务连续采样 1800 秒，结果为：
+
+```text
+passed=true
+sample_count=1801
+errors=0
+fetch_errors=0
+stale_samples=0
+robot_execution_enabled_samples=0
+lumos_sequence_advancement=26967
+d435_sequence_advancement=53961
+latency_p95_max_ms=71.335
+latency_p95_final_ms=56.378
+gpu_memory_reserved_max_gib=0.449
+source_age_max_ms=81
+systemd_restarts=0
+```
+
+报告位于 `artifacts/vision/dual-camera-online/readiness-20260805.json`，SHA-256 为
+`c3ef895c40c023e45c882b35f1bb03729da2d61dc6bcf0aa512fbb6f74ea4827`。
+Lumos 实时叠加抽帧位于
+`artifacts/vision/dual-camera-online/lumos-overlay-20260805.jpg`，可见检测框以及
+`MODEL READY | EXECUTION LOCKED`。
+
+30 分钟验收后只将监听地址从 loopback 改为 `0.0.0.0`，模型与相机代码未变；随后通过
+局域网地址再采样 60 秒，61 个样本零错误，Lumos/D435 序号分别前进 899/1799 帧。
+局域网报告位于 `artifacts/vision/dual-camera-online/readiness-lan-20260805.json`。
+
+### 当前安全边界
+
+D435 RGB-D 已在线、深度帧持续前进，但当前 D435-to-Lumos 外参和手眼标定没有独立验收，
+因此在线融合器故意传入 `calibration=None`：页面可以显示检测与深度健康，不能输出可信的
+机器人基座三维坐标，所有目标均为 `actionable:false`。当前预期阻断项包括：
+`calibration_unavailable`、`robot_pose_unavailable`、`arm_not_stationary`、
+`observation_below_memory_quality`、`identity_not_actionable` 和
+`task_checkpoint_unvalidated`。这些是正确的 fail-closed 证据，不是可绕过的运行错误。
 
 ## 新增部署面
 
@@ -185,4 +257,5 @@ Hugging Face 访问权限，凭据不得写入仓库。
 3. 真实序列仍需完成遮挡、长间隔 ReID、同类实例混淆、ID switch 与静态 jitter 验收；
    单帧冒烟不能证明持续身份准确率。
 4. Lumos 内参、D435-to-Lumos 外参和手眼标定仍需重新采集并独立验证，随后验收绝对三维位置。
-5. 上述项目全部通过前，不接入在线服务、不生成可执行抓取命令、不移动机械臂。
+5. 上述项目全部通过前，在线服务只发布不可操作的 Dry Run 结果，不生成可执行抓取命令，
+   不移动机械臂。

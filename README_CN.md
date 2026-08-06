@@ -245,10 +245,23 @@ Lumos 超广角采用 SEUCM。对相机点 `(X,Y,Z)`，实现先计算
 ### 2.6 外参和手眼标定
 
 内参描述单个相机，外参描述坐标系之间的刚体关系。当前完整链需要 D435→Lumos、
-Lumos→flange（或固定相机的 base→camera）和时间对齐的机器人姿态。
-[CoordinateTransforms](src/uiea_thirdhand_vla/perception/transforms.py) 提供 Tsai `AX=XB`
-接口；研究管线用[标定审计与双相机 bundle](web-control/server/vision/dual_camera.py)把来源
-校验和组合成新的内容 ID。
+Lumos→flange（或固定相机的 base→camera）和时间对齐的机器人姿态。以下仍使用
+`T_{target←source}`，即矩阵把 source 坐标中的点变换到 target 坐标。
+
+OpenCV `cv2.calibrateHandEye` 的输入合同是每个姿态的 `T_{base←gripper}`
+（参数名 `gripper2base`）与 `T_{camera←target}`（`target2cam`）；返回值是
+`T_{gripper←camera}`（`cam2gripper`），而不是 `T_{base←camera}`。eye-in-hand 中相机刚性
+安装在 gripper 上，后者是固定外参，某一机器人姿态下应显式组合
+`T_{base←camera}=T_{base←gripper} T_{gripper←camera}`。eye-to-hand 中相机固定在 base，目标
+量才是固定的 `T_{base←camera}`；它使用不同的运动链/输入倒置或交换，不能把 eye-in-hand
+返回值直接改名为 base→camera。
+
+当前 [CoordinateTransforms.calibrate_hand_eye](src/uiea_thirdhand_vla/perception/transforms.py)
+把 `T_base_ee` 和 `T_camera_marker` 传入上述接口，却把返回的 camera→gripper 直接存成
+`T_base_cam` 并声称返回 base→camera；这是 frame 标注与组合错误。在实现按安装方式拆分、
+修正方向/组合并通过独立留出姿态验证以前，该 helper **不得用于真实执行，也不得作为 SCI
+标定证据**。研究管线用[标定审计与双相机 bundle](web-control/server/vision/dual_camera.py)
+把来源校验和组合成新的内容 ID，但内容 ID 本身不修复坐标链。
 
 手眼结果必须在独立留出姿态上报告平移/旋转或重投影残差。现有研究审计明确指出旧
 Lumos 标定残差不可用于执行；不要把“文件存在”当作 `validated=true`。重采集协议见
@@ -296,12 +309,12 @@ Metrics、Evidence、Limits，便于直接映射到[主张矩阵](docs/research/
 
 ### 3.1 方法一：逻辑相机角色与原生成像模型
 
-##### Problem
+#### Problem
 
 广角主图像和米制深度来自不同相机；若身份、分割和深度各自随意选择 RGB，会出现语义
 漂移、边缘畸变误差和不可复现的设备角色切换。
 
-##### Method
+#### Method
 
 `canonical_rgb=lumos_rgb`：RTMDet mask、DINOv2 外观和身份都以 Lumos 原生 SEUCM 像素
 为准；`metric_depth=d435_depth`：D435 pinhole Z-depth 提供米制几何；
@@ -309,71 +322,71 @@ Metrics、Evidence、Limits，便于直接映射到[主张矩阵](docs/research/
 [online_frames.py](web-control/server/vision/online_frames.py)和
 [remind3d.yaml](configs/vision/remind3d.yaml)。
 
-##### Protocol
+#### Protocol
 
 记录设备序列/固件、逻辑角色、分辨率、帧率、像素格式、内参 ID 与每帧 monotonic
 timestamp；数据 split 按录制会话/场景/物理实例隔离。SEUCM 必须用中心/边缘留出点验证，
 D435 深度单位必须在录制清单中固定。
 
-##### Metrics
+#### Metrics
 
 中心/径向分桶重投影 median、P95、max；无效域比例；采集丢帧率；角色错误率；主/调试
 源切换次数；按径向分桶的 mask AP/recall。
 
-##### Evidence
+#### Evidence
 
 相机模型单元测试和带日期的只读部署记录已存在，属于工程验证；真实比较研究仍是
 Planned Evidence。清单入口见[数据集模板](docs/research/dataset_datasheet.md)，预览位置 V3。
 
-##### Limits
+#### Limits
 
 官方 COCO 权重的单帧输出不证明任务类别性能；设备枚举、曝光、照明和鱼眼域偏移仍是
 混杂因素。当前标定链未完成执行验收。
 
 ### 3.2 方法二：时间配对、标定来源与坐标链
 
-##### Problem
+#### Problem
 
 运动场景中即使几何外参正确，过期或错配的 RGB/depth/robot pose 也会生成错误三维点；
 无版本的标定文件无法判断结果属于哪条坐标链。
 
-##### Method
+#### Method
 
 [LatestFramePairer](web-control/server/vision/online_frames.py) 使用 monotonic 时间戳，采用
 latest-only 配对，不等待、不插值、不发明时间。当前配置要求 RGB–depth skew ≤`50 ms`、
 帧龄 ≤`200 ms`、机器人姿态 skew ≤`50 ms`；超限只产生原因码。每个有效标定以
 `sha256:` 内容 ID 和 `validated` 状态进入 [DualCameraCalibrationBundle](web-control/server/vision/dual_camera.py)。
 
-##### Protocol
+#### Protocol
 
 冻结时钟源与单位；记录每帧序号、三个时间戳、pair 决策、排除原因、标定文件校验和、
 外参方向及独立验证残差。按静态/运动、中心/边缘、不同 skew 桶分别评估，禁止同一 clip
 跨训练和测试。
 
-##### Metrics
+#### Metrics
 
 skew/age P50、P95、max；配对接受率；错配率；不同 skew 桶的注册像素误差、平面 mm
 误差和三维位置误差；标定失效检出率。
 
-##### Evidence
+#### Evidence
 
 时间与标定 fail-closed 测试已实现；A-REG-01 仍为 Planned Evidence，且预注册阈值未
 就绪。使用[主张矩阵](docs/research/claim_evidence_matrix.md)记录这一状态，而不是从工程
 预算倒推出论文阈值。
 
-##### Limits
+#### Limits
 
 单机 monotonic 时间不能自动解决不同设备硬件时钟偏置；重新安装相机、移动支架或更新
 内参会使旧外参失效。缺机器人姿态时允许做身份观察，但不得生成可执行 base-frame 目标。
 
 ### 3.3 方法三：D435→Lumos 深度注册与 z-buffer
 
-##### Problem
+#### Problem
 
 D435 的深度像素不与 Lumos mask 共格；直接按相同 `(u,v)` 取深度会把背景或遮挡面赋给
 目标，尤其在双相机基线、边缘和深度不连续处。
 
-##### Method
+#### Method
 
 [register_depth_to_lumos](web-control/server/vision/depth_registration.py) 依次：过滤无效/范围外
 Z-depth → 用 D435 pinhole 反投影 → 左乘 `T_lumos_from_d435` → 用 Lumos SEUCM 投影 →
@@ -381,34 +394,34 @@ Z-depth → 用 D435 pinhole 反投影 → 左乘 `T_lumos_from_d435` → 用 Lu
 记录 `source_count`、轴向 `z_m`、欧氏 `range_m` 和 Lumos 三维点。最后由布尔实例 mask
 选择点云；缺深度时绝不以桌面平面伪造。
 
-##### Protocol
+#### Protocol
 
 用已知平面/标靶和遮挡边界录制同步深度；固定 min/max depth、分辨率、取整策略、外参 ID
 与无效值政策。比较无注册、无时间门禁、无 z-buffer 和完整方法；按径向与遮挡边界切片。
 
-##### Metrics
+#### Metrics
 
 注册 coverage、像素误差 P50/P95、平面 mm 误差、flying-edge 率、mask 内点云纯度、
 空洞率、单帧/端到端 P50/P95 时延。
 
-##### Evidence
+#### Evidence
 
 合成注册测试和微基准见[离线实现记录](docs/vision_research/OFFLINE_IMPLEMENTATION_RESULTS.md)，
 只能证明实现与确定性；其真实精度证据为 Planned Evidence。未来 V1/V3/E1/E2 必须由
 机器可读结果生成。
 
-##### Limits
+#### Limits
 
 最近像素是基线而非亚像素最优方法；透明、反射、黑色物体和视差遮挡会造成深度缺失。
 纯 NumPy 微基准不含采集、模型和 UI，不能证明端到端实时性。
 
 ### 3.4 方法四：RTMDet 实例 mask 与 DINOv2 描述符
 
-##### Problem
+#### Problem
 
 检测框混入背景，难以获得纯目标点云；仅靠类别/框位置也无法在同类物体遮挡后维持身份。
 
-##### Method
+#### Method
 
 [RTMDet adapter](web-control/server/vision_models/rtmdet.py) 要求原生图像尺寸的非空布尔实例
 mask，并校验配置 labels 与 checkpoint 元数据完全一致。
@@ -416,36 +429,36 @@ mask，并校验配置 labels 与 checkpoint 元数据完全一致。
 池化、归一化为每实例描述符；模型只在适配器实例化时懒加载。当前默认是官方 COCO
 RTMDet-Ins tiny 和 `facebook/dinov2-small`，且 `task_checkpoint_validated: false`。
 
-##### Protocol
+#### Protocol
 
 建立任务专用类别与实例标注，冻结 train/validation/test；所有模型在相同主图、输入尺度、
 阈值、硬件和测量窗口下比较。基线包括 YOLOv8n detect、YOLO nano segmentation、
 RTMDet-tiny-ins、Mask R-CNN R50-FPN；记录权重 SHA-256 和许可。
 
-##### Metrics
+#### Metrics
 
 per-class box/mask AP 与 recall、empty-scene FP、径向分桶、mask coverage、点云纯度、
 描述符类内/类间距离、P50/P95 时延、吞吐、CPU/GPU/VRAM。
 
-##### Evidence
+#### Evidence
 
 真实帧 GPU smoke 和在线可用性是带日期的工程证据，详见
 [部署记录](docs/vision_research/REMIND3D_DEPLOYMENT_RESULTS.md)；因任务权重与完整统计缺失，
 论文层面属于 Evidence Incomplete，不能宣称检测优越。比较计划见[基线矩阵](docs/research/baseline_ablation_matrix.md)。
 
-##### Limits
+#### Limits
 
 COCO 类别与桌面任务域不等价；单帧非空 mask 不等于 recall/精度验收。鱼眼边缘、截断、
 相似外观、mask 漂移和模型许可都需单独报告。
 
 ### 3.5 方法五：短期追踪、work/stable 记忆与重捕获
 
-##### Problem
+#### Problem
 
 逐帧 detection ID 不是物理实例身份。漏检、遮挡、离开后重入和多个相似物体会引发 ID
 switch、轨迹碎裂或危险误合并。
 
-##### Method
+#### Method
 
 基础 [MultiObjectTracker](web-control/server/vision/tracking.py) 用常速度预测、同类门控、
 组合协方差 Mahalanobis 代价与 Hungarian 全局分配。研究在线路径进一步使用
@@ -454,36 +467,36 @@ switch、轨迹碎裂或危险误合并。
 或污染记忆。当前 `300 ms` 后标记 occluded、`1.5 s` 后 inactive，重捕获需连续 2 次
 带深度确认；近优全局分配差小于 ambiguity margin 时显式返回 `AMBIGUOUS`。
 
-##### Protocol
+#### Protocol
 
 按物理实例和 clip 冻结遮挡/重入测试集，固定 detections 与 descriptors，分别比较
 IoU-only、appearance-only、appearance+3D、work-only、work+stable 和歧义拒绝 on/off。
 每个种子保留逐帧 assignment、cost、status、memory bank 状态和拒绝原因。
 
-##### Metrics
+#### Metrics
 
 HOTA、IDF1、ID switches、fragmentation、reacquisition rate/time、false identity merges、
 ambiguous accept/reject、身份容量和内存/时延。
 
-##### Evidence
+#### Evidence
 
 合成身份回放证明状态机输出可确定且歧义不会被强制分配，但不证明真实 ReID 准确率。
 A-ID-01、V2、E1、E2 仍需 held-out 真实序列、重复测量和区间，见
 [主张矩阵](docs/research/claim_evidence_matrix.md)。
 
-##### Limits
+#### Limits
 
 descriptor 域偏移、同款同色物体、长期光照变化和 detector 变化会混淆身份贡献。长期重入
 保留 ID 后仍先处于 tentative；不能因“看起来相似”跳过连续确认。
 
 ### 3.6 方法六：mask 三维位姿、协方差与 actionability
 
-##### Problem
+#### Problem
 
 bbox 中心或点云均值会被背景、边缘噪声和离群深度偏移；即使有三维中心，未量化时效与
 不确定度也不能决定目标是否可供后续动作考虑。
 
-##### Method
+#### Method
 
 [estimate_instance_pose](web-control/server/vision/instance_pose.py) 默认腐蚀 mask `3 px`，要求
 至少 `80` 个有效点，以逐轴 median 和 `3.5×MAD` 去除离群，变换到 `robot_base` 后用
@@ -492,23 +505,23 @@ median 得到中心，并将样本 covariance 加 `0.002 m` noise floor。身份
 [Safety](web-control/server/vision/safety.py) 还检查标定匹配、点云数量、工作区与显式可达性。
 在线页面再强制目标 `actionable:false`/execution false。
 
-##### Protocol
+#### Protocol
 
 在有真值的静态/重复放置序列中，按材质、距离、径向和遮挡切片；比较 bbox 中心、mask
 均值、mask median、侵蚀/MAD/noise-floor 消融。冻结标定、工作区、时效与可达性判据，
 同时记录被拒绝样本而不是删除失败。
 
-##### Metrics
+#### Metrics
 
 三维位置误差和轴向偏差、静态 jitter、covariance calibration/coverage、有效点数、
 actionability 接受/拒绝率、错误放行率、拒绝原因分布、P50/P95 时延。
 
-##### Evidence
+#### Evidence
 
 单元/合成测试覆盖稀疏深度、离群、协方差和 fail-closed 原因；真实 base-frame 精度仍是
 Planned Evidence。预览 V1/V3/F1 只有链接 manifest 和生成命令后才能升级为结果。
 
-##### Limits
+#### Limits
 
 covariance 表达观测点分散度，不自动包含全部外参系统误差；当前没有通过验收的完整标定链
 和碰撞规划器。`actionable` 是感知条件，不等于机器人执行授权。
@@ -719,8 +732,9 @@ TH-Fanxy/
 | [smoke_remind3d_models.py](scripts/vision/smoke_remind3d_models.py) | RTMDet+DINO 资源/合同 smoke | model env/本地图像权重 | L1/L3，只读图像与 GPU |
 | [start_dual_camera_online.sh](scripts/vision/start_dual_camera_online.sh) | 端口 3100 安全生命周期 | Lumos HTTP/D435/model env/Node | L3，固定 simulate/假 CAN/无 gripper |
 | [verify_dual_camera_online.py](scripts/vision/verify_dual_camera_online.py) | 一秒采样、原子 readiness JSON | HTTP status/Python | L3，只读 |
-| [open_fixed_pick_place_control.sh](scripts/open_fixed_pick_place_control.sh) | loopback 8766 操作页 | Python/demo runner | L4；页面空闲不占 CAN |
-| [fixed_pick_place.py](web-control/scripts/fixed_pick_place.py) | simulate/dry-run/real | YAML/Startouch bridge | L2/L4；real 必须逐步确认 |
+| [demo_fixed_pick_place.sh](scripts/demo_fixed_pick_place.sh) | 固定点手动演示包装入口 | branch/CAN/owner/点位/路径/lift/YAML/bridge | 唯一教程 L4 入口；默认 `manual` 并按配置逐步确认 |
+| [open_fixed_pick_place_control.sh](scripts/open_fixed_pick_place_control.sh) | loopback 8766 操作页 | Python/demo runner | Experimental、非教程入口；自动路由尚未硬门禁 |
+| [fixed_pick_place.py](web-control/scripts/fixed_pick_place.py) | simulate/dry-run/real 底层 runner | YAML/Startouch bridge | L2 可直接 simulate/dry-run；真实模式仅供包装脚本内部调用 |
 | [teach_fixed_point.py](web-control/scripts/teach_fixed_point.py) | 读取/验证/原子保存 J1–J6 点位 | real bridge/YAML | L4；会备份旧 YAML |
 | [check_hardware.py](scripts/check_hardware.py)、[calibrate_camera.py](scripts/calibrate_camera.py)、[teach_points.py](scripts/teach_points.py) | 早期脚本骨架 | 当前仅标准库打印 | Planned；不完成自动检查/标定/教学 |
 
@@ -768,14 +782,18 @@ stale、初态匹配或速度门禁。
 
 ### 6.9 HTTP、REST 与 WebSocket
 
-| 边界 | 路径 | 当前事实 |
-| --- | --- | --- |
-| packaged FastAPI `:8000` | 文档列出 `/api/robot/*`、`/api/camera/*`、`/api/task/*`、`/ws` | router 文件存在但 `create_app()` 未装配；视为接口合同，不是可用生产 API |
-| Startouch Node `:3000` | `/`, `/diag`, `/camera`, `/camera_lumos`, `/camera_lumos_vision`, `/api/vision/status` | 实际 Express routes；vision routes 只读 |
-| Startouch Node `:3000` | `/ws` | connect/disconnect/servo/preset/gripper/software_stop/status/ping；能控制真实硬件，必须现场监督 |
-| Lumos `:3001` | `/health`, `/frame.jpg`, `/camera_lumos` | 只读；frame 含 sequence 与 monotonic headers |
-| Voice Bridge | `/v1/voice`, subprotocol `thirdhand.voice.v1` | audio/text → response/candidate；不连接 robot `/ws` |
-| fixed page `:8766` | loopback UI/status/control | 只拥有自己启动的 runner，不终止无关控制器 |
+| 边界/传输 | 路径与默认 bind | 认证 | 控制权限与安全门禁 | 停止语义 | 成熟度 |
+| --- | --- | --- | --- | --- | --- |
+| packaged FastAPI HTTP/WS | 配置为 `0.0.0.0:8000`；文档列出 `/api/robot/*`、`/api/camera/*`、`/api/task/*`、`/ws` | 当前 app 未见有效认证接线，CORS 为 `*` | router 文件存在但 `create_app()` 未装配，不能取得实际控制权限 | 仅接口文件中的任务/机器人停止合同，运行 app 不可依赖 | Experimental 接口合同，非可用生产 API |
+| Startouch Node HTTP | `0.0.0.0:3000`；`/`、`/diag`、`/camera`、`/camera_lumos`、`/camera_lumos_vision`、`/api/vision/status` | 无认证 | 静态页面与只读 vision status；实际控制经同服务 `/ws` | HTTP routes 不提供硬件急停 | Experimental；只能放在受控网络 |
+| Startouch Node WebSocket | `ws://<host>:3000/ws` | 无认证；只按连接级 control lock 排他 | 精确 command 集：`connect`、`disconnect`、`servo`、`preset`、`gripper`、`software_stop`、`status`、`ping`、`estop`、`grasp_object`、`estop_camera`、`camera_refresh`；运动仍经限位、稳定初态、CAN feedback/watchdog 与串行化校验 | `software_stop` 调 SDK 软件停止；`estop` 只是它的别名，**不是硬件急停**；`disconnect` 清理 bridge；`estop_camera` 只停 camera bridge | 真实控制边界，L4 现场监督；无认证，禁止暴露到不受控网络 |
+| Lumos HTTP | `0.0.0.0:3001`；`/health`、`/frame.jpg`、`/camera_lumos` | 无认证 | camera-only、只读；frame 含 sequence/monotonic headers，不获机器人权限 | Ctrl+C/进程停止仅结束相机服务 | L3 只读；按教程改绑 loopback |
+| Voice Bridge WebSocket | 默认 `0.0.0.0:3001/v1/voice`，subprotocol `thirdhand.voice.v1` | 无认证 | audio/text → response/candidate；设计上无 RobotExecutor 且不连接 robot `/ws` | `session.stop`/断开只结束语音会话，不停止机器人 | Experimental 候选层；只能放在受控网络，且同机不能与 Lumos TCP 3001 并占 |
+| fixed demo HTTP | `127.0.0.1:8766`；GET `/api/status`；POST `/api/start`、`/api/start-auto`、`/api/stop`、`/api/continue` | 无认证，但默认仅 loopback | 只拥有自己启动的 runner；`/api/start` 为 manual，`/api/continue` 放行下一步；`/api/start-auto` 可启动自动三循环 | `/api/stop` 只停止页面拥有的 runner，不终止无关控制器，也不替代硬件急停 | Experimental、非教程入口；`/api/start-auto` 在 `validated_real_cycles: 0`、`require_step_confirmation: true` 下仍缺实现级硬门禁，L4 禁用 |
+
+`grasp_object` 当前由 `execution=false` 的授权器 fail closed，不能触发抓取；`estop_camera`
+只关闭相机 bridge；`camera_refresh` 只请求相机状态。命令名出现于协议不代表拥有执行权限，
+更不能把任何软件停止消息等同于独立硬件急停或动力切断。
 
 ### 6.10 模型和运行产物政策
 
@@ -795,7 +813,8 @@ stale、初态匹配或速度门禁。
 
 每一级都独立授权；完成 L2 不意味着可以进入 L3，更不意味着可以运动。命令默认从仓库根
 目录运行。开始前记录 `git rev-parse HEAD` 与 `git status --short`，不要在 dirty 工作树上
-覆盖标定、配置或他人的运行产物。
+覆盖标定、配置或他人的运行产物。每打开一个新终端，都应先进入该 checkout 内的任意目录，
+再运行 `cd "$(git rev-parse --show-toplevel)"`；下文多终端步骤会显式重复该命令。
 
 ### L0：阅读、安装和准备（无硬件权限）
 
@@ -903,9 +922,9 @@ STARTOUCH_SDK_PATH="$HOME/arm/startouch_sdk" \
 Voice Protocol 自动 smoke（会退出）与交互 mock（保持运行）：
 
 ```bash
-cd web-control/server
-npm run test:voice-protocol
-VOICE_HOST=127.0.0.1 VOICE_PORT=3001 node test/voice-mock.js
+cd "$(git rev-parse --show-toplevel)"
+npm --prefix web-control/server run test:voice-protocol
+VOICE_HOST=127.0.0.1 VOICE_PORT=3001 node web-control/server/test/voice-mock.js
 ```
 
 **预期观察：**模拟 Web 只报告模拟/干运行状态；协议 smoke 按顺序收到 audio/text 事件；
@@ -929,6 +948,7 @@ confirmation/refusal 日志、端口与 PID。
 先在独立终端启动 camera-only Lumos 服务（无 CAN/Startouch 依赖）：
 
 ```bash
+cd "$(git rev-parse --show-toplevel)"
 LUMOS_HTTP_HOST=127.0.0.1 LUMOS_HTTP_PORT=3001 \
   "$HOME/miniconda3/envs/thirdhand-remind3d/bin/python" \
   web-control/server/lumos_http_server.py
@@ -937,6 +957,7 @@ LUMOS_HTTP_HOST=127.0.0.1 LUMOS_HTTP_PORT=3001 \
 在第二个终端进行只读预检、启动和短时 verifier：
 
 ```bash
+cd "$(git rev-parse --show-toplevel)"
 curl --fail http://127.0.0.1:3001/health
 bash scripts/vision/start_dual_camera_online.sh --background
 bash scripts/vision/start_dual_camera_online.sh --status
@@ -979,32 +1000,38 @@ UP/1 Mbps；只有一个控制 owner；点位由本机实教并逐点复核；15
 先只读检查接口和竞争进程：
 
 ```bash
+cd "$(git rev-parse --show-toplevel)"
 ip -details -statistics link show can0
 ps -ef | rg 'startouch_bridge.py|proxy.js|fixed_pick_place.py|teach_fixed_point.py|ros2|move_group'
 ```
 
-推荐从 loopback 页面进入；页面空闲时不连接 `can0`：
+本教程唯一允许的 L4 启动入口是默认 manual 的包装脚本；它先检查预期 branch、CAN
+UP/1 Mbps、唯一控制 owner、资源锁、点位/分段/25 cm lift/限位与配置，再启动底层 runner：
 
 ```bash
-bash scripts/open_fixed_pick_place_control.sh
+bash scripts/demo_fixed_pick_place.sh
 ```
 
-打开 `http://127.0.0.1:8766`，本教程只允许“手动逐步演示”：逐阶段确认机械臂、夹爪、
-瓶体、线缆和人员位置，再点击一次“执行下一步”。等价 CLI 只允许带显式逐步确认：
+保持默认 `DEMO_RUN_MODE=manual`。当前配置为 `validated_real_cycles: 0` 且
+`require_step_confirmation: true`，包装脚本会要求每一步在终端显式确认；不要通过环境变量
+切换模式或移除确认。
 
-```bash
-"$HOME/miniconda3/envs/LumosTouch/bin/python" \
-  web-control/scripts/fixed_pick_place.py \
-  --real --speed-scale 0.15 --confirm-each-step
-```
+`web-control/scripts/fixed_pick_place.py` 的真实模式是包装脚本内部接口，禁止操作员直接调用：
+直接调用会绕过仅由包装层实施的 branch、CAN、控制资源、点位、路径分段和 lift preflight。
+`scripts/open_fixed_pick_place_control.sh` 与 `127.0.0.1:8766` 页面也仅为 Experimental，**不是
+本教程 L4 入口**。页面可见的“一键自动循环 3 次”只确认一次便调用 `/api/start-auto`，随后
+不再逐步确认；当前实现没有在上述未验收计数和逐步确认配置下硬拒绝该路由。在代码完成
+实现级 fail-closed 门禁并重新审计以前，禁止打开或使用该 UI 和 `/api/start-auto`。
 
-这不是无人监督运动配方：不要使用自动三循环入口，不要后台运行，不要移除确认，也不要在
-无人现场时复用上述命令。
+这不是无人监督运动配方：不要使用任何自动三循环入口，不要后台运行，不要移除确认，也
+不要在无人现场时复用包装命令。
 
-**预期观察：**资源 preflight 通过、状态稳定、每一步等待确认、关节/CAN feedback 持续、
-每个逻辑 route 完成后才进入下一步，日志写入 `logs/fixed_pick_place/`。
+**预期观察：**终端依次报告包装层 preflight 通过、状态稳定，并在每一步等待 stdin 确认；
+关节/CAN feedback 持续、每个逻辑 route 完成后才进入下一步，日志写入
+`logs/fixed_pick_place/`。
 
-**禁止：**Web controller 与 fixed runner 并行；使用 test fixture 的点位配合 `--real`；跳过
+**禁止：**打开 fixed demo UI、调用 `/api/start-auto` 或任何自动 route；直接调用真实 Python
+runner；Web controller 与 fixed runner 并行；使用 test fixture 的点位执行真实运动；跳过
 点位/限位/分支/锁检查；提高速度；无人监督或远程盲操；把软件 Stop 当硬件急停。
 
 **停止条件：**任何 `RESOURCE_CONFLICT`、CAN stale、初态/反馈不匹配、意外方向/声音/振动、

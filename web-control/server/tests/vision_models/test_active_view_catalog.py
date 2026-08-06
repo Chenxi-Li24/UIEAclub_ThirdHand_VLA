@@ -10,6 +10,7 @@ import pytest
 from vision.types import InvalidDataError
 from vision_models.active_view_catalog import (
     ActiveViewEvidenceError,
+    ActiveViewEvidenceGuard,
     load_active_view_evidence,
     load_active_view_foundation,
 )
@@ -273,3 +274,24 @@ def test_loader_rejects_invalid_numeric_camera_values(tmp_path: Path) -> None:
         load_active_view_evidence(
             camera_path, table_path, catalog_path, evidence_dir=evidence_dir
         )
+
+
+def test_loaded_evidence_guard_fails_closed_if_catalog_hash_changes(tmp_path: Path) -> None:
+    evidence_dir = tmp_path / "evidence"
+    camera_path, table_path, catalog_path = write_evidence(evidence_dir)
+    guard = ActiveViewEvidenceGuard.load(
+        camera_path,
+        table_path,
+        catalog_path,
+        evidence_dir=evidence_dir,
+    )
+    original_id = guard.evidence.evidence_id
+    assert guard.verify_unchanged() is True
+
+    catalog = json.loads(catalog_path.read_text(encoding="utf-8"))
+    catalog.pop("content_id")
+    catalog["poses"][0]["joint_tolerance_deg"] = 0.8
+    catalog_path.write_text(json.dumps(addressed(catalog)), encoding="utf-8")
+
+    assert guard.verify_unchanged() is False
+    assert guard.evidence.evidence_id == original_id

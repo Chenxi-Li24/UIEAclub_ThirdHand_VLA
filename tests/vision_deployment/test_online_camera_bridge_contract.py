@@ -9,6 +9,7 @@ import sys
 from pathlib import Path
 
 import numpy as np
+import pytest
 
 ROOT = Path(__file__).parents[2]
 PYTHON_BRIDGE = ROOT / "web-control/server/camera_bridge.py"
@@ -58,6 +59,91 @@ def test_stdin_contract_rejects_targets_detections_and_motion_commands():
     assert bridge.accepted_command_type({"cmd": "shutdown"}) == "shutdown"
     for forbidden in ("detection_result", "grasp_target", "move", "trajectory"):
         assert bridge.accepted_command_type({"type": forbidden}) is None
+
+
+def valid_arm_state(timestamp: str = "1000000000") -> dict:
+    return {
+        "type": "arm_state",
+        "tcp_position_m": [0.1, 0.0, 0.3],
+        "tcp_euler_rad": [0.0, 0.0, 0.0],
+        "joints_deg": [1, 2, -3, 4, 5, 6],
+        "velocities_deg_s": [0, 0, 0, 0, 0, 0],
+        "stationary": True,
+        "monotonic_ns": timestamp,
+    }
+
+
+def test_arm_state_requires_sender_timestamp_and_explicit_stationarity():
+    bridge = load_python_bridge()
+
+    accepted = bridge.parse_arm_state(valid_arm_state(), now_ns=1_100_000_000)
+
+    assert accepted.stationary is True
+    assert accepted.stamp.monotonic_ns == 1_000_000_000
+    np.testing.assert_allclose(accepted.joints_deg, [1, 2, -3, 4, 5, 6])
+    np.testing.assert_allclose(accepted.velocities_deg_s, np.zeros(6))
+
+
+@pytest.mark.parametrize(
+    "mutation,match",
+    [
+        (lambda value: value.pop("monotonic_ns"), "keys"),
+        (lambda value: value.update(monotonic_ns=True), "timestamp"),
+        (lambda value: value.update(monotonic_ns="1200000000"), "future"),
+        (lambda value: value.update(monotonic_ns="700000000"), "stale"),
+        (lambda value: value.update(stationary=1), "stationary"),
+        (lambda value: value.update(velocities_deg_s=[0, 0, 0, 0, 0, 0.6]), "velocity"),
+    ],
+)
+def test_arm_state_rejects_invalid_provenance_and_false_stationarity(mutation, match):
+    bridge = load_python_bridge()
+    command = valid_arm_state()
+    mutation(command)
+
+    with pytest.raises(ValueError, match=match):
+        bridge.parse_arm_state(command, now_ns=1_100_000_000)
+
+
+def test_arm_state_rejects_backward_sender_timestamp():
+    bridge = load_python_bridge()
+
+    with pytest.raises(ValueError, match="backward"):
+        bridge.parse_arm_state(
+            valid_arm_state("1000000000"),
+            now_ns=1_100_000_000,
+            previous_monotonic_ns=1_000_000_001,
+        )
+
+
+def test_online_inputs_fail_closed_when_evidence_changes_or_pose_is_stale():
+    bridge = load_python_bridge()
+    sample = bridge.parse_arm_state(valid_arm_state(), now_ns=1_100_000_000)
+
+    class Guard:
+        def __init__(self, unchanged):
+            self.unchanged = unchanged
+            self.evidence = type("Evidence", (), {"camera": object()})()
+
+        def verify_unchanged(self):
+            return self.unchanged
+
+    calibration, robot_pose, stationary, blockers = bridge.select_online_inputs(
+        Guard(True), sample, now_ns=1_100_000_000
+    )
+    assert calibration is not None
+    assert robot_pose is not None
+    assert stationary is True
+    assert blockers == ()
+
+    changed = bridge.select_online_inputs(Guard(False), sample, now_ns=1_100_000_000)
+    assert changed[0] is None
+    assert changed[2] is False
+    assert "calibration_changed" in changed[3]
+
+    stale = bridge.select_online_inputs(Guard(True), sample, now_ns=1_300_000_001)
+    assert stale[1] is None
+    assert stale[2] is False
+    assert "robot_pose_stale" in stale[3]
 
 
 def test_d435_capture_supervisor_retries_after_transient_start_failure(monkeypatch):
@@ -118,9 +204,9 @@ bridge.child = {{
 }};
 const spec = bridge.buildSpawnSpec();
 const rejected = bridge.send({{ type: 'detection_result', targets: [{{ actionable: true }}] }});
-const accepted = bridge.send({{
-  type: 'arm_state', tcp_position_m: [0,0,0], tcp_euler_rad: [0,0,0]
-}});
+const accepted = bridge.sendArmState(
+  [0.1,0,0.3], [0,0,0], [1,2,-3,4,5,6], [0,0,0,0,0,0], true, '1000000'
+);
 const paused = new PassThrough();
 paused.pause();
 bridge.releaseMjpegStream(paused, new PassThrough());
@@ -155,7 +241,7 @@ process.stdout.write(JSON.stringify({{
         "rejected": False,
         "accepted": True,
         "writes": [
-            '{"type":"arm_state","tcp_position_m":[0,0,0],"tcp_euler_rad":[0,0,0]}\n'
+            '{"type":"arm_state","tcp_position_m":[0.1,0,0.3],"tcp_euler_rad":[0,0,0],"joints_deg":[1,2,-3,4,5,6],"velocities_deg_s":[0,0,0,0,0,0],"stationary":true,"monotonic_ns":"1000000"}\n'
         ],
         "onlineEnabled": "1",
         "visionConfig": "/tmp/vision.yaml",

@@ -68,6 +68,11 @@ module.exports = {
       path.resolve(__dirname, '../../configs/vision/remind3d.yaml'),
     activeViewConfig: process.env.ACTIVE_VIEW_CONFIG ||
       path.resolve(__dirname, '../../configs/vision/active_view.yaml'),
+    activeViewEvidenceDir: process.env.ACTIVE_VIEW_EVIDENCE_DIR ||
+      path.resolve(__dirname, '../../data/calibration/active-view'),
+    activeViewCameraEvidence: process.env.ACTIVE_VIEW_CAMERA_EVIDENCE || '',
+    activeViewTableEvidence: process.env.ACTIVE_VIEW_TABLE_EVIDENCE || '',
+    activeViewCatalog: process.env.ACTIVE_VIEW_CATALOG || '',
     lumosSnapshotUrl: process.env.LUMOS_SNAPSHOT_URL ||
       'http://127.0.0.1:3001/frame.jpg',
     yoloModel: process.env.CAMERA_YOLO_MODEL || path.join(__dirname, 'yolov8n.pt'),

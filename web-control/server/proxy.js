@@ -330,7 +330,13 @@ cameraBridge.on('log', message => {
 // Forward arm state to camera bridge for coordinate transforms
 bridge.on('robot_state', message => {
   const jointsDeg = radiansToDegrees(message.joints_rad);
-  if (jointsDeg.length !== 6 || !jointsDeg.every(Number.isFinite)) {
+  const velocitiesDeg = Array.isArray(message.velocities_rad_s)
+    ? radiansToDegrees(message.velocities_rad_s)
+    : [];
+  if (
+    jointsDeg.length !== 6 || !jointsDeg.every(Number.isFinite)
+    || velocitiesDeg.length !== 6 || !velocitiesDeg.every(Number.isFinite)
+  ) {
     broadcast({ type: 'error', msg: 'SDK 返回了无效关节状态，已忽略' });
     return;
   }
@@ -341,13 +347,23 @@ bridge.on('robot_state', message => {
 
   // Forward arm state to camera bridge for coordinate transforms
   if (cameraBridge.ready) {
-    cameraBridge.sendArmState(message.tcp_position_m, message.tcp_euler_rad);
+    const stationary = !motionActive
+      && message.state !== 'MOVING'
+      && velocitiesDeg.every(value => Math.abs(value) <= 0.5);
+    cameraBridge.sendArmState(
+      message.tcp_position_m,
+      message.tcp_euler_rad,
+      jointsDeg,
+      velocitiesDeg,
+      stationary,
+      process.hrtime.bigint().toString()
+    );
   }
 
   broadcast({
     type: 'robot_state',
     joints: latestJointsDeg,
-    velocities: radiansToDegrees(message.velocities_rad_s),
+    velocities: velocitiesDeg,
     torques: message.torques_nm,
     tcpPos: message.tcp_position_m.map(value => value * 1000),
     tcpEuler: radiansToDegrees(message.tcp_euler_rad),

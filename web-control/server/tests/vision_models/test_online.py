@@ -4,7 +4,14 @@ import json
 
 import numpy as np
 
-from vision.dual_camera import DualCameraConfig, DualCameraPerception
+from vision.calibration_gate import audit_handeye_calibration
+from vision.camera_models import PinholeCamera, SeucmCamera
+from vision.dual_camera import (
+    DualCameraCalibrationBundle,
+    DualCameraConfig,
+    DualCameraPerception,
+    StampedRobotPose,
+)
 from vision.identity import PersistentIdentityConfig, PersistentIdentityMemory
 from vision.instance_pose import InstancePoseConfig
 from vision.online_frames import CameraRoleMap, FramePair, RgbFrame
@@ -283,3 +290,51 @@ def test_active_view_adapter_error_does_not_make_model_unavailable() -> None:
     assert len(result.targets) == 1
     assert result.active_view_reports[0].reasons == ("active_view_adapter_unavailable",)
     assert "active_view_adapter_unavailable" in result.blockers
+
+
+class RecordingActiveView:
+    def __init__(self):
+        self.kwargs = None
+
+    def evaluate(self, **kwargs):
+        self.kwargs = kwargs
+        return ()
+
+
+def test_online_engine_forwards_verified_stationarity_and_calibration() -> None:
+    recorder = RecordingActiveView()
+    calibration = DualCameraCalibrationBundle.from_audits(
+        d435=PinholeCamera(40.0, 40.0, 2.0, 2.0, 5, 5),
+        lumos=SeucmCamera(40.0, 40.0, 2.0, 2.0, 0.5, 1.0, 5, 5),
+        d435_to_lumos_audit=audit_handeye_calibration(
+            {
+                "T_lumos_from_d435": np.eye(4).tolist(),
+                "validation": {"reprojection_rmse_px": 0.4, "position_rmse_m": 0.004},
+            },
+            "T_lumos_from_d435",
+        ),
+        lumos_to_flange_audit=audit_handeye_calibration(
+            {
+                "T_flange_from_lumos": np.eye(4).tolist(),
+                "validation": {"reprojection_rmse_px": 0.4, "position_rmse_m": 0.004},
+            },
+            "T_flange_from_lumos",
+        ),
+    )
+    robot_pose = StampedRobotPose(
+        FrameStamp("robot_flange_pose", 1, 1_000_000_000),
+        np.eye(4),
+    )
+
+    engine(active_view=recorder).process(
+        pair(),
+        robot_pose=robot_pose,
+        calibration=calibration,
+        arm_stationary=True,
+        now_ns=1_020_000_000,
+    )
+
+    assert recorder.kwargs is not None
+    assert recorder.kwargs["robot_pose"] is robot_pose
+    assert recorder.kwargs["calibration"] is calibration
+    assert recorder.kwargs["arm_stationary"] is True

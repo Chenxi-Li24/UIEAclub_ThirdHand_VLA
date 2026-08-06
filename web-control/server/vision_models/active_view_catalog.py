@@ -300,6 +300,53 @@ class ActiveViewEvidence:
         object.__setattr__(self, "poses", poses)
 
 
+@dataclass(frozen=True)
+class ActiveViewEvidenceGuard:
+    """Hold one immutable evidence bundle and detect source changes without reloading it."""
+
+    camera_path: Path
+    table_path: Path
+    catalog_path: Path
+    evidence_dir: Path
+    evidence: ActiveViewEvidence
+
+    @classmethod
+    def load(
+        cls,
+        camera_path: Path | str,
+        table_path: Path | str,
+        catalog_path: Path | str,
+        *,
+        evidence_dir: Path | str,
+    ) -> "ActiveViewEvidenceGuard":
+        root = Path(evidence_dir).resolve()
+        evidence = load_active_view_evidence(
+            camera_path,
+            table_path,
+            catalog_path,
+            evidence_dir=root,
+        )
+        return cls(
+            camera_path=Path(camera_path).resolve(),
+            table_path=Path(table_path).resolve(),
+            catalog_path=Path(catalog_path).resolve(),
+            evidence_dir=root,
+            evidence=evidence,
+        )
+
+    def verify_unchanged(self) -> bool:
+        try:
+            current = load_active_view_evidence(
+                self.camera_path,
+                self.table_path,
+                self.catalog_path,
+                evidence_dir=self.evidence_dir,
+            )
+        except (ActiveViewEvidenceError, OSError, ValueError):
+            return False
+        return current.evidence_id == self.evidence.evidence_id
+
+
 def load_active_view_foundation(
     camera_path: Path | str,
     table_path: Path | str,
@@ -540,6 +587,7 @@ def intersect_camera_rays_with_table(
 __all__ = [
     "ActiveViewEvidence",
     "ActiveViewEvidenceError",
+    "ActiveViewEvidenceGuard",
     "ActiveViewFoundation",
     "audit_path_validation",
     "canonical_json",

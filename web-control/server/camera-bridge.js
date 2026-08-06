@@ -77,6 +77,15 @@ class CameraBridge extends EventEmitter {
       path.resolve(__dirname, '../../configs/vision/remind3d.yaml');
     const activeViewConfig = this.config.activeViewConfig || process.env.ACTIVE_VIEW_CONFIG ||
       path.resolve(__dirname, '../../configs/vision/active_view.yaml');
+    const activeViewEvidenceDir = this.config.activeViewEvidenceDir ||
+      process.env.ACTIVE_VIEW_EVIDENCE_DIR ||
+      path.resolve(__dirname, '../../data/calibration/active-view');
+    const activeViewCameraEvidence = this.config.activeViewCameraEvidence ||
+      process.env.ACTIVE_VIEW_CAMERA_EVIDENCE || path.join(activeViewEvidenceDir, 'camera.json');
+    const activeViewTableEvidence = this.config.activeViewTableEvidence ||
+      process.env.ACTIVE_VIEW_TABLE_EVIDENCE || path.join(activeViewEvidenceDir, 'table.json');
+    const activeViewCatalog = this.config.activeViewCatalog ||
+      process.env.ACTIVE_VIEW_CATALOG || path.join(activeViewEvidenceDir, 'catalog.json');
     const lumosSnapshotUrl = this.config.lumosSnapshotUrl ||
       process.env.LUMOS_SNAPSHOT_URL || 'http://127.0.0.1:3001/frame.jpg';
     const onlineEnabled = this.config.onlineEnabled === undefined
@@ -95,6 +104,10 @@ class CameraBridge extends EventEmitter {
         VISION_ONLINE_ENABLED: onlineEnabled ? '1' : '0',
         VISION_CONFIG: visionConfig,
         ACTIVE_VIEW_CONFIG: activeViewConfig,
+        ACTIVE_VIEW_EVIDENCE_DIR: activeViewEvidenceDir,
+        ACTIVE_VIEW_CAMERA_EVIDENCE: activeViewCameraEvidence,
+        ACTIVE_VIEW_TABLE_EVIDENCE: activeViewTableEvidence,
+        ACTIVE_VIEW_CATALOG: activeViewCatalog,
         LUMOS_SNAPSHOT_URL: lumosSnapshotUrl,
       },
       stdio: ['pipe', 'pipe', 'pipe', 'pipe', 'pipe'],
@@ -131,11 +144,22 @@ class CameraBridge extends EventEmitter {
   }
 
   /** Send arm state to the camera bridge for coordinate transforms */
-  sendArmState(tcpPosition, tcpEuler) {
+  sendArmState(
+    tcpPosition,
+    tcpEuler,
+    jointsDeg,
+    velocitiesDegS,
+    stationary,
+    observedAtNs
+  ) {
     return this.send({
       type: 'arm_state',
       tcp_position_m: tcpPosition,
       tcp_euler_rad: tcpEuler,
+      joints_deg: jointsDeg,
+      velocities_deg_s: velocitiesDegS,
+      stationary,
+      monotonic_ns: observedAtNs,
     });
   }
 

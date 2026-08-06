@@ -8,7 +8,7 @@ the canonical Lumos perception overlay. This process never opens robot/CAN.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field, replace
 import json
 import os
 from pathlib import Path
@@ -33,6 +33,10 @@ from vision_models.active_view_online import (
     load_active_view_config,
 )
 from vision_models.lumos_client import LumosSnapshotClient
+from vision_models.active_view_catalog import (
+    ActiveViewEvidenceError,
+    ActiveViewEvidenceGuard,
+)
 from vision_models.online import (
     OnlinePerceptionEngine,
     load_online_vision_config,
@@ -55,6 +59,30 @@ ACTIVE_VIEW_CONFIG = Path(
     os.environ.get(
         "ACTIVE_VIEW_CONFIG",
         str(Path(__file__).resolve().parents[2] / "configs/vision/active_view.yaml"),
+    )
+).resolve()
+ACTIVE_VIEW_EVIDENCE_DIR = Path(
+    os.environ.get(
+        "ACTIVE_VIEW_EVIDENCE_DIR",
+        str(Path(__file__).resolve().parents[2] / "data/calibration/active-view"),
+    )
+).resolve()
+ACTIVE_VIEW_CAMERA_EVIDENCE = Path(
+    os.environ.get(
+        "ACTIVE_VIEW_CAMERA_EVIDENCE",
+        str(ACTIVE_VIEW_EVIDENCE_DIR / "camera.json"),
+    )
+).resolve()
+ACTIVE_VIEW_TABLE_EVIDENCE = Path(
+    os.environ.get(
+        "ACTIVE_VIEW_TABLE_EVIDENCE",
+        str(ACTIVE_VIEW_EVIDENCE_DIR / "table.json"),
+    )
+).resolve()
+ACTIVE_VIEW_CATALOG = Path(
+    os.environ.get(
+        "ACTIVE_VIEW_CATALOG",
+        str(ACTIVE_VIEW_EVIDENCE_DIR / "catalog.json"),
     )
 ).resolve()
 LUMOS_SNAPSHOT_URL = os.environ.get(
@@ -173,7 +201,139 @@ class D435Sample:
 @dataclass(frozen=True)
 class ArmPoseSample:
     stamp: FrameStamp
-    transform: np.ndarray
+    transform: np.ndarray = field(compare=False)
+    joints_deg: np.ndarray = field(compare=False)
+    velocities_deg_s: np.ndarray = field(compare=False)
+    stationary: bool
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.stamp, FrameStamp) or self.stamp.source != "robot_flange_pose":
+            raise ValueError("arm sample provenance is invalid")
+        transform = np.array(self.transform, dtype=float, copy=True)
+        joints = np.array(self.joints_deg, dtype=float, copy=True)
+        velocities = np.array(self.velocities_deg_s, dtype=float, copy=True)
+        if transform.shape != (4, 4) or not np.isfinite(transform).all():
+            raise ValueError("arm transform must be finite")
+        if joints.shape != (6,) or not np.isfinite(joints).all():
+            raise ValueError("arm joints must contain six finite values")
+        if velocities.shape != (6,) or not np.isfinite(velocities).all():
+            raise ValueError("arm velocities must contain six finite values")
+        if not isinstance(self.stationary, bool):
+            raise ValueError("arm stationary state must be explicit")
+        transform.setflags(write=False)
+        joints.setflags(write=False)
+        velocities.setflags(write=False)
+        object.__setattr__(self, "transform", transform)
+        object.__setattr__(self, "joints_deg", joints)
+        object.__setattr__(self, "velocities_deg_s", velocities)
+
+
+ARM_STATE_KEYS = {
+    "type",
+    "tcp_position_m",
+    "tcp_euler_rad",
+    "joints_deg",
+    "velocities_deg_s",
+    "stationary",
+    "monotonic_ns",
+}
+
+
+def _finite_vector(value: Any, length: int, name: str) -> np.ndarray:
+    if not isinstance(value, list) or len(value) != length or any(
+        isinstance(item, bool) for item in value
+    ):
+        raise ValueError(f"{name} must contain {length} finite numbers")
+    try:
+        result = np.asarray(value, dtype=float)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"{name} must contain {length} finite numbers") from exc
+    if not np.isfinite(result).all():
+        raise ValueError(f"{name} must contain {length} finite numbers")
+    return result
+
+
+def parse_arm_state(
+    command: Any,
+    *,
+    now_ns: int,
+    previous_monotonic_ns: Optional[int] = None,
+) -> ArmPoseSample:
+    """Validate one sender-timestamped, read-only robot-state sample."""
+
+    if not isinstance(command, dict) or set(command) != ARM_STATE_KEYS:
+        raise ValueError("arm state keys are invalid")
+    if command.get("type") != "arm_state":
+        raise ValueError("arm state type is invalid")
+    timestamp_raw = command["monotonic_ns"]
+    if (
+        not isinstance(timestamp_raw, str)
+        or not timestamp_raw.isascii()
+        or not timestamp_raw.isdigit()
+        or not 1 <= len(timestamp_raw) <= 20
+    ):
+        raise ValueError("arm state timestamp is invalid")
+    timestamp_ns = int(timestamp_raw)
+    if timestamp_ns <= 0:
+        raise ValueError("arm state timestamp is invalid")
+    if isinstance(now_ns, bool) or not isinstance(now_ns, int) or now_ns <= 0:
+        raise ValueError("arm state receipt timestamp is invalid")
+    if timestamp_ns > now_ns:
+        raise ValueError("arm state timestamp is in the future")
+    if now_ns - timestamp_ns > 250_000_000:
+        raise ValueError("arm state is stale")
+    if previous_monotonic_ns is not None and timestamp_ns <= previous_monotonic_ns:
+        raise ValueError("arm state timestamp moved backward")
+    stationary = command["stationary"]
+    if not isinstance(stationary, bool):
+        raise ValueError("arm stationary state must be explicit")
+    position = _finite_vector(command["tcp_position_m"], 3, "TCP position")
+    euler = _finite_vector(command["tcp_euler_rad"], 3, "TCP Euler")
+    joints = _finite_vector(command["joints_deg"], 6, "joints")
+    velocities = _finite_vector(command["velocities_deg_s"], 6, "velocities")
+    if stationary and np.any(np.abs(velocities) > 0.5):
+        raise ValueError("stationary arm state exceeds the velocity threshold")
+    return ArmPoseSample(
+        stamp=FrameStamp("robot_flange_pose", timestamp_ns, timestamp_ns),
+        transform=sdk_pose_transform(position, euler),
+        joints_deg=joints,
+        velocities_deg_s=velocities,
+        stationary=stationary,
+    )
+
+
+def select_online_inputs(
+    evidence_guard: Optional[ActiveViewEvidenceGuard],
+    arm_sample: Optional[ArmPoseSample],
+    *,
+    now_ns: int,
+) -> tuple[Any, Optional[StampedRobotPose], bool, tuple[str, ...]]:
+    """Select trusted calibration/pose inputs for one perception frame."""
+
+    blockers: list[str] = []
+    calibration = None
+    if evidence_guard is None:
+        blockers.append("calibration_unavailable")
+    elif not evidence_guard.verify_unchanged():
+        blockers.append("calibration_changed")
+    else:
+        calibration = evidence_guard.evidence.camera
+    robot_pose = None
+    stationary = False
+    if arm_sample is None:
+        blockers.append("robot_pose_unavailable")
+    elif now_ns < arm_sample.stamp.monotonic_ns or (
+        now_ns - arm_sample.stamp.monotonic_ns > 250_000_000
+    ):
+        blockers.append("robot_pose_stale")
+    else:
+        robot_pose = StampedRobotPose(arm_sample.stamp, arm_sample.transform)
+        stationary = arm_sample.stationary
+        if not stationary:
+            blockers.append("arm_not_stationary")
+    if calibration is None:
+        stationary = False
+    return calibration, robot_pose, stationary, tuple(blockers)
 
 
 d435_latest: LatestValueBuffer[D435Sample] = LatestValueBuffer()
@@ -330,6 +490,22 @@ def capture_d435(retry_initial_s: float = 0.5) -> None:
 def _load_online_engine():
     config = load_online_vision_config(VISION_CONFIG)
     active_view_config = load_active_view_config(ACTIVE_VIEW_CONFIG)
+    evidence_guard = None
+    evidence_error = None
+    try:
+        evidence_guard = ActiveViewEvidenceGuard.load(
+            ACTIVE_VIEW_CAMERA_EVIDENCE,
+            ACTIVE_VIEW_TABLE_EVIDENCE,
+            ACTIVE_VIEW_CATALOG,
+            evidence_dir=ACTIVE_VIEW_EVIDENCE_DIR,
+        )
+        active_view_config = replace(
+            active_view_config,
+            table_plane=evidence_guard.evidence.table,
+            observation_poses=evidence_guard.evidence.poses,
+        )
+    except (ActiveViewEvidenceError, OSError, ValueError) as error:
+        evidence_error = str(error)[:512]
     emit(
         "vision_status",
         online=False,
@@ -363,14 +539,14 @@ def _load_online_engine():
         perception,
         config,
         active_view=active_view,
-    )
+    ), evidence_guard, evidence_error
 
 
 def run_online_perception() -> None:
     """Read newest Lumos frame, pair newest D435 depth, and emit read-only output."""
 
     try:
-        config, engine = _load_online_engine()
+        config, engine, evidence_guard, evidence_error = _load_online_engine()
         pairer = LatestFramePairer(
             config.roles,
             config.perception_config.max_frame_skew_ns,
@@ -406,25 +582,26 @@ def run_online_perception() -> None:
             now_ns = time.monotonic_ns()
             pair = pairer.pair(rgb, depth, now_ns)
             arm_item = arm_pose_latest.get_after(0, timeout_s=0.0)
-            robot_pose = None
-            if arm_item is not None:
-                _, arm = arm_item
-                if now_ns - arm.stamp.monotonic_ns <= 250_000_000:
-                    robot_pose = StampedRobotPose(arm.stamp, arm.transform)
-            # The current real cross-camera calibration is unvalidated. Passing None is
-            # intentional: identity/overlay remain online but all targets stay blocked.
+            arm = None if arm_item is None else arm_item[1]
+            calibration, robot_pose, arm_stationary, input_blockers = select_online_inputs(
+                evidence_guard,
+                arm,
+                now_ns=now_ns,
+            )
             result = engine.process(
                 pair,
                 robot_pose=robot_pose,
-                calibration=None,
-                arm_stationary=False,
+                calibration=calibration,
+                arm_stationary=arm_stationary,
                 now_ns=now_ns,
             )
             event = result.to_event()
             emit_event(event)
             blockers = list(result.blockers)
-            if "calibration_unavailable" not in blockers:
+            blockers.extend(input_blockers)
+            if evidence_error and evidence_guard is None:
                 blockers.append("calibration_unavailable")
+            blockers = list(dict.fromkeys(blockers))
             _update_state(
                 lumos_sequence=last_lumos_sequence,
                 model_ready=result.model_ready,
@@ -467,23 +644,22 @@ def run_online_perception() -> None:
 
 
 def _handle_arm_state(command: dict[str, Any]) -> None:
-    position = command.get("tcp_position_m") or command.get("position")
-    euler = command.get("tcp_euler_rad") or command.get("euler")
-    if not isinstance(position, list) or not isinstance(euler, list):
-        return
-    if len(position) != 3 or len(euler) != 3:
-        return
-    values = np.asarray([*position, *euler], dtype=float)
-    if not np.isfinite(values).all():
-        return
-    stamp_ns = time.monotonic_ns()
-    sequence = arm_pose_latest.publish(
-        ArmPoseSample(
-            FrameStamp("robot_flange_pose", stamp_ns, stamp_ns),
-            sdk_pose_transform(values[:3], values[3:]),
+    now_ns = time.monotonic_ns()
+    previous = _state_snapshot().get("robot_pose_monotonic_ns")
+    try:
+        sample = parse_arm_state(
+            command,
+            now_ns=now_ns,
+            previous_monotonic_ns=previous,
         )
+    except ValueError:
+        return
+    sequence = arm_pose_latest.publish(sample)
+    _update_state(
+        robot_pose_sequence=sequence,
+        robot_pose_monotonic_ns=sample.stamp.monotonic_ns,
+        arm_stationary=sample.stationary,
     )
-    _update_state(robot_pose_sequence=sequence)
 
 
 def main() -> None:

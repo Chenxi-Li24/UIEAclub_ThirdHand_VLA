@@ -1121,18 +1121,18 @@ v1 有意保持宽松：`hardware`、`models`、`artifacts` 等内部对象未�
 ### 8.6 图表预览注册表
 
 下表全部是 **Planned Evidence / 待补实验证据**，只描述未来生成物，不是空白结果图，也
-不能填入虚构数字。来源与生成命令要求以[图表清单](docs/research/figure_manifest.md)为准。
+不能填入虚构数字。每一行目前都没有结果；来源与生成命令要求以[图表清单](docs/research/figure_manifest.md)为准。
 
-| ID | 计划内容 | 最低来源 | 释放门禁 |
-| --- | --- | --- | --- |
-| V1 | Lumos mask + D435 depth + base-frame 3D | 同步帧、calibration、mask、registered points、manifest | 命令无手工改图复现 panel |
-| V2 | 遮挡前/中/重捕获身份 | held-out clip、IDs/cost/memory/annotations | 选择规则和 identity truth 固定 |
-| V3 | 注册误差、径向残差、不确定度 | correspondence、radial bins、covariance | 单位/聚合/排除/标定 ID 完整 |
-| L1 | instruction→context→candidate→preview→confirmation/refusal | 去标识 scenario 与 validator log | 不出现 secret 或执行成功暗示 |
-| E1 | baseline + confidence intervals | 全部 result records、n、CI、slice | 与预注册基线/区间方法一致 |
-| E2 | ablation table/curve | one-delta variants、seeds、source JSON/CSV | 控制条件完整 |
-| E3 | accuracy–latency–resource trade-off | accuracy/P50/P95/FPS/CPU/GPU/VRAM | 硬件和测量窗口可比 |
-| F1 | success/failure paired cases | 预先声明选择规则与 failure taxonomy | 不 cherry-pick，限制同时可见 |
+| ID | 计划内容 | 状态 | 必需来源数据 | 必需生成命令 | 释放门禁 |
+| --- | --- | --- | --- | --- | --- |
+| V1 | Lumos 实例 mask、D435 depth 和机器人基座坐标系 3D 视图 | Planned Evidence | 带时间戳的 Lumos RGB、D435 depth、calibration ID/hash、实例 masks、registered 3D points、experiment manifest | 版本化 script/command 按 manifest 对齐帧、应用记录的 calibration 并渲染已选样本 | manifest 和命令无需手工改图即可复现 panel |
+| V2 | 遮挡前、遮挡中和重捕获后的身份 | Planned Evidence | 有序 replay frames、detections/masks、track IDs、association scores、memory state、occlusion annotations、experiment manifest | 版本化 script/command 选择声明的 clips，并从 result records 渲染三个状态 | clip split 为 held-out，且 identity labels/selection rule 已记录 |
+| V3 | 深度注册误差、径向标定残差和不确定度视图 | Planned Evidence | calibration targets、correspondence/residual records、radial-bin metadata、registration errors、covariance/uncertainty records、manifest | 版本化 script/command 将 source JSON/CSV 聚合为残差、误差和不确定度 panels | 单位、聚合、calibration ID 和排除样本均已报告 |
+| L1 | VLA instruction、visual context、candidate、preview、confirmation 和 refusal reason | Planned Evidence | 去标识 scenario input、visual-context reference、structured candidate、preview output、confirmation event、validator/refusal log、manifest | 版本化 script/command 从 logs 渲染完整可审计 decision trace | trace 不含 secret、个人信息或误导性的 actuator-success claim |
+| E1 | baseline comparison 和 confidence intervals | Planned Evidence | 所有预注册 baselines 的 result records、sample counts、intervals、slices、source CSV/JSON、manifests | 版本化 script/command 读取 result records 并计算/绘制声明的 aggregate 和 confidence intervals | baselines、split、interval method 和 exclusions 与矩阵一致 |
+| E2 | ablation table/curve | Planned Evidence | controlled-variant result records、variant configuration、seeds、slices、source CSV/JSON、manifests | 版本化 script/command 按 variants 分组，生成声明的 table 或 curve | one-delta ablation rule 和所有 controls 均有文档记录 |
+| E3 | accuracy-latency-resource trade-off | Planned Evidence | accuracy、P50/P95 latency、FPS、CPU/GPU/VRAM records、hardware/environment manifests、source CSV/JSON | 版本化 script/command 按 experiment ID 连接 metrics 并渲染 trade-off points/error bars | hardware、batch/input settings 和 aggregation window 可比较 |
+| F1 | representative success/failure cases | Planned Evidence | 声明的 case-selection rule、scenario/clip IDs、input/output traces、failure taxonomy、manifests | 版本化 script/command 应用 selection rule 并渲染成对 success/failure cases | 不可 cherry-pick；limitations 和 refusal/failure context 必须可见 |
 
 ### 8.7 失败案例与 validity threats
 

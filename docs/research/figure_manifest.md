@@ -3,6 +3,8 @@
 Every entry below is `Planned Evidence`. It defines a future generated artifact,
 not a measured result. A figure can be released only after its source data,
 experiment manifest(s), and generation command are all linked and reproducible.
+This is the canonical preview registry: the README tables preserve each row's intended
+content, status, source-data requirement, generation-command requirement, and release gate.
 
 `Planned Evidence / 待补实验证据` means no result exists; every registry entry below
 has this status. `Evidence Incomplete / 待补充证据` is reserved for a partial result
@@ -17,7 +19,7 @@ separate readiness gap. It does not change a figure with no measurements from
 
 | ID | Intended content | Status | Required source data | Required generation command | Release gate |
 | --- | --- | --- | --- | --- | --- |
-| V1 | Lumos instance mask, D435 depth, and robot-base 3D result. | Planned Evidence | Timestamped Lumos RGB, D435 depth, calibration ID/hash, instance masks, registered 3D points, experiment manifest. | Versioned script/command that joins frames by manifest, applies the recorded calibration, and renders the selected samples. | Source manifest and command reproduce the panel without manual image editing. |
+| V1 | Lumos instance mask, D435 depth, and robot-base 3D view. | Planned Evidence | Timestamped Lumos RGB, D435 depth, calibration ID/hash, instance masks, registered 3D points, experiment manifest. | Versioned script/command that joins frames by manifest, applies the recorded calibration, and renders the selected samples. | Source manifest and command reproduce the panel without manual image editing. |
 | V2 | Identity before occlusion, during occlusion, and after reacquisition. | Planned Evidence | Ordered replay frames, detections/masks, track IDs, association scores, memory state, occlusion annotations, experiment manifest. | Versioned script/command that selects declared clips and renders the three states from result records. | Clip split is held out and identity labels/selection rule are recorded. |
 | V3 | Depth-registration error, radial calibration residuals, and uncertainty view. | Planned Evidence | Calibration targets, correspondence/residual records, radial-bin metadata, registration errors, covariance/uncertainty records, manifest. | Versioned script/command that aggregates source JSON/CSV into residual, error, and uncertainty panels. | Units, aggregation, calibration ID, and excluded samples are reported. |
 | L1 | VLA instruction, visual context, candidate, preview, confirmation, and refusal reason. | Planned Evidence | De-identified scenario input, visual-context reference, structured candidate, preview output, confirmation event, validator/refusal log, manifest. | Versioned script/command that renders the complete auditable decision trace from logs. | No secret, personal, or misleading actuator-success claim appears in the trace. |

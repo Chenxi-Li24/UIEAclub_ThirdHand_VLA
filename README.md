@@ -115,19 +115,20 @@ status.
 
 ### Planned figure registry / 计划图表登记
 
-All entries below are **Planned Evidence**; intended visuals are not measurements.
-Release requirements are maintained in the [full figure manifest](docs/research/figure_manifest.md).
+All entries below are **Planned Evidence**: they are future artifacts, not measurements, and no
+result exists for any row. The [full figure manifest](docs/research/figure_manifest.md) is the
+canonical release contract.
 
-| ID | Intended visual | Status | Required source artifact |
-| --- | --- | --- | --- |
-| V1 | Lumos mask + D435 depth + robot-base 3D | Planned Evidence | Timestamped RGB/depth, calibration, masks, 3D points, manifest |
-| V2 | Identity before/during/after occlusion | Planned Evidence | Replay frames, tracks, scores, memory, annotations, manifest |
-| V3 | Registration error, radial residuals, uncertainty | Planned Evidence | Calibration targets, residual/error/covariance records, manifest |
-| L1 | Instruction → candidate → preview → decision trace | Planned Evidence | Scenario, visual context, candidate, confirmation, validator log |
-| E1 | Baseline comparison with confidence intervals | Planned Evidence | Baseline records, counts, intervals, source CSV/JSON, manifests |
-| E2 | Controlled ablation table or curve | Planned Evidence | Variant configs, seeds, result records, source CSV/JSON |
-| E3 | Accuracy–latency–resource trade-off | Planned Evidence | Accuracy, P50/P95, FPS, resource and environment records |
-| F1 | Declared representative success/failure cases | Planned Evidence | Selection rule, scenario traces, failure taxonomy, manifests |
+| ID | Intended content | Status | Required source data | Required generation command | Release gate |
+| --- | --- | --- | --- | --- | --- |
+| V1 | Lumos instance mask, D435 depth, and robot-base 3D view | Planned Evidence | Timestamped Lumos RGB, D435 depth, calibration ID/hash, instance masks, registered 3D points, experiment manifest | Versioned script/command joins frames by manifest, applies recorded calibration, and renders selected samples | Manifest and command reproduce the panel without manual figure editing |
+| V2 | Identity before occlusion, during occlusion, and after reacquisition | Planned Evidence | Ordered replay frames, detections/masks, track IDs, association scores, memory state, occlusion annotations, experiment manifest | Versioned script/command selects declared clips and renders the three states from result records | Clip split is held out and identity labels/selection rule are recorded |
+| V3 | Depth-registration error, radial calibration residuals, and uncertainty view | Planned Evidence | Calibration targets, correspondence/residual records, radial-bin metadata, registration errors, covariance/uncertainty records, manifest | Versioned script/command aggregates source JSON/CSV into residual, error, and uncertainty panels | Units, aggregation, calibration ID, and excluded samples are reported |
+| L1 | VLA instruction, visual context, candidate, preview, confirmation, and refusal reason | Planned Evidence | De-identified scenario input, visual-context reference, structured candidate, preview output, confirmation event, validator/refusal log, manifest | Versioned script/command renders the complete auditable decision trace from logs | No secret, personal, or misleading actuator-success claim appears in the trace |
+| E1 | Baseline comparison and confidence intervals | Planned Evidence | Result records for all preregistered baselines, sample counts, intervals, slices, source CSV/JSON, manifests | Versioned script/command reads result records and computes/plots declared aggregate and confidence intervals | Baselines, split, interval method, and exclusions match the matrix |
+| E2 | Ablation table/curve | Planned Evidence | Controlled-variant result records, variant configuration, seeds, slices, source CSV/JSON, manifests | Versioned script/command groups variants and produces the declared table or curve | One-delta ablation rule and all controls are documented |
+| E3 | Accuracy-latency-resource trade-off | Planned Evidence | Accuracy, P50/P95 latency, FPS, CPU/GPU/VRAM records, hardware/environment manifests, source CSV/JSON | Versioned script/command joins metrics by experiment ID and renders trade-off points/error bars | Hardware, batch/input settings, and aggregation window are comparable |
+| F1 | Representative success and failure cases | Planned Evidence | Declared case-selection rule, scenario/clip IDs, input/output traces, failure taxonomy, manifests | Versioned script/command applies the selection rule and renders paired success/failure cases | Selection is not cherry-picked; limitations and refusal/failure context are visible |
 
 ### Dated measured deployment records / 已链接的日期测量记录
 

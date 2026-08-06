@@ -137,6 +137,38 @@ def test_readmes_do_not_contain_unqualified_placeholders() -> None:
         assert forbidden.search(read_doc(path)) is None
 
 
+def test_planned_preview_registry_is_complete_and_honest() -> None:
+    required_ids = {"V1", "V2", "V3", "L1", "E1", "E2", "E3", "F1"}
+    for path in DOCS:
+        text = read_doc(path)
+        assert required_ids <= set(re.findall(r"\b(?:V[123]|L1|E[123]|F1)\b", text))
+    manifest = read_doc("docs/research/figure_manifest.md")
+    for figure_id in required_ids:
+        assert f"| {figure_id} |" in manifest
+    assert manifest.count("Planned Evidence") >= len(required_ids)
+
+
+def test_preview_registries_require_traceable_generation() -> None:
+    registry_headers = {
+        "README.md": (
+            "| ID | Intended content | Status | Required source data | Required generation command | Release gate |",
+            "not measurements",
+        ),
+        "README_EN.md": (
+            "| ID | Planned content | Status | Required source data | Required generation command | Release gate |",
+            "must never be populated with invented values",
+        ),
+        "README_CN.md": (
+            "| ID | 计划内容 | 状态 | 必需来源数据 | 必需生成命令 | 释放门禁 |",
+            "不是空白结果图",
+        ),
+    }
+    for path, (header, no_result_notice) in registry_headers.items():
+        text = read_doc(path)
+        assert header in text
+        assert no_result_notice in text
+
+
 def test_research_schemas_are_valid_json_schema_documents() -> None:
     for path in RESEARCH_FILES[-2:]:
         payload = json.loads(read_doc(path))

@@ -152,13 +152,27 @@ git commit -m "feat(web): expose interactive active-view dry run"
 - [ ] **Step 1: Write the failing launcher contract test**
 
 ```python
-def test_launcher_is_loopback_static_and_actuator_free():
-    source = LAUNCHER.read_text(encoding="utf-8")
-    assert "--bind 127.0.0.1" in source
-    assert "web-control/web" in source
-    assert "camera-test.html?demo=1" in source
-    for forbidden in ("proxy.js", "camera_bridge", "startouch", "can0", "robot", "gripper"):
-        assert forbidden not in source.lower()
+def test_launcher_executes_loopback_static_server(tmp_path):
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    capture = tmp_path / "python-args.txt"
+    python = fake_bin / "python3"
+    python.write_text("#!/bin/sh\nprintf '%s\\n' \"$@\" > \"$CAPTURE\"\n", encoding="utf-8")
+    python.chmod(0o755)
+    result = subprocess.run(
+        ["bash", str(LAUNCHER), "--port", "43130"],
+        cwd=ROOT,
+        env={"PATH": f"{fake_bin}:/usr/bin:/bin", "CAPTURE": str(capture)},
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    assert result.returncode == 0
+    assert capture.read_text(encoding="utf-8").splitlines() == [
+        "-m", "http.server", "43130", "--bind", "127.0.0.1", "--directory",
+        str(ROOT / "web-control" / "web"),
+    ]
+    assert "http://127.0.0.1:43130/camera-test.html?demo=1" in result.stdout
 ```
 
 - [ ] **Step 2: Run the test and verify RED**

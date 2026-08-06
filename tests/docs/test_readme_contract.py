@@ -172,66 +172,64 @@ PREVIEW_HEADER_ALIASES = {
     "Release gate": "release_gate",
     "释放门禁": "release_gate",
 }
-
-# Stable semantic anchors shared by the canonical manifest and every translated row.
-# They permit natural-language phrasing differences while keeping evidence requirements aligned.
-PREVIEW_FIELD_TOKENS = {
+PREVIEW_CONTRACT_KEYS = {
     "V1": {
-        "intended_content": ("Lumos", "D435", "3D"),
-        "source_data": ("Lumos RGB", "D435", "calibration", "manifest"),
-        "generation_command": ("script/command", "manifest", "calibration"),
-        "release_gate": ("manifest", "manual"),
+        "intended_content": "content:v1:mask-depth-base3d",
+        "source_data": "source:v1:rgb-depth-calibration-mask-points",
+        "generation_command": "generator:v1:manifest-calibrated-panel",
+        "release_gate": "gate:v1:reproducible-no-manual-edit",
     },
     "V2": {
-        "intended_content": ("Identity", "occlusion", "reacquisition"),
-        "source_data": ("track IDs", "memory", "manifest"),
-        "generation_command": ("script/command", "result records"),
-        "release_gate": ("identity", "selection rule"),
+        "intended_content": "content:v2:occlusion-reacquisition-identity",
+        "source_data": "source:v2:replay-tracks-memory-annotations",
+        "generation_command": "generator:v2:declared-clips-three-states",
+        "release_gate": "gate:v2:heldout-identity-selection",
     },
     "V3": {
-        "intended_content": ("registration", "residual", "uncertainty"),
-        "source_data": ("calibration", "covariance", "manifest"),
-        "generation_command": ("script/command", "JSON/CSV"),
-        "release_gate": ("calibration ID", "aggregation"),
+        "intended_content": "content:v3:registration-residual-uncertainty",
+        "source_data": "source:v3:calibration-correspondence-covariance",
+        "generation_command": "generator:v3:aggregate-residual-error-uncertainty",
+        "release_gate": "gate:v3:units-aggregation-calibration-exclusions",
     },
     "L1": {
-        "intended_content": ("VLA", "candidate", "preview", "refusal"),
-        "source_data": ("scenario", "candidate", "validator/refusal log", "manifest"),
-        "generation_command": ("script/command", "logs"),
-        "release_gate": ("secret", "actuator-success"),
+        "intended_content": "content:l1:instruction-candidate-preview-refusal",
+        "source_data": "source:l1:scenario-context-candidate-validator-log",
+        "generation_command": "generator:l1:auditable-decision-trace",
+        "release_gate": "gate:l1:no-secrets-or-actuator-success-claim",
     },
     "E1": {
-        "intended_content": ("baseline", "confidence intervals"),
-        "source_data": ("result records", "CSV/JSON", "manifests"),
-        "generation_command": ("script/command", "result records", "confidence intervals"),
-        "release_gate": ("baseline", "interval"),
+        "intended_content": "content:e1:baseline-confidence-intervals",
+        "source_data": "source:e1:preregistered-results-intervals-slices",
+        "generation_command": "generator:e1:aggregate-confidence-interval-plot",
+        "release_gate": "gate:e1:baseline-split-interval-exclusions",
     },
     "E2": {
-        "intended_content": ("ablation", "table/curve"),
-        "source_data": ("variant", "seeds", "CSV/JSON"),
-        "generation_command": ("script/command", "variants"),
-        "release_gate": ("one-delta", "controls"),
+        "intended_content": "content:e2:ablation-table-curve",
+        "source_data": "source:e2:controlled-variants-seeds-results",
+        "generation_command": "generator:e2:grouped-variant-table-curve",
+        "release_gate": "gate:e2:one-delta-controls",
     },
     "E3": {
-        "intended_content": ("accuracy", "latency", "resource"),
-        "source_data": ("P50/P95", "CPU/GPU/VRAM", "JSON"),
-        "generation_command": ("script/command", "experiment ID"),
-        "release_gate": ("hardware", "aggregation window"),
+        "intended_content": "content:e3:accuracy-latency-resource",
+        "source_data": "source:e3:metrics-environment-manifest",
+        "generation_command": "generator:e3:experiment-metric-tradeoff",
+        "release_gate": "gate:e3:comparable-hardware-window",
     },
     "F1": {
-        "intended_content": ("success", "failure", "cases"),
-        "source_data": ("selection rule", "failure taxonomy", "manifests"),
-        "generation_command": ("script/command", "selection rule"),
-        "release_gate": ("cherry-pick", "limitations"),
+        "intended_content": "content:f1:representative-success-failure",
+        "source_data": "source:f1:selection-traces-failure-taxonomy",
+        "generation_command": "generator:f1:selection-rule-paired-cases",
+        "release_gate": "gate:f1:no-cherry-pick-limitations-visible",
     },
 }
-CHINESE_CONTENT_TOKENS = {
-    "V2": ("遮挡", "重捕获", "身份"),
-    "V3": ("注册", "残差", "不确定度"),
-}
-CHINESE_FIELD_TOKEN_OVERRIDES = {
-    ("V1", "release_gate"): ("manifest", "手工"),
-    ("V3", "release_gate"): ("calibration ID", "聚合"),
+PREVIEW_CONTRACT_KEY_RE = re.compile(
+    r"<code>((content|source|generator|gate):([a-z0-9]+):([a-z0-9-]+))</code>"
+)
+PREVIEW_FIELD_KEY_PREFIXES = {
+    "intended_content": "content",
+    "source_data": "source",
+    "generation_command": "generator",
+    "release_gate": "gate",
 }
 
 
@@ -274,41 +272,40 @@ def parse_preview_registry(text: str) -> dict[str, dict[str, str]]:
 
     assert len(matches) == 1
     registry = matches[0]
-    assert tuple(registry) == PREVIEW_IDS
+    assert set(registry) == set(PREVIEW_IDS)
     for row in registry.values():
         assert row["status"] == "Planned Evidence"
     return registry
 
 
-def normalized_text(value: str) -> str:
-    return re.sub(r"\s+", " ", value).casefold()
+def preview_contract_key(figure_id: str, field: str, value: str) -> str:
+    matches = PREVIEW_CONTRACT_KEY_RE.findall(value)
+    assert len(matches) == 1
+    key, prefix, key_figure_id, slug = matches[0]
+    assert prefix == PREVIEW_FIELD_KEY_PREFIXES[field]
+    assert key_figure_id == figure_id.lower()
+    assert slug
+    return key
 
 
-def preview_field_tokens(path: str, figure_id: str, field: str) -> tuple[str, ...]:
-    if path == "README_CN.md":
-        if field == "intended_content":
-            return CHINESE_CONTENT_TOKENS.get(figure_id, PREVIEW_FIELD_TOKENS[figure_id][field])
-        if (figure_id, field) in CHINESE_FIELD_TOKEN_OVERRIDES:
-            return CHINESE_FIELD_TOKEN_OVERRIDES[figure_id, field]
-    return PREVIEW_FIELD_TOKENS[figure_id][field]
-
-
-def assert_preview_registry_alignment(documents: dict[str, str]) -> None:
-    assert tuple(documents) == PREVIEW_REGISTRY_PATHS
+def assert_preview_contract_keys_align(documents: dict[str, str]) -> None:
+    assert set(documents) == set(PREVIEW_REGISTRY_PATHS)
     registries = {path: parse_preview_registry(text) for path, text in documents.items()}
     canonical = registries["docs/research/figure_manifest.md"]
 
     for figure_id in PREVIEW_IDS:
-        for field in PREVIEW_FIELDS[1:]:
-            if field == "status":
-                continue
-            for token in preview_field_tokens(
-                "docs/research/figure_manifest.md", figure_id, field
-            ):
-                assert normalized_text(token) in normalized_text(canonical[figure_id][field])
-            for path, registry in registries.items():
-                for token in preview_field_tokens(path, figure_id, field):
-                    assert normalized_text(token) in normalized_text(registry[figure_id][field])
+        for field in PREVIEW_FIELD_KEY_PREFIXES:
+            canonical_key = preview_contract_key(figure_id, field, canonical[figure_id][field])
+            assert canonical_key == PREVIEW_CONTRACT_KEYS[figure_id][field]
+            for path in DOCS:
+                readme_key = preview_contract_key(
+                    figure_id, field, registries[path][figure_id][field]
+                )
+                assert readme_key == canonical_key
+
+
+def assert_preview_registry_alignment(documents: dict[str, str]) -> None:
+    assert_preview_contract_keys_align(documents)
 
 
 def preview_registry_documents() -> dict[str, str]:
@@ -323,8 +320,24 @@ def replace_preview_row_cell(text: str, figure_id: str, column: int, value: str)
     return text.replace(line, replacement, 1)
 
 
+def replace_preview_contract_key(text: str, figure_id: str, field: str, replacement: str) -> str:
+    column = PREVIEW_FIELDS.index(field)
+    old_key = PREVIEW_CONTRACT_KEYS[figure_id][field]
+    line = next(line for line in text.splitlines() if line.startswith(f"| {figure_id} |"))
+    cells = [cell.strip() for cell in line.strip().strip("|").split("|")]
+    cells[column] = cells[column].replace(
+        f"<code>{old_key}</code>", f"<code>{replacement}</code>", 1
+    )
+    replacement_line = "| " + " | ".join(cells) + " |"
+    return text.replace(line, replacement_line, 1)
+
+
 def test_preview_registry_rows_match_the_canonical_evidence_contract() -> None:
     assert_preview_registry_alignment(preview_registry_documents())
+
+
+def test_preview_registry_machine_keys_match_canonical_fields() -> None:
+    assert_preview_contract_keys_align(preview_registry_documents())
 
 
 def test_preview_registries_require_traceable_generation() -> None:
@@ -369,6 +382,63 @@ def test_preview_registry_contract_rejects_row_level_drift(
 
     with pytest.raises(AssertionError):
         assert_preview_registry_alignment(documents)
+
+
+@pytest.mark.parametrize(
+    ("figure_id", "field", "replacement"),
+    [
+        ("V1", "intended_content", "content:v1:incorrect-content"),
+        ("V1", "source_data", "source:v1:incorrect-source"),
+        ("V1", "generation_command", "generator:v1:incorrect-generator"),
+        ("V1", "release_gate", "gate:v1:incorrect-gate"),
+    ],
+    ids=("intended-key", "source-key", "generator-key", "gate-key"),
+)
+def test_preview_registry_contract_rejects_readme_key_drift(
+    figure_id: str, field: str, replacement: str
+) -> None:
+    documents = preview_registry_documents()
+    documents["README.md"] = replace_preview_contract_key(
+        documents["README.md"], figure_id, field, replacement
+    )
+
+    with pytest.raises(AssertionError):
+        assert_preview_contract_keys_align(documents)
+
+
+@pytest.mark.parametrize(
+    "replacement",
+    [
+        "",
+        "content:v1:mask-depth-base3d</code> <code>content:v1:mask-depth-base3d",
+        "source:v1:mask-depth-base3d",
+        "content:v2:mask-depth-base3d",
+    ],
+    ids=("missing", "duplicate", "wrong-field-prefix", "wrong-figure-id"),
+)
+def test_preview_registry_contract_rejects_malformed_machine_keys(replacement: str) -> None:
+    documents = preview_registry_documents()
+    documents["README.md"] = replace_preview_contract_key(
+        documents["README.md"], "V1", "intended_content", replacement
+    )
+
+    with pytest.raises(AssertionError):
+        assert_preview_contract_keys_align(documents)
+
+
+def test_preview_registry_key_comparison_rejects_negated_natural_text() -> None:
+    documents = preview_registry_documents()
+    documents["README_EN.md"] = replace_preview_contract_key(
+        documents["README_EN.md"], "V1", "generation_command", "generator:v1:negated"
+    ).replace(
+        "Versioned script/command joins frames by manifest, applies recorded calibration, "
+        "and renders selected samples",
+        "No versioned script/command joins frames by manifest, applies recorded calibration, "
+        "or renders selected samples",
+    )
+
+    with pytest.raises(AssertionError):
+        assert_preview_contract_keys_align(documents)
 
 
 def test_research_schemas_are_valid_json_schema_documents() -> None:

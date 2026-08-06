@@ -45,3 +45,9 @@ de-identified CI fixtures are distinct from the complete local corpus.
 | Current status | Planned Evidence — no dataset release or quantitative corpus claim is made by this template. |
 | Manifest schema | [Experiment manifest](schemas/experiment-manifest.schema.json) links each run to this datasheet version and split checksum. |
 | Result linkage | [Result records](schemas/result-record.schema.json) identify the source artifact for every published aggregate. |
+
+`Planned Evidence / 待补实验证据` means no result exists. `Evidence Incomplete /
+待补充证据` means partial results exist but sample count, confidence interval,
+statistical method, or source evidence is absent, empty, inadequate, or untraceable.
+They are not interchangeable, and neither status may support a claim, abstract
+conclusion, or deterministic figure/table conclusion.

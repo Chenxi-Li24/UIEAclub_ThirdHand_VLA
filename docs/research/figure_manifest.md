@@ -4,6 +4,13 @@ Every entry below is `Planned Evidence`. It defines a future generated artifact,
 not a measured result. A figure can be released only after its source data,
 experiment manifest(s), and generation command are all linked and reproducible.
 
+`Planned Evidence / 待补实验证据` means no result exists; every registry entry below
+has this status. `Evidence Incomplete / 待补充证据` is reserved for a partial result
+whose sample count, confidence interval, statistical method, or source evidence is
+absent, empty, inadequate, or untraceable. The labels are not interchangeable, and
+neither status may support a claim, abstract conclusion, or deterministic conclusion
+in a figure or table.
+
 | ID | Intended content | Status | Required source data | Required generation command | Release gate |
 | --- | --- | --- | --- | --- | --- |
 | V1 | Lumos instance mask, D435 depth, and robot-base 3D result. | Planned Evidence | Timestamped Lumos RGB, D435 depth, calibration ID/hash, instance masks, registered 3D points, experiment manifest. | Versioned script/command that joins frames by manifest, applies the recorded calibration, and renders the selected samples. | Source manifest and command reproduce the panel without manual image editing. |

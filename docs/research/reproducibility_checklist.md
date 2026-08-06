@@ -1,8 +1,12 @@
 # Reproducibility Checklist
 
 Use this checklist for every reported experiment and figure. Check a box only when
-the referenced artifact exists and can be independently located; otherwise retain
-the item as incomplete and label the claim `Planned Evidence`.
+the referenced artifact exists and can be independently located. `Planned Evidence /
+待补实验证据` means no result exists yet. `Evidence Incomplete / 待补充证据` means partial
+results exist but sample count, confidence interval, statistical method, or source
+evidence is absent, empty, inadequate, or untraceable. The labels are not
+interchangeable, and neither status may support a claim, abstract conclusion, or
+deterministic figure/table conclusion.
 
 ## Run identity and environment
 
@@ -26,6 +30,7 @@ the item as incomplete and label the claim `Planned Evidence`.
 - [ ] All compared runs share the stated split, calibration, hardware class, measurement window, and reporting definition, or differences are explicitly stratified.
 - [ ] Every metric record has unit, aggregation, sample count, slice, source artifact, and null-or-defined confidence interval.
 - [ ] Confidence level/method, statistical test where used, outlier policy, and multiple-comparison handling are recorded.
+- [ ] Any partial result with missing, empty, inadequate, or untraceable sample count, confidence interval, statistical method, or source evidence is labeled `Evidence Incomplete / 待补充证据` and is excluded from claims, abstracts, and deterministic figure/table conclusions.
 - [ ] Negative results, uncertainty, threats to validity, and deviations from the protocol are retained in the [claim matrix](claim_evidence_matrix.md).
 
 ## Artifact release and review

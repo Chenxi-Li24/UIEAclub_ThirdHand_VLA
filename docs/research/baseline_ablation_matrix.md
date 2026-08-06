@@ -1,8 +1,14 @@
 # Baseline and Ablation Matrix
 
 Freeze dataset split, calibration version, hardware class, reporting aggregation,
-and seeds before comparing a row. All results remain `Planned Evidence` until
-experiment manifests and machine-readable source artifacts are linked.
+and seeds before comparing a row. Comparison rows start as `Planned Evidence` until
+any result exists.
+
+`Planned Evidence / 待补实验证据` means no result exists. If partial comparison
+results exist but sample count, confidence interval, statistical method, or source
+evidence is absent, empty, inadequate, or untraceable, label them `Evidence
+Incomplete / 待补充证据` instead. The two statuses are not interchangeable, and neither
+may support a claim, abstract conclusion, or deterministic figure/table conclusion.
 
 ## Detection and segmentation baselines
 

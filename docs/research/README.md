@@ -26,6 +26,21 @@ The benchmark metrics and acceptance gates originate in
 Machine-readable JSON/CSV is the source of record; figures and tables are
 generated from it, never hand-filled.
 
+## Evidence-status rule / 证据状态规则
+
+Use exactly one evidence status for each claim, result, table, or figure:
+
+- `Planned Evidence / 待补实验证据` means that no result exists yet. It may describe
+  a future protocol or artifact requirement, but cannot imply an observed outcome.
+- `Evidence Incomplete / 待补充证据` means that partial results exist, but
+  `sample_count`, `confidence_interval`, statistical method, or source evidence is
+  absent, empty, inadequate, or not traceable. Such material must not support a
+  claim, abstract conclusion, or deterministic conclusion in a figure or table.
+
+These states are not interchangeable. A result is not reportable evidence until its
+status is neither of the above and its linked manifest, source artifact, sample count,
+confidence interval (or explicit justified null), and statistical method are complete.
+
 ## Track A — Vision and 3D perception (primary)
 
 | Evidence item | Definition |
@@ -50,7 +65,7 @@ generated from it, never hand-filled.
 | Missing gates | Frozen scenario set, offline unsafe baseline isolation, registered human-evaluation protocol where applicable, comparative runs, intervals, and generated evidence. |
 | Templates | [claims](claim_evidence_matrix.md), [baselines](baseline_ablation_matrix.md), [figures](figure_manifest.md), [reproducibility](reproducibility_checklist.md). |
 
-## Track C — Integrated vision–VLA system
+## Track C — Integrated vision–VLA system (optional / 可选综合路线)
 
 | Evidence item | Definition |
 | --- | --- |
@@ -64,6 +79,11 @@ generated from it, never hand-filled.
 
 ## Reporting rule
 
-Use `Planned Evidence` for any item without a linked source manifest and generation
-command. A claim may move to reported evidence only when its matrix row references
-the dataset checksum, experiment IDs, source artifacts, and generated figure/table.
+Use `Planned Evidence / 待补实验证据` only for an item with no result. Use
+`Evidence Incomplete / 待补充证据` for a partial result whose sample count,
+confidence interval, statistical method, or source evidence is missing, empty,
+inadequate, or untraceable; never use either status to support a claim, abstract
+conclusion, or deterministic figure/table conclusion. A claim may move to reported
+evidence only when its matrix row references the dataset checksum, experiment IDs,
+source artifacts, sample count, confidence interval or justified null, statistical
+method, and generated figure/table.

@@ -4,6 +4,8 @@ import json
 import re
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parents[2]
 DOCS = ("README.md", "README_CN.md", "README_EN.md")
 RESEARCH_FILES = (
@@ -43,6 +45,34 @@ def local_markdown_links(text: str) -> list[str]:
     ]
 
 
+def local_markdown_link_failures(base: Path, targets: list[str]) -> list[str]:
+    root = ROOT.resolve()
+    failures: list[str] = []
+    for target in targets:
+        if Path(target).is_absolute():
+            failures.append(f"absolute local link: {target}")
+            continue
+        resolved = (base / target).resolve()
+        if not resolved.is_relative_to(root):
+            failures.append(f"outside repository: {target}")
+        elif not resolved.exists():
+            failures.append(f"missing local link: {target}")
+    return failures
+
+
+@pytest.mark.parametrize(
+    ("target", "expected"),
+    [
+        ("/etc/passwd", "absolute local link: /etc/passwd"),
+        ("../escaping.md", "outside repository: ../escaping.md"),
+    ],
+)
+def test_local_markdown_link_validation_rejects_absolute_and_escaping_targets(
+    target: str, expected: str
+) -> None:
+    assert local_markdown_link_failures(ROOT, [target]) == [expected]
+
+
 def test_language_tutorials_have_aligned_section_anchors() -> None:
     cn = section_anchors(read_doc("README_CN.md"))
     en = section_anchors(read_doc("README_EN.md"))
@@ -63,19 +93,19 @@ def test_all_local_markdown_links_resolve() -> None:
     failures: list[str] = []
     for source in (*DOCS, *RESEARCH_FILES[:-2]):
         base = (ROOT / source).parent
-        for target in local_markdown_links(read_doc(source)):
-            if not (base / target).resolve().exists():
-                failures.append(f"{source}: {target}")
+        for failure in local_markdown_link_failures(base, local_markdown_links(read_doc(source))):
+            failures.append(f"{source}: {failure}")
     assert failures == []
 
 
 def test_repository_identity_and_runtime_boundaries_are_current() -> None:
-    combined = "\n".join(read_doc(path) for path in DOCS)
-    assert "Oliveirah007/UIEAclub_ThirdHand_VLA" not in combined
-    assert "https://github.com/Chenxi-Li24/UIEAclub_ThirdHand_VLA.git" in combined
-    for port in ("8000", "3000", "3001", "8766"):
-        assert port in combined
-    assert "robot_execution_enabled: false" in combined
+    for path in DOCS:
+        text = read_doc(path)
+        assert "Oliveirah007/UIEAclub_ThirdHand_VLA" not in text
+        assert "https://github.com/Chenxi-Li24/UIEAclub_ThirdHand_VLA.git" in text
+        for port in ("8000", "3000", "3001", "8766"):
+            assert port in text
+        assert "robot_execution_enabled: false" in text
 
 
 def assert_tutorial_safety_and_maturity(path: str) -> None:

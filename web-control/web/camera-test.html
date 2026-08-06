@@ -20,15 +20,22 @@
     button.primary { border-color: #52a8df; background: #15334a; }
     button.danger { border-color: #a44b4b; background: #3b2020; }
     main { display: grid; grid-template-columns: minmax(0, 2fr) minmax(300px, 1fr);
-      gap: 14px; padding: 14px; }
-    .camera-grid { display: grid; grid-template-rows: minmax(360px, 2fr) minmax(240px, 1fr);
-      gap: 14px; min-width: 0; }
+      align-items: start; gap: 14px; padding: 14px; }
+    .camera-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 14px; min-width: 0; align-items: start; }
     figure, aside { margin: 0; border: 1px solid #26323b; border-radius: 10px;
       background: #121920; overflow: hidden; }
-    figcaption { padding: 10px 13px; display: flex; justify-content: space-between;
+    figcaption { min-height: 70px; padding: 10px 13px; display: flex;
+      justify-content: space-between; align-items: flex-start; gap: 10px;
       border-bottom: 1px solid #26323b; }
     figcaption span, .muted { color: #91a1ad; }
-    .feed { height: calc(100% - 43px); min-height: 200px; display: grid;
+    .camera-title { display: flex; flex-direction: column; gap: 5px; }
+    .camera-title span { font-size: 12px; font-weight: 400; }
+    .stream-tools { display: flex; flex-direction: column; align-items: flex-end; gap: 5px;
+      text-align: right; font-size: 12px; }
+    .stream-tools button { padding: 4px 7px; font-size: 12px; }
+    [hidden] { display: none !important; }
+    .feed { width: 100%; min-height: 0; aspect-ratio: 16 / 9; display: grid;
       place-items: center; background: #030608; }
     img { display: block; width: 100%; height: 100%; object-fit: contain; }
     aside { padding: 15px; }
@@ -44,7 +51,7 @@
     .controls { display: flex; gap: 8px; margin: 10px 0; }
     #active-result { min-height: 1.4em; }
     @media (max-width: 900px) { main { grid-template-columns: 1fr; }
-      .camera-grid { grid-template-rows: 55vh 38vh; } }
+      .camera-grid { grid-template-columns: 1fr; } }
   </style>
 </head>
 <body>
@@ -60,8 +67,18 @@
   <main>
     <section class="camera-grid" aria-label="camera streams">
       <figure>
-        <figcaption><strong>Lumos 主视图</strong><span>canonical RGB / identity</span></figcaption>
-        <div class="feed"><img id="lumos" data-stream="/camera_lumos_vision"
+        <figcaption>
+          <span class="camera-title">
+            <strong>Lumos 主视图</strong>
+            <span>canonical RGB / identity</span>
+          </span>
+          <span class="stream-tools" id="lumos-stream-tools">
+            <span id="lumos-stream-status">实时原始画面</span>
+            <button id="lumos-overlay-toggle" type="button">查看算法叠加</button>
+          </span>
+        </figcaption>
+        <div class="feed"><img id="lumos" data-stream="/camera_lumos"
+          data-overlay-stream="/camera_lumos_vision"
           alt="Lumos inference overlay"></div>
       </figure>
       <figure>
@@ -111,6 +128,7 @@
       <p class="muted">Lumos 用于广角识别与身份连续性；D435 用于近场度量深度。页面只发送身份、会话和提案 ID，不发送坐标或抓取命令；每一步均需人工确认。</p>
     </aside>
   </main>
+  <script src="/live-camera-streams.js"></script>
   <script src="/active-view-demo.js"></script>
   <script>
     'use strict';
@@ -123,6 +141,7 @@
     let sessionId = null;
     let proposalId = null;
     let socket = null;
+    let lumosSelector = null;
 
     function sendCommand(payload) {
       if (demoMode) {
@@ -197,6 +216,7 @@
       if (demoMode) {
         document.body.dataset.mode = 'demo';
         byId('demo-banner').hidden = false;
+        byId('lumos-stream-tools').hidden = true;
         byId('lumos').src = demo.cameraPanels.lumos;
         byId('d435').src = demo.cameraPanels.d435;
         return;
@@ -206,6 +226,34 @@
         bindRetry(image);
         image.src = image.dataset.stream;
       });
+    }
+
+    function initializeLumosStreamSelector() {
+      if (demoMode) return;
+      const image = byId('lumos');
+      const toggle = byId('lumos-overlay-toggle');
+      const statusCopy = {
+        raw: '实时原始画面',
+        checking_overlay: '正在检查算法叠加…',
+        overlay_unavailable: '算法叠加不可用，继续显示原始画面',
+        overlay: '算法叠加画面',
+      };
+      lumosSelector = window.ThirdHandLiveCameraStreams.createLumosStreamSelector({
+        rawUrl: image.dataset.stream,
+        overlayUrl: image.dataset.overlayStream,
+        applySource: source => { image.src = source; },
+        report: status => {
+          text('lumos-stream-status', statusCopy[status] ?? status);
+          toggle.disabled = status === 'checking_overlay';
+          toggle.textContent = status === 'overlay' ? '返回原始画面' : '查看算法叠加';
+        },
+        timeoutMs: 2500,
+      });
+      toggle.addEventListener('click', () => {
+        if (lumosSelector.mode() === 'overlay') lumosSelector.useRaw();
+        else lumosSelector.tryOverlay();
+      });
+      lumosSelector.useRaw();
     }
 
     function render(status) {
@@ -383,6 +431,7 @@
       }
     }
     initializeCameraStreams();
+    initializeLumosStreamSelector();
     refresh();
     connectControl();
     if (!demoMode) setInterval(refresh, 1000);

@@ -30,7 +30,8 @@ def test_camera_test_page_exposes_both_camera_roles_with_id_only_active_view() -
         Path(__file__).parents[2] / "web-control/web/camera-test.html"
     ).read_text(encoding="utf-8")
 
-    assert 'data-stream="/camera_lumos_vision"' in source
+    assert 'data-stream="/camera_lumos"' in source
+    assert 'data-overlay-stream="/camera_lumos_vision"' in source
     assert 'data-stream="/camera"' in source
     assert 'src="/camera_lumos_vision"' not in source
     assert 'src="/camera"' not in source

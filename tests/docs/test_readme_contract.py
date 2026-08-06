@@ -148,14 +148,195 @@ def test_planned_preview_registry_is_complete_and_honest() -> None:
     assert manifest.count("Planned Evidence") >= len(required_ids)
 
 
+PREVIEW_REGISTRY_PATHS = (*DOCS, "docs/research/figure_manifest.md")
+PREVIEW_IDS = ("V1", "V2", "V3", "L1", "E1", "E2", "E3", "F1")
+PREVIEW_FIELDS = (
+    "id",
+    "intended_content",
+    "status",
+    "source_data",
+    "generation_command",
+    "release_gate",
+)
+PREVIEW_HEADER_ALIASES = {
+    "ID": "id",
+    "Intended content": "intended_content",
+    "Planned content": "intended_content",
+    "计划内容": "intended_content",
+    "Status": "status",
+    "状态": "status",
+    "Required source data": "source_data",
+    "必需来源数据": "source_data",
+    "Required generation command": "generation_command",
+    "必需生成命令": "generation_command",
+    "Release gate": "release_gate",
+    "释放门禁": "release_gate",
+}
+
+# Stable semantic anchors shared by the canonical manifest and every translated row.
+# They permit natural-language phrasing differences while keeping evidence requirements aligned.
+PREVIEW_FIELD_TOKENS = {
+    "V1": {
+        "intended_content": ("Lumos", "D435", "3D"),
+        "source_data": ("Lumos RGB", "D435", "calibration", "manifest"),
+        "generation_command": ("script/command", "manifest", "calibration"),
+        "release_gate": ("manifest", "manual"),
+    },
+    "V2": {
+        "intended_content": ("Identity", "occlusion", "reacquisition"),
+        "source_data": ("track IDs", "memory", "manifest"),
+        "generation_command": ("script/command", "result records"),
+        "release_gate": ("identity", "selection rule"),
+    },
+    "V3": {
+        "intended_content": ("registration", "residual", "uncertainty"),
+        "source_data": ("calibration", "covariance", "manifest"),
+        "generation_command": ("script/command", "JSON/CSV"),
+        "release_gate": ("calibration ID", "aggregation"),
+    },
+    "L1": {
+        "intended_content": ("VLA", "candidate", "preview", "refusal"),
+        "source_data": ("scenario", "candidate", "validator/refusal log", "manifest"),
+        "generation_command": ("script/command", "logs"),
+        "release_gate": ("secret", "actuator-success"),
+    },
+    "E1": {
+        "intended_content": ("baseline", "confidence intervals"),
+        "source_data": ("result records", "CSV/JSON", "manifests"),
+        "generation_command": ("script/command", "result records", "confidence intervals"),
+        "release_gate": ("baseline", "interval"),
+    },
+    "E2": {
+        "intended_content": ("ablation", "table/curve"),
+        "source_data": ("variant", "seeds", "CSV/JSON"),
+        "generation_command": ("script/command", "variants"),
+        "release_gate": ("one-delta", "controls"),
+    },
+    "E3": {
+        "intended_content": ("accuracy", "latency", "resource"),
+        "source_data": ("P50/P95", "CPU/GPU/VRAM", "JSON"),
+        "generation_command": ("script/command", "experiment ID"),
+        "release_gate": ("hardware", "aggregation window"),
+    },
+    "F1": {
+        "intended_content": ("success", "failure", "cases"),
+        "source_data": ("selection rule", "failure taxonomy", "manifests"),
+        "generation_command": ("script/command", "selection rule"),
+        "release_gate": ("cherry-pick", "limitations"),
+    },
+}
+CHINESE_CONTENT_TOKENS = {
+    "V2": ("遮挡", "重捕获", "身份"),
+    "V3": ("注册", "残差", "不确定度"),
+}
+CHINESE_FIELD_TOKEN_OVERRIDES = {
+    ("V1", "release_gate"): ("manifest", "手工"),
+    ("V3", "release_gate"): ("calibration ID", "聚合"),
+}
+
+
+def markdown_table_cells(line: str) -> list[str]:
+    assert line.startswith("|") and line.endswith("|")
+    return [cell.strip() for cell in line.strip().strip("|").split("|")]
+
+
+def is_markdown_table_divider(cells: list[str]) -> bool:
+    return bool(cells) and all(re.fullmatch(r":?-{3,}:?", cell) for cell in cells)
+
+
+def parse_preview_registry(text: str) -> dict[str, dict[str, str]]:
+    lines = text.splitlines()
+    matches: list[dict[str, dict[str, str]]] = []
+    for index, line in enumerate(lines):
+        if not (line.startswith("|") and line.endswith("|")):
+            continue
+        header_cells = markdown_table_cells(line)
+        header = tuple(PREVIEW_HEADER_ALIASES.get(cell, "") for cell in header_cells)
+        if header != PREVIEW_FIELDS:
+            continue
+        assert index + 1 < len(lines)
+        divider_cells = markdown_table_cells(lines[index + 1])
+        assert len(divider_cells) == len(PREVIEW_FIELDS)
+        assert is_markdown_table_divider(divider_cells)
+
+        rows: dict[str, dict[str, str]] = {}
+        for row_line in lines[index + 2 :]:
+            if not (row_line.startswith("|") and row_line.endswith("|")):
+                break
+            row_cells = markdown_table_cells(row_line)
+            assert len(row_cells) == len(PREVIEW_FIELDS)
+            row = dict(zip(PREVIEW_FIELDS, row_cells, strict=True))
+            assert all(row[field] for field in PREVIEW_FIELDS)
+            figure_id = row["id"]
+            assert figure_id not in rows
+            rows[figure_id] = row
+        matches.append(rows)
+
+    assert len(matches) == 1
+    registry = matches[0]
+    assert tuple(registry) == PREVIEW_IDS
+    for row in registry.values():
+        assert row["status"] == "Planned Evidence"
+    return registry
+
+
+def normalized_text(value: str) -> str:
+    return re.sub(r"\s+", " ", value).casefold()
+
+
+def preview_field_tokens(path: str, figure_id: str, field: str) -> tuple[str, ...]:
+    if path == "README_CN.md":
+        if field == "intended_content":
+            return CHINESE_CONTENT_TOKENS.get(figure_id, PREVIEW_FIELD_TOKENS[figure_id][field])
+        if (figure_id, field) in CHINESE_FIELD_TOKEN_OVERRIDES:
+            return CHINESE_FIELD_TOKEN_OVERRIDES[figure_id, field]
+    return PREVIEW_FIELD_TOKENS[figure_id][field]
+
+
+def assert_preview_registry_alignment(documents: dict[str, str]) -> None:
+    assert tuple(documents) == PREVIEW_REGISTRY_PATHS
+    registries = {path: parse_preview_registry(text) for path, text in documents.items()}
+    canonical = registries["docs/research/figure_manifest.md"]
+
+    for figure_id in PREVIEW_IDS:
+        for field in PREVIEW_FIELDS[1:]:
+            if field == "status":
+                continue
+            for token in preview_field_tokens(
+                "docs/research/figure_manifest.md", figure_id, field
+            ):
+                assert normalized_text(token) in normalized_text(canonical[figure_id][field])
+            for path, registry in registries.items():
+                for token in preview_field_tokens(path, figure_id, field):
+                    assert normalized_text(token) in normalized_text(registry[figure_id][field])
+
+
+def preview_registry_documents() -> dict[str, str]:
+    return {path: read_doc(path) for path in PREVIEW_REGISTRY_PATHS}
+
+
+def replace_preview_row_cell(text: str, figure_id: str, column: int, value: str) -> str:
+    line = next(line for line in text.splitlines() if line.startswith(f"| {figure_id} |"))
+    cells = [cell.strip() for cell in line.strip().strip("|").split("|")]
+    cells[column] = value
+    replacement = "| " + " | ".join(cells) + " |"
+    return text.replace(line, replacement, 1)
+
+
+def test_preview_registry_rows_match_the_canonical_evidence_contract() -> None:
+    assert_preview_registry_alignment(preview_registry_documents())
+
+
 def test_preview_registries_require_traceable_generation() -> None:
     registry_headers = {
         "README.md": (
-            "| ID | Intended content | Status | Required source data | Required generation command | Release gate |",
+            "| ID | Intended content | Status | Required source data | "
+            "Required generation command | Release gate |",
             "not measurements",
         ),
         "README_EN.md": (
-            "| ID | Planned content | Status | Required source data | Required generation command | Release gate |",
+            "| ID | Planned content | Status | Required source data | "
+            "Required generation command | Release gate |",
             "must never be populated with invented values",
         ),
         "README_CN.md": (
@@ -167,6 +348,27 @@ def test_preview_registries_require_traceable_generation() -> None:
         text = read_doc(path)
         assert header in text
         assert no_result_notice in text
+
+
+@pytest.mark.parametrize(
+    ("path", "figure_id", "column", "value"),
+    [
+        ("README.md", "V1", 2, "Evidence Incomplete"),
+        ("README_EN.md", "V2", 3, ""),
+        ("README_CN.md", "E1", 4, ""),
+        ("README.md", "V2", 0, "V1"),
+        ("docs/research/figure_manifest.md", "V1", 3, "Timestamped camera RGB"),
+    ],
+    ids=("status", "source-data", "generation-command", "duplicate-id", "canonical-token"),
+)
+def test_preview_registry_contract_rejects_row_level_drift(
+    path: str, figure_id: str, column: int, value: str
+) -> None:
+    documents = preview_registry_documents()
+    documents[path] = replace_preview_row_cell(documents[path], figure_id, column, value)
+
+    with pytest.raises(AssertionError):
+        assert_preview_registry_alignment(documents)
 
 
 def test_research_schemas_are_valid_json_schema_documents() -> None:

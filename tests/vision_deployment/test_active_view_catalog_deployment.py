@@ -2,18 +2,15 @@ from __future__ import annotations
 
 import importlib.util
 import json
-from pathlib import Path
 import sys
+from pathlib import Path
 
 import numpy as np
-
-from vision.active_view_types import ObservationPose
+from vision.active_view_types import ObservationPose, TablePlane
 from vision.calibration_gate import audit_handeye_calibration
 from vision.camera_models import PinholeCamera, SeucmCamera
 from vision.dual_camera import DualCameraCalibrationBundle
-from vision.active_view_types import TablePlane
 from vision_models.active_view_catalog import ActiveViewFoundation
-
 
 ROOT = Path(__file__).parents[2]
 SCRIPT = ROOT / "scripts/vision/finalize_active_view_catalog.py"

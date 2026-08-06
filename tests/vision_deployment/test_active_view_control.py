@@ -1,12 +1,11 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
 import subprocess
 import sys
+from pathlib import Path
 
 import pytest
-
 
 ROOT = Path(__file__).parents[2]
 SCRIPT_DIR = ROOT / "scripts/vision"
@@ -18,7 +17,6 @@ from verify_active_view_control import (  # noqa: E402
     evaluate_active_view_control,
     simulated_success_events,
 )
-
 
 EVIDENCE_ID = f"sha256:{'a' * 64}"
 

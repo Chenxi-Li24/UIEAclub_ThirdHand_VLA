@@ -1,10 +1,18 @@
 ﻿"""Shared test fixtures and mocks."""
 
+import sys
+from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
 
 from uiea_thirdhand_vla.utils.types import JointState, Pose
+
+ROOT = Path(__file__).resolve().parents[1]
+SERVER_ROOT = ROOT / "web-control" / "server"
+server_root = str(SERVER_ROOT)
+if server_root not in sys.path:
+    sys.path.insert(0, server_root)
 
 
 @pytest.fixture

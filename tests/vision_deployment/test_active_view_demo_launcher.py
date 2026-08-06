@@ -4,7 +4,6 @@ import os
 import subprocess
 from pathlib import Path
 
-
 ROOT = Path(__file__).parents[2]
 LAUNCHER = ROOT / "scripts" / "vision" / "start_active_view_demo.sh"
 

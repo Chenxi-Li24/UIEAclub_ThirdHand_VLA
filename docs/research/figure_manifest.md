@@ -11,6 +11,10 @@ absent, empty, inadequate, or untraceable. The labels are not interchangeable, a
 neither status may support a claim, abstract conclusion, or deterministic conclusion
 in a figure or table.
 
+A missing preregistration protocol, threshold, or statistical-analysis plan is a
+separate readiness gap. It does not change a figure with no measurements from
+`Planned Evidence / 待补实验证据` to `Evidence Incomplete / 待补充证据`.
+
 | ID | Intended content | Status | Required source data | Required generation command | Release gate |
 | --- | --- | --- | --- | --- | --- |
 | V1 | Lumos instance mask, D435 depth, and robot-base 3D result. | Planned Evidence | Timestamped Lumos RGB, D435 depth, calibration ID/hash, instance masks, registered 3D points, experiment manifest. | Versioned script/command that joins frames by manifest, applies the recorded calibration, and renders the selected samples. | Source manifest and command reproduce the panel without manual image editing. |

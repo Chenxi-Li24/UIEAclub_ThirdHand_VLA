@@ -8,6 +8,11 @@ evidence is absent, empty, inadequate, or untraceable. The labels are not
 interchangeable, and neither status may support a claim, abstract conclusion, or
 deterministic figure/table conclusion.
 
+Preregistration readiness is a separate protocol field. A missing threshold or
+statistical-analysis plan must be recorded before a run, but it does not turn an
+unmeasured item into `Evidence Incomplete / 待补充证据`; without a result, its evidence
+status remains `Planned Evidence / 待补实验证据`.
+
 ## Run identity and environment
 
 - [ ] Experiment ID, hypothesis ID, research track, schema version, and UTC start time are recorded.
@@ -20,6 +25,7 @@ deterministic figure/table conclusion.
 
 - [ ] Dataset manifest, SHA-256, split, scene/instance allocation, and leakage-prevention rule are frozen before evaluation.
 - [ ] Capture hardware, logical camera roles, timestamp/skew policy, calibration validation, annotation policy, privacy/consent, and licensing are completed in the datasheet.
+- [ ] Preregistration readiness records the protocol artifact/path, exact thresholds, and statistical-analysis plan before a run; its incompleteness is not reported as `Evidence Incomplete / 待补充证据` when no result exists.
 - [ ] Held-out, replay, live, and synthetic data are distinguished; no result silently combines them.
 - [ ] Inclusion/exclusion criteria, failure taxonomy, stop conditions, and missing-data policy are documented.
 - [ ] Robot control remains a supervised experimental platform: offline/Dry Run evidence is distinguished from any approved hardware observation.

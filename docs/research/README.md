@@ -37,6 +37,12 @@ Use exactly one evidence status for each claim, result, table, or figure:
   absent, empty, inadequate, or not traceable. Such material must not support a
   claim, abstract conclusion, or deterministic conclusion in a figure or table.
 
+Preregistration readiness is separate from evidence status. A missing protocol,
+threshold, or statistical-analysis plan must be recorded as incomplete
+preregistration readiness; it does not turn an item with no measurements into
+`Evidence Incomplete / 待补充证据`. An item with no measurements remains `Planned
+Evidence / 待补实验证据`.
+
 These states are not interchangeable. A result is not reportable evidence until its
 status is neither of the above and its linked manifest, source artifact, sample count,
 confidence interval (or explicit justified null), and statistical method are complete.
@@ -86,4 +92,7 @@ inadequate, or untraceable; never use either status to support a claim, abstract
 conclusion, or deterministic figure/table conclusion. A claim may move to reported
 evidence only when its matrix row references the dataset checksum, experiment IDs,
 source artifacts, sample count, confidence interval or justified null, statistical
-method, and generated figure/table.
+method, and generated figure/table. A missing preregistration protocol, threshold,
+or statistical-analysis plan is recorded separately as preregistration readiness;
+without measurements, it remains `Planned Evidence / 待补实验证据` rather than
+`Evidence Incomplete / 待补充证据`.

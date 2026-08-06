@@ -9,6 +9,9 @@ results exist but sample count, confidence interval, statistical method, or sour
 evidence is absent, empty, inadequate, or untraceable, label them `Evidence
 Incomplete / 待补充证据` instead. The two statuses are not interchangeable, and neither
 may support a claim, abstract conclusion, or deterministic figure/table conclusion.
+Record an unregistered threshold or statistical-analysis plan as incomplete
+preregistration readiness; if no measurement exists, the comparison row remains
+`Planned Evidence / 待补实验证据`, not `Evidence Incomplete / 待补充证据`.
 
 ## Detection and segmentation baselines
 

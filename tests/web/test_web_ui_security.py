@@ -25,7 +25,7 @@ def test_detection_ui_only_enables_server_authorized_targets() -> None:
     assert "const lumosStreamUrl = '/camera_lumos'" in source
 
 
-def test_camera_test_page_exposes_both_camera_roles_without_motion_controls() -> None:
+def test_camera_test_page_exposes_both_camera_roles_with_id_only_active_view() -> None:
     source = (
         Path(__file__).parents[2] / "web-control/web/camera-test.html"
     ).read_text(encoding="utf-8")
@@ -45,13 +45,33 @@ def test_camera_test_page_exposes_both_camera_roles_without_motion_controls() ->
     assert "稳定样本" in source
     assert "剩余精调" in source
     assert "grasp_object" not in source
-    assert "start_active_view" not in source
-    assert "confirm_active_view" not in source
+    assert "start_active_view" in source
+    assert "confirm_active_view_step" in source
+    assert "cancel_active_view" in source
+    assert "GRASP_PREVIEW" in source
+    assert "每一步均需人工确认" in source
+    for forbidden in (
+        "jointsDeg",
+        "deltaBaseM",
+        "tcp_position",
+        "euler",
+        "safetyApproved",
+    ):
+        assert forbidden not in source
     assert "move_joint" not in source
     assert "move_l" not in source
     assert "method: 'POST'" not in source
-    assert ".send(" not in source
     assert "contenteditable" not in source
+
+
+def test_camera_page_websocket_commands_contain_ids_only() -> None:
+    source = (
+        Path(__file__).parents[2] / "web-control/web/camera-test.html"
+    ).read_text(encoding="utf-8")
+
+    assert "{ cmd: 'start_active_view', identityId }" in source
+    assert "{ cmd: 'confirm_active_view_step', sessionId, proposalId }" in source
+    assert "{ cmd: 'cancel_active_view', sessionId }" in source
 
 
 def test_proxy_exposes_read_only_vision_status_and_overlay_routes() -> None:
@@ -62,6 +82,20 @@ def test_proxy_exposes_read_only_vision_status_and_overlay_routes() -> None:
     assert "'/api/vision/status'" in source
     assert "'/camera_lumos_vision'" in source
     assert "getVisionMjpegStream" in source
+
+
+def test_proxy_keeps_active_view_coordinates_out_of_browser_dispatch() -> None:
+    source = (
+        Path(__file__).parents[2] / "web-control/server/proxy.js"
+    ).read_text(encoding="utf-8")
+
+    assert "sendRobot: sendActiveViewRobotCommand" in source
+    assert "parseActiveViewBrowserCommand(message)" in source
+    assert "trustedTargets: visionStatus.trustedTargets(Date.now())" in source
+    assert "const confirmed = activeView.confirm({" in source
+    assert "cameraBridge.on('active_view_move_proposal'" in source
+    assert "broadcast({ type: 'active_view_move_ready', ...control })" in source
+    assert "activeViewIsActive()" in source
 
 
 def test_vision_robot_execution_is_hard_locked_in_this_release() -> None:

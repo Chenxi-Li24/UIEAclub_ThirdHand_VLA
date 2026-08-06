@@ -182,6 +182,34 @@ for (const event of [
 }
 
 {
+  const { controller, setNow, visionCommands } = setup();
+  controller.begin({ sessionId: SESSION_ID, identityId: 9 });
+  controller.onVisionEvent(proposal());
+  setNow(1_201);
+  assert.equal(controller.checkTimeout().handled, true);
+  assert.equal(controller.pending, null);
+  assert.equal(controller.session, null);
+  assert.equal(visionCommands.at(-1).type, 'active_view_cancel');
+}
+
+{
+  const { controller, visionCommands } = setup();
+  controller.begin({ sessionId: SESSION_ID, identityId: 9 });
+  controller.onVisionEvent(proposal());
+  const aborted = controller.onVisionEvent({
+    type: 'active_view_state',
+    phase: 'aborted',
+    session_id: SESSION_ID,
+    evidence_ids: [EVIDENCE],
+    reasons: ['target_identity_changed'],
+  });
+  assert.equal(aborted.handled, true);
+  assert.equal(controller.pending, null);
+  assert.equal(controller.session, null);
+  assert.equal(visionCommands.at(-1).type, 'active_view_cancel');
+}
+
+{
   const { controller, robotCommands } = setup();
   controller.begin({ sessionId: SESSION_ID, identityId: 9 });
   controller.onVisionEvent(proposal());

@@ -12,6 +12,11 @@
       justify-content: space-between; align-items: center; gap: 16px; }
     header h1 { margin: 0; font-size: 17px; }
     .lock { color: #ffbd5b; font-weight: 700; }
+    button { border: 1px solid #3d5668; border-radius: 7px; background: #1d2a34;
+      color: #eef3f6; padding: 8px 11px; cursor: pointer; }
+    button:disabled { cursor: not-allowed; opacity: .45; }
+    button.primary { border-color: #52a8df; background: #15334a; }
+    button.danger { border-color: #a44b4b; background: #3b2020; }
     main { display: grid; grid-template-columns: minmax(0, 2fr) minmax(300px, 1fr);
       gap: 14px; padding: 14px; }
     .camera-grid { display: grid; grid-template-rows: minmax(360px, 2fr) minmax(240px, 1fr);
@@ -31,6 +36,11 @@
     .ok { color: #6ee7a0; } .bad { color: #ff817a; }
     #blockers, #active-blockers { margin: 8px 0 0; padding-left: 20px; color: #ffbd5b; }
     #targets { font-variant-numeric: tabular-nums; }
+    #active-targets { display: grid; gap: 7px; margin-bottom: 12px; }
+    .target-row { display: flex; align-items: center; justify-content: space-between;
+      gap: 8px; padding: 8px; border: 1px solid #26323b; border-radius: 7px; }
+    .controls { display: flex; gap: 8px; margin: 10px 0; }
+    #active-result { min-height: 1.4em; }
     @media (max-width: 900px) { main { grid-template-columns: 1fr; }
       .camera-grid { grid-template-rows: 55vh 38vh; } }
   </style>
@@ -38,8 +48,8 @@
 <body>
   <header>
     <h1>双相机在线视觉</h1>
-    <span class="lock">
-      只读 · robotExecutionEnabled = false · activeViewExecutionEnabled = false
+    <span class="lock" id="safety-lock">
+      robotExecutionEnabled = false · activeViewExecutionEnabled = false
     </span>
   </header>
   <main>
@@ -69,18 +79,28 @@
       </dl>
       <h2>闭锁原因 / blockers</h2>
       <ul id="blockers"><li>vision_not_started</li></ul>
-      <h2>观察建议（Dry Run）</h2>
+      <h2>主动观察会话 / 观察建议</h2>
+      <div id="active-targets"><span class="muted">等待已确认目标</span></div>
       <dl>
+        <dt>会话阶段</dt><dd id="active-phase">idle</dd>
         <dt>目标身份</dt><dd id="active-identity">—</dd>
         <dt>建议观察位</dt><dd id="active-proposal">—</dd>
+        <dt>单步上限</dt><dd id="active-max-step">—</dd>
+        <dt>证据摘要</dt><dd id="active-evidence">—</dd>
         <dt>桌面粗位置</dt><dd id="active-coarse">—</dd>
         <dt>D435 深度质量</dt><dd id="active-depth">—</dd>
         <dt>稳定样本</dt><dd id="active-stable">— / 5</dd>
         <dt>剩余精调</dt><dd id="active-refinements">—</dd>
+        <dt>抓取预览</dt><dd id="grasp-preview">未进入 GRASP_PREVIEW</dd>
       </dl>
+      <div class="controls">
+        <button id="confirm-step" class="primary" type="button" disabled>确认本步观察运动</button>
+        <button id="cancel-session" class="danger" type="button" disabled>取消会话</button>
+      </div>
+      <p id="active-result" class="muted" role="status">尚未发起会话</p>
       <h2>主动观察 blockers</h2>
       <ul id="active-blockers"><li>active_view_report_unavailable</li></ul>
-      <p class="muted">Lumos 用于广角识别与身份连续性；D435 用于近场度量深度。当前页面不会发送运动、坐标或抓取命令。</p>
+      <p class="muted">Lumos 用于广角识别与身份连续性；D435 用于近场度量深度。页面只发送身份、会话和提案 ID，不发送坐标或抓取命令；每一步均需人工确认。</p>
     </aside>
   </main>
   <script>
@@ -88,6 +108,53 @@
     const byId = id => document.getElementById(id);
     const text = (id, value) => { byId(id).textContent = value; };
     const finite = value => Number.isFinite(value) ? value : null;
+    let latestStatus = null;
+    let sessionId = null;
+    let proposalId = null;
+    let socket = null;
+
+    function sendCommand(payload) {
+      if (!socket || socket.readyState !== WebSocket.OPEN) {
+        text('active-result', '控制连接尚未就绪');
+        return;
+      }
+      socket.send(JSON.stringify(payload));
+    }
+
+    function connectControl() {
+      const scheme = location.protocol === 'https:' ? 'wss:' : 'ws:';
+      socket = new WebSocket(`${scheme}//${location.host}/ws`);
+      socket.addEventListener('open', () => text('active-result', 'ID-only 控制通道已连接'));
+      socket.addEventListener('close', () => {
+        text('active-result', '控制通道已断开，正在重连');
+        setTimeout(connectControl, 1000);
+      });
+      socket.addEventListener('message', event => {
+        let message;
+        try { message = JSON.parse(event.data); } catch { return; }
+        if (message.type === 'active_view_command_result') {
+          const outcome = message.accepted === false || message.approved === false
+            ? `拒绝：${message.reason ?? 'unknown'}`
+            : `${message.action ?? 'command'} 已受理`;
+          text('active-result', outcome);
+          if (message.sessionId) sessionId = message.sessionId;
+        }
+        if (message.type === 'active_view_state' || message.type === 'active_view_move_ready') {
+          if (message.sessionId) sessionId = message.sessionId;
+          if (message.proposalId) proposalId = message.proposalId;
+          refresh();
+        }
+      });
+    }
+
+    byId('confirm-step').addEventListener('click', () => {
+      if (sessionId && proposalId) {
+        sendCommand({ cmd: 'confirm_active_view_step', sessionId, proposalId });
+      }
+    });
+    byId('cancel-session').addEventListener('click', () => {
+      if (sessionId) sendCommand({ cmd: 'cancel_active_view', sessionId });
+    });
 
     function bindRetry(image) {
       let attempts = 0;
@@ -103,6 +170,7 @@
     document.querySelectorAll('img[data-stream]').forEach(bindRetry);
 
     function render(status) {
+      latestStatus = status;
       text('online', status.online && !status.stale ? '是' : '否');
       byId('online').className = status.online && !status.stale ? 'ok' : 'bad';
       text('model', status.modelReady ? 'ready' : 'unavailable');
@@ -115,6 +183,34 @@
       text('gpu', gpu === null ? '—' : `${gpu.toFixed(2)} GiB`);
       text('age', status.sourceAgeMs === null ? '—' : `${status.sourceAgeMs.toFixed(0)} ms`);
       text('targets', String(status.targets.length));
+      const control = status.activeView?.control ?? {};
+      const terminalPhase = new Set(['idle', 'aborted', 'complete']).has(control.phase);
+      const targetList = byId('active-targets');
+      const eligibleTargets = status.stale ? [] : status.targets.filter(
+        target => target.identityStatus === 'confirmed' && Number.isSafeInteger(target.identityId),
+      );
+      targetList.replaceChildren(...eligibleTargets.map(target => {
+        const row = document.createElement('div');
+        row.className = 'target-row';
+        const label = document.createElement('span');
+        label.textContent = `#${target.identityId} · ${target.label}`;
+        const start = document.createElement('button');
+        start.type = 'button';
+        start.textContent = '开始主动观察';
+        start.disabled = !terminalPhase;
+        start.addEventListener('click', () => {
+          const identityId = target.identityId;
+          sendCommand({ cmd: 'start_active_view', identityId });
+        });
+        row.append(label, start);
+        return row;
+      }));
+      if (!eligibleTargets.length) {
+        const empty = document.createElement('span');
+        empty.className = 'muted';
+        empty.textContent = '没有新鲜且已确认身份的目标';
+        targetList.replaceChildren(empty);
+      }
       const list = byId('blockers');
       list.replaceChildren(...status.blockers.map(value => {
         const item = document.createElement('li');
@@ -131,8 +227,13 @@
         : { executionEnabled: false, reports: [] };
       const activeViewExecutionEnabled = activeView.executionEnabled;
       const activeReports = Array.isArray(activeView.reports) ? activeView.reports : [];
-      const report = activeReports[0] || null;
-      text('active-identity', report?.identityId ?? '—');
+      const activeControl = activeView.control ?? {};
+      if (activeControl.sessionId) sessionId = activeControl.sessionId;
+      if (activeControl.proposalId) proposalId = activeControl.proposalId;
+      const report = activeReports.find(item => item.identityId === activeControl.identityId)
+        ?? activeReports[0] ?? null;
+      text('active-phase', activeControl.phase ?? 'idle');
+      text('active-identity', activeControl.identityId ?? report?.identityId ?? '—');
       text(
         'active-proposal',
         report === null
@@ -140,6 +241,14 @@
           : report.kind === 'none'
             ? '无动作建议'
             : `${report.kind} · ${report.targetPoseId ?? '未命名观察位'}`,
+      );
+      const maxStep = finite(activeControl.maxStepM);
+      text('active-max-step', maxStep === null ? '预标定观察位' : `≤ ${(maxStep * 1000).toFixed(0)} mm`);
+      text(
+        'active-evidence',
+        Array.isArray(activeControl.evidenceIdsShort) && activeControl.evidenceIdsShort.length
+          ? activeControl.evidenceIdsShort.join(' · ')
+          : '—',
       );
       const coarse = report?.coarseCenterXYM;
       text(
@@ -160,16 +269,39 @@
       );
       text('active-stable', `${report?.stableSamples ?? 0} / 5`);
       text('active-refinements', report?.remainingRefinements ?? '—');
-      const activeReasons = Array.isArray(report?.reasons) && report.reasons.length
-        ? report.reasons
-        : [report === null ? 'active_view_report_unavailable' : 'none'];
+      const previewTarget = status.targets.find(
+        target => target.identityId === activeControl.identityId && Array.isArray(target.positionM),
+      );
+      text(
+        'grasp-preview',
+        activeControl.phase === 'grasp_preview'
+          ? previewTarget
+            ? `GRASP_PREVIEW · ${previewTarget.positionM.map(value => value.toFixed(3)).join(', ')} m · 仅预览，不能执行抓取`
+            : 'GRASP_PREVIEW · 深度几何待刷新 · 仅预览，不能执行抓取'
+          : '未进入 GRASP_PREVIEW',
+      );
+      const controlReasons = Array.isArray(activeControl.reasons) ? activeControl.reasons : [];
+      const activeReasons = controlReasons.length
+        ? controlReasons
+        : Array.isArray(report?.reasons) && report.reasons.length
+          ? report.reasons
+          : [report === null ? 'active_view_report_unavailable' : 'none'];
       const activeList = byId('active-blockers');
       activeList.replaceChildren(...activeReasons.map(value => {
         const item = document.createElement('li');
         item.textContent = value;
         return item;
       }));
-      if (status.robotExecutionEnabled !== false || activeViewExecutionEnabled !== false) {
+      byId('confirm-step').disabled = activeControl.moveReady !== true ||
+        activeControl.requiresConfirmation !== true;
+      byId('cancel-session').disabled = !activeControl.sessionId || terminalPhase;
+      text(
+        'safety-lock',
+        `robotExecutionEnabled = ${status.robotExecutionEnabled === true} · ` +
+        `activeViewExecutionEnabled = ${status.activeViewExecutionEnabled === true}`,
+      );
+      if (status.robotExecutionEnabled !== false ||
+          (status.activeViewExecutionEnabled === true && activeControl.phase !== 'moving_to_view')) {
         text('online', '安全配置错误');
         byId('online').className = 'bad';
       }
@@ -186,6 +318,7 @@
       }
     }
     refresh();
+    connectControl();
     setInterval(refresh, 1000);
   </script>
 </body>

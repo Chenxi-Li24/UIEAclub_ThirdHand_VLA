@@ -26,6 +26,7 @@ store.updateTargets({
   targets: [
     {
       identity_id: 3,
+      identity_status: 'confirmed',
       label: 'bottle',
       score: 0.95,
       actionable: true,
@@ -73,6 +74,7 @@ assert.deepEqual(current.metrics, {
   gpuMemoryReservedGib: 4.25,
 });
 assert.equal(current.targets[0].actionable, false);
+assert.equal(current.targets[0].identityStatus, 'confirmed');
 assert.equal(current.targets[0].positionM, null);
 assert.deepEqual(current.blockers, ['calibration_unavailable']);
 assert.equal(current.activeView.executionEnabled, false);
@@ -93,6 +95,46 @@ assert.deepEqual(current.activeView.reports[0], {
 });
 assert.equal('jointsDeg' in current.activeView.reports[0], false);
 assert.equal('deltaBaseM' in current.activeView.reports[0], false);
+assert.deepEqual(store.trustedTargets(1500), [{ identityId: 3, label: 'bottle' }]);
+assert.deepEqual(store.trustedTargets(3102), []);
+
+store.updateActiveViewState({
+  type: 'active_view_state',
+  phase: 'moving_to_view',
+  session_id: '11111111-1111-4111-8111-111111111111',
+  identity_id: 3,
+  proposal_id: '22222222-2222-4222-8222-222222222222',
+  request_id: '33333333-3333-4333-8333-333333333333',
+  evidence_ids: [`sha256:${'a'.repeat(64)}`],
+  reasons: [],
+  joints_deg: [1, 2, 3, 4, 5, 6],
+});
+store.updateActiveViewMoveReady({
+  sessionId: '11111111-1111-4111-8111-111111111111',
+  proposalId: '22222222-2222-4222-8222-222222222222',
+  identityId: 3,
+  kind: 'coarse_pose',
+  targetPoseId: 'table_left',
+  evidenceIds: [`sha256:${'a'.repeat(64)}`],
+  maxStepM: 0.020,
+  requiresConfirmation: true,
+});
+const controlled = store.snapshot(1500);
+assert.deepEqual(controlled.activeView.control, {
+  phase: 'moving_to_view',
+  sessionId: '11111111-1111-4111-8111-111111111111',
+  identityId: 3,
+  proposalId: '22222222-2222-4222-8222-222222222222',
+  requestId: '33333333-3333-4333-8333-333333333333',
+  reasons: [],
+  evidenceIdsShort: ['sha256:aaaaaaaaaaaa…'],
+  moveReady: true,
+  kind: 'coarse_pose',
+  targetPoseId: 'table_left',
+  maxStepM: 0.02,
+  requiresConfirmation: true,
+});
+assert.equal(JSON.stringify(controlled).includes('joints_deg'), false);
 
 const stale = store.snapshot(3102);
 assert.equal(stale.stale, true);

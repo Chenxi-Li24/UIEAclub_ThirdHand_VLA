@@ -48,6 +48,7 @@ class ActiveViewController {
     this.session = null;
     this.pending = null;
     this.inFlight = null;
+    this.approvalId = null;
   }
 
   _audit(event) {
@@ -78,10 +79,31 @@ class ActiveViewController {
       activeMotion: false,
       operatorConfirmed: false,
     };
+    this.approvalId = null;
     return { accepted: true, sessionId: message.sessionId };
   }
 
   onVisionEvent(event) {
+    if (event?.type === 'active_view_abort') {
+      const reason = typeof event.reason === 'string' && event.reason.length <= 128
+        ? event.reason : 'vision_abort';
+      return this._abort(reason);
+    }
+    if (event?.type === 'active_view_state') {
+      if (!this.session) return { handled: false, reason: 'session_unavailable' };
+      if (event.session_id !== this.session.sessionId) return this._abort('vision_session_mismatch');
+      if (Array.isArray(this.session.evidenceIds) &&
+          (!Array.isArray(event.evidence_ids) ||
+           event.evidence_ids.join('\0') !== this.session.evidenceIds.join('\0'))) {
+        return this._abort('evidence_changed');
+      }
+      if (['aborted', 'complete', 'idle'].includes(event.phase)) {
+        const reason = Array.isArray(event.reasons) && typeof event.reasons[0] === 'string'
+          ? `vision_${event.reasons[0].slice(0, 96)}` : `vision_${event.phase}`;
+        return this._abort(reason);
+      }
+      return { handled: false, reason: 'state_observed' };
+    }
     if (event?.type === 'active_view_evidence_changed') {
       const changed = !this.session || !Array.isArray(event.evidence_ids) ||
         !Array.isArray(this.session.evidenceIds) ||
@@ -171,6 +193,7 @@ class ActiveViewController {
       } catch { return { approved: false, reason: 'audit_write_failed' }; }
       return decision;
     }
+    this.approvalId = approval.content_id;
     const requestId = this.idFactory();
     if (!validUuid(requestId)) return { approved: false, reason: 'request_id_invalid' };
     const identifiers = {
@@ -252,10 +275,22 @@ class ActiveViewController {
   }
 
   checkTimeout() {
-    if (!this.inFlight || this.nowMs() - this.inFlight.startedAtMs <= this.motionTimeoutMs) {
-      return { handled: false, reason: 'not_timed_out' };
+    const now = this.nowMs();
+    if (this.inFlight && now - this.inFlight.startedAtMs > this.motionTimeoutMs) {
+      return this._abort('motion_timeout');
     }
-    return this._abort('motion_timeout');
+    if (this.pending && now >= this.pending.expiresAtMs) return this._abort('proposal_expired');
+    if (this.requested && this.session) {
+      let approval;
+      try { approval = this.loadApproval(); } catch { approval = null; }
+      if (!approval || !Number.isFinite(approval.expires_at_ms) || now >= approval.expires_at_ms) {
+        return this._abort('approval_expired');
+      }
+      if (this.approvalId !== null && approval.content_id !== this.approvalId) {
+        return this._abort('approval_changed');
+      }
+    }
+    return { handled: false, reason: 'not_timed_out' };
   }
 
   _abort(reason) {
@@ -275,6 +310,7 @@ class ActiveViewController {
     this.pending = null;
     this.inFlight = null;
     this.session = null;
+    this.approvalId = null;
     try {
       this._audit({
         action: 'session_aborted', reason, sessionId, proposalId,

@@ -34,6 +34,8 @@ function sanitizeTarget(target) {
   const pose = target.pose && typeof target.pose === 'object' ? target.pose : null;
   return {
     identityId: nonNegativeIntegerOrNull(target.identity_id ?? target.id),
+    identityStatus: new Set(['tentative', 'confirmed', 'occluded', 'inactive', 'ambiguous'])
+      .has(target.identity_status) ? target.identity_status : 'unknown',
     label: typeof target.label === 'string' ? target.label.slice(0, 128) : 'unknown',
     score: finiteOrNull(target.score ?? target.conf),
     positionM: finitePosition(pose ? pose.xyz_m : target.position_m),
@@ -80,6 +82,7 @@ class VisionStatusStore {
     this.staleAfterMs = staleAfterMs;
     this.maxTargets = maxTargets;
     this.lastEventTs = null;
+    this.lastTargetsTs = null;
     this.online = false;
     this.modelReady = false;
     this.d435Ready = false;
@@ -98,6 +101,20 @@ class VisionStatusStore {
     this.blockers = ['vision_not_started'];
     this.targets = [];
     this.activeViewReports = [];
+    this.activeViewControl = {
+      phase: 'idle',
+      sessionId: null,
+      identityId: null,
+      proposalId: null,
+      requestId: null,
+      reasons: [],
+      evidenceIdsShort: [],
+      moveReady: false,
+      kind: null,
+      targetPoseId: null,
+      maxStepM: null,
+      requiresConfirmation: true,
+    };
     this.error = null;
   }
 
@@ -150,6 +167,7 @@ class VisionStatusStore {
   updateTargets(event) {
     if (!event || typeof event !== 'object' || event.type !== 'detection_result') return;
     this._timestamp(event);
+    this.lastTargetsTs = finiteOrNull(event.ts);
     const rawTargets = Array.isArray(event.targets) ? event.targets : [];
     this.targets = rawTargets
       .slice(0, this.maxTargets)
@@ -162,6 +180,61 @@ class VisionStatusStore {
       .slice(0, this.maxTargets)
       .map(sanitizeActiveView)
       .filter(Boolean);
+  }
+
+  trustedTargets(nowMs = Date.now()) {
+    const now = finiteOrNull(nowMs);
+    if (now === null || this.lastTargetsTs === null || now < this.lastTargetsTs ||
+        now - this.lastTargetsTs > this.staleAfterMs) return [];
+    return this.targets
+      .filter(target => target.identityId !== null && target.identityStatus === 'confirmed')
+      .map(target => ({ identityId: target.identityId, label: target.label }));
+  }
+
+  updateActiveViewState(event) {
+    if (!event || typeof event !== 'object' || event.type !== 'active_view_state') return;
+    const phases = new Set([
+      'idle', 'target_locked', 'coarse_view_planned', 'move_authorized',
+      'moving_to_view', 'settling', 'verifying_identity', 'acquiring_depth',
+      'refine_view', 'grasp_preview', 'waiting_operator_confirmation',
+      'ready_for_existing_grasp_gate', 'aborted', 'complete',
+    ]);
+    const evidenceIds = boundedStrings(event.evidence_ids, 32)
+      .filter(value => /^sha256:[0-9a-f]{64}$/.test(value));
+    const sameProposal = this.activeViewControl.proposalId !== null &&
+      this.activeViewControl.proposalId === event.proposal_id;
+    this.activeViewControl = {
+      ...this.activeViewControl,
+      phase: phases.has(event.phase) ? event.phase : 'aborted',
+      sessionId: typeof event.session_id === 'string' ? event.session_id : null,
+      identityId: nonNegativeIntegerOrNull(event.identity_id),
+      proposalId: typeof event.proposal_id === 'string' ? event.proposal_id : null,
+      requestId: typeof event.request_id === 'string' ? event.request_id : null,
+      reasons: boundedStrings(event.reasons),
+      evidenceIdsShort: evidenceIds.map(value => `${value.slice(0, 19)}…`),
+      moveReady: sameProposal && this.activeViewControl.moveReady,
+      kind: sameProposal ? this.activeViewControl.kind : null,
+      targetPoseId: sameProposal ? this.activeViewControl.targetPoseId : null,
+      maxStepM: sameProposal ? this.activeViewControl.maxStepM : null,
+    };
+  }
+
+  updateActiveViewMoveReady(event) {
+    if (!event || typeof event !== 'object') return;
+    const evidenceIds = boundedStrings(event.evidenceIds, 32)
+      .filter(value => /^sha256:[0-9a-f]{64}$/.test(value));
+    this.activeViewControl = {
+      ...this.activeViewControl,
+      sessionId: typeof event.sessionId === 'string' ? event.sessionId : null,
+      proposalId: typeof event.proposalId === 'string' ? event.proposalId : null,
+      identityId: nonNegativeIntegerOrNull(event.identityId),
+      evidenceIdsShort: evidenceIds.map(value => `${value.slice(0, 19)}…`),
+      moveReady: true,
+      kind: new Set(['coarse_pose', 'refine_delta']).has(event.kind) ? event.kind : null,
+      targetPoseId: typeof event.targetPoseId === 'string' ? event.targetPoseId.slice(0, 128) : null,
+      maxStepM: finiteOrNull(event.maxStepM),
+      requiresConfirmation: event.requiresConfirmation === true,
+    };
   }
 
   snapshot(nowMs = Date.now()) {
@@ -185,6 +258,11 @@ class VisionStatusStore {
       targets: this.targets.map(target => ({ ...target })),
       activeView: {
         executionEnabled: false,
+        control: {
+          ...this.activeViewControl,
+          reasons: [...this.activeViewControl.reasons],
+          evidenceIdsShort: [...this.activeViewControl.evidenceIdsShort],
+        },
         reports: this.activeViewReports.map(report => ({
           ...report,
           coarseCenterXYM: report.coarseCenterXYM === null

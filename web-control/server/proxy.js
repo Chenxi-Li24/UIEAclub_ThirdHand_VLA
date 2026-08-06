@@ -14,6 +14,13 @@ const config = require('./config');
 const { StartouchBridge } = require('./startouch-bridge');
 const { CameraBridge } = require('./camera-bridge');
 const { VisionStatusStore } = require('./vision-status');
+const { ActiveViewAuditLog } = require('./active-view-audit-log');
+const { loadActiveViewApproval } = require('./active-view-authorization');
+const { ActiveViewController } = require('./active-view-controller');
+const {
+  authorizeActiveViewStart,
+  parseActiveViewBrowserCommand,
+} = require('./active-view-browser-protocol');
 const {
   authorizeGrasp,
   trustedTargetFromDetection,
@@ -32,6 +39,7 @@ const visionStatus = new VisionStatusStore({ staleAfterMs: 2000, maxTargets: 256
 let latestJointsDeg = null;
 let latestTcpEuler = null;    // [rad] for camera bridge
 let latestTcpPos = null;      // [m] for camera bridge
+let latestRobotStateAtMs = null;
 let stateReady = false;
 let motionActive = false;
 let connectPending = false;
@@ -39,6 +47,47 @@ let latestVisionTargets = new Map();
 
 // Grasp state machine
 let graspState = null;  // { tid, bx, by, phase, ... }
+
+let activeViewAuditLog;
+try {
+  activeViewAuditLog = new ActiveViewAuditLog(config.activeView.auditLog);
+} catch (error) {
+  console.error(`[Active view] audit log unavailable; motion locked: ${error.message}`);
+  activeViewAuditLog = { append: () => { throw new Error('active-view audit unavailable'); } };
+}
+
+const activeViewLimits = {
+  maxSpeedScale: config.activeView.maxSpeedScale,
+  maxTranslationM: config.activeView.maxTranslationM,
+  maxRotationRad: config.activeView.maxRotationRad,
+  maxRefinementSteps: config.activeView.maxRefinementSteps,
+  requireStepConfirmation: config.activeView.requireStepConfirmation,
+  robotModelId: config.activeView.robotModelId,
+  jointLimitsDeg: config.jointLimitsDeg,
+};
+
+const activeView = new ActiveViewController({
+  requested: config.activeView.requested,
+  loadApproval: () => config.activeView.approvalFile
+    ? loadActiveViewApproval(config.activeView.approvalFile)
+    : null,
+  limits: activeViewLimits,
+  getRobotState: () => ({
+    connected: bridge.connected,
+    moving: motionActive,
+    stateFresh: stateReady && latestRobotStateAtMs !== null &&
+      Date.now() - latestRobotStateAtMs <= 250,
+    graspActive: graspState !== null,
+    currentJointsDeg: latestJointsDeg,
+  }),
+  sendRobot: sendActiveViewRobotCommand,
+  sendVision: command => cameraBridge.send(command),
+  auditLog: activeViewAuditLog,
+});
+
+function activeViewIsActive() {
+  return activeView.session !== null || activeView.pending !== null || activeView.inFlight !== null;
+}
 
 // ── Lumos streamer (separate process, no pyrealsense2 conflict) ──
 let lumosChild = null;
@@ -132,6 +181,10 @@ function sendJointMotion(joints, ws, source = 'servo') {
     send(ws, { type: 'error', msg: '上一条关节运动尚未完成' });
     return;
   }
+  if (activeViewIsActive()) {
+    send(ws, { type: 'error', msg: '主动观察会话进行中，普通运动已闭锁' });
+    return;
+  }
 
   const normalized = joints.map(Number);
   if (
@@ -157,11 +210,47 @@ function sendJointMotion(joints, ws, source = 'servo') {
   });
 }
 
+function sendActiveViewRobotCommand(command) {
+  if (!bridge.connected || !stateReady || motionActive ||
+      latestRobotStateAtMs === null || Date.now() - latestRobotStateAtMs > 250) return false;
+  if (command.cmd === 'move_joint') {
+    const jointsDeg = radiansToDegrees(command.joints_rad || []);
+    if (validateJoints(jointsDeg) || jointsDeg.every(value => Math.abs(value) < 0.05)) return false;
+    return bridge.send({
+      cmd: 'move_joint',
+      joints_rad: [...command.joints_rad],
+      time_sec: moveTimeFor(jointsDeg),
+      request_id: command.request_id,
+      source: command.source,
+    });
+  }
+  if (command.cmd === 'move_l_delta') {
+    if (![latestTcpPos, latestTcpEuler, command.delta_base_m].every(
+      value => Array.isArray(value) && value.length === 3 && value.every(Number.isFinite)
+    )) return false;
+    const position = latestTcpPos.map((value, index) => value + command.delta_base_m[index]);
+    const distanceM = Math.hypot(...command.delta_base_m);
+    if (!position.every(Number.isFinite) || distanceM <= 1e-12 ||
+        distanceM > config.activeView.maxTranslationM + 1e-12) return false;
+    return bridge.send({
+      cmd: 'move_l',
+      position,
+      euler: [...latestTcpEuler],
+      time_sec: Math.max(2.0, distanceM / 0.01),
+      request_id: command.request_id,
+      source: command.source,
+    });
+  }
+  return false;
+}
+
 bridge.on('connection', message => {
   latestJointsDeg = null;
   stateReady = false;
   motionActive = false;
   connectPending = false;
+  latestRobotStateAtMs = null;
+  if (!message.connected) activeView.onRobotEvent(message);
   if (message.connected) {
     console.log(`[Robot ${new Date().toISOString()}] connected on ${config.robot.canInterface}`);
   } else {
@@ -288,7 +377,12 @@ app.get('/camera_lumos_vision', (req, res) => {
 
 app.get('/api/vision/status', (_req, res) => {
   res.setHeader('Cache-Control', 'no-store');
-  res.json(visionStatus.snapshot(Date.now()));
+  const snapshot = visionStatus.snapshot(Date.now());
+  snapshot.activeViewExecutionEnabled = activeView.inFlight !== null;
+  snapshot.activeViewExecutionRequested = config.activeView.requested;
+  snapshot.activeView.executionEnabled = activeView.inFlight !== null;
+  snapshot.activeView.executionRequested = config.activeView.requested;
+  res.json(snapshot);
 });
 
 // ── Camera bridge events ────────────────────────────────────
@@ -305,11 +399,15 @@ cameraBridge.on('detection_result', message => {
 
 cameraBridge.on('camera_status', message => {
   visionStatus.updateCamera(message);
+  if (message.d435_ready === false) {
+    activeView.onVisionEvent({ type: 'active_view_abort', reason: 'd435_unavailable' });
+  }
   broadcast(message);
 });
 
 cameraBridge.on('camera_error', message => {
   visionStatus.updateCamera(message);
+  activeView.onVisionEvent({ type: 'active_view_abort', reason: 'camera_error' });
   broadcast({ type: 'camera_error', msg: message.message });
 });
 
@@ -320,7 +418,58 @@ cameraBridge.on('vision_status', message => {
 
 cameraBridge.on('vision_error', message => {
   visionStatus.updateStatus(message);
+  activeView.onVisionEvent({ type: 'active_view_abort', reason: 'vision_error' });
   broadcast(message);
+});
+
+cameraBridge.on('active_view_move_proposal', message => {
+  const result = activeView.onVisionEvent(message);
+  if (result.accepted !== true || !activeView.pending) {
+    broadcast({
+      type: 'active_view_state',
+      phase: 'aborted',
+      reasons: [result.reason || 'proposal_rejected'],
+      moveReady: false,
+      activeViewExecutionEnabled: false,
+    });
+    return;
+  }
+  const moveReady = {
+    type: 'active_view_move_ready',
+    sessionId: activeView.pending.sessionId,
+    proposalId: activeView.pending.proposalId,
+    identityId: activeView.pending.identityId,
+    kind: message.kind,
+    targetPoseId: activeView.pending.targetPoseId,
+    evidenceIds: activeView.pending.evidenceIds,
+    maxStepM: config.activeView.maxTranslationM,
+    requiresConfirmation: true,
+  };
+  visionStatus.updateActiveViewMoveReady(moveReady);
+  const control = visionStatus.snapshot(Date.now()).activeView.control;
+  broadcast({ type: 'active_view_move_ready', ...control });
+});
+
+cameraBridge.on('active_view_state', message => {
+  activeView.onVisionEvent(message);
+  visionStatus.updateActiveViewState(message);
+  const control = visionStatus.snapshot(Date.now()).activeView.control;
+  broadcast({
+    type: 'active_view_state',
+    ...control,
+    activeViewExecutionEnabled: activeView.inFlight !== null,
+  });
+});
+
+cameraBridge.on('active_view_protocol_rejected', message => {
+  activeView.onVisionEvent({ type: 'active_view_abort', reason: 'protocol_rejected' });
+  broadcast({
+    type: 'active_view_state',
+    phase: 'aborted',
+    reasons: [typeof message.reason === 'string' ? message.reason.slice(0, 128) : 'protocol_rejected'],
+    moveReady: false,
+    activeViewExecutionEnabled: false,
+  });
 });
 
 cameraBridge.on('log', message => {
@@ -344,6 +493,7 @@ bridge.on('robot_state', message => {
   latestTcpEuler = message.tcp_euler_rad;
   latestTcpPos = message.tcp_position_m;
   stateReady = true;
+  latestRobotStateAtMs = Date.now();
 
   // Forward arm state to camera bridge for coordinate transforms
   if (cameraBridge.ready) {
@@ -399,10 +549,12 @@ bridge.on('command_accepted', message => {
 });
 
 bridge.on('command_complete', message => {
+  activeView.onRobotEvent(message);
   broadcast({ ...message, type: 'command_status', status: 'complete' });
 });
 
 bridge.on('error', message => {
+  activeView.onRobotEvent(message);
   broadcast({ type: 'error', msg: message.message, requestId: message.request_id });
 });
 
@@ -456,6 +608,8 @@ wss.on('connection', ws => {
     camera: cameraBridge.getInfo(),
     visionSafety: {
       robotExecutionEnabled: config.visionSafety.robotExecutionEnabled,
+      activeViewExecutionRequested: config.activeView.requested,
+      activeViewExecutionEnabled: activeView.inFlight !== null,
     },
   });
   bridge.send({ cmd: 'get_state' });
@@ -491,6 +645,7 @@ function handleBrowserCommand(message, ws) {
       break;
 
     case 'disconnect':
+      activeView.onRobotEvent({ type: 'connection', connected: false });
       bridge.send({ cmd: 'disconnect' });
       break;
 
@@ -509,6 +664,10 @@ function handleBrowserCommand(message, ws) {
     }
 
     case 'gripper':
+      if (activeViewIsActive()) {
+        send(ws, { type: 'error', msg: '主动观察会话进行中，夹爪控制已闭锁' });
+        return;
+      }
       if (!bridge.connected) {
         send(ws, { type: 'error', msg: 'Startouch SDK 尚未连接' });
         return;
@@ -518,6 +677,7 @@ function handleBrowserCommand(message, ws) {
 
     case 'software_stop':
     case 'estop':
+      activeView.onRobotEvent({ type: 'software_stop' });
       if (bridge.softwareStop()) {
         broadcast({
           type: 'software_stop',
@@ -540,6 +700,10 @@ function handleBrowserCommand(message, ws) {
       break;
 
     case 'grasp_object':
+      if (activeViewIsActive()) {
+        send(ws, { type: 'error', msg: '主动观察会话进行中，抓取已闭锁' });
+        return;
+      }
       if (graspState) {
         send(ws, { type: 'error', msg: '抓取动作正在进行中' });
         return;
@@ -564,7 +728,53 @@ function handleBrowserCommand(message, ws) {
       }
       break;
 
+    case 'start_active_view':
+    case 'confirm_active_view_step':
+    case 'cancel_active_view': {
+      const parsed = parseActiveViewBrowserCommand(message);
+      if (!parsed.accepted) {
+        send(ws, { type: 'active_view_command_result', accepted: false, reason: parsed.reason });
+        return;
+      }
+      if (parsed.command === 'start') {
+        const startGate = authorizeActiveViewStart({
+          identityId: parsed.identityId,
+          trustedTargets: visionStatus.trustedTargets(Date.now()),
+          activeViewActive: activeViewIsActive(),
+          graspActive: graspState !== null,
+          motionActive,
+        });
+        if (!startGate.approved) {
+          send(ws, { type: 'active_view_command_result', accepted: false, reason: startGate.reason });
+          return;
+        }
+        const started = activeView.begin({ sessionId: randomUUID(), identityId: parsed.identityId });
+        send(ws, { type: 'active_view_command_result', action: 'start', ...started });
+        return;
+      }
+      if (parsed.command === 'confirm') {
+        const confirmed = activeView.confirm({
+          sessionId: parsed.sessionId,
+          proposalId: parsed.proposalId,
+        });
+        send(ws, {
+          type: 'active_view_command_result',
+          action: 'confirm',
+          approved: confirmed.approved === true,
+          reason: confirmed.reason,
+          sessionId: parsed.sessionId,
+          proposalId: parsed.proposalId,
+          requestId: confirmed.requestId || null,
+        });
+        return;
+      }
+      const cancelled = activeView.cancel({ sessionId: parsed.sessionId });
+      send(ws, { type: 'active_view_command_result', action: 'cancel', ...cancelled });
+      return;
+    }
+
     case 'estop_camera':
+      activeView.onVisionEvent({ type: 'active_view_abort', reason: 'camera_stopped' });
       cameraBridge.shutdown();
       broadcast({ type: 'camera_status', d435_ready: false, calibration_loaded: false,
         error: 'E-STOP by user' });
@@ -581,6 +791,7 @@ function handleBrowserCommand(message, ws) {
 
 // ── Grasp state machine ─────────────────────────────────────
 function startGrasp(tid, positionM) {
+  activeView.onRobotEvent({ type: 'grasp_started' });
   const [bx, by, bz] = positionM;
   const hoverZ = Math.max(bz + 0.10, 0.15);
   const graspZ = Math.max(bz + 0.01, 0.03);
@@ -714,9 +925,14 @@ server.listen(config.web.port, config.web.host, () => {
   bridge.start();
 });
 
+const activeViewTimeoutTimer = setInterval(() => activeView.checkTimeout(), 250);
+activeViewTimeoutTimer.unref();
+
 function shutdown() {
   console.log('\n[shutdown] closing...');
   if (lumosChild) { lumosChild.kill('SIGTERM'); lumosChild = null; }
+  clearInterval(activeViewTimeoutTimer);
+  if (activeView.session) activeView.cancel({ sessionId: activeView.session.sessionId });
   cameraBridge.shutdown();
   bridge.shutdown();
   server.close(() => process.exit(0));

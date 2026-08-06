@@ -148,6 +148,7 @@ async function run() {
   lumosServer = spawnChild('proxy.js', {
     STARTOUCH_SIMULATE: '1',
     STARTOUCH_PYTHON: 'python',
+    CAMERA_ENABLED: '0',
     WEB_HOST: '127.0.0.1',
     WEB_PORT: String(WEB_PORT)
   });
@@ -589,6 +590,76 @@ async function run() {
   });
   fs.writeFileSync(SCREENSHOT_PATH, Buffer.from(screenshot.result.data, 'base64'));
 
+  await command('Page.navigate', { url: `${PAGE_URL}camera-test.html` });
+  await waitFor(
+    `document.readyState !== 'loading' && ` +
+    `document.getElementById('active-result')?.textContent.includes('ID-only')`
+  );
+  const activeViewUi = await evaluate(`(() => {
+    const session = '11111111-1111-4111-8111-111111111111';
+    const proposal = '22222222-2222-4222-8222-222222222222';
+    const base = {
+      online: true,
+      modelReady: true,
+      stale: false,
+      sequences: { lumos: 1, d435: 1 },
+      metrics: { latencyP95Ms: 10, gpuMemoryReservedGib: 1 },
+      sourceAgeMs: 10,
+      blockers: [],
+      robotExecutionEnabled: false,
+      activeViewExecutionEnabled: false,
+      targets: [{
+        identityId: 7,
+        identityStatus: 'confirmed',
+        label: 'bottle',
+        positionM: [0.2, 0.1, 0.03]
+      }],
+      activeView: {
+        executionEnabled: false,
+        reports: [],
+        control: {
+          phase: 'idle', sessionId: null, proposalId: null, identityId: null,
+          moveReady: false, requiresConfirmation: true, evidenceIdsShort: [], reasons: []
+        }
+      }
+    };
+    render(base);
+    document.querySelector('#active-targets button').click();
+    render({
+      ...base,
+      activeView: {
+        ...base.activeView,
+        control: {
+          phase: 'waiting_operator_confirmation', sessionId: session,
+          proposalId: proposal, identityId: 7, moveReady: true,
+          requiresConfirmation: true, evidenceIdsShort: ['sha256:aaaaaaaaaaaa…'],
+          reasons: [], kind: 'coarse_pose', targetPoseId: 'table_center', maxStepM: 0.02
+        }
+      }
+    });
+    document.getElementById('confirm-step').click();
+    document.getElementById('cancel-session').click();
+    const commands = window.__thirdhandWsSends
+      .filter(entry => entry.url.endsWith('/ws') && entry.data !== '[binary]')
+      .map(entry => JSON.parse(entry.data))
+      .filter(message => [
+        'start_active_view', 'confirm_active_view_step', 'cancel_active_view'
+      ].includes(message.cmd));
+    const exactKeys = (value, expected) =>
+      JSON.stringify(Object.keys(value).sort()) === JSON.stringify([...expected].sort());
+    return {
+      commands,
+      idsOnly:
+        commands.length === 3 &&
+        exactKeys(commands[0], ['cmd', 'identityId']) &&
+        exactKeys(commands[1], ['cmd', 'sessionId', 'proposalId']) &&
+        exactKeys(commands[2], ['cmd', 'sessionId']),
+      noGraspButton: ![...document.querySelectorAll('button')]
+        .some(button => button.textContent.includes('执行抓取')),
+      confirmationRequired: document.body.textContent.includes('每一步均需人工确认')
+    };
+  })()`);
+
   const checks = {
     defaultJetsonEndpoint: defaultEndpoint === 'ws://192.168.58.43:3002/v1/voice',
     cpuAndGpuRoutesAvailable:
@@ -659,6 +730,9 @@ async function run() {
     lumosModelAndControlsPreserved:
       finalState.canvasCount === 1 && finalState.jointSliderCount === 6,
     manualLumosControlStillWorks: manualRegression,
+    activeViewCommandsAreIdsOnly: activeViewUi.idsOnly,
+    graspPreviewHasNoExecutionButton: activeViewUi.noGraspButton,
+    activeViewRequiresEachConfirmation: activeViewUi.confirmationRequired,
     noTtsPlayback: finalState.audioCount === 0,
     noAmbiguousExecutionCopy:
       !finalState.bodyText.includes('执行 1 个操作'),

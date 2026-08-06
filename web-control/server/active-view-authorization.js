@@ -197,6 +197,7 @@ function authorizeActiveViewMove({ requested, approval, proposal, robot, session
     if (!isFiniteVector(proposal.deltaBaseM, 3) || !isFiniteVector(proposal.opticalAxisBase, 3) ||
         !isFiniteVector(proposal.rotationDeltaRad, 3)) return reject('refinement_delta_invalid');
     const translation = Math.hypot(...proposal.deltaBaseM);
+    if (translation <= 1e-12) return reject('refinement_translation_too_small');
     if (translation > safeLimits.maxTranslationM + 1e-12) {
       return reject('refinement_translation_exceeds_limit');
     }

@@ -11,11 +11,12 @@
     "test:active-view-authorization": "node test/active-view-authorization-smoke.js",
     "test:active-view-controller": "node test/active-view-controller-smoke.js",
     "test:active-view-audit-log": "node test/active-view-audit-log-smoke.js",
+    "test:active-view-browser-protocol": "node test/active-view-browser-protocol-smoke.js",
     "test:lumos-proxy": "node test/lumos-proxy-smoke.js",
     "test:vision-status": "node test/vision-status-smoke.js",
     "test:teach-active-view": "node test/teach-active-view-pose-smoke.js",
     "test:browser": "node test/browser-smoke.js",
-    "test": "npm run test:voice-protocol && npm run test:grasp-authorization && npm run test:active-view-authorization && npm run test:active-view-controller && npm run test:active-view-audit-log && npm run test:vision-status && npm run test:teach-active-view && npm run test:lumos-proxy && npm run test:browser"
+    "test": "npm run test:voice-protocol && npm run test:grasp-authorization && npm run test:active-view-authorization && npm run test:active-view-controller && npm run test:active-view-audit-log && npm run test:active-view-browser-protocol && npm run test:vision-status && npm run test:teach-active-view && npm run test:lumos-proxy && npm run test:browser"
   },
   "dependencies": {
     "express": "^4.21.0",

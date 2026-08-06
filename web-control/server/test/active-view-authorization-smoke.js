@@ -171,6 +171,10 @@ assert.deepEqual(
   { approved: false, reason: 'refinement_translation_exceeds_limit' }
 );
 assert.deepEqual(
+  decide({ proposal: refinement({ deltaBaseM: [0, 0, 0] }) }),
+  { approved: false, reason: 'refinement_translation_too_small' }
+);
+assert.deepEqual(
   decide({ proposal: refinement({ deltaBaseM: [0, 0, 0.001] }) }),
   { approved: false, reason: 'optical_axis_refinement_forbidden' }
 );

@@ -72,6 +72,7 @@ class ArucoDetector(BaseDetector):
 
         results = []
         for i, (corner, marker_id) in enumerate(zip(corners, ids)):
+            marker_value = int(np.asarray(marker_id).reshape(-1)[0])
             c = corner.reshape(4, 2)
             center = tuple(c.mean(axis=0).astype(int))
 
@@ -106,8 +107,8 @@ class ArucoDetector(BaseDetector):
                 )
 
             results.append(Detection(
-                id=int(marker_id[0]),
-                label=f"aruco_{marker_id[0]}",
+                id=marker_value,
+                label=f"aruco_{marker_value}",
                 confidence=1.0,
                 corners_2d=[(float(x), float(y)) for x, y in corner.reshape(4, 2)],
                 center_pixel=center,
@@ -128,7 +129,8 @@ class ArucoDetector(BaseDetector):
                 # Draw pose axes
                 rvec = np.zeros((3, 1))  # simplified — use actual rvec from detect
                 tvec = np.array(det.pose_camera.position).reshape(3, 1)
-                cv2.drawFrameAxes(out, self.K, None, rvec, tvec,
+                dist = self.dist if hasattr(self, "dist") else np.zeros(4)
+                cv2.drawFrameAxes(out, self.K, dist, rvec, tvec,
                                   self.marker_size_m * 0.7)
 
             # Draw label

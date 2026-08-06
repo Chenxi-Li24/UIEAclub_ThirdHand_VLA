@@ -4,7 +4,7 @@
 
 **Status:** Approved design
 
-**Audience:** Developers and researchers
+**Audience:** Developers, researchers, and future SCI authors
 
 **Languages:** Complete Chinese and English documentation
 
@@ -14,6 +14,12 @@ Replace the current short repository overview with a bilingual, tutorial-style
 documentation set that explains the complete ThirdHand VLA project from first
 principles through implementation, deployment, verification, and extension.
 
+The documentation is also the entry point to a reproducible SCI evidence base.
+Its primary research axis is robotic vision and 3D perception, its secondary axis
+is verifiable VLA decision-making, and its optional system-paper axis combines the
+two. Robot control is the supervised experimental platform and safety boundary,
+not the principal claimed contribution.
+
 The documentation must let a new developer answer five questions without first
 reading the implementation:
 
@@ -22,6 +28,8 @@ reading the implementation:
 3. How do those concepts map to concrete modules, interfaces, configuration, and data flow?
 4. What can be run offline, in simulation, read-only on hardware, or with supervised motion?
 5. Which features are implemented, verified, experimental, or only planned?
+6. Which hypotheses, datasets, protocols, metrics, baselines, and artifacts support
+   future scientific claims?
 
 ## 2. Documentation Set
 
@@ -37,6 +45,7 @@ The bilingual landing page remains concise enough for GitHub visitors. It contai
 - a high-level architecture diagram showing both runtime boundaries;
 - the shortest safe installation and offline verification route;
 - a prominent safety warning and links to the full tutorials;
+- a research-track summary and selected evidence/preview gallery;
 - the correct `Chenxi-Li24/UIEAclub_ThirdHand_VLA` clone URL.
 
 It is a navigation and project-presentation page, not a third copy of the full tutorial.
@@ -85,6 +94,7 @@ Each concept is paired with the repository module or configuration that implemen
 - ArUco, YOLO, RTMDet instance segmentation, and DINOv2 descriptors;
 - short-horizon tracking, persistent identity, object memory, occlusion, and reacquisition;
 - 3D instance pose estimation, uncertainty, and fail-closed perception gates.
+- research hypotheses, baselines, ablations, and metrics for each perception stage.
 
 The text must distinguish the packaged perception baseline from the newer
 `web-control/server/vision` and `vision_models` pipelines.
@@ -96,6 +106,8 @@ The text must distinguish the packaged perception baseline from the newer
 - intent candidates, local preview, human confirmation, and command authorization;
 - why model output is a recommendation rather than direct robot authority;
 - offline mocks, network failure, and privacy/runtime considerations.
+- VLA evaluation protocols covering intent accuracy, unsafe-action interception,
+  human correction, latency, hallucination, refusal quality, and recovery.
 
 ### Part 5 — Control, Orchestration, and Safety
 
@@ -142,8 +154,108 @@ Every real-hardware section begins with prerequisites, stop conditions, and expe
 - hardware preflight, soak testing, logs, and acceptance evidence;
 - symptom-to-diagnosis-to-safe-response troubleshooting;
 - extension interfaces, contribution workflow, research roadmap, and documentation index.
+- SCI evidence manifests, dataset documentation, reproducibility checklists, quantitative
+  result generation, effect previews, baselines, ablations, failure cases, and limitations.
 
-## 4. Architecture Presentation
+## 4. Scientific Research Tracks
+
+The documentation prepares three compatible publication directions without claiming
+that uncompleted experiments already support them.
+
+### Track A — Robotic Vision and 3D Perception (primary)
+
+The primary research story covers:
+
+- Lumos fisheye RGB as the canonical appearance source;
+- D435 metric depth and cross-camera registration;
+- explicit timestamp, calibration, and uncertainty handling;
+- instance segmentation and masked 3D estimation;
+- DINOv2 appearance descriptors, tracking, persistent object memory, occlusion,
+  reacquisition, and ambiguity rejection;
+- propagation of perception confidence into actionability.
+
+Candidate evaluation includes mask AP/recall, radial performance, depth registration
+error, 3D position error and jitter, HOTA, IDF1, ID switches, fragmentation,
+reacquisition rate, false identity merges, latency, throughput, and GPU memory.
+
+### Track B — Verifiable VLA Decision-Making (secondary)
+
+The VLA research story covers:
+
+- grounded multimodal task understanding;
+- structured intent/action candidates instead of direct actuator calls;
+- local simulation/preview, human confirmation, and deterministic validation;
+- uncertainty, invalid intent, hallucination, timeout, refusal, and recovery behavior;
+- use of persistent visual object state as grounded VLA context.
+
+Candidate evaluation includes task and intent accuracy, unsafe-action interception,
+human correction rate, unsupported-action rate, calibrated refusal quality, recovery
+success, and end-to-end latency.
+
+### Track C — Integrated Vision–VLA System (optional)
+
+The integrated paper route studies persistent object memory as VLA context,
+perception-uncertainty propagation into decisions, long-horizon task completion,
+closed-loop verification, and failure recovery. Robot hardware demonstrates the
+method under supervised safety constraints; low-level arm control is not presented
+as the main novelty.
+
+## 5. Scientific Evidence Unit
+
+Every research-relevant method section follows one repeatable evidence structure:
+
+1. **Problem:** research question, scope, and falsifiable hypothesis.
+2. **Method:** notation, mathematical definition, algorithm, assumptions, and complexity.
+3. **Protocol:** hardware, software, dataset split, scenario, seed, baseline, and procedure.
+4. **Metrics:** exact definition, aggregation, uncertainty, and statistical test where useful.
+5. **Evidence:** machine-readable results, generated figures, model/calibration/data versions,
+   commit, command, and environment manifest.
+6. **Limits:** failure cases, threats to validity, safety limits, and unverified claims.
+
+Results must be generated from machine-readable JSON/CSV rather than copied by hand.
+The evidence contract records at least the Git commit, model identifier and checksum,
+calibration identifier, dataset manifest/checksum, hardware/software environment,
+command, seed, timestamp, and schema version.
+
+## 6. Effect Preview and Planned-Evidence Policy
+
+The README set provides visual preview positions that can later be populated with
+real experimental artifacts:
+
+- **V1:** Lumos instance mask, D435 depth, and robot-base 3D result;
+- **V2:** identity before occlusion, during occlusion, and after reacquisition;
+- **V3:** depth-registration error, radial calibration residuals, and uncertainty view;
+- **L1:** VLA instruction, visual context, candidate, preview, confirmation, and refusal reason;
+- **E1:** baseline comparison and confidence intervals;
+- **E2:** ablation table/curve;
+- **E3:** accuracy-latency-resource trade-off;
+- **F1:** representative success and failure cases.
+
+Until real evidence exists, each position is visibly labeled **Planned Evidence /
+待补实验证据** and contains only the expected artifact type, required fields,
+and generation path. It must not contain invented screenshots, numbers, curves, or
+conclusions. A preview becomes a result only after its source manifest and generation
+command are linked.
+
+## 7. Research Support Files
+
+The implementation plan may add a focused research evidence area under `docs/research/`
+with the following templates or indexes:
+
+- contribution and claim-to-evidence matrix;
+- dataset datasheet and recording manifest;
+- experiment manifest and result schema;
+- baseline and ablation matrix;
+- metric definitions and statistical reporting rules;
+- figure manifest with source-data and generation-command fields;
+- reproducibility checklist;
+- known limitations and threats-to-validity register;
+- paper-writing index mapping methods, experiments, figures, and tables to evidence.
+
+These are support structures, not empty claims. The README links them and summarizes
+their current completion state.
+
+## 8. Architecture Presentation
 
 The tutorials explicitly show two cooperating but independent runtime boundaries.
 
@@ -179,7 +291,7 @@ Fixed A/B demo :8766 -> separate process and CAN ownership lock
 
 The diagrams must show control authority separately from observational data flow.
 
-## 5. Core Knowledge Chains
+## 9. Core Knowledge Chains
 
 The tutorial ties implementation details to five end-to-end knowledge chains:
 
@@ -189,7 +301,7 @@ The tutorial ties implementation details to five end-to-end knowledge chains:
 4. **VLA and voice:** image/audio/text → recommendation or candidate → preview → human confirmation → local validation.
 5. **Safety:** freshness + calibration + identity + pose confidence + resource ownership → fail closed.
 
-## 6. Feature Maturity Model
+## 10. Feature Maturity Model
 
 Every substantial capability receives one of four explicit labels:
 
@@ -203,7 +315,7 @@ online dual-camera perception may be observable while vision-triggered robot exe
 remains disabled by `robot_execution_enabled: false` until calibration and task-model
 acceptance gates pass.
 
-## 7. Reference Tables and Appendices
+## 11. Reference Tables and Appendices
 
 The complete tutorials include synchronized Chinese and English versions of:
 
@@ -219,12 +331,13 @@ The complete tutorials include synchronized Chinese and English versions of:
 - test and verification command matrix;
 - glossary;
 - research, architecture, setup, API, safety, and contribution document index.
+- research-track, experiment, metric, figure, and claim-to-evidence indexes.
 
 Commands and defaults must be extracted from current code/configuration. Volatile evidence
 such as historical test counts or deployment timestamps is linked to result documents rather
 than presented as timeless fact unless clearly dated.
 
-## 8. Troubleshooting Pattern
+## 12. Troubleshooting Pattern
 
 Troubleshooting entries use a consistent structure:
 
@@ -238,7 +351,7 @@ Minimum covered categories are CAN/interface ownership, stale CAN receive data, 
 role loss, timestamp skew, invalid calibration/depth, ambiguous identity, port conflicts,
 WebSocket/voice-bridge failure, missing model assets, GPU capacity, and latency-limit failure.
 
-## 9. Documentation Quality and Safety Constraints
+## 13. Documentation Quality and Safety Constraints
 
 - Do not include credentials, machine-specific tokens, private paths, logs, PID files, or model weights.
 - Do not claim unsupported autonomy or validated grasp execution.
@@ -248,8 +361,13 @@ WebSocket/voice-bridge failure, missing model assets, GPU capacity, and latency-
 - Keep Chinese and English headings, tables, diagrams, links, commands, and status labels aligned.
 - Prefer concise explanations in `README.md`; place full teaching material in the language files.
 - Link detailed research evidence instead of duplicating long research reports.
+- Separate measured results, dated deployment evidence, hypotheses, and future work.
+- Never use a visual placeholder or expected threshold as evidence of achieved performance.
+- Describe dataset licensing, consent/privacy, leakage prevention, and train/validation/test
+  separation before presenting quantitative results.
+- Include failure cases and threats to validity alongside positive qualitative previews.
 
-## 10. Acceptance Criteria
+## 14. Acceptance Criteria
 
 The README redesign is complete when:
 
@@ -263,3 +381,8 @@ The README redesign is complete when:
 8. Chinese and English documents have aligned structure and technical meaning;
 9. Markdown lint/link checks and the repository's relevant verification commands pass;
 10. no local artifacts, secrets, or unverified capability claims are introduced.
+11. the vision-primary, VLA-secondary, and optional integrated research tracks are explicit;
+12. every displayed scientific result is traceable to machine-readable data and a manifest;
+13. planned previews are clearly distinguishable from measured evidence;
+14. the documentation provides reusable experiment, metric, figure, and reproducibility
+    structures sufficient to support later SCI writing without retroactive data reconstruction.

@@ -18,7 +18,7 @@ def _readonly_vector(value: Any, shape: tuple[int, ...], name: str) -> np.ndarra
     return array
 
 
-def _evidence_ids(values: Any, *, allow_empty: bool = False) -> tuple[str, ...]:
+def validated_evidence_ids(values: Any, *, allow_empty: bool = False) -> tuple[str, ...]:
     try:
         result = tuple(values)
     except TypeError as exc:
@@ -86,7 +86,7 @@ class CoarseTargetEstimate:
             raise InvalidDataError("coarse target covariance must be positive semidefinite")
         if not isinstance(self.source_stamp, FrameStamp):
             raise InvalidDataError("coarse target requires frame provenance")
-        calibration_id = _evidence_ids((self.calibration_id,))[0]
+        calibration_id = validated_evidence_ids((self.calibration_id,))[0]
 
         samples.setflags(write=False)
         object.__setattr__(self, "center_xy_m", center)
@@ -130,7 +130,7 @@ class ObservationPose:
             raise InvalidDataError("observation pose requires allowed start pose IDs")
         if len(set(starts)) != len(starts):
             raise InvalidDataError("allowed start pose IDs must be unique")
-        path_id, calibration_id = _evidence_ids(
+        path_id, calibration_id = validated_evidence_ids(
             (self.path_validation_id, self.calibration_id)
         )
         tolerance = float(self.joint_tolerance_deg)
@@ -167,7 +167,7 @@ class TablePlane:
             raise InvalidDataError("table offset must be finite")
         if not np.isfinite(self.position_rmse_m) or self.position_rmse_m <= 0.0:
             raise InvalidDataError("table position RMSE must be finite and positive")
-        calibration_id = _evidence_ids((self.calibration_id,))[0]
+        calibration_id = validated_evidence_ids((self.calibration_id,))[0]
         if not isinstance(self.validated, bool):
             raise InvalidDataError("table validation state must be a boolean")
 
@@ -345,7 +345,7 @@ class ObservationMoveProposal:
                 raise InvalidDataError("rejected proposal cannot contain a motion payload")
             if not reasons:
                 raise InvalidDataError("rejected proposal requires reasons")
-            evidence_ids = _evidence_ids(self.evidence_ids, allow_empty=True)
+            evidence_ids = validated_evidence_ids(self.evidence_ids, allow_empty=True)
         elif self.kind == "coarse_pose":
             if not isinstance(self.target_pose_id, str) or not self.target_pose_id:
                 raise InvalidDataError("coarse active-view proposal requires a target pose ID")
@@ -360,7 +360,7 @@ class ObservationMoveProposal:
                 "joints_deg",
                 _readonly_vector(self.joints_deg, (6,), "joints_deg"),
             )
-            evidence_ids = _evidence_ids(self.evidence_ids)
+            evidence_ids = validated_evidence_ids(self.evidence_ids)
         else:
             if self.target_pose_id is not None or self.joints_deg is not None:
                 raise InvalidDataError("refinement proposal cannot contain an absolute pose")
@@ -378,7 +378,7 @@ class ObservationMoveProposal:
                 "rotation_delta_rad",
                 _readonly_vector(self.rotation_delta_rad, (3,), "rotation_delta_rad"),
             )
-            evidence_ids = _evidence_ids(self.evidence_ids)
+            evidence_ids = validated_evidence_ids(self.evidence_ids)
 
         object.__setattr__(self, "evidence_ids", evidence_ids)
         object.__setattr__(self, "reasons", reasons)

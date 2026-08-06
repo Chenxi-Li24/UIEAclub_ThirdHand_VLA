@@ -1,6 +1,7 @@
 """Offline-first vision geometry, tracking, and Dry Run safety core."""
 
 from .active_view_geometry import contains_estimate, estimate_table_target
+from .active_view_planner import match_observation_pose, select_observation_pose
 from .active_view_types import (
     CoarseTargetEstimate,
     DepthQuality,
@@ -67,6 +68,8 @@ __all__ = [
     "TablePlane",
     "contains_estimate",
     "estimate_table_target",
+    "match_observation_pose",
+    "select_observation_pose",
     "CalibrationRef",
     "CalibrationAudit",
     "DryRunReport",

@@ -43,6 +43,7 @@ configs/tasks/.fixed_pick_place_backups/
 # Data (runtime-generated)
 data/calibration/*.npz
 data/calibration/*.yaml
+data/calibration/active-view/
 /models/vision/
 /artifacts/vision/
 

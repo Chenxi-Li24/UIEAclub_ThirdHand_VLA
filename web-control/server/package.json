@@ -10,8 +10,9 @@
     "test:grasp-authorization": "node test/grasp-authorization-smoke.js",
     "test:lumos-proxy": "node test/lumos-proxy-smoke.js",
     "test:vision-status": "node test/vision-status-smoke.js",
+    "test:teach-active-view": "node test/teach-active-view-pose-smoke.js",
     "test:browser": "node test/browser-smoke.js",
-    "test": "npm run test:voice-protocol && npm run test:grasp-authorization && npm run test:vision-status && npm run test:lumos-proxy && npm run test:browser"
+    "test": "npm run test:voice-protocol && npm run test:grasp-authorization && npm run test:vision-status && npm run test:teach-active-view && npm run test:lumos-proxy && npm run test:browser"
   },
   "dependencies": {
     "express": "^4.21.0",

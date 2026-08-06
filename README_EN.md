@@ -14,9 +14,12 @@ platform and safety boundary, not as the current SCI novelty claim.
 > and an independent hardware emergency stop that is immediately reachable. A web-based
 > “software stop,” keyboard interrupt, voice emergency stop, and SDK `cleanup()` all depend
 > on the computer and communication path. They cannot replace a hardware emergency stop
-> or power isolation. Keep `robot_execution_enabled: false` in the vision configuration.
-> Never remove calibration, freshness, identity, resource-ownership, or human-confirmation
-> gates merely to make a demonstration pass.
+> or power isolation. Autonomous grasp is locked by
+> `visionSafety.robotExecutionEnabled=false` and `robot_execution_enabled: false`, and remains
+> Planned. Active-view observation motion is a separate Implemented / Experimental authority
+> path: it is default-disabled, requires a runtime switch, approval, catalog/evidence, stepwise
+> confirmation, and fresh correlated state, and has not passed real-hardware acceptance. Never
+> remove any gate merely to make a demonstration pass.
 
 [Project home](README.md) · [Architecture](docs/architecture.md) ·
 [Setup guide](docs/setup_guide.md) · [Research evidence hub](docs/research/README.md) ·
@@ -128,8 +131,12 @@ on `0.0.0.0:3000` by default and connects through a JSON Lines subprocess to the
 [Startouch bridge](web-control/server/startouch_bridge.py). That bridge exclusively owns the
 specified CAN interface and calls the external vendor SDK. This is the repository's directly
 controlling boundary that has undergone hardware integration. Camera and vision state are
-side-channel inputs and cannot bypass resource locks, command validation, or the execution switch.
-Read the [Web control guide](web-control/README.md) before deployment.
+side-channel inputs and cannot bypass resource locks, command validation, or execution switches.
+The active-view [controller](web-control/server/active-view-controller.js) and
+[authorization](web-control/server/active-view-authorization.js) live inside this boundary and can
+send a bounded observation move only when every separate gate passes. That does not unlock autonomous
+grasp or establish real-hardware observation-motion acceptance. Read the
+[Web control guide](web-control/README.md) before deployment.
 
 ### 1.4 Capability maturity and evidence maturity
 
@@ -160,9 +167,17 @@ for the full rules.
 | Fixed A/B stepwise demo | Experimental | Simulation, dry-run, resource preflight, and manual stepwise entry points exist | Configuration still records `validated_real_cycles: 0`; it cannot be promoted to an unsupervised workflow |
 | Offline vision safety core and deterministic replay | Verified (offline engineering) | Geometry, registration, tracking, memory, gate, and replay tests exist | Real datasets and comparative statistics remain incomplete |
 | RTMDet + DINOv2 online dual-camera read-only state | Experimental | A dated deployment record and status verifier exist | Task-specific weights, cross-camera/hand–eye calibration, and paper statistics are incomplete |
-| Vision-triggered physical execution | Planned | Authorization code fails closed and the configuration execution lock is false | Every calibration, identity, depth, latency, model, and on-site safety gate |
+| Active-view observation-motion control path | Implemented / Experimental | Controller, authorization, ID-only WebSocket, and audit interfaces exist | Default-locked; real calibration, observation poses, paths, and first hardware move remain unaccepted |
+| Autonomous vision-triggered grasp | Planned | The grasp authorizer exists, but `visionSafety.robotExecutionEnabled` is fixed false | Every calibration, identity, depth, latency, model, and on-site safety gate; no autonomous-grasp recipe |
 | Voice/text structured candidates | Experimental / partially Verified | The isolated Voice Bridge, protocol, and mock have tests | Candidates never receive real robot privileges; the VLA comparison study is incomplete |
 | Vision/VLA/integrated publication claims | Planned Evidence | Hypotheses, schemas, and baseline templates exist | Frozen data, repeated experiments, intervals, statistical tests, and generated figures |
+
+<!-- ACTIVE-VIEW-SAFETY:BEGIN -->
+| Contract key | Capability and maturity | Default lock | Additional authority | Hardware acceptance |
+| --- | --- | --- | --- | --- |
+| `grasp-lock` | Autonomous vision-triggered grasp is <code>maturity:Planned</code>. | <code>visionSafety.robotExecutionEnabled=false</code>; checked-in vision configuration keeps <code>robot_execution_enabled:false</code>. | No vision/VLA candidate can bypass the grasp authorizer. | No accepted autonomous grasp. |
+| `active-view-motion` | Observation-motion control is <code>maturity:Implemented/Experimental</code>. | Default disabled; the safe online launcher fixes <code>ACTIVE_VIEW_EXECUTION_ENABLED=0</code>. | Requires <code>authority:approval+catalog+evidence+confirmation</code>, fresh correlated IDs/robot state, and hard motion bounds. | <code>real-hardware-accepted:false</code>; simulation evidence cannot be promoted to hardware acceptance. |
+<!-- ACTIVE-VIEW-SAFETY:END -->
 
 ### 1.5 A port means “host + transport + port”
 
@@ -742,12 +757,15 @@ stop remain necessary.
 | Camera | Correct logical roles, fresh frames, skew within limits | Report blocker only | [online frames](web-control/server/vision/online_frames.py) |
 | Geometry | Valid calibration, sufficient depth, synchronized robot pose | Do not produce a trusted base pose | [dual camera](web-control/server/vision/dual_camera.py) |
 | Identity | Unambiguous, confirmed, fresh, covariance within limits | `actionable:false` | [identity](web-control/server/vision/identity.py) |
-| Authorization | Task checkpoint, safety fields, human gate, and execution switch | Reasons such as `robot_execution_disabled` | [grasp authorization](web-control/server/grasp-authorization.js) |
+| Autonomous-grasp authorization | Task checkpoint, safety fields, human gate, and `visionSafety.robotExecutionEnabled` | Reasons such as `robot_execution_disabled` | [grasp authorization](web-control/server/grasp-authorization.js) |
+| Active-view observation-motion authorization | Separate environment switch, short-lived approval, matching catalog/evidence, server-held proposal, step confirmation, fresh/idle robot | Reject or abort the session when any condition fails | [active-view authorization](web-control/server/active-view-authorization.js), [controller](web-control/server/active-view-controller.js) |
 
 The online status page sanitizes source objects again and forces them non-actionable. The
 [configuration](configs/vision/remind3d.yaml) must retain `stop_and_look_only: true`,
-`task_checkpoint_validated: false`, and `robot_execution_enabled: false`. These blockers are the
-correct safe result, not errors to “fix.”
+`task_checkpoint_validated: false`, and `robot_execution_enabled: false`; this locks autonomous
+grasp. Active view is controlled separately by `ACTIVE_VIEW_EXECUTION_ENABLED`, an approval file,
+catalog/evidence, and step confirmation; both the default and L3 launcher keep that gate off. Both
+classes of blockers are the correct safe result, not errors to “fix.”
 
 ### 5.4 Software stop versus hardware emergency stop
 
@@ -810,11 +828,13 @@ TH-Fanxy/
 
 | Module | Responsibility/interface | Dependencies | Safety boundary and deep link |
 | --- | --- | --- | --- |
-| `server/proxy.js` | Static UI, `/ws`, camera and vision HTTP | Node/Express/ws | Validation before motion; vision execution forced false; [code](web-control/server/proxy.js) |
+| `server/proxy.js` | Static UI, `/ws`, camera and vision HTTP | Node/Express/ws | Autonomous grasp is hard-locked; active view uses a separate default-disabled authority path; [code](web-control/server/proxy.js) |
 | Startouch bridge | JSON Lines, CAN preflight, SDK state/trajectory/gripper | vendor SDK/SocketCAN | Per-interface lock, feedback watchdog, cleanup; [Python](web-control/server/startouch_bridge.py) |
 | camera bridge | D435 owner, MJPEG, optional online-model events | pyrealsense2/OpenCV | Does not open CAN/robot; [code](web-control/server/camera_bridge.py) |
 | `vision` | Geometry, registration, tracking, identity, pose, safety, replay | NumPy/SciPy | Pure computation; rejects invalid/stale/ambiguous input; [directory](web-control/server/vision/) |
-| `vision_models` | RTMDet, DINO, online/replay adapters | Torch/MMDetection/Transformers | Lazy heavy imports, execution false; [directory](web-control/server/vision_models/) |
+| active-view perception | Geometry, planner, session, replay, online adapter, and catalog | NumPy/vision state/evidence | Produces only immutable, short-TTL, ID-correlated server-held proposals; [geometry](web-control/server/vision/active_view_geometry.py), [planner](web-control/server/vision/active_view_planner.py), [session](web-control/server/vision/active_view_session.py), [online](web-control/server/vision_models/active_view_online.py), [catalog](web-control/server/vision_models/active_view_catalog.py) |
+| active-view control/authorization | Proposal ownership, short-lived approval, hard bounds, step confirmation, audit, and abort | Node/robot state/approval/evidence | Can issue `move_joint`/`move_l_delta`, but is default-disabled and not hardware-accepted; [controller](web-control/server/active-view-controller.js), [authorization](web-control/server/active-view-authorization.js), [audit](web-control/server/active-view-audit-log.js) |
+| `vision_models` | RTMDet, DINO, online/replay adapters | Torch/MMDetection/Transformers | Lazy heavy imports; online and active-view configurations default execution false; [directory](web-control/server/vision_models/) |
 | Lumos HTTP | `/health`, `/frame.jpg`, `/camera_lumos` | OpenCV/V4L2 | Camera read-only, frame sequence and monotonic header; [service](web-control/server/lumos_http_server.py) |
 | Voice Bridge | `/v1/voice`, audio/text candidates | websockets/existing voice_agent | No RobotExecutor or robot WS; [README](web-control/voice-bridge/README.md) |
 | fixed runner/demo | simulate/dry-run/real, loopback page | bridge/YAML | Stepwise confirmation, resource preflight, 30% hard cap; [guide](web-control/FIXED_PICK_PLACE.md) |
@@ -831,7 +851,7 @@ TH-Fanxy/
 | [web.yaml](configs/web.yaml) | `0.0.0.0:8000`, WS/video | packaged FastAPI | Routers/WS are not mounted |
 | [fixed_pick_place.yaml](configs/tasks/fixed_pick_place.yaml) | Points, limits, speed, lift, confirmation, validation count | fixed runner/demo | Real mode remains gated by the bridge and human process |
 | [remind3d.yaml](configs/vision/remind3d.yaml) | Roles, models, timing, identity, pose, budgets, safety | vision/vision_models/launcher | Permissive v1 config; execution fixed false |
-| [active_view.yaml](configs/vision/active_view.yaml) | Dry-run observation-proposal parameters | active-view dry-run modules | `active_view_execution_enabled:false`; this is not motion capability |
+| [active_view.yaml](configs/vision/active_view.yaml) | Dry-run/observation proposal, quality, and motion bounds | active-view vision/model modules | `active_view_execution_enabled:false` is one default lock; Node hardware authority separately requires the environment switch, approval, catalog/evidence, and confirmation |
 
 ### 6.5 `scripts` and supported entry points
 
@@ -845,6 +865,9 @@ TH-Fanxy/
 | [smoke_remind3d_models.py](scripts/vision/smoke_remind3d_models.py) | RTMDet+DINO resource/contract smoke | model env/local image weights | L1/L3, read-only image and GPU |
 | [start_dual_camera_online.sh](scripts/vision/start_dual_camera_online.sh) | Safe lifecycle on port 3100 | Lumos HTTP/D435/model env/Node | L3, fixed simulate/fake CAN/no gripper |
 | [verify_dual_camera_online.py](scripts/vision/verify_dual_camera_online.py) | One-second sampling and atomic readiness JSON | HTTP status/Python | L3, read-only |
+| [start_active_view_demo.sh](scripts/vision/start_active_view_demo.sh) | Loopback, browser-only active-view state-machine demo | Python static server/browser | L2-only; no camera, CAN, robot, or gripper transport |
+| [active-view evidence tools](scripts/vision/) | `finalize_active_view_catalog.py`, `verify_active_view_dry_run.py`, `verify_active_view_control.py` | capture/evidence JSON/offline events | Catalog and verifier tools do not authorize motion; retain hashes/status |
+| [create_active_view_approval.py](scripts/vision/create_active_view_approval.py) / [teach-active-view-pose.js](web-control/scripts/teach-active-view-pose.js) | Create a short-lived content-addressed approval / read robot state for an observation pose | accepted evidence/operator / bridge state | Experimental authority artifacts; this tutorial provides no real-motion or approval-creation recipe |
 | [demo_fixed_pick_place.sh](scripts/demo_fixed_pick_place.sh) | Manual fixed-point demo wrapper | branch/CAN/owner/points/path/lift/YAML/bridge | The tutorial's only L4 entry point; defaults to `manual` with per-step confirmation from configuration |
 | [open_fixed_pick_place_control.sh](scripts/open_fixed_pick_place_control.sh) | Loopback 8766 operator page | Python/demo runner | Experimental, not a tutorial entry point; auto route lacks a hard gate |
 | [fixed_pick_place.py](web-control/scripts/fixed_pick_place.py) | Low-level simulate/dry-run/real runner | YAML/Startouch bridge | May be called directly for L2 simulate/dry-run; real mode is internal to the wrapper only |
@@ -886,6 +909,10 @@ TH-Fanxy/
 | `CAMERA_ENABLED` / `CAMERA_PYTHON` | enabled / REMIND env | D435 bridge and model Python |
 | `CAMERA_YOLO_MODEL` / `CAMERA_CALIB_FILE` | Local weights/local calibration | File existence does not establish task/calibration acceptance |
 | `VISION_ONLINE_ENABLED` / `VISION_CONFIG` | `0` / REMIND YAML | Read-only online-model switch and configuration |
+| `ACTIVE_VIEW_CONFIG` / `ACTIVE_VIEW_EVIDENCE_DIR` | `configs/vision/active_view.yaml` / `data/calibration/active-view` | Active-view proposal configuration and content-addressed evidence root; file existence is not acceptance |
+| `ACTIVE_VIEW_CAMERA_EVIDENCE` / `ACTIVE_VIEW_TABLE_EVIDENCE` / `ACTIVE_VIEW_CATALOG` | Empty by default | Exact camera/table/catalog artifacts; any missing item fails closed |
+| `ACTIVE_VIEW_EXECUTION_ENABLED` / `ACTIVE_VIEW_APPROVAL_FILE` | Disabled by default / empty by default | Both together are still partial authority; matching evidence, step confirmation, and fresh robot/session state are also required |
+| `ACTIVE_VIEW_AUDIT_LOG` | `artifacts/vision/active-view-control/events.jsonl` | Append-only audit; a write failure must lock/abort rather than bypass |
 | `LUMOS_HTTP_HOST` / `LUMOS_HTTP_PORT` | `0.0.0.0` / `3001` | Lumos camera-only HTTP |
 | `LUMOS_SNAPSHOT_URL` / `LUMOS_STREAM_URL` | loopback `:3001` | Online-model snapshot/browser MJPEG sources |
 | `VOICE_HOST` / `VOICE_PORT` | `127.0.0.1` / `3001` (mock) | Mutually exclusive with Lumos TCP on the same host |
@@ -899,10 +926,25 @@ acceptance record, never use tuning to bypass stale-state, initial-state matchin
 | --- | --- | --- | --- | --- | --- |
 | packaged FastAPI HTTP/WS | Configured as `0.0.0.0:8000`; documentation lists `/api/robot/*`, `/api/camera/*`, `/api/task/*`, `/ws` | No effective authentication wiring is visible in the current app; CORS is `*` | Router files exist, but `create_app()` does not mount them, so the running app cannot obtain actual control privilege | Only task/robot stop contracts exist in interface files; a running app cannot rely on them | Experimental interface contract, not a usable production API |
 | Startouch Node HTTP | `0.0.0.0:3000`; `/`, `/diag`, `/camera`, `/camera_lumos`, `/camera_lumos_vision`, `/api/vision/status` | None | Static pages and read-only vision status; actual control uses `/ws` on the same service | HTTP routes provide no hardware emergency stop | Experimental; controlled networks only |
-| Startouch Node WebSocket | `ws://<host>:3000/ws` | None; there is also no per-client ownership/authorization | Every connected client can submit the exact command set accepted by the shared bridge: `connect`, `disconnect`, `servo`, `preset`, `gripper`, `software_stop`, `status`, `ping`, `estop`, `grasp_object`, `estop_camera`, `camera_refresh`. Motion still passes joint-limit, stable-initial-state, CAN feedback/watchdog, motion-active, and queue-serialization checks, but these are concurrency safety gates—not access control or caller ownership | `software_stop` invokes an SDK software stop; `estop` is only its alias and is **not a hardware emergency stop**; `disconnect` cleans up the shared bridge; `estop_camera` stops only the camera bridge | Real control boundary; even on a controlled network, clients affect one another. L4 relies on the on-site procedure to ensure one operator client; the software does not currently enforce it. Unauthenticated—never expose to an uncontrolled network |
+| Startouch Node WebSocket | `ws://<host>:3000/ws` | None; there is also no per-client ownership/authorization | Every connected client can submit the exact command set accepted by the shared bridge: `connect`, `disconnect`, `servo`, `preset`, `gripper`, `software_stop`, `status`, `ping`, `estop`, `grasp_object`, `estop_camera`, `camera_refresh`, `start_active_view`, `confirm_active_view_step`, `cancel_active_view`. Motion still passes joint-limit, stable-initial-state, CAN feedback/watchdog, motion-active, and queue-serialization checks, but these are concurrency safety gates—not access control or caller ownership | `software_stop` invokes an SDK software stop; `estop` is only its alias and is **not a hardware emergency stop**; `disconnect` cleans up the shared bridge; `estop_camera` stops only the camera bridge; `cancel_active_view` aborts the shared active-view session | Real control boundary; even on a controlled network, clients affect one another. Any connection can start, confirm, or cancel the shared active-view session, and the software records no per-client owner. Unauthenticated—never expose to an uncontrolled network |
 | Lumos HTTP | `0.0.0.0:3001`; `/health`, `/frame.jpg`, `/camera_lumos` | None | Camera-only and read-only; frames carry sequence/monotonic headers and gain no robot privilege | Ctrl+C/process termination stops only the camera service | L3 read-only; rebind to loopback as shown in this tutorial |
 | Voice Bridge WebSocket | Default `0.0.0.0:3001/v1/voice`, subprotocol `thirdhand.voice.v1` | None | audio/text → response/candidate; by design has no RobotExecutor and does not connect to robot `/ws` | `session.stop`/disconnect ends only the voice session and does not stop the robot | Experimental candidate layer; controlled networks only, and cannot share TCP 3001 with Lumos on one host |
 | fixed demo HTTP | `127.0.0.1:8766`; GET `/api/status`; POST `/api/start`, `/api/start-auto`, `/api/stop`, `/api/continue` | None, but loopback by default | Owns only the runner it starts; `/api/start` is manual, `/api/continue` releases the next step, and `/api/start-auto` can start three automatic cycles | `/api/stop` stops only the runner owned by the page; it neither terminates unrelated controllers nor replaces a hardware emergency stop | Experimental and not a tutorial entry point; `/api/start-auto` still lacks an implementation-level hard gate when `validated_real_cycles: 0` and `require_step_confirmation: true`, so it is disabled for L4 |
+
+<!-- ACTIVE-VIEW-WS-COMMANDS:BEGIN -->
+The active-view browser protocol accepts only these three ID-only payloads. A browser cannot submit
+coordinates, joints, or robot commands.
+
+| Command | Exact allowed client keys | Meaning |
+| --- | --- | --- |
+| `start_active_view` | `cmd`, `identityId` (non-negative integer); <code>keys:cmd+identityId</code> | Ask the server to create a session only for a fresh, confirmed identity. |
+| `confirm_active_view_step` | `cmd`, `sessionId`, `proposalId` (UUIDs); <code>keys:cmd+sessionId+proposalId</code> | Confirm only the server-held pending proposal. |
+| `cancel_active_view` | `cmd`, `sessionId` (UUID); <code>keys:cmd+sessionId</code> | Cancel the shared session. |
+
+This boundary has <code>authentication:none</code>, <code>per-client-ownership:none</code>, and
+<code>session-scope:shared</code>. Any connected client can affect a session created by another
+client, including starting, confirming, or canceling it. Use only on a controlled network.
+<!-- ACTIVE-VIEW-WS-COMMANDS:END -->
 
 `grasp_object` currently fails closed through an authorizer with `execution=false` and cannot trigger
 a grasp. `estop_camera` closes only the camera bridge; `camera_refresh` requests camera state only.
@@ -910,7 +952,7 @@ The presence of a command name in the protocol does not grant execution privileg
 stop message is equivalent to an independent hardware emergency stop or power isolation. The
 Startouch bridge's per-CAN-interface `flock` excludes other controller processes only; it does not
 exclude another browser client within the same Node process. Multiple clients can affect the shared
-connection and robot state.
+connection, active-view session, and robot state.
 
 ### 6.10 Model and runtime-artifact policy
 
@@ -1058,9 +1100,20 @@ npm --prefix web-control/server run test:voice-protocol
 VOICE_HOST=127.0.0.1 VOICE_PORT=3001 node web-control/server/test/voice-mock.js
 ```
 
+<!-- ACTIVE-VIEW-L2-DEMO:BEGIN -->
+For active view, run only the deterministic loopback browser simulation. It is
+<code>authority:L2-only</code> with <code>actuator-transport:none</code>; it connects to no camera,
+CAN interface, robot, or gripper. End it with Ctrl+C.
+
+```bash
+bash scripts/vision/start_active_view_demo.sh
+```
+<!-- ACTIVE-VIEW-L2-DEMO:END -->
+
 **Expected observations:** the simulated Web UI reports simulated/dry-run status only; the protocol
 smoke receives audio/text events in order; the mock displays a candidate and, after browser
-confirmation, still updates only the preview/log.
+confirmation, still updates only the preview/log. The active-view demo advances only ID-correlated
+simulated browser state and accesses no network model or actuator transport.
 
 **Forbidden:** simultaneously enable normal hardware mode; forward a voice candidate to `/ws`;
 replace the test fixture with real taught points; expose an unauthenticated mock to the Internet.
@@ -1077,7 +1130,8 @@ simulation, candidate/confirmation/refusal logs, ports, and PIDs.
 **Prerequisites:** on-site permission to read Lumos and D435; the exact model environment prepared
 according to the [model asset policy](docs/model_assets.md); visible USB devices; free ports
 3001/3100; explicit acceptance that the launcher binds 3100 to `0.0.0.0`. Robot execution
-configuration must remain false.
+configuration for autonomous grasp must remain false. The launcher also explicitly fixes
+`ACTIVE_VIEW_EXECUTION_ENABLED=0`, so this section grants neither grasp nor active-view motion.
 
 In a dedicated terminal, start the camera-only Lumos service, which has no CAN/Startouch dependency:
 
@@ -1112,7 +1166,8 @@ bash scripts/vision/start_dual_camera_online.sh --stop
 **Expected observations:** roles are strictly Lumos canonical RGB, D435 metric depth, and D435
 debug RGB; both sequences advance, the model is ready, status is non-stale, and
 `robotExecutionEnabled` remains false. When valid calibration, a robot pose, or a task checkpoint
-is missing, the target remains non-actionable. That is the correct result.
+is missing, the target remains non-actionable. Active view may at most expose an execution-disabled
+state/proposal and cannot send an observation move. That is the correct result.
 
 **Forbidden:** start a second D435 owner; connect a real Startouch controller; edit the execution
 flag; filter blockers out of output; expose 3100 to an uncontrolled network; call the read-only page
@@ -1144,31 +1199,37 @@ ip -details -statistics link show can0
 ps -ef | rg 'startouch_bridge.py|proxy.js|fixed_pick_place.py|teach_fixed_point.py|ros2|move_group'
 ```
 
-The only L4 launch entry point allowed by this tutorial is the wrapper in its default manual mode.
+<!-- L4-EXECUTABLE-RECOMMENDATION:BEGIN -->
+The only executable L4 recommendation allowed by this tutorial is the wrapper in its default manual mode.
 It checks the expected branch, CAN UP/1 Mbps, a unique controller owner, resource lock, taught
 points, segments, 25 cm lift, limits, and configuration before starting the low-level runner:
 
 ```bash
 bash scripts/demo_fixed_pick_place.sh
 ```
+<!-- L4-EXECUTABLE-RECOMMENDATION:END -->
 
 Keep the default `DEMO_RUN_MODE=manual`. The current configuration has
 `validated_real_cycles: 0` and `require_step_confirmation: true`; the wrapper therefore requires
 explicit terminal confirmation before every step. Do not use an environment variable to change
 the mode or remove confirmation.
 
+<!-- L4-PROHIBITIONS:BEGIN -->
 Real mode in `web-control/scripts/fixed_pick_place.py` is an internal interface used by the wrapper
+(<code>prohibited:raw-real-runner</code>)
 and must not be invoked directly by an operator. Direct invocation bypasses branch, CAN, controller
 resource, taught-point, path-segmentation, and lift preflight that exist only in the wrapper.
-`scripts/open_fixed_pick_place_control.sh` and the `127.0.0.1:8766` page are also only Experimental
-and are **not an L4 entry point in this tutorial**. The visible “three automatic cycles” action
-confirms only once, calls `/api/start-auto`, and then performs no per-step confirmation. The current
-implementation does not hard-reject that route under the unvalidated count and step-confirmation
-configuration above. Do not open or use this UI or `/api/start-auto` until an implementation-level
-fail-closed gate has been added and audited again.
+The command `bash scripts/open_fixed_pick_place_control.sh` opens the `127.0.0.1:8766` page but is
+listed here only as a prohibition (<code>prohibited:open-fixed-ui</code>); it is Experimental and is
+**not an L4 entry point in this tutorial**. The visible “three automatic cycles” action confirms only once, calls
+`/api/start-auto` (<code>prohibited:start-auto</code>), and then performs no per-step confirmation.
+The current implementation does not hard-reject that route under the unvalidated count and
+step-confirmation configuration above. Do not open or use this UI or any automatic route until an
+implementation-level fail-closed gate has been added and audited again.
 
 This is not an unsupervised motion recipe. Do not use any automatic three-cycle entry point, run in
 the background, remove confirmation, or reuse the wrapper command when nobody is on site.
+<!-- L4-PROHIBITIONS:END -->
 
 **Expected observations:** the terminal reports that wrapper preflight passed and state is stable,
 then waits for stdin confirmation at every step. Joint/CAN feedback remains live; each logical
@@ -1345,13 +1406,22 @@ small samples, intervals, multiple comparisons, and denominator definitions.
 | Dry Run | Produces only candidates/reports and neither contains nor invokes an execution transport |
 | hardware emergency stop | Hardware emergency stop/power isolation independent of the software path |
 
+**Extension and contribution workflow:** when adding a detector, task, protocol, or active-view
+capability, first use the [reuse-first engineering policy](docs/research/REUSE_FIRST_ENGINEERING_POLICY.md)
+to record primary sources, candidate comparison, licensing, project-specific differences, and
+fail-closed degradation. Then follow the [contribution guide](CONTRIBUTING.md) to add interface
+contracts, tests, documentation, and verification evidence. An extension cannot prove capability by
+removing a default lock.
+
 Further reading: [module contracts](docs/module_guide.md),
 [Web API contracts](docs/web_api.md),
 [fixed-point safety audit](docs/fixed_pick_place_audit.md),
 [vision acceptance plan](docs/vision_research/13_BENCHMARK_AND_ACCEPTANCE_PLAN.md),
 [vision implementation gate](docs/vision_research/IMPLEMENTATION_GATE.md),
 [offline implementation record](docs/vision_research/OFFLINE_IMPLEMENTATION_RESULTS.md), and
-[deployment record](docs/vision_research/REMIND3D_DEPLOYMENT_RESULTS.md).
+[deployment record](docs/vision_research/REMIND3D_DEPLOYMENT_RESULTS.md). Contribution entry points:
+[CONTRIBUTING.md](CONTRIBUTING.md) and
+[REUSE_FIRST_ENGINEERING_POLICY.md](docs/research/REUSE_FIRST_ENGINEERING_POLICY.md).
 
 ## License
 

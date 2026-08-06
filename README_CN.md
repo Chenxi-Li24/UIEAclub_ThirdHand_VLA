@@ -10,8 +10,10 @@ Intel RealSense D435 构建的研究与实验仓库。主研究轴是**机器人
 > 本教程的 L0–L3 不授予真实运动权限。任何真实运动都必须在现场监督、独占 CAN、低速、
 > 清空工作区且独立硬件急停可立即触达的条件下进行。网页“软件停止”、键盘中断、语音
 > 急停和 SDK `cleanup()` 都依赖计算机与通信链路，不能代替 hardware emergency stop
-> （硬件急停）或动力切断。视觉配置保持 `robot_execution_enabled: false`；不得为了
-> 通过演示而移除标定、时效、身份、资源所有权或人工确认门禁。
+> （硬件急停）或动力切断。自主抓取路径由 `visionSafety.robotExecutionEnabled=false` 和
+> `robot_execution_enabled: false` 闭锁，仍是 Planned。主动视角观测运动是另一条
+> Implemented / Experimental 权限链：默认关闭，必须同时具备运行时开关、审批、catalog/
+> evidence、逐步确认与新鲜关联状态，且尚未完成真机验收。不得为了通过演示而移除任何门禁。
 
 [项目首页](README.md) · [架构](docs/architecture.md) ·
 [安装指南](docs/setup_guide.md) · [研究证据中心](docs/research/README.md) ·
@@ -108,7 +110,11 @@ FastAPI object :8000 → `/static` mount / future route integration
 `0.0.0.0:3000`，通过 JSON Lines 子进程连接
 [Startouch bridge](web-control/server/startouch_bridge.py)，后者独占指定 CAN 接口并调用
 外部 vendor SDK。这是仓库中经过真机联调的直接控制边界；相机与视觉状态是旁路输入，
-不能绕过资源锁、命令校验和执行开关。部署前必须读 [Web 控制说明](web-control/README.md)。
+不能绕过资源锁、命令校验和执行开关。主动视角的
+[controller](web-control/server/active-view-controller.js) 与
+[authorization](web-control/server/active-view-authorization.js) 位于该边界内，可在全部独立门禁
+成立时发送有界观测动作；这不改变自主抓取闭锁，也不代表真机观测运动已验收。部署前必须读
+[Web 控制说明](web-control/README.md)。
 
 ### 1.4 能力成熟度与证据成熟度
 
@@ -133,9 +139,17 @@ FastAPI object :8000 → `/static` mount / future route integration
 | 固定 A/B 逐步演示 | Experimental | 模拟、dry-run、资源预检和人工逐步入口存在 | 配置仍记录 `validated_real_cycles: 0`，不能升级为无人监督流程 |
 | 离线视觉安全核心与确定性回放 | Verified（离线工程） | 几何、注册、追踪、记忆、门禁和回放测试存在 | 真实数据集与比较统计尚未完成 |
 | RTMDet + DINOv2 双相机在线只读状态 | Experimental | 有带日期的部署记录和状态 verifier | 任务权重、跨相机/手眼标定与论文统计不完整 |
-| 视觉触发真实执行 | Planned | 授权器代码 fail-closed，配置执行锁为 false | 所有标定、身份、深度、时延、模型、现场安全门禁 |
+| 主动视角观测运动控制路径 | Implemented / Experimental | controller、authorization、ID-only WebSocket 与审计接口存在 | 默认闭锁；真实标定、观察位、路径与首次真机动作尚未验收 |
+| 自主视觉触发抓取 | Planned | 抓取授权器存在，但 `visionSafety.robotExecutionEnabled` 固定为 false | 所有标定、身份、深度、时延、模型与现场安全门禁；没有自主抓取配方 |
 | 语音/文字结构化候选 | Experimental / 部分 Verified | 隔离 Voice Bridge、协议和 mock 有测试 | 候选不会获得真实机器人权限；VLA 对比研究未完成 |
 | 视觉/VLA/综合论文主张 | Planned Evidence | 假设、schema 与基线模板存在 | 冻结数据、重复实验、区间、统计检验和生成图表 |
+
+<!-- ACTIVE-VIEW-SAFETY:BEGIN -->
+| Contract key | 能力与成熟度 | 默认闭锁 | 额外权限条件 | 真机验收 |
+| --- | --- | --- | --- | --- |
+| `grasp-lock` | 自主视觉抓取为 <code>maturity:Planned</code>。 | <code>visionSafety.robotExecutionEnabled=false</code>；仓库视觉配置保持 <code>robot_execution_enabled:false</code>。 | 视觉/VLA 候选不能绕过抓取授权器。 | 没有已验收自主抓取。 |
+| `active-view-motion` | 观测运动控制为 <code>maturity:Implemented/Experimental</code>。 | 默认关闭；安全在线启动器固定 <code>ACTIVE_VIEW_EXECUTION_ENABLED=0</code>。 | 必须具备 <code>authority:approval+catalog+evidence+confirmation</code>、新鲜且相关的 ID/机器人状态与硬运动边界。 | <code>real-hardware-accepted:false</code>；模拟证据不能升级为真机验收。 |
+<!-- ACTIVE-VIEW-SAFETY:END -->
 
 ### 1.5 端口是“主机 + 传输 + 端口”
 
@@ -636,11 +650,14 @@ CAN UP/1 Mbps、点位、段间跳变和日志目录。资源锁不能阻止仓�
 | 相机 | 逻辑角色、帧新鲜、skew 在限 | 只报 blocker | [online frames](web-control/server/vision/online_frames.py) |
 | 几何 | 标定有效、深度足够、机器人姿态同步 | 不产生可信 base pose | [dual camera](web-control/server/vision/dual_camera.py) |
 | 身份 | 非歧义、确认、fresh、covariance 在限 | `actionable:false` | [identity](web-control/server/vision/identity.py) |
-| 授权 | task checkpoint、安全字段、人工与执行开关 | `robot_execution_disabled` 等原因 | [grasp authorization](web-control/server/grasp-authorization.js) |
+| 自主抓取授权 | task checkpoint、安全字段、人工与 `visionSafety.robotExecutionEnabled` | `robot_execution_disabled` 等原因 | [grasp authorization](web-control/server/grasp-authorization.js) |
+| 主动视角观测运动授权 | 独立环境开关、短时 approval、匹配 catalog/evidence、server-held proposal、逐步确认、机器人 fresh/idle | 任一条件失败即拒绝/中止 session | [active-view authorization](web-control/server/active-view-authorization.js)、[controller](web-control/server/active-view-controller.js) |
 
 在线状态页把来源对象重新清洗并强制不可操作；[配置](configs/vision/remind3d.yaml)必须保持
 `stop_and_look_only: true`、`task_checkpoint_validated: false` 和
-`robot_execution_enabled: false`。这些 blocker 是正确安全结果，不是需要“修掉”的异常。
+`robot_execution_enabled: false`，它闭锁自主抓取。主动视角另由
+`ACTIVE_VIEW_EXECUTION_ENABLED`、审批文件、catalog/evidence 和逐步确认控制；默认及 L3
+启动器均关闭该门。两类 blocker 都是正确安全结果，不是需要“修掉”的异常。
 
 ### 5.4 软件停止与硬件急停
 
@@ -697,11 +714,13 @@ TH-Fanxy/
 
 | 模块 | 责任/接口 | 依赖 | 安全边界与深链 |
 | --- | --- | --- | --- |
-| `server/proxy.js` | 静态 UI、`/ws`、相机与 vision HTTP | Node/Express/ws | 运动前校验；vision execution 强制 false；[代码](web-control/server/proxy.js) |
+| `server/proxy.js` | 静态 UI、`/ws`、相机与 vision HTTP | Node/Express/ws | 自主抓取固定闭锁；主动视角使用独立默认关闭权限链；[代码](web-control/server/proxy.js) |
 | Startouch bridge | JSON Lines、CAN preflight、SDK 状态/轨迹/夹爪 | vendor SDK/SocketCAN | 单接口锁、反馈 watchdog、cleanup；[Python](web-control/server/startouch_bridge.py) |
 | camera bridge | D435 owner、MJPEG、可选在线模型事件 | pyrealsense2/OpenCV | 不打开 CAN/robot；[代码](web-control/server/camera_bridge.py) |
 | `vision` | 几何、注册、追踪、身份、位姿、安全、回放 | NumPy/SciPy | 纯计算，invalid/stale/ambiguous 拒绝；[目录](web-control/server/vision/) |
-| `vision_models` | RTMDet、DINO、online/replay adapter | Torch/MMDetection/Transformers | lazy heavy imports，execution false；[目录](web-control/server/vision_models/) |
+| active-view perception | 几何、planner、session、replay、online adapter 与 catalog | NumPy/vision state/evidence | 只产生不可变、短 TTL、ID 关联的 server-held proposal；[geometry](web-control/server/vision/active_view_geometry.py)、[planner](web-control/server/vision/active_view_planner.py)、[session](web-control/server/vision/active_view_session.py)、[online](web-control/server/vision_models/active_view_online.py)、[catalog](web-control/server/vision_models/active_view_catalog.py) |
+| active-view control/authorization | proposal ownership、短时审批、硬边界、逐步确认、审计、中止 | Node/robot state/approval/evidence | 可下发 `move_joint`/`move_l_delta`，但默认禁用且真机未验收；[controller](web-control/server/active-view-controller.js)、[authorization](web-control/server/active-view-authorization.js)、[audit](web-control/server/active-view-audit-log.js) |
+| `vision_models` | RTMDet、DINO、online/replay adapter | Torch/MMDetection/Transformers | lazy heavy imports；在线与主动视角配置默认 execution false；[目录](web-control/server/vision_models/) |
 | Lumos HTTP | `/health`、`/frame.jpg`、`/camera_lumos` | OpenCV/V4L2 | 相机只读、帧序号和 monotonic header；[服务](web-control/server/lumos_http_server.py) |
 | Voice Bridge | `/v1/voice`、audio/text candidate | websockets/现有 voice_agent | 无 RobotExecutor/机器人 WS；[README](web-control/voice-bridge/README.md) |
 | fixed runner/demo | simulate/dry-run/real、loopback page | bridge/YAML | 逐步确认、资源预检、30% 硬上限；[说明](web-control/FIXED_PICK_PLACE.md) |
@@ -718,7 +737,7 @@ TH-Fanxy/
 | [web.yaml](configs/web.yaml) | `0.0.0.0:8000`、WS/video | packaged FastAPI | routers/WS 尚未装配 |
 | [fixed_pick_place.yaml](configs/tasks/fixed_pick_place.yaml) | 点位、限位、速度、lift、确认、验收计数 | fixed runner/demo | 真实模式仍受 bridge/人工门禁约束 |
 | [remind3d.yaml](configs/vision/remind3d.yaml) | 角色、模型、时间、身份、位姿、预算、安全 | vision/vision_models/launcher | v1 宽松配置；执行固定 false |
-| [active_view.yaml](configs/vision/active_view.yaml) | dry-run 观测提案参数 | active-view dry-run modules | `active_view_execution_enabled:false`，不代表运动能力 |
+| [active_view.yaml](configs/vision/active_view.yaml) | dry-run/观测提案、质量与运动上限 | active-view vision/model modules | `active_view_execution_enabled:false` 是默认锁之一；Node 真实权限还独立要求环境开关、approval、catalog/evidence 与确认 |
 
 ### 6.5 `scripts` 与受支持入口
 
@@ -732,6 +751,9 @@ TH-Fanxy/
 | [smoke_remind3d_models.py](scripts/vision/smoke_remind3d_models.py) | RTMDet+DINO 资源/合同 smoke | model env/本地图像权重 | L1/L3，只读图像与 GPU |
 | [start_dual_camera_online.sh](scripts/vision/start_dual_camera_online.sh) | 端口 3100 安全生命周期 | Lumos HTTP/D435/model env/Node | L3，固定 simulate/假 CAN/无 gripper |
 | [verify_dual_camera_online.py](scripts/vision/verify_dual_camera_online.py) | 一秒采样、原子 readiness JSON | HTTP status/Python | L3，只读 |
+| [start_active_view_demo.sh](scripts/vision/start_active_view_demo.sh) | loopback 纯浏览器主动视角状态机 demo | Python static server/browser | L2-only；无相机、CAN、robot 或 gripper transport |
+| [active-view evidence tools](scripts/vision/) | `finalize_active_view_catalog.py`、`verify_active_view_dry_run.py`、`verify_active_view_control.py` | 采集/evidence JSON/离线事件 | catalog 与 verifier 工具本身不授权运动；必须保留 hash/status |
+| [create_active_view_approval.py](scripts/vision/create_active_view_approval.py) / [teach-active-view-pose.js](web-control/scripts/teach-active-view-pose.js) | 生成短时内容寻址审批 / 只读采集观察姿态 | 已验收 evidence/operator / bridge state | Experimental 权限工件；本教程不提供真实运动或审批创建配方 |
 | [demo_fixed_pick_place.sh](scripts/demo_fixed_pick_place.sh) | 固定点手动演示包装入口 | branch/CAN/owner/点位/路径/lift/YAML/bridge | 唯一教程 L4 入口；默认 `manual` 并按配置逐步确认 |
 | [open_fixed_pick_place_control.sh](scripts/open_fixed_pick_place_control.sh) | loopback 8766 操作页 | Python/demo runner | Experimental、非教程入口；自动路由尚未硬门禁 |
 | [fixed_pick_place.py](web-control/scripts/fixed_pick_place.py) | simulate/dry-run/real 底层 runner | YAML/Startouch bridge | L2 可直接 simulate/dry-run；真实模式仅供包装脚本内部调用 |
@@ -773,6 +795,10 @@ TH-Fanxy/
 | `CAMERA_ENABLED` / `CAMERA_PYTHON` | enabled / REMIND env | D435 bridge 与模型 Python |
 | `CAMERA_YOLO_MODEL` / `CAMERA_CALIB_FILE` | 本地权重/本地标定 | 文件存在不代表任务/标定已验收 |
 | `VISION_ONLINE_ENABLED` / `VISION_CONFIG` | `0` / REMIND YAML | 在线模型只读开关与配置 |
+| `ACTIVE_VIEW_CONFIG` / `ACTIVE_VIEW_EVIDENCE_DIR` | `configs/vision/active_view.yaml` / `data/calibration/active-view` | 主动视角提案配置和内容寻址证据根；文件存在不等于验收 |
+| `ACTIVE_VIEW_CAMERA_EVIDENCE` / `ACTIVE_VIEW_TABLE_EVIDENCE` / `ACTIVE_VIEW_CATALOG` | 默认空 | 精确 camera/table/catalog 工件；缺一即 fail closed |
+| `ACTIVE_VIEW_EXECUTION_ENABLED` / `ACTIVE_VIEW_APPROVAL_FILE` | 默认关闭 / 默认空 | 两者同时存在仍只是部分条件；还需匹配 evidence、逐步确认与 fresh robot/session state |
+| `ACTIVE_VIEW_AUDIT_LOG` | `artifacts/vision/active-view-control/events.jsonl` | 追加审计；写入失败应闭锁/中止，而不是绕过 |
 | `LUMOS_HTTP_HOST` / `LUMOS_HTTP_PORT` | `0.0.0.0` / `3001` | Lumos camera-only HTTP |
 | `LUMOS_SNAPSHOT_URL` / `LUMOS_STREAM_URL` | loopback `:3001` | 在线模型快照/浏览器 MJPEG 来源 |
 | `VOICE_HOST` / `VOICE_PORT` | `127.0.0.1` / `3001`（mock） | 与同主机 Lumos TCP 端口互斥 |
@@ -786,16 +812,30 @@ stale、初态匹配或速度门禁。
 | --- | --- | --- | --- | --- | --- |
 | packaged FastAPI HTTP/WS | 配置为 `0.0.0.0:8000`；文档列出 `/api/robot/*`、`/api/camera/*`、`/api/task/*`、`/ws` | 当前 app 未见有效认证接线，CORS 为 `*` | router 文件存在但 `create_app()` 未装配，不能取得实际控制权限 | 仅接口文件中的任务/机器人停止合同，运行 app 不可依赖 | Experimental 接口合同，非可用生产 API |
 | Startouch Node HTTP | `0.0.0.0:3000`；`/`、`/diag`、`/camera`、`/camera_lumos`、`/camera_lumos_vision`、`/api/vision/status` | 无认证 | 静态页面与只读 vision status；实际控制经同服务 `/ws` | HTTP routes 不提供硬件急停 | Experimental；只能放在受控网络 |
-| Startouch Node WebSocket | `ws://<host>:3000/ws` | 无认证，也无 per-client ownership/authorization | 每个已连接客户端都可向共享 bridge 提交协议接受的精确 command 集：`connect`、`disconnect`、`servo`、`preset`、`gripper`、`software_stop`、`status`、`ping`、`estop`、`grasp_object`、`estop_camera`、`camera_refresh`；运动仍经限位、稳定初态、CAN feedback/watchdog、motion-active 与 queue serialization 校验，但这些是并发安全门禁，不是访问控制或调用者所有权 | `software_stop` 调 SDK 软件停止；`estop` 只是它的别名，**不是硬件急停**；`disconnect` 清理共享 bridge；`estop_camera` 只停 camera bridge | 真实控制边界；即使在受控网络，多客户端也会互相影响。L4 需由现场流程保证只有一个操作客户端，当前软件并不强制；无认证，禁止暴露到不受控网络 |
+| Startouch Node WebSocket | `ws://<host>:3000/ws` | 无认证，也无 per-client ownership/authorization | 每个已连接客户端都可向共享 bridge 提交协议接受的精确 command 集：`connect`、`disconnect`、`servo`、`preset`、`gripper`、`software_stop`、`status`、`ping`、`estop`、`grasp_object`、`estop_camera`、`camera_refresh`、`start_active_view`、`confirm_active_view_step`、`cancel_active_view`；运动仍经限位、稳定初态、CAN feedback/watchdog、motion-active 与 queue serialization 校验，但这些是并发安全门禁，不是访问控制或调用者所有权 | `software_stop` 调 SDK 软件停止；`estop` 只是它的别名，**不是硬件急停**；`disconnect` 清理共享 bridge；`estop_camera` 只停 camera bridge；`cancel_active_view` 中止共享主动视角 session | 真实控制边界；即使在受控网络，多客户端也会互相影响。任意连接都能开始、确认或取消共享主动视角 session，软件不记录其 per-client owner；无认证，禁止暴露到不受控网络 |
 | Lumos HTTP | `0.0.0.0:3001`；`/health`、`/frame.jpg`、`/camera_lumos` | 无认证 | camera-only、只读；frame 含 sequence/monotonic headers，不获机器人权限 | Ctrl+C/进程停止仅结束相机服务 | L3 只读；按教程改绑 loopback |
 | Voice Bridge WebSocket | 默认 `0.0.0.0:3001/v1/voice`，subprotocol `thirdhand.voice.v1` | 无认证 | audio/text → response/candidate；设计上无 RobotExecutor 且不连接 robot `/ws` | `session.stop`/断开只结束语音会话，不停止机器人 | Experimental 候选层；只能放在受控网络，且同机不能与 Lumos TCP 3001 并占 |
 | fixed demo HTTP | `127.0.0.1:8766`；GET `/api/status`；POST `/api/start`、`/api/start-auto`、`/api/stop`、`/api/continue` | 无认证，但默认仅 loopback | 只拥有自己启动的 runner；`/api/start` 为 manual，`/api/continue` 放行下一步；`/api/start-auto` 可启动自动三循环 | `/api/stop` 只停止页面拥有的 runner，不终止无关控制器，也不替代硬件急停 | Experimental、非教程入口；`/api/start-auto` 在 `validated_real_cycles: 0`、`require_step_confirmation: true` 下仍缺实现级硬门禁，L4 禁用 |
+
+<!-- ACTIVE-VIEW-WS-COMMANDS:BEGIN -->
+主动视角浏览器协议只接受下列三种 ID-only payload；浏览器不能提交坐标、关节或机器人命令。
+
+| Command | 客户端允许的精确 keys | 语义 |
+| --- | --- | --- |
+| `start_active_view` | `cmd`、`identityId`（非负整数）；<code>keys:cmd+identityId</code> | 仅请求 server 为 fresh/confirmed identity 建立 session。 |
+| `confirm_active_view_step` | `cmd`、`sessionId`、`proposalId`（UUID）；<code>keys:cmd+sessionId+proposalId</code> | 仅确认 server 持有的 pending proposal。 |
+| `cancel_active_view` | `cmd`、`sessionId`（UUID）；<code>keys:cmd+sessionId</code> | 取消共享 session。 |
+
+该边界为 <code>authentication:none</code>、<code>per-client-ownership:none</code>、
+<code>session-scope:shared</code>。任意已连接客户端都能影响其他客户端创建的共享 session，
+包括开始、确认或取消；只能在受控网络使用。
+<!-- ACTIVE-VIEW-WS-COMMANDS:END -->
 
 `grasp_object` 当前由 `execution=false` 的授权器 fail closed，不能触发抓取；`estop_camera`
 只关闭相机 bridge；`camera_refresh` 只请求相机状态。命令名出现于协议不代表拥有执行权限，
 更不能把任何软件停止消息等同于独立硬件急停或动力切断。Startouch bridge 的
 per-CAN-interface `flock` 只排斥其他 controller processes，不排斥同一 Node 进程内的其他
-浏览器客户端；多个客户端可对共享连接和机器人状态相互产生影响。
+浏览器客户端；多个客户端可对共享连接、主动视角 session 和机器人状态相互产生影响。
 
 ### 6.10 模型和运行产物政策
 
@@ -929,8 +969,18 @@ npm --prefix web-control/server run test:voice-protocol
 VOICE_HOST=127.0.0.1 VOICE_PORT=3001 node web-control/server/test/voice-mock.js
 ```
 
+<!-- ACTIVE-VIEW-L2-DEMO:BEGIN -->
+主动视角只允许运行确定性 loopback 浏览器模拟。它是 <code>authority:L2-only</code>、
+<code>actuator-transport:none</code>，不连接相机、CAN、机械臂或夹爪；用 Ctrl+C 结束。
+
+```bash
+bash scripts/vision/start_active_view_demo.sh
+```
+<!-- ACTIVE-VIEW-L2-DEMO:END -->
+
 **预期观察：**模拟 Web 只报告模拟/干运行状态；协议 smoke 按顺序收到 audio/text 事件；
-mock 显示 candidate，在浏览器确认后也只更新预览/日志。
+mock 显示 candidate，在浏览器确认后也只更新预览/日志；主动视角 demo 只在浏览器内推进
+ID 关联的模拟状态，不访问网络模型或 actuator transport。
 
 **禁止：**同时设置正常硬件模式；把 voice candidate 转发到 `/ws`；用真实点位替换 test
 fixture；对外网暴露无认证 mock。
@@ -945,7 +995,8 @@ confirmation/refusal 日志、端口与 PID。
 
 **前置条件：**现场允许读取 Lumos 和 D435；精确模型环境已按
 [模型资产政策](docs/model_assets.md) 准备；USB 设备可见；端口 3001/3100 空闲；明确接受
-启动器会把 3100 绑定到 `0.0.0.0`。机器人执行配置必须仍为 false。
+启动器会把 3100 绑定到 `0.0.0.0`。自主抓取配置必须仍为 false；启动器还会显式固定
+`ACTIVE_VIEW_EXECUTION_ENABLED=0`，所以本节既无抓取权限，也无主动视角运动权限。
 
 先在独立终端启动 camera-only Lumos 服务（无 CAN/Startouch 依赖）：
 
@@ -979,7 +1030,8 @@ bash scripts/vision/start_dual_camera_online.sh --stop
 
 **预期观察：**角色严格为 Lumos canonical RGB、D435 metric depth/debug RGB；两路 sequence
 前进，model ready、status non-stale，`robotExecutionEnabled` 始终 false。缺有效标定/机器人
-姿态/任务 checkpoint 时目标保持 non-actionable，这是正确结果。
+姿态/任务 checkpoint 时目标保持 non-actionable，主动视角最多产生 execution-disabled 状态/提案，
+不能发送观测运动；这是正确结果。
 
 **禁止：**同时启动第二个 D435 owner；连接真实 Startouch；编辑 execution flag；把 blocker
 从输出过滤；将 3100 暴露到不受控网络；将只读页面称为抓取验证。
@@ -1007,26 +1059,34 @@ ip -details -statistics link show can0
 ps -ef | rg 'startouch_bridge.py|proxy.js|fixed_pick_place.py|teach_fixed_point.py|ros2|move_group'
 ```
 
-本教程唯一允许的 L4 启动入口是默认 manual 的包装脚本；它先检查预期 branch、CAN
+<!-- L4-EXECUTABLE-RECOMMENDATION:BEGIN -->
+本教程唯一允许的 L4 可执行推荐是默认 manual 的包装脚本；它先检查预期 branch、CAN
 UP/1 Mbps、唯一控制 owner、资源锁、点位/分段/25 cm lift/限位与配置，再启动底层 runner：
 
 ```bash
 bash scripts/demo_fixed_pick_place.sh
 ```
+<!-- L4-EXECUTABLE-RECOMMENDATION:END -->
 
 保持默认 `DEMO_RUN_MODE=manual`。当前配置为 `validated_real_cycles: 0` 且
 `require_step_confirmation: true`，包装脚本会要求每一步在终端显式确认；不要通过环境变量
 切换模式或移除确认。
 
-`web-control/scripts/fixed_pick_place.py` 的真实模式是包装脚本内部接口，禁止操作员直接调用：
+<!-- L4-PROHIBITIONS:BEGIN -->
+`web-control/scripts/fixed_pick_place.py` 的真实模式是包装脚本内部接口
+（<code>prohibited:raw-real-runner</code>），禁止操作员直接调用：
 直接调用会绕过仅由包装层实施的 branch、CAN、控制资源、点位、路径分段和 lift preflight。
-`scripts/open_fixed_pick_place_control.sh` 与 `127.0.0.1:8766` 页面也仅为 Experimental，**不是
-本教程 L4 入口**。页面可见的“一键自动循环 3 次”只确认一次便调用 `/api/start-auto`，随后
-不再逐步确认；当前实现没有在上述未验收计数和逐步确认配置下硬拒绝该路由。在代码完成
-实现级 fail-closed 门禁并重新审计以前，禁止打开或使用该 UI 和 `/api/start-auto`。
+命令 `bash scripts/open_fixed_pick_place_control.sh` 会打开 `127.0.0.1:8766` 页面，但它仅在
+禁止说明中列出（<code>prohibited:open-fixed-ui</code>）；该页面也仅为 Experimental，**不是本教程
+L4 入口**。页面
+可见的“一键自动循环 3 次”只确认一次便调用 `/api/start-auto`
+（<code>prohibited:start-auto</code>），随后不再逐步确认；当前实现没有在上述未验收计数和逐步
+确认配置下硬拒绝该路由。在代码完成实现级 fail-closed 门禁并重新审计以前，禁止打开或使用
+该 UI 和自动 route。
 
 这不是无人监督运动配方：不要使用任何自动三循环入口，不要后台运行，不要移除确认，也
 不要在无人现场时复用包装命令。
+<!-- L4-PROHIBITIONS:END -->
 
 **预期观察：**终端依次报告包装层 preflight 通过、状态稳定，并在每一步等待 stdin 确认；
 关节/CAN feedback 持续、每个逻辑 route 完成后才进入下一步，日志写入
@@ -1188,12 +1248,19 @@ construct validity 关注 proxy metric 是否真的表示安全/完成；统计 
 | Dry Run | 只产生候选/报告，不包含或调用执行传输 |
 | hardware emergency stop | 独立于软件链路的硬件急停/动力切断 |
 
+**扩展与贡献：**新增 detector、task、协议或主动视角能力时，先按
+[复用优先工程政策](docs/research/REUSE_FIRST_ENGINEERING_POLICY.md)记录一手来源、候选比较、
+许可证、项目差异和 fail-closed 降级，再按[贡献指南](CONTRIBUTING.md)补接口合同、测试、文档
+与验证证据。任何扩展都不能通过删除默认锁来证明“可用”。
+
 进一步阅读：[模块合同](docs/module_guide.md)、[Web API 合同](docs/web_api.md)、
 [固定点安全审计](docs/fixed_pick_place_audit.md)、
 [视觉验收计划](docs/vision_research/13_BENCHMARK_AND_ACCEPTANCE_PLAN.md)、
 [视觉实施门禁](docs/vision_research/IMPLEMENTATION_GATE.md)、
 [离线实现记录](docs/vision_research/OFFLINE_IMPLEMENTATION_RESULTS.md)和
-[部署记录](docs/vision_research/REMIND3D_DEPLOYMENT_RESULTS.md)。
+[部署记录](docs/vision_research/REMIND3D_DEPLOYMENT_RESULTS.md)；贡献入口见
+[CONTRIBUTING.md](CONTRIBUTING.md) 与
+[REUSE_FIRST_ENGINEERING_POLICY.md](docs/research/REUSE_FIRST_ENGINEERING_POLICY.md)。
 
 ## 许可
 

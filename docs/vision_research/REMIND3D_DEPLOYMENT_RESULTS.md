@@ -262,6 +262,16 @@ Hugging Face 访问权限，凭据不得写入仓库。
 
 ## 2026-08-06 主动视角 Dry Run 记录
 
+<!-- ACTIVE-VIEW-DRY-RUN-EVIDENCE:BEGIN -->
+**本节全部数值的表级证据状态：`Evidence Incomplete / 待补充证据`。** 回放和 60 秒实时
+采样有可追溯产物，但尚未提供完整的 sample-count 设计依据、confidence interval（或明确且
+合理的 null）、comparative statistical method 与预注册分析计划，因此只能作为带日期的工程
+观察，不能支撑 SCI 比较或确定性结论。
+
+**预注册准备度（独立字段）：** <code>preregistration-readiness:incomplete</code>。该字段不替代
+证据状态，也不因协议代码或回放已运行而升级数值证据。
+<!-- ACTIVE-VIEW-DRY-RUN-EVIDENCE:END -->
+
 已将“Lumos 广角发现目标 → 选择 D435 观察位姿 → 深度质量门控 → 有界微调建议”
 实现为独立可组合模块。几何估计、位姿规划、身份绑定状态机、在线适配、状态展示和回放验证
 之间仅通过不可变数据契约衔接，没有机械臂 I/O 依赖。默认配置中机器人执行和主动视角执行
@@ -296,6 +306,16 @@ Lumos 序列增加 899、D435 序列增加 1799，机器人执行启用样本数
 受限观察位姿目录的独立验收；第一次发送机械臂观察动作仍需人工拍板。
 
 ## 2026-08-06 主动视角控制模拟与故障注入
+
+<!-- ACTIVE-VIEW-CONTROL-EVIDENCE:BEGIN -->
+**本节全部数值的表级证据状态：`Evidence Incomplete / 待补充证据`。** 故障注入与虚拟浸泡
+报告有内容哈希，但没有面向论文 claim 的独立样本设计、confidence interval（或明确且合理的
+null）、comparative statistical method 与冻结分析计划；这些数字仅证明本次确定性工程验证的
+范围，不证明真实运动性能或安全性。
+
+**预注册准备度（独立字段）：** <code>preregistration-readiness:incomplete</code>。真实标定、路径、
+现场验收和统计计划仍是独立缺口。
+<!-- ACTIVE-VIEW-CONTROL-EVIDENCE:END -->
 
 新增独立纯事件验证器 `scripts/vision/verify_active_view_control.py`。验证器不导入 Startouch、
 CAN、相机或网页模块，只评估不可变事件证据；默认 `real_motion_allowed=False`。在线启动脚本

@@ -20,11 +20,17 @@ templates before a result is cited:
 - [Baseline and ablation matrix](baseline_ablation_matrix.md)
 - [Figure manifest](figure_manifest.md)
 - [Reproducibility checklist](reproducibility_checklist.md)
+- [Reuse-first, validate-before-improvement engineering policy](REUSE_FIRST_ENGINEERING_POLICY.md)
 
 The benchmark metrics and acceptance gates originate in
 [the existing benchmark and acceptance plan](../vision_research/13_BENCHMARK_AND_ACCEPTANCE_PLAN.md).
 Machine-readable JSON/CSV is the source of record; figures and tables are
 generated from it, never hand-filled.
+
+New methods and major replacements must record primary sources, reusable components, licensing,
+project-specific changes, local validation, and fail-closed behavior under the reuse-first policy
+before they enter a claim or execution chain. Repository changes also follow the root
+[contribution guide](../../CONTRIBUTING.md).
 
 ## Evidence-status rule / 证据状态规则
 

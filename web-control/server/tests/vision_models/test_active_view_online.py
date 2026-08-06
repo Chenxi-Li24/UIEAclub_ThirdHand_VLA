@@ -6,7 +6,14 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from vision.dual_camera import DualCameraTarget
+from vision.active_view_types import ObservationPose, TablePlane
+from vision.calibration_gate import audit_handeye_calibration
+from vision.camera_models import PinholeCamera, SeucmCamera
+from vision.dual_camera import (
+    DualCameraCalibrationBundle,
+    DualCameraTarget,
+    StampedRobotPose,
+)
 from vision.identity import IdentityStatus
 from vision.types import FrameStamp
 from vision.types import InvalidDataError
@@ -226,8 +233,78 @@ def test_active_view_adapter_is_a_public_model_boundary() -> None:
     expected = {
         "ActiveViewConfig",
         "ActiveViewDryRunAdapter",
+        "ActiveViewEvaluationBatch",
         "ActiveViewTargetReport",
         "load_active_view_config",
     }
     assert expected <= set(vision_models.__all__)
     assert vision_models.ActiveViewDryRunAdapter is ActiveViewDryRunAdapter
+
+
+def test_adapter_keeps_trusted_motion_proposal_out_of_presentation_report() -> None:
+    d435 = PinholeCamera(20.0, 20.0, 4.0, 4.0, 9, 9)
+    lumos = SeucmCamera(20.0, 20.0, 4.0, 4.0, 0.5, 1.0, 9, 9)
+
+    def audit(key: str):
+        return audit_handeye_calibration(
+            {
+                key: np.eye(4).tolist(),
+                "validation": {"reprojection_rmse_px": 0.4, "position_rmse_m": 0.004},
+            },
+            key,
+        )
+
+    calibration = DualCameraCalibrationBundle.from_audits(
+        d435=d435,
+        lumos=lumos,
+        d435_to_lumos_audit=audit("T_lumos_from_d435"),
+        lumos_to_flange_audit=audit("T_flange_from_lumos"),
+    )
+    calibration_id = calibration.calibration.calibration_id
+    table = TablePlane([0, 0, 1], 0.0, 0.004, calibration_id, True)
+    transform = np.eye(4)
+    transform[:3, :3] = np.diag([1.0, -1.0, -1.0])
+    transform[2, 3] = 1.0
+    home_observation = ObservationPose(
+        pose_id="home",
+        joints_deg=[1, 20, -40, 0, 10, 0],
+        t_base_from_flange=transform,
+        coverage_polygon_xy_m=[[2, 2], [3, 2], [3, 3], [2, 3]],
+        allowed_start_pose_ids=("home",),
+        path_validation_id="sha256:" + "c" * 64,
+        calibration_id=calibration_id,
+    )
+    observation = ObservationPose(
+        pose_id="table_center",
+        joints_deg=[2, 20, -40, 0, 10, 0],
+        t_base_from_flange=transform,
+        coverage_polygon_xy_m=[[-1, -1], [1, -1], [1, 1], [-1, 1]],
+        allowed_start_pose_ids=("home",),
+        path_validation_id=EVIDENCE_ID,
+        calibration_id=calibration_id,
+    )
+    active_config = replace(
+        load_active_view_config_dict(_valid_config_dict()),
+        table_plane=table,
+        observation_poses=(home_observation, observation),
+    )
+    adapter = ActiveViewDryRunAdapter(active_config)
+
+    batch = adapter.evaluate_with_proposals(
+        detections=(_detection(),),
+        targets=(_target(),),
+        rgb_stamp=FrameStamp("lumos_rgb", 1, 1_000),
+        robot_pose=StampedRobotPose(FrameStamp("robot_flange_pose", 1, 1_000), transform),
+        calibration=calibration,
+        arm_stationary=True,
+        current_joints_deg=np.array([1, 20, -40, 0, 10, 0]),
+        now_ns=1_001,
+    )
+
+    assert len(batch.proposals) == 1
+    assert batch.proposals[0].kind == "coarse_pose"
+    assert batch.reports[0].kind == "coarse_pose"
+    assert batch.reports[0].target_pose_id == "table_center"
+    serialized = batch.reports[0].to_dict()
+    assert "joints_deg" not in serialized
+    assert "delta_base_m" not in serialized

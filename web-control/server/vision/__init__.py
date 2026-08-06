@@ -10,6 +10,7 @@ from .active_view_planner import (
 from .active_view_session import (
     ActiveViewPhase,
     ActiveViewSession,
+    ActiveViewSessionCoordinator,
     Cancel,
     DepthObserved,
     DepthStabilityDecision,
@@ -20,6 +21,7 @@ from .active_view_session import (
     LockTarget,
     MoveCompleted,
     MoveStarted,
+    OperatorConfirmed,
     ProposalReady,
     Settled,
 )
@@ -86,6 +88,7 @@ __all__ = [
     "ActiveViewReplayError",
     "ActiveViewReplayMetrics",
     "ActiveViewSession",
+    "ActiveViewSessionCoordinator",
     "Cancel",
     "CoarseTargetEstimate",
     "DepthObserved",
@@ -100,6 +103,7 @@ __all__ = [
     "MoveStarted",
     "ObservationMoveProposal",
     "ObservationPose",
+    "OperatorConfirmed",
     "ProposalReady",
     "Settled",
     "TablePlane",

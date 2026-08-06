@@ -11,7 +11,12 @@ import numpy as np
 import yaml
 
 from vision.active_view_geometry import estimate_table_target
-from vision.active_view_types import ObservationPose, TablePlane
+from vision.active_view_planner import select_observation_pose
+from vision.active_view_types import (
+    ObservationMoveProposal,
+    ObservationPose,
+    TablePlane,
+)
 from vision.dual_camera import (
     DualCameraCalibrationBundle,
     DualCameraTarget,
@@ -332,6 +337,28 @@ class ActiveViewTargetReport:
         }
 
 
+@dataclass(frozen=True)
+class ActiveViewEvaluationBatch:
+    """Separate presentation reports from trusted in-process motion proposals."""
+
+    reports: tuple[ActiveViewTargetReport, ...]
+    proposals: tuple[ObservationMoveProposal, ...]
+
+    def __post_init__(self) -> None:
+        reports = tuple(self.reports)
+        proposals = tuple(self.proposals)
+        if len(reports) > 256 or any(
+            not isinstance(report, ActiveViewTargetReport) for report in reports
+        ):
+            raise InvalidDataError("active-view report batch is invalid or unbounded")
+        if len(proposals) > len(reports) or any(
+            not isinstance(proposal, ObservationMoveProposal) for proposal in proposals
+        ):
+            raise InvalidDataError("active-view proposal batch is invalid or unbounded")
+        object.__setattr__(self, "reports", reports)
+        object.__setattr__(self, "proposals", proposals)
+
+
 class ActiveViewDryRunAdapter:
     """Adapt online perception outputs into non-executing active-view reports."""
 
@@ -354,6 +381,29 @@ class ActiveViewDryRunAdapter:
         arm_stationary: bool,
         now_ns: int,
     ) -> tuple[ActiveViewTargetReport, ...]:
+        return self.evaluate_with_proposals(
+            detections=detections,
+            targets=targets,
+            rgb_stamp=rgb_stamp,
+            robot_pose=robot_pose,
+            calibration=calibration,
+            arm_stationary=arm_stationary,
+            current_joints_deg=None,
+            now_ns=now_ns,
+        ).reports
+
+    def evaluate_with_proposals(
+        self,
+        *,
+        detections: Any,
+        targets: Any,
+        rgb_stamp: FrameStamp,
+        robot_pose: Optional[StampedRobotPose],
+        calibration: Optional[DualCameraCalibrationBundle],
+        arm_stationary: bool,
+        current_joints_deg: Any,
+        now_ns: int,
+    ) -> ActiveViewEvaluationBatch:
         detection_items = tuple(detections)
         target_items = tuple(targets)
         if any(not isinstance(item, InstanceDetection) for item in detection_items):
@@ -400,6 +450,7 @@ class ActiveViewDryRunAdapter:
             common_reasons.append("camera_frames_stale")
 
         reports: list[ActiveViewTargetReport] = []
+        proposals: list[ObservationMoveProposal] = []
         for detection in detection_items[: self.max_reports]:
             target = target_by_detection.get(detection.detection_id)
             if target is None:
@@ -412,6 +463,9 @@ class ActiveViewDryRunAdapter:
                 )
                 continue
             reasons = list(common_reasons)
+            report_kind = "none"
+            target_pose_id = None
+            expires_ns = None
             if target.identity_id is None:
                 reasons.append("identity_unavailable")
             coarse_center = None
@@ -448,7 +502,24 @@ class ActiveViewDryRunAdapter:
                     )
                     coarse_center = estimate.center_xy_m
                     if self.config.observation_poses:
-                        reasons.append("current_joints_unavailable")
+                        if current_joints_deg is None:
+                            reasons.append("current_joints_unavailable")
+                        else:
+                            proposal = select_observation_pose(
+                                estimate=estimate,
+                                poses=self.config.observation_poses,
+                                current_joints_deg=current_joints_deg,
+                                required_calibration_id=calibration.calibration.calibration_id,
+                                now_ns=now_ns,
+                                config=self.config,
+                            )
+                            if proposal.kind == "none":
+                                reasons.extend(proposal.reasons)
+                            else:
+                                proposals.append(proposal)
+                                report_kind = proposal.kind
+                                target_pose_id = proposal.target_pose_id
+                                expires_ns = proposal.expires_ns
                 except InvalidDataError:
                     reasons.append("coarse_geometry_unavailable")
             depth_acceptable = bool(
@@ -459,9 +530,9 @@ class ActiveViewDryRunAdapter:
                 ActiveViewTargetReport(
                     detection_id=detection.detection_id,
                     identity_id=target.identity_id,
-                    kind="none",
-                    target_pose_id=None,
-                    expires_ns=None,
+                    kind=report_kind,
+                    target_pose_id=target_pose_id,
+                    expires_ns=expires_ns,
                     coarse_center_xy_m=coarse_center,
                     valid_depth_points=target.registered_depth_points,
                     central_fraction=None,
@@ -472,7 +543,7 @@ class ActiveViewDryRunAdapter:
                     active_view_execution_enabled=False,
                 )
             )
-        return tuple(reports)
+        return ActiveViewEvaluationBatch(tuple(reports), tuple(proposals))
 
     def _blocked_report(
         self,

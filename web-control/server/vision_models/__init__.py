@@ -12,6 +12,7 @@ from .rtmdet import RTMDetInstanceSegmenter, detections_from_mmdet
 __all__ = [
     "ActiveViewConfig",
     "ActiveViewDryRunAdapter",
+    "ActiveViewEvaluationBatch",
     "ActiveViewTargetReport",
     "DinoMaskEncoder",
     "InstanceDetection",
@@ -36,6 +37,7 @@ def __getattr__(name):
     if name in {
         "ActiveViewConfig",
         "ActiveViewDryRunAdapter",
+        "ActiveViewEvaluationBatch",
         "ActiveViewTargetReport",
         "load_active_view_config",
     }:

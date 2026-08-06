@@ -14,6 +14,7 @@ import cv2
 import numpy as np
 import yaml
 
+from vision.active_view_types import ObservationMoveProposal
 from vision.dual_camera import (
     DualCameraConfig,
     DualCameraCalibrationBundle,
@@ -27,7 +28,7 @@ from vision.online_frames import CameraRoleMap, FramePair
 from vision.types import InvalidDataError
 
 from .contracts import InstanceDetection, ModelContractError, validated_rgb_image
-from .active_view_online import ActiveViewTargetReport
+from .active_view_online import ActiveViewEvaluationBatch, ActiveViewTargetReport
 from .offline_replay import IdentityReplayFormatError
 
 
@@ -181,6 +182,7 @@ class OnlinePerceptionResult:
     robot_execution_enabled: bool
     blockers: tuple[str, ...]
     active_view_reports: tuple[ActiveViewTargetReport, ...]
+    active_view_proposals: tuple[ObservationMoveProposal, ...]
     model_error: Optional[str] = None
 
     def to_event(self) -> dict[str, Any]:
@@ -271,6 +273,7 @@ class OnlinePerceptionEngine:
         model_ready: bool,
         blockers: tuple[str, ...],
         active_view_reports: tuple[ActiveViewTargetReport, ...] = (),
+        active_view_proposals: tuple[ObservationMoveProposal, ...] = (),
         model_error: Optional[str] = None,
     ) -> OnlinePerceptionResult:
         latency_ms = max(0.0, (time.perf_counter_ns() - started_ns) / 1_000_000.0)
@@ -299,6 +302,7 @@ class OnlinePerceptionEngine:
             robot_execution_enabled=False,
             blockers=tuple(combined),
             active_view_reports=active_view_reports,
+            active_view_proposals=active_view_proposals,
             model_error=model_error,
         )
 
@@ -309,6 +313,7 @@ class OnlinePerceptionEngine:
         calibration: Optional[DualCameraCalibrationBundle],
         arm_stationary: bool,
         now_ns: int,
+        current_joints_deg: Any = None,
     ) -> OnlinePerceptionResult:
         started_ns = time.perf_counter_ns()
         if not isinstance(pair, FramePair):
@@ -360,19 +365,43 @@ class OnlinePerceptionEngine:
             if not self.config.task_checkpoint_validated:
                 blockers.append("task_checkpoint_unvalidated")
             active_view_reports: tuple[ActiveViewTargetReport, ...] = ()
+            active_view_proposals: tuple[ObservationMoveProposal, ...] = ()
             if self.active_view is not None:
                 try:
-                    candidate_reports = tuple(
-                        self.active_view.evaluate(
+                    evaluate_batch = getattr(
+                        self.active_view,
+                        "evaluate_with_proposals",
+                        None,
+                    )
+                    if callable(evaluate_batch):
+                        batch = evaluate_batch(
                             detections=detections,
                             targets=targets,
                             rgb_stamp=pair.rgb.stamp,
                             robot_pose=robot_pose,
                             calibration=calibration,
                             arm_stationary=arm_stationary,
+                            current_joints_deg=current_joints_deg,
                             now_ns=now_ns,
                         )
-                    )
+                        if not isinstance(batch, ActiveViewEvaluationBatch):
+                            raise ModelContractError(
+                                "active-view adapter returned an invalid batch"
+                            )
+                        candidate_reports = batch.reports
+                        active_view_proposals = batch.proposals
+                    else:
+                        candidate_reports = tuple(
+                            self.active_view.evaluate(
+                                detections=detections,
+                                targets=targets,
+                                rgb_stamp=pair.rgb.stamp,
+                                robot_pose=robot_pose,
+                                calibration=calibration,
+                                arm_stationary=arm_stationary,
+                                now_ns=now_ns,
+                            )
+                        )
                     if any(
                         not isinstance(report, ActiveViewTargetReport)
                         for report in candidate_reports
@@ -399,6 +428,7 @@ class OnlinePerceptionEngine:
                             active_view_execution_enabled=False,
                         ),
                     )
+                    active_view_proposals = ()
                     blockers.append("active_view_adapter_unavailable")
             return self._finish(
                 pair=pair,
@@ -408,6 +438,7 @@ class OnlinePerceptionEngine:
                 model_ready=True,
                 blockers=tuple(dict.fromkeys(blockers)),
                 active_view_reports=active_view_reports,
+                active_view_proposals=active_view_proposals,
             )
         except Exception as error:
             if isinstance(error, (KeyboardInterrupt, SystemExit)):

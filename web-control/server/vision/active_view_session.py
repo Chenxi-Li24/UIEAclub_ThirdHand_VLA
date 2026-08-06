@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field, replace
 from enum import Enum
-from typing import Any, Protocol
+from typing import Any, Callable, Mapping, Protocol
+from uuid import UUID, uuid4
 
 import numpy as np
 
@@ -90,6 +91,19 @@ class MoveStarted:
         object.__setattr__(self, "session_id", _session_id(self.session_id))
         if not isinstance(self.request_id, str) or not self.request_id:
             raise InvalidDataError("MoveStarted requires a request_id")
+        object.__setattr__(self, "observed_ns", _timestamp(self.observed_ns))
+
+
+@dataclass(frozen=True)
+class OperatorConfirmed:
+    session_id: str
+    proposal_id: str
+    observed_ns: int
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "session_id", _session_id(self.session_id))
+        if not isinstance(self.proposal_id, str) or not self.proposal_id:
+            raise InvalidDataError("OperatorConfirmed requires a proposal_id")
         object.__setattr__(self, "observed_ns", _timestamp(self.observed_ns))
 
 
@@ -385,11 +399,12 @@ class ActiveViewSession:
             return self._on_initial_proposal(event)
         if self.phase is ActiveViewPhase.REFINE_VIEW and isinstance(event, ProposalReady):
             return self._on_refinement_proposal(event, config)
-        planned_phases = {
-            ActiveViewPhase.COARSE_VIEW_PLANNED,
-            ActiveViewPhase.REFINE_VIEW,
-        }
+        planned_phases = {ActiveViewPhase.COARSE_VIEW_PLANNED, ActiveViewPhase.REFINE_VIEW}
+        if self.phase in planned_phases and isinstance(event, OperatorConfirmed):
+            return self._on_operator_confirmed(event)
         if self.phase in planned_phases and isinstance(event, MoveStarted):
+            raise InvalidTransition("OperatorConfirmed is required before MoveStarted")
+        if self.phase is ActiveViewPhase.MOVE_AUTHORIZED and isinstance(event, MoveStarted):
             return self._on_move_started(event)
         if self.phase is ActiveViewPhase.MOVING_TO_VIEW and isinstance(event, MoveCompleted):
             return self._on_move_completed(event)
@@ -480,6 +495,17 @@ class ActiveViewSession:
             depth_samples=(),
         )
 
+    def _on_operator_confirmed(self, event: OperatorConfirmed) -> "ActiveViewSession":
+        if self.proposal is None:
+            raise InvalidTransition("OperatorConfirmed requires a ready proposal")
+        if event.observed_ns >= self.proposal.expires_ns:
+            return self._abort("proposal_expired", event.observed_ns)
+        return replace(
+            self,
+            phase=ActiveViewPhase.MOVE_AUTHORIZED,
+            updated_ns=event.observed_ns,
+        )
+
     def _on_move_completed(self, event: MoveCompleted) -> "ActiveViewSession":
         if event.request_id != self.request_id:
             raise InvalidTransition("movement completion request does not match")
@@ -558,9 +584,221 @@ class ActiveViewSession:
         )
 
 
+def _uuid(value: Any, name: str) -> str:
+    if not isinstance(value, str) or len(value) != 36:
+        raise InvalidDataError(f"{name} must be a canonical UUID")
+    try:
+        parsed = UUID(value)
+    except (ValueError, TypeError, AttributeError) as exc:
+        raise InvalidDataError(f"{name} must be a canonical UUID") from exc
+    if str(parsed) != value or parsed.variant != UUID(value).variant:
+        raise InvalidDataError(f"{name} must be a canonical UUID")
+    return value
+
+
+def _coordinator_event_base() -> dict[str, Any]:
+    return {
+        "active_view_execution_enabled": False,
+        "robot_execution_enabled": False,
+    }
+
+
+class ActiveViewSessionCoordinator:
+    """Own one active-view session and correlate ID-only protocol commands."""
+
+    def __init__(
+        self,
+        config: ActiveViewSessionConfig,
+        *,
+        evidence_ids: tuple[str, ...],
+        proposal_id_factory: Callable[[], str] | None = None,
+    ) -> None:
+        self.config = config
+        self.evidence_ids = validated_evidence_ids(evidence_ids)
+        self.proposal_id_factory = proposal_id_factory or (lambda: str(uuid4()))
+        self.session: ActiveViewSession | None = None
+        self.proposal_id: str | None = None
+
+    def _state_event(self) -> dict[str, Any]:
+        if self.session is None:
+            return {
+                "type": "active_view_state",
+                "phase": ActiveViewPhase.IDLE.value,
+                "session_id": None,
+                "identity_id": None,
+                "proposal_id": None,
+                "request_id": None,
+                "evidence_ids": list(self.evidence_ids),
+                "reasons": [],
+                **_coordinator_event_base(),
+            }
+        return {
+            "type": "active_view_state",
+            "phase": self.session.phase.value,
+            "session_id": self.session.session_id,
+            "identity_id": self.session.identity_id,
+            "proposal_id": self.proposal_id,
+            "request_id": self.session.request_id,
+            "evidence_ids": list(self.session.evidence_ids),
+            "reasons": list(self.session.reasons),
+            "updated_ns": self.session.updated_ns,
+            **_coordinator_event_base(),
+        }
+
+    def _rejected(self, reason: str) -> dict[str, Any]:
+        return {
+            "type": "active_view_protocol_rejected",
+            "reason": reason,
+            "session_id": None if self.session is None else self.session.session_id,
+            **_coordinator_event_base(),
+        }
+
+    def _abort(self, reason: str, now_ns: int) -> list[dict[str, Any]]:
+        if self.session is None or self.session.phase in {
+            ActiveViewPhase.ABORTED,
+            ActiveViewPhase.COMPLETE,
+        }:
+            return [self._rejected(reason)]
+        self.session = self.session.transition(
+            Cancel(self.session.session_id, reason, max(now_ns, self.session.updated_ns + 1)),
+            self.config,
+        )
+        self.proposal_id = None
+        return [self._state_event()]
+
+    def handle_command(
+        self,
+        command: Mapping[str, Any],
+        *,
+        now_ns: int,
+    ) -> list[dict[str, Any]]:
+        if not isinstance(command, Mapping):
+            return [self._rejected("command_invalid")]
+        command_type = command.get("type")
+        if command_type == "active_view_start":
+            if set(command) != {"type", "session_id", "identity_id"}:
+                return [self._rejected("command_keys_invalid")]
+            try:
+                session_id = _uuid(command["session_id"], "session_id")
+                identity_id = _identity_id(command["identity_id"])
+            except InvalidDataError:
+                return [self._rejected("command_id_invalid")]
+            if self.session is not None and self.session.phase not in {
+                ActiveViewPhase.ABORTED,
+                ActiveViewPhase.COMPLETE,
+            }:
+                return [self._rejected("session_already_active")]
+            self.session = ActiveViewSession.start(
+                session_id,
+                identity_id,
+                self.evidence_ids,
+                now_ns,
+            )
+            self.proposal_id = None
+            return [self._state_event()]
+
+        if self.session is None:
+            return [self._rejected("session_unavailable")]
+        if command.get("session_id") != self.session.session_id:
+            return [self._rejected("session_mismatch")]
+        try:
+            if command_type == "active_view_operator_confirmed":
+                if set(command) != {"type", "session_id", "proposal_id"}:
+                    return [self._rejected("command_keys_invalid")]
+                proposal_id = _uuid(command["proposal_id"], "proposal_id")
+                if proposal_id != self.proposal_id:
+                    return self._abort("proposal_not_pending", now_ns)
+                self.session = self.session.transition(
+                    OperatorConfirmed(self.session.session_id, proposal_id, now_ns),
+                    self.config,
+                )
+            elif command_type == "active_view_motion_started":
+                if set(command) != {"type", "session_id", "proposal_id", "request_id"}:
+                    return [self._rejected("command_keys_invalid")]
+                proposal_id = _uuid(command["proposal_id"], "proposal_id")
+                request_id = _uuid(command["request_id"], "request_id")
+                if proposal_id != self.proposal_id:
+                    return self._abort("proposal_not_pending", now_ns)
+                self.session = self.session.transition(
+                    MoveStarted(self.session.session_id, request_id, now_ns),
+                    self.config,
+                )
+            elif command_type == "active_view_motion_completed":
+                if set(command) != {"type", "session_id", "request_id"}:
+                    return [self._rejected("command_keys_invalid")]
+                request_id = _uuid(command["request_id"], "request_id")
+                self.session = self.session.transition(
+                    MoveCompleted(self.session.session_id, request_id, now_ns),
+                    self.config,
+                )
+                self.proposal_id = None
+            elif command_type == "active_view_motion_failed":
+                if set(command) != {"type", "session_id", "request_id", "reason"}:
+                    return [self._rejected("command_keys_invalid")]
+                _uuid(command["request_id"], "request_id")
+                reason = command["reason"]
+                if not isinstance(reason, str) or not reason or len(reason) > 128:
+                    return [self._rejected("failure_reason_invalid")]
+                return self._abort(f"motion_failed:{reason}", now_ns)
+            elif command_type == "active_view_cancel":
+                if set(command) != {"type", "session_id"}:
+                    return [self._rejected("command_keys_invalid")]
+                return self._abort("operator_cancelled", now_ns)
+            else:
+                return [self._rejected("command_type_invalid")]
+        except (InvalidDataError, InvalidTransition):
+            return self._abort("protocol_transition_invalid", now_ns)
+        return [self._state_event()]
+
+    def offer_proposal(
+        self,
+        proposal: ObservationMoveProposal,
+        *,
+        now_ns: int,
+    ) -> list[dict[str, Any]]:
+        if self.session is None:
+            return [self._rejected("session_unavailable")]
+        if proposal.identity_id != self.session.identity_id:
+            return self._abort("target_identity_changed", now_ns)
+        try:
+            self.session = self.session.transition(
+                ProposalReady(self.session.session_id, proposal),
+                self.config,
+            )
+        except InvalidTransition:
+            return self._abort("proposal_transition_invalid", now_ns)
+        if self.session.phase is ActiveViewPhase.ABORTED or proposal.kind == "none":
+            self.proposal_id = None
+            return [self._state_event()]
+        proposal_id = _uuid(self.proposal_id_factory(), "proposal_id")
+        self.proposal_id = proposal_id
+        event = {
+            "type": "active_view_move_proposal",
+            "session_id": self.session.session_id,
+            "proposal_id": proposal_id,
+            "identity_id": proposal.identity_id,
+            "kind": proposal.kind,
+            "source_frame_id": proposal.source_stamp.frame_id,
+            "source_monotonic_ns": proposal.source_stamp.monotonic_ns,
+            "expires_ns": proposal.expires_ns,
+            "target_pose_id": proposal.target_pose_id,
+            "joints_deg": None if proposal.joints_deg is None else proposal.joints_deg.tolist(),
+            "delta_base_m": None
+            if proposal.delta_base_m is None
+            else proposal.delta_base_m.tolist(),
+            "rotation_delta_rad": None
+            if proposal.rotation_delta_rad is None
+            else proposal.rotation_delta_rad.tolist(),
+            "evidence_ids": list(proposal.evidence_ids),
+            **_coordinator_event_base(),
+        }
+        return [event, self._state_event()]
+
+
 __all__ = [
     "ActiveViewPhase",
     "ActiveViewSession",
+    "ActiveViewSessionCoordinator",
     "Cancel",
     "DepthObserved",
     "DepthStabilityDecision",
@@ -571,6 +809,7 @@ __all__ = [
     "LockTarget",
     "MoveCompleted",
     "MoveStarted",
+    "OperatorConfirmed",
     "ProposalReady",
     "Settled",
 ]

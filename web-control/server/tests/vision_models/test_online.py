@@ -17,7 +17,11 @@ from vision.instance_pose import InstancePoseConfig
 from vision.online_frames import CameraRoleMap, FramePair, RgbFrame
 from vision.types import FrameStamp
 from vision_models.contracts import InstanceDetection, ModelContractError
-from vision_models.active_view_online import ActiveViewTargetReport
+from vision.active_view_types import ObservationMoveProposal
+from vision_models.active_view_online import (
+    ActiveViewEvaluationBatch,
+    ActiveViewTargetReport,
+)
 from vision_models.online import OnlinePerceptionEngine, OnlineVisionConfig, render_overlay
 
 
@@ -338,3 +342,50 @@ def test_online_engine_forwards_verified_stationarity_and_calibration() -> None:
     assert recorder.kwargs["robot_pose"] is robot_pose
     assert recorder.kwargs["calibration"] is calibration
     assert recorder.kwargs["arm_stationary"] is True
+
+
+class ProposalActiveView:
+    def evaluate(self, **_kwargs):
+        raise AssertionError("engine must use the trusted batch interface")
+
+    def evaluate_with_proposals(self, **kwargs):
+        target = kwargs["targets"][0]
+        proposal = ObservationMoveProposal.coarse(
+            identity_id=target.identity_id,
+            source_stamp=kwargs["rgb_stamp"],
+            expires_ns=kwargs["now_ns"] + 100_000_000,
+            target_pose_id="table_left",
+            joints_deg=[1, 20, -40, 0, 10, 0],
+            evidence_ids=("sha256:" + "a" * 64,),
+        )
+        report = ActiveViewTargetReport(
+            detection_id=target.detection_id,
+            identity_id=target.identity_id,
+            kind="coarse_pose",
+            target_pose_id="table_left",
+            expires_ns=proposal.expires_ns,
+            coarse_center_xy_m=np.array([0.2, -0.1]),
+            valid_depth_points=0,
+            central_fraction=None,
+            depth_acceptable=False,
+            reasons=(),
+            active_view_execution_enabled=False,
+        )
+        return ActiveViewEvaluationBatch((report,), (proposal,))
+
+
+def test_online_result_keeps_trusted_proposals_inside_python_boundary() -> None:
+    result = engine(active_view=ProposalActiveView()).process(
+        pair(),
+        robot_pose=None,
+        calibration=None,
+        arm_stationary=True,
+        now_ns=1_020_000_000,
+        current_joints_deg=np.array([1, 20, -40, 0, 10, 0]),
+    )
+
+    assert len(result.active_view_proposals) == 1
+    assert result.active_view_proposals[0].target_pose_id == "table_left"
+    event = result.to_event()
+    assert "active_view_proposals" not in event
+    assert "joints_deg" not in json.dumps(event)

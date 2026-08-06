@@ -5,6 +5,27 @@ const { spawn } = require('child_process');
 const readline = require('readline');
 const path = require('path');
 
+const COMMAND_KEYS = {
+  arm_state: [
+    'type', 'tcp_position_m', 'tcp_euler_rad', 'joints_deg',
+    'velocities_deg_s', 'stationary', 'monotonic_ns',
+  ],
+  active_view_start: ['type', 'session_id', 'identity_id'],
+  active_view_motion_started: ['type', 'session_id', 'proposal_id', 'request_id'],
+  active_view_motion_completed: ['type', 'session_id', 'request_id'],
+  active_view_motion_failed: ['type', 'session_id', 'request_id', 'reason'],
+  active_view_cancel: ['type', 'session_id'],
+  active_view_operator_confirmed: ['type', 'session_id', 'proposal_id'],
+};
+
+function hasExactKeys(message, expected) {
+  if (!message || typeof message !== 'object' || Array.isArray(message)) return false;
+  const actual = Object.keys(message).sort();
+  const required = [...expected].sort();
+  return actual.length === required.length
+    && actual.every((value, index) => value === required[index]);
+}
+
 class CameraBridge extends EventEmitter {
   constructor(config) {
     super();
@@ -134,7 +155,19 @@ class CameraBridge extends EventEmitter {
   /** Send a command to the Python camera bridge via stdin */
   send(message) {
     const command = message && (message.type || message.cmd);
-    if (!['arm_state', 'get_status', 'shutdown'].includes(command)) return false;
+    const allowed = [
+      'arm_state',
+      'get_status',
+      'shutdown',
+      'active_view_start',
+      'active_view_motion_started',
+      'active_view_motion_completed',
+      'active_view_motion_failed',
+      'active_view_cancel',
+      'active_view_operator_confirmed',
+    ];
+    if (!allowed.includes(command)) return false;
+    if (COMMAND_KEYS[command] && !hasExactKeys(message, COMMAND_KEYS[command])) return false;
     if (!this.child || !this.child.stdin.writable) {
       this.emit('bridge_error', { message: 'Camera bridge not ready' });
       return false;

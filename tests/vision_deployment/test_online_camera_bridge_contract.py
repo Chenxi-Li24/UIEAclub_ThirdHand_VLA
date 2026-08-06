@@ -15,6 +15,9 @@ ROOT = Path(__file__).parents[2]
 PYTHON_BRIDGE = ROOT / "web-control/server/camera_bridge.py"
 NODE_BRIDGE = ROOT / "web-control/server/camera-bridge.js"
 SERVER = ROOT / "web-control/server"
+SESSION_ID = "11111111-1111-4111-8111-111111111111"
+PROPOSAL_ID = "22222222-2222-4222-8222-222222222222"
+REQUEST_ID = "33333333-3333-4333-8333-333333333333"
 
 
 def load_python_bridge():
@@ -54,11 +57,56 @@ def test_d435_depth_is_converted_once_with_device_scale_and_zero_is_nan():
 def test_stdin_contract_rejects_targets_detections_and_motion_commands():
     bridge = load_python_bridge()
 
-    assert bridge.accepted_command_type({"type": "arm_state"}) == "arm_state"
+    assert bridge.accepted_command_type(valid_arm_state()) == "arm_state"
     assert bridge.accepted_command_type({"cmd": "get_status"}) == "get_status"
     assert bridge.accepted_command_type({"cmd": "shutdown"}) == "shutdown"
     for forbidden in ("detection_result", "grasp_target", "move", "trajectory"):
         assert bridge.accepted_command_type({"type": forbidden}) is None
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        {"type": "active_view_start", "session_id": SESSION_ID, "identity_id": 7},
+        {
+            "type": "active_view_motion_started",
+            "session_id": SESSION_ID,
+            "proposal_id": PROPOSAL_ID,
+            "request_id": REQUEST_ID,
+        },
+        {
+            "type": "active_view_motion_completed",
+            "session_id": SESSION_ID,
+            "request_id": REQUEST_ID,
+        },
+        {"type": "active_view_cancel", "session_id": SESSION_ID},
+        {
+            "type": "active_view_operator_confirmed",
+            "session_id": SESSION_ID,
+            "proposal_id": PROPOSAL_ID,
+        },
+    ],
+)
+def test_session_commands_accept_ids_only(command):
+    bridge = load_python_bridge()
+    assert bridge.accepted_command_type(command) == command["type"]
+
+
+def test_session_command_with_coordinates_or_invalid_ids_is_rejected():
+    bridge = load_python_bridge()
+    with_coordinates = {
+        "type": "active_view_start",
+        "session_id": SESSION_ID,
+        "identity_id": 7,
+        "position": [0.1, 0.2, 0.3],
+    }
+    assert bridge.accepted_command_type(with_coordinates) is None
+    assert bridge.accepted_command_type(
+        {"type": "active_view_cancel", "session_id": "not-a-uuid"}
+    ) is None
+    assert bridge.accepted_command_type(
+        {"type": "active_view_cancel", "session_id": "a" * 200}
+    ) is None
 
 
 def valid_arm_state(timestamp: str = "1000000000") -> dict:
@@ -146,6 +194,19 @@ def test_online_inputs_fail_closed_when_evidence_changes_or_pose_is_stale():
     assert "robot_pose_stale" in stale[3]
 
 
+def test_active_view_command_mailbox_preserves_fifo_for_one_owner():
+    bridge = load_python_bridge()
+    mailbox = bridge.ActiveViewCommandMailbox()
+    first = {"type": "active_view_start", "session_id": SESSION_ID, "identity_id": 7}
+    second = {"type": "active_view_cancel", "session_id": SESSION_ID}
+
+    mailbox.publish(first)
+    mailbox.publish(second)
+
+    assert mailbox.drain() == (first, second)
+    assert mailbox.drain() == ()
+
+
 def test_d435_capture_supervisor_retries_after_transient_start_failure(monkeypatch):
     bridge = load_python_bridge()
     attempts = []
@@ -207,6 +268,12 @@ const rejected = bridge.send({{ type: 'detection_result', targets: [{{ actionabl
 const accepted = bridge.sendArmState(
   [0.1,0,0.3], [0,0,0], [1,2,-3,4,5,6], [0,0,0,0,0,0], true, '1000000'
 );
+const sessionAccepted = bridge.send({{
+  type: 'active_view_cancel', session_id: {json.dumps(SESSION_ID)}
+}});
+const sessionRejected = bridge.send({{
+  type: 'active_view_cancel', session_id: {json.dumps(SESSION_ID)}, position: [0.1,0.2,0.3]
+}});
 const paused = new PassThrough();
 paused.pause();
 bridge.releaseMjpegStream(paused, new PassThrough());
@@ -215,6 +282,8 @@ process.stdout.write(JSON.stringify({{
   overlayMatches: bridge.getVisionMjpegStream() === overlay,
   rejected,
   accepted,
+  sessionAccepted,
+  sessionRejected,
   writes,
   onlineEnabled: spec.env.VISION_ONLINE_ENABLED,
   visionConfig: spec.env.VISION_CONFIG,
@@ -240,8 +309,11 @@ process.stdout.write(JSON.stringify({{
         "overlayMatches": True,
         "rejected": False,
         "accepted": True,
+        "sessionAccepted": True,
+        "sessionRejected": False,
         "writes": [
-            '{"type":"arm_state","tcp_position_m":[0.1,0,0.3],"tcp_euler_rad":[0,0,0],"joints_deg":[1,2,-3,4,5,6],"velocities_deg_s":[0,0,0,0,0,0],"stationary":true,"monotonic_ns":"1000000"}\n'
+            '{"type":"arm_state","tcp_position_m":[0.1,0,0.3],"tcp_euler_rad":[0,0,0],"joints_deg":[1,2,-3,4,5,6],"velocities_deg_s":[0,0,0,0,0,0],"stationary":true,"monotonic_ns":"1000000"}\n',
+            f'{{"type":"active_view_cancel","session_id":"{SESSION_ID}"}}\n',
         ],
         "onlineEnabled": "1",
         "visionConfig": "/tmp/vision.yaml",

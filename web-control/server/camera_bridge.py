@@ -12,11 +12,13 @@ from dataclasses import dataclass, field, replace
 import json
 import os
 from pathlib import Path
+import queue
 import sys
 import threading
 import time
 import traceback
 from typing import Any, Generic, Optional, TypeVar
+from uuid import UUID
 
 import cv2
 import numpy as np
@@ -27,6 +29,7 @@ from vision.identity import PersistentIdentityMemory
 from vision.online_frames import DepthFrame, LatestFramePairer
 from vision.types import FrameStamp
 from vision.calibration_gate import sdk_pose_transform
+from vision.active_view_session import ActiveViewPhase, ActiveViewSessionCoordinator
 from vision_models.dino import DinoMaskEncoder
 from vision_models.active_view_online import (
     ActiveViewDryRunAdapter,
@@ -170,6 +173,24 @@ class LatestValueBuffer(Generic[T]):
             return self._sequence, self._value
 
 
+class ActiveViewCommandMailbox:
+    """FIFO handoff; only the online perception thread drains commands."""
+
+    def __init__(self) -> None:
+        self._queue: queue.SimpleQueue[dict[str, Any]] = queue.SimpleQueue()
+
+    def publish(self, command: dict[str, Any]) -> None:
+        self._queue.put(dict(command))
+
+    def drain(self) -> tuple[dict[str, Any], ...]:
+        commands: list[dict[str, Any]] = []
+        while True:
+            try:
+                commands.append(self._queue.get_nowait())
+            except queue.Empty:
+                return tuple(commands)
+
+
 def depth_to_metres(raw_depth: Any, depth_scale: float) -> np.ndarray:
     raw = np.asarray(raw_depth)
     scale = float(depth_scale)
@@ -183,11 +204,60 @@ def depth_to_metres(raw_depth: Any, depth_scale: float) -> np.ndarray:
     return depth
 
 
+SESSION_COMMAND_KEYS = {
+    "active_view_start": {"type", "session_id", "identity_id"},
+    "active_view_motion_started": {
+        "type",
+        "session_id",
+        "proposal_id",
+        "request_id",
+    },
+    "active_view_motion_completed": {"type", "session_id", "request_id"},
+    "active_view_motion_failed": {"type", "session_id", "request_id", "reason"},
+    "active_view_cancel": {"type", "session_id"},
+    "active_view_operator_confirmed": {"type", "session_id", "proposal_id"},
+}
+
+
+def _canonical_uuid(value: Any) -> bool:
+    if not isinstance(value, str) or len(value) != 36:
+        return False
+    try:
+        return str(UUID(value)) == value
+    except (ValueError, TypeError, AttributeError):
+        return False
+
+
 def accepted_command_type(message: Any) -> Optional[str]:
     if not isinstance(message, dict):
         return None
     command = message.get("type") or message.get("cmd")
-    return command if command in {"arm_state", "get_status", "shutdown"} else None
+    if command == "arm_state":
+        return command if set(message) == ARM_STATE_KEYS else None
+    if command in {"get_status", "shutdown"}:
+        return command if set(message) in ({"cmd"}, {"type"}) else None
+    expected = SESSION_COMMAND_KEYS.get(command)
+    if expected is None or set(message) != expected:
+        return None
+    id_fields = ("session_id", "proposal_id", "request_id")
+    if any(field in message and not _canonical_uuid(message[field]) for field in id_fields):
+        return None
+    if command == "active_view_start" and (
+        isinstance(message["identity_id"], bool)
+        or not isinstance(message["identity_id"], int)
+        or message["identity_id"] < 0
+    ):
+        return None
+    if command == "active_view_motion_failed":
+        reason = message["reason"]
+        if (
+            not isinstance(reason, str)
+            or not reason
+            or len(reason) > 128
+            or any(character not in "abcdefghijklmnopqrstuvwxyz0123456789_.-" for character in reason)
+        ):
+            return None
+    return command
 
 
 @dataclass(frozen=True)
@@ -338,6 +408,7 @@ def select_online_inputs(
 
 d435_latest: LatestValueBuffer[D435Sample] = LatestValueBuffer()
 arm_pose_latest: LatestValueBuffer[ArmPoseSample] = LatestValueBuffer()
+active_view_commands = ActiveViewCommandMailbox()
 _state_lock = threading.Lock()
 _state: dict[str, Any] = {
     "d435_ready": False,
@@ -539,14 +610,14 @@ def _load_online_engine():
         perception,
         config,
         active_view=active_view,
-    ), evidence_guard, evidence_error
+    ), active_view_config, evidence_guard, evidence_error
 
 
 def run_online_perception() -> None:
     """Read newest Lumos frame, pair newest D435 depth, and emit read-only output."""
 
     try:
-        config, engine, evidence_guard, evidence_error = _load_online_engine()
+        config, engine, active_view_config, evidence_guard, evidence_error = _load_online_engine()
         pairer = LatestFramePairer(
             config.roles,
             config.perception_config.max_frame_skew_ns,
@@ -564,11 +635,37 @@ def run_online_perception() -> None:
         return
 
     _update_state(model_ready=True, vision_error=None)
+    coordinator = None
+    if evidence_guard is not None:
+        coordinator = ActiveViewSessionCoordinator(
+            active_view_config,
+            evidence_ids=(
+                evidence_guard.evidence.evidence_id,
+                evidence_guard.evidence.camera.calibration.calibration_id,
+            ),
+        )
     last_lumos_sequence = -1
     last_d435_sequence = 0
     backoff_s = 0.1
     while not shutdown_flag.is_set():
         try:
+            for command in active_view_commands.drain():
+                if coordinator is None:
+                    emit_event(
+                        {
+                            "type": "active_view_protocol_rejected",
+                            "reason": "active_view_evidence_unavailable",
+                            "session_id": command.get("session_id"),
+                            "robot_execution_enabled": False,
+                            "active_view_execution_enabled": False,
+                        }
+                    )
+                    continue
+                for active_event in coordinator.handle_command(
+                    command,
+                    now_ns=time.monotonic_ns(),
+                ):
+                    emit_event(active_event)
             rgb = lumos.read(last_lumos_sequence)
             if rgb is None:
                 time.sleep(0.01)
@@ -594,7 +691,32 @@ def run_online_perception() -> None:
                 calibration=calibration,
                 arm_stationary=arm_stationary,
                 now_ns=now_ns,
+                current_joints_deg=(
+                    None
+                    if arm is None or robot_pose is None or not arm_stationary
+                    else arm.joints_deg
+                ),
             )
+            if (
+                coordinator is not None
+                and coordinator.session is not None
+                and coordinator.session.phase
+                in {ActiveViewPhase.TARGET_LOCKED, ActiveViewPhase.REFINE_VIEW}
+            ):
+                matching = next(
+                    (
+                        proposal
+                        for proposal in result.active_view_proposals
+                        if proposal.identity_id == coordinator.session.identity_id
+                    ),
+                    None,
+                )
+                if matching is not None:
+                    for active_event in coordinator.offer_proposal(
+                        matching,
+                        now_ns=now_ns,
+                    ):
+                        emit_event(active_event)
             event = result.to_event()
             emit_event(event)
             blockers = list(result.blockers)
@@ -689,6 +811,8 @@ def main() -> None:
         command_type = accepted_command_type(command)
         if command_type == "arm_state":
             _handle_arm_state(command)
+        elif command_type in SESSION_COMMAND_KEYS:
+            active_view_commands.publish(command)
         elif command_type == "get_status":
             emit("camera_status", **_state_snapshot())
         elif command_type == "shutdown":

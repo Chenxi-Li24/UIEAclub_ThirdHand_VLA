@@ -147,9 +147,10 @@ def test_verifier_rejects_an_expired_proposal() -> None:
     assert "expired" in "\n".join(report["errors"]).lower()
 
 
-def test_launcher_forwards_config_without_an_execution_switch() -> None:
+def test_launcher_explicitly_locks_active_view_execution_for_dry_run() -> None:
     source = LAUNCHER.read_text(encoding="utf-8")
 
     assert "ACTIVE_VIEW_CONFIG" in source
     assert "active_view.yaml" in source
-    assert "ACTIVE_VIEW_EXECUTION_ENABLED" not in source
+    assert "ACTIVE_VIEW_EXECUTION_ENABLED=0" in source
+    assert "ACTIVE_VIEW_EXECUTION_ENABLED=1" not in source

@@ -294,3 +294,52 @@ Lumos 序列增加 899、D435 序列增加 1799，机器人执行启用样本数
 
 进入任何真机观察移动前，仍必须依次完成桌面模型、Lumos 内参、D435 外参/手眼标定和
 受限观察位姿目录的独立验收；第一次发送机械臂观察动作仍需人工拍板。
+
+## 2026-08-06 主动视角控制模拟与故障注入
+
+新增独立纯事件验证器 `scripts/vision/verify_active_view_control.py`。验证器不导入 Startouch、
+CAN、相机或网页模块，只评估不可变事件证据；默认 `real_motion_allowed=False`。在线启动脚本
+同时显式固定 `ACTIVE_VIEW_EXECUTION_ENABLED=0`，避免继承宿主环境中残留的开启变量。
+
+验证器要求：
+
+- 会话、提议、请求和身份 ID 全程精确关联；
+- 证据哈希在会话内不变，提议未过期；
+- 每次移动后至少两次同一身份确认；
+- 最终至少五个新鲜深度样本，中心最大偏差不超过 10 mm、每轴 MAD 不超过 5 mm；
+- 精调平移不超过 20 mm、旋转不超过 5°，且没有沿 D435 光轴的位移；
+- 模拟证据中机器人执行与主动视角执行门均为 `false`；
+- 不产生抓取命令，故障终止后不再出现后续命令。
+
+故障注入覆盖身份切换、身份歧义、陈旧深度、错误 request ID、提议过期、运动超时、机器人
+断连、D435 断连、审批过期、证据变化/失效，以及故障后追加运动或抓取命令。所有故障均被
+判为失败，且“正确终止”的故障样本 `commands_after_abort=0`。
+
+虚拟 30 分钟浸泡在不等待墙钟时间、不访问 `--base-url` 的 `--simulation-only` 模式完成：
+
+```text
+passed=true
+virtual_duration_seconds=1800
+session_count=60
+completed_sessions=60
+observation_moves=120
+identity_confirmations=240
+depth_samples=360
+max_translation_m=0.015
+max_rotation_rad=0.0
+execution_gate_samples=60
+execution_gate_violations=0
+identity_changes=0
+stale_accepted_proposals=0
+unexpected_transitions=0
+commands_after_abort=0
+grasp_commands=0
+```
+
+报告位于 `artifacts/vision/active-view-control/simulation-soak-20260806.json`，SHA-256 为
+`6f772fbfd22a1885b33fea9bcae265644c5bc53a166db5f986d5cdface99596a`。该文件是 gitignored
+运行证据。
+
+这只证明控制协议、相关性、边界和故障终止在确定性虚拟事件上成立，不证明真实路径无碰撞，
+也不证明标定、观察位或真机控制已通过。未连接、未重启现有在线服务，未发送任何机械臂或夹爪
+命令；真实观察运动仍停在人工安全确认门之前。

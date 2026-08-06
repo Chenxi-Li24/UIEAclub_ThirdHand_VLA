@@ -42,6 +42,7 @@ validate_owned_pid() {
   grep -Fxq 'WEB_PORT=3100' <<<"$task_environment" || return 2
   grep -Fxq 'STARTOUCH_SIMULATE=1' <<<"$task_environment" || return 2
   grep -Fxq 'VISION_ONLINE_ENABLED=1' <<<"$task_environment" || return 2
+  grep -Fxq 'ACTIVE_VIEW_EXECUTION_ENABLED=0' <<<"$task_environment" || return 2
   grep -Fxq "ACTIVE_VIEW_CONFIG=$TASK_ACTIVE_VIEW_CONFIG" \
     <<<"$task_environment" || return 2
   printf '%s\n' "$task_pid"
@@ -149,6 +150,7 @@ server_environment() {
     CAMERA_ENABLED=1 \
     CAMERA_PYTHON="$TASK_MODEL_PYTHON" \
     VISION_ONLINE_ENABLED=1 \
+    ACTIVE_VIEW_EXECUTION_ENABLED=0 \
     VISION_CONFIG="$TASK_CONFIG" \
     ACTIVE_VIEW_CONFIG="$TASK_ACTIVE_VIEW_CONFIG" \
     LUMOS_SNAPSHOT_URL="$TASK_LUMOS_FRAME" \
@@ -188,6 +190,7 @@ start_background() {
     --setenv=CAMERA_ENABLED=1 \
     --setenv=CAMERA_PYTHON="$TASK_MODEL_PYTHON" \
     --setenv=VISION_ONLINE_ENABLED=1 \
+    --setenv=ACTIVE_VIEW_EXECUTION_ENABLED=0 \
     --setenv=VISION_CONFIG="$TASK_CONFIG" \
     --setenv=ACTIVE_VIEW_CONFIG="$TASK_ACTIVE_VIEW_CONFIG" \
     --setenv=LUMOS_SNAPSHOT_URL="$TASK_LUMOS_FRAME" \

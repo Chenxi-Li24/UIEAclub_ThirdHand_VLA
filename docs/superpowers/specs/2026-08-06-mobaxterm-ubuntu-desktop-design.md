@@ -28,9 +28,7 @@
 
 ## Windows / MobaXterm 端配置
 
-在 MobaXterm 中建立 SSH 本地端口转发：Windows 本机一个空闲端口转发到 Ubuntu 的 `127.0.0.1:5900`。随后创建 VNC 会话，连接 Windows 本机的该转发端口，并使用独立 VNC 密码认证。
-
-为避免与 Windows 上可能已有的本地 `5900` 冲突，实施时先探测并选择空闲本地端口；优先使用 `5900`，冲突时使用 `5901`。
+创建一个 MobaXterm VNC 会话，VNC 目标填写 Ubuntu 内部的 `127.0.0.1:5900`，并在该会话的 Network settings 中启用 SSH gateway，网关填写 `192.168.58.68:22` 和用户 `nieqingcao`。MobaXterm 会自动建立 SSH 隧道，不需要额外占用或管理 Windows 本地转发端口。连接 VNC 时使用独立 VNC 密码认证。
 
 ## 安全边界
 

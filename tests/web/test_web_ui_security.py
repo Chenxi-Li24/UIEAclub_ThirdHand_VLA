@@ -39,7 +39,18 @@ def test_camera_test_page_exposes_both_camera_roles_without_motion_controls() ->
     assert "/api/vision/status" in source
     assert "blockers" in source
     assert "robotExecutionEnabled" in source
+    assert "activeViewExecutionEnabled" in source
+    assert "观察建议" in source
+    assert "D435 深度质量" in source
+    assert "稳定样本" in source
+    assert "剩余精调" in source
     assert "grasp_object" not in source
+    assert "start_active_view" not in source
+    assert "confirm_active_view" not in source
+    assert "move_joint" not in source
+    assert "move_l" not in source
+    assert "method: 'POST'" not in source
+    assert ".send(" not in source
     assert "contenteditable" not in source
 
 

@@ -1,11 +1,13 @@
 'use strict';
 
 function finiteOrNull(value) {
+  if (value === null || value === undefined || value === '') return null;
   const number = Number(value);
   return Number.isFinite(number) ? number : null;
 }
 
 function nonNegativeIntegerOrNull(value) {
+  if (value === null || value === undefined || value === '') return null;
   const number = Number(value);
   return Number.isSafeInteger(number) && number >= 0 ? number : null;
 }
@@ -21,6 +23,12 @@ function finitePosition(value) {
   return result.every(Number.isFinite) ? result : null;
 }
 
+function finiteXY(value) {
+  if (!Array.isArray(value) || value.length !== 2) return null;
+  const result = value.map(Number);
+  return result.every(Number.isFinite) ? result : null;
+}
+
 function sanitizeTarget(target) {
   if (!target || typeof target !== 'object') return null;
   const pose = target.pose && typeof target.pose === 'object' ? target.pose : null;
@@ -31,6 +39,33 @@ function sanitizeTarget(target) {
     positionM: finitePosition(pose ? pose.xyz_m : target.position_m),
     reasons: boundedStrings(target.reasons),
     actionable: false,
+  };
+}
+
+function sanitizeActiveView(report) {
+  if (!report || typeof report !== 'object') return null;
+  const kinds = new Set(['none', 'coarse_pose', 'refine_delta']);
+  const centralFraction = finiteOrNull(report.central_fraction);
+  return {
+    detectionId: nonNegativeIntegerOrNull(report.detection_id),
+    identityId: nonNegativeIntegerOrNull(report.identity_id),
+    kind: kinds.has(report.kind) ? report.kind : 'none',
+    targetPoseId: typeof report.target_pose_id === 'string'
+      ? report.target_pose_id.slice(0, 128)
+      : null,
+    expiresNs: nonNegativeIntegerOrNull(report.expires_ns),
+    coarseCenterXYM: finiteXY(report.coarse_center_xy_m),
+    validDepthPoints: nonNegativeIntegerOrNull(report.valid_depth_points),
+    centralFraction: centralFraction !== null && centralFraction >= 0 && centralFraction <= 1
+      ? centralFraction
+      : null,
+    depthAcceptable: typeof report.depth_acceptable === 'boolean'
+      ? report.depth_acceptable
+      : null,
+    stableSamples: nonNegativeIntegerOrNull(report.stable_samples),
+    remainingRefinements: nonNegativeIntegerOrNull(report.remaining_refinements),
+    reasons: boundedStrings(report.reasons),
+    executionEnabled: false,
   };
 }
 
@@ -62,6 +97,7 @@ class VisionStatusStore {
     this.taskCheckpointValidated = false;
     this.blockers = ['vision_not_started'];
     this.targets = [];
+    this.activeViewReports = [];
     this.error = null;
   }
 
@@ -119,6 +155,13 @@ class VisionStatusStore {
       .slice(0, this.maxTargets)
       .map(sanitizeTarget)
       .filter(Boolean);
+    const rawActiveView = Array.isArray(event.active_view_reports)
+      ? event.active_view_reports
+      : [];
+    this.activeViewReports = rawActiveView
+      .slice(0, this.maxTargets)
+      .map(sanitizeActiveView)
+      .filter(Boolean);
   }
 
   snapshot(nowMs = Date.now()) {
@@ -140,6 +183,16 @@ class VisionStatusStore {
       sequences: { ...this.sequences },
       metrics: { ...this.metrics },
       targets: this.targets.map(target => ({ ...target })),
+      activeView: {
+        executionEnabled: false,
+        reports: this.activeViewReports.map(report => ({
+          ...report,
+          coarseCenterXYM: report.coarseCenterXYM === null
+            ? null
+            : [...report.coarseCenterXYM],
+          reasons: [...report.reasons],
+        })),
+      },
       blockers: [...new Set(blockers)],
       sourceAgeMs,
       stale,
@@ -150,4 +203,4 @@ class VisionStatusStore {
   }
 }
 
-module.exports = { VisionStatusStore, sanitizeTarget };
+module.exports = { VisionStatusStore, sanitizeActiveView, sanitizeTarget };

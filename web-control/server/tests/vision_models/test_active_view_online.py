@@ -186,6 +186,8 @@ def test_checked_in_adapter_reports_blockers_without_motion_payload() -> None:
     assert report["identity_id"] == 3
     assert report["active_view_execution_enabled"] is False
     assert report["kind"] == "none"
+    assert report["stable_samples"] == 0
+    assert report["remaining_refinements"] == 3
     assert "table_unvalidated" in report["reasons"]
     assert "observation_catalog_empty" in report["reasons"]
     assert "calibration_unavailable" in report["reasons"]

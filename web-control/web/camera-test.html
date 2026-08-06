@@ -29,7 +29,7 @@
     dl { display: grid; grid-template-columns: 130px 1fr; gap: 8px 12px; margin: 0 0 18px; }
     dt { color: #91a1ad; } dd { margin: 0; overflow-wrap: anywhere; }
     .ok { color: #6ee7a0; } .bad { color: #ff817a; }
-    #blockers { margin: 8px 0 0; padding-left: 20px; color: #ffbd5b; }
+    #blockers, #active-blockers { margin: 8px 0 0; padding-left: 20px; color: #ffbd5b; }
     #targets { font-variant-numeric: tabular-nums; }
     @media (max-width: 900px) { main { grid-template-columns: 1fr; }
       .camera-grid { grid-template-rows: 55vh 38vh; } }
@@ -38,7 +38,9 @@
 <body>
   <header>
     <h1>双相机在线视觉</h1>
-    <span class="lock">只读 · robotExecutionEnabled = false</span>
+    <span class="lock">
+      只读 · robotExecutionEnabled = false · activeViewExecutionEnabled = false
+    </span>
   </header>
   <main>
     <section class="camera-grid" aria-label="camera streams">
@@ -67,6 +69,17 @@
       </dl>
       <h2>闭锁原因 / blockers</h2>
       <ul id="blockers"><li>vision_not_started</li></ul>
+      <h2>观察建议（Dry Run）</h2>
+      <dl>
+        <dt>目标身份</dt><dd id="active-identity">—</dd>
+        <dt>建议观察位</dt><dd id="active-proposal">—</dd>
+        <dt>桌面粗位置</dt><dd id="active-coarse">—</dd>
+        <dt>D435 深度质量</dt><dd id="active-depth">—</dd>
+        <dt>稳定样本</dt><dd id="active-stable">— / 5</dd>
+        <dt>剩余精调</dt><dd id="active-refinements">—</dd>
+      </dl>
+      <h2>主动观察 blockers</h2>
+      <ul id="active-blockers"><li>active_view_report_unavailable</li></ul>
       <p class="muted">Lumos 用于广角识别与身份连续性；D435 用于近场度量深度。当前页面不会发送运动、坐标或抓取命令。</p>
     </aside>
   </main>
@@ -113,7 +126,50 @@
         item.textContent = 'none';
         list.replaceChildren(item);
       }
-      if (status.robotExecutionEnabled !== false) {
+      const activeView = status.activeView && typeof status.activeView === 'object'
+        ? status.activeView
+        : { executionEnabled: false, reports: [] };
+      const activeViewExecutionEnabled = activeView.executionEnabled;
+      const activeReports = Array.isArray(activeView.reports) ? activeView.reports : [];
+      const report = activeReports[0] || null;
+      text('active-identity', report?.identityId ?? '—');
+      text(
+        'active-proposal',
+        report === null
+          ? '—'
+          : report.kind === 'none'
+            ? '无动作建议'
+            : `${report.kind} · ${report.targetPoseId ?? '未命名观察位'}`,
+      );
+      const coarse = report?.coarseCenterXYM;
+      text(
+        'active-coarse',
+        Array.isArray(coarse) && coarse.length === 2
+          ? `${coarse[0].toFixed(3)}, ${coarse[1].toFixed(3)} m（仅观察规划）`
+          : '—',
+      );
+      const central = finite(report?.centralFraction);
+      const pointCount = report?.validDepthPoints;
+      text(
+        'active-depth',
+        report === null
+          ? '—'
+          : `${pointCount ?? 0} 点 · 中央比例 ${
+            central === null ? '—' : central.toFixed(2)
+          }`,
+      );
+      text('active-stable', `${report?.stableSamples ?? 0} / 5`);
+      text('active-refinements', report?.remainingRefinements ?? '—');
+      const activeReasons = Array.isArray(report?.reasons) && report.reasons.length
+        ? report.reasons
+        : [report === null ? 'active_view_report_unavailable' : 'none'];
+      const activeList = byId('active-blockers');
+      activeList.replaceChildren(...activeReasons.map(value => {
+        const item = document.createElement('li');
+        item.textContent = value;
+        return item;
+      }));
+      if (status.robotExecutionEnabled !== false || activeViewExecutionEnabled !== false) {
         text('online', '安全配置错误');
         byId('online').className = 'bad';
       }

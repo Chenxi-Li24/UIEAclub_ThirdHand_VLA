@@ -242,6 +242,8 @@ class ActiveViewTargetReport:
     central_fraction: Optional[float]
     depth_acceptable: Optional[bool]
     reasons: tuple[str, ...]
+    stable_samples: int = 0
+    remaining_refinements: int = 0
     active_view_execution_enabled: bool = False
 
     def __post_init__(self) -> None:
@@ -288,6 +290,14 @@ class ActiveViewTargetReport:
             fraction = None
         if self.depth_acceptable is not None and not isinstance(self.depth_acceptable, bool):
             raise InvalidDataError("active-view depth quality state must be a boolean or null")
+        counters = (self.stable_samples, self.remaining_refinements)
+        if any(
+            isinstance(value, bool) or not isinstance(value, int) or value < 0
+            for value in counters
+        ):
+            raise InvalidDataError("active-view report counters must be non-negative integers")
+        if self.remaining_refinements > 3:
+            raise InvalidDataError("active-view report refinements cannot exceed three")
         reasons = tuple(self.reasons)
         if any(
             not isinstance(reason, str) or not reason or len(reason) > 128
@@ -315,6 +325,8 @@ class ActiveViewTargetReport:
             "identity_id": self.identity_id,
             "kind": self.kind,
             "reasons": list(self.reasons),
+            "remaining_refinements": self.remaining_refinements,
+            "stable_samples": self.stable_samples,
             "target_pose_id": self.target_pose_id,
             "valid_depth_points": self.valid_depth_points,
         }
@@ -455,13 +467,15 @@ class ActiveViewDryRunAdapter:
                     central_fraction=None,
                     depth_acceptable=depth_acceptable,
                     reasons=tuple(dict.fromkeys(reasons)),
+                    stable_samples=0,
+                    remaining_refinements=self.config.max_refinement_steps,
                     active_view_execution_enabled=False,
                 )
             )
         return tuple(reports)
 
-    @staticmethod
     def _blocked_report(
+        self,
         detection_id: int,
         identity_id: Optional[int],
         reasons: tuple[str, ...],
@@ -477,6 +491,8 @@ class ActiveViewDryRunAdapter:
             central_fraction=None,
             depth_acceptable=None,
             reasons=reasons,
+            stable_samples=0,
+            remaining_refinements=self.config.max_refinement_steps,
             active_view_execution_enabled=False,
         )
 

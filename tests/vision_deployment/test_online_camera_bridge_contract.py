@@ -54,6 +54,14 @@ def test_d435_depth_is_converted_once_with_device_scale_and_zero_is_nan():
     assert depth_m.flags.writeable is False
 
 
+def test_d435_debug_inner_quality_roi_uses_configured_central_fraction():
+    bridge = load_python_bridge()
+
+    assert bridge.inner_roi_bounds(640, 480, 0.60) == (128, 96, 511, 383)
+    with pytest.raises(ValueError, match="fraction"):
+        bridge.inner_roi_bounds(640, 480, 0.0)
+
+
 def test_stdin_contract_rejects_targets_detections_and_motion_commands():
     bridge = load_python_bridge()
 

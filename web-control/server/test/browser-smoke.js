@@ -33,6 +33,10 @@ const MOBILE_SCREENSHOT_PATH = path.join(
   os.tmpdir(),
   'thirdhand-lumos-voice-mobile-smoke.png'
 );
+const CAMERA_SCREENSHOT_PATH = path.join(
+  os.tmpdir(),
+  'thirdhand-camera-test-smoke.png'
+);
 const profileDir = fs.mkdtempSync(path.join(os.tmpdir(), 'thirdhand-lumos-edge-'));
 const safeTempPrefix = `${path.resolve(os.tmpdir())}${path.sep}`.toLowerCase();
 
@@ -612,7 +616,12 @@ async function run() {
         identityId: 7,
         identityStatus: 'confirmed',
         label: 'bottle',
-        positionM: [0.2, 0.1, 0.03]
+        positionM: [0.2, 0.1, 0.03],
+        identityMemory: {
+          hits: 6, workPrototypeCount: 4, stablePrototypeCount: 3,
+          appearanceSimilarity: 0.93, associationCost: 0.07,
+          associationReason: null
+        }
       }],
       activeView: {
         executionEnabled: false,
@@ -657,8 +666,21 @@ async function run() {
       noGraspButton: ![...document.querySelectorAll('button')]
         .some(button => button.textContent.includes('执行抓取')),
       confirmationRequired: document.body.textContent.includes('每一步均需人工确认')
+        && document.getElementById('confirm-step').disabled === false,
+      identityDiagnostics:
+        document.getElementById('identity-similarity').textContent === '93.0%' &&
+        document.getElementById('identity-memory').textContent.includes('4 / 3') &&
+        document.getElementById('identity-association').textContent.includes('0.070')
     };
   })()`);
+  const cameraScreenshot = await command('Page.captureScreenshot', {
+    format: 'png',
+    captureBeyondViewport: false
+  });
+  fs.writeFileSync(
+    CAMERA_SCREENSHOT_PATH,
+    Buffer.from(cameraScreenshot.result.data, 'base64')
+  );
 
   const checks = {
     defaultJetsonEndpoint: defaultEndpoint === 'ws://192.168.58.43:3002/v1/voice',
@@ -733,6 +755,7 @@ async function run() {
     activeViewCommandsAreIdsOnly: activeViewUi.idsOnly,
     graspPreviewHasNoExecutionButton: activeViewUi.noGraspButton,
     activeViewRequiresEachConfirmation: activeViewUi.confirmationRequired,
+    identityDiagnosticsRendered: activeViewUi.identityDiagnostics,
     noTtsPlayback: finalState.audioCount === 0,
     noAmbiguousExecutionCopy:
       !finalState.bodyText.includes('执行 1 个操作'),
@@ -748,6 +771,7 @@ async function run() {
   console.log(`SCREENSHOT ${SCREENSHOT_PATH}`);
   console.log(`VOICE_SCREENSHOT ${VOICE_SCREENSHOT_PATH}`);
   console.log(`MOBILE_SCREENSHOT ${MOBILE_SCREENSHOT_PATH}`);
+  console.log(`CAMERA_SCREENSHOT ${CAMERA_SCREENSHOT_PATH}`);
   if (!passed) {
     if (exceptions.length) console.error(exceptions.join('\n'));
     console.error(childOutput.join(''));

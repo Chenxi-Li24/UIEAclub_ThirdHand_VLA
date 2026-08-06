@@ -195,6 +195,10 @@ def test_global_assignment_keeps_two_similar_instances_one_to_one():
     )
     by_observation = {item.observation_id: item.identity_id for item in result.assignments}
     assert by_observation == {3: 2, 4: 1}
+    assert all(
+        item.appearance_similarity is not None and item.appearance_similarity > 0.99
+        for item in result.assignments
+    )
 
 
 def test_class_gate_never_reuses_identity_across_labels():

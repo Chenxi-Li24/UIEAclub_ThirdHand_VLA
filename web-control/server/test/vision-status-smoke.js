@@ -32,6 +32,15 @@ store.updateTargets({
       actionable: true,
       reasons: ['calibration_unavailable'],
       pose: { xyz_m: [Number.NaN, 0.2, 0.3] },
+      identity_memory: {
+        hits: 5,
+        work_prototype_count: 4,
+        stable_prototype_count: 3,
+        appearance_similarity: 0.93,
+        association_cost: 0.07,
+        association_reason: null,
+        dense_features: [1, 2, 3],
+      },
     },
   ],
   active_view_reports: [
@@ -76,6 +85,14 @@ assert.deepEqual(current.metrics, {
 assert.equal(current.targets[0].actionable, false);
 assert.equal(current.targets[0].identityStatus, 'confirmed');
 assert.equal(current.targets[0].positionM, null);
+assert.deepEqual(current.targets[0].identityMemory, {
+  hits: 5,
+  workPrototypeCount: 4,
+  stablePrototypeCount: 3,
+  appearanceSimilarity: 0.93,
+  associationCost: 0.07,
+  associationReason: null,
+});
 assert.deepEqual(current.blockers, ['calibration_unavailable']);
 assert.equal(current.activeView.executionEnabled, false);
 assert.deepEqual(current.activeView.reports[0], {

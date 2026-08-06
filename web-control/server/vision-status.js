@@ -29,6 +29,22 @@ function finiteXY(value) {
   return result.every(Number.isFinite) ? result : null;
 }
 
+function sanitizeIdentityMemory(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const similarity = finiteOrNull(value.appearance_similarity);
+  const cost = finiteOrNull(value.association_cost);
+  return {
+    hits: nonNegativeIntegerOrNull(value.hits),
+    workPrototypeCount: nonNegativeIntegerOrNull(value.work_prototype_count),
+    stablePrototypeCount: nonNegativeIntegerOrNull(value.stable_prototype_count),
+    appearanceSimilarity: similarity !== null && similarity >= -1 && similarity <= 1
+      ? similarity : null,
+    associationCost: cost !== null && cost >= 0 ? cost : null,
+    associationReason: typeof value.association_reason === 'string'
+      ? value.association_reason.slice(0, 128) : null,
+  };
+}
+
 function sanitizeTarget(target) {
   if (!target || typeof target !== 'object') return null;
   const pose = target.pose && typeof target.pose === 'object' ? target.pose : null;
@@ -36,6 +52,7 @@ function sanitizeTarget(target) {
     identityId: nonNegativeIntegerOrNull(target.identity_id ?? target.id),
     identityStatus: new Set(['tentative', 'confirmed', 'occluded', 'inactive', 'ambiguous'])
       .has(target.identity_status) ? target.identity_status : 'unknown',
+    identityMemory: sanitizeIdentityMemory(target.identity_memory),
     label: typeof target.label === 'string' ? target.label.slice(0, 128) : 'unknown',
     score: finiteOrNull(target.score ?? target.conf),
     positionM: finitePosition(pose ? pose.xyz_m : target.position_m),
@@ -281,4 +298,9 @@ class VisionStatusStore {
   }
 }
 
-module.exports = { VisionStatusStore, sanitizeActiveView, sanitizeTarget };
+module.exports = {
+  VisionStatusStore,
+  sanitizeActiveView,
+  sanitizeIdentityMemory,
+  sanitizeTarget,
+};

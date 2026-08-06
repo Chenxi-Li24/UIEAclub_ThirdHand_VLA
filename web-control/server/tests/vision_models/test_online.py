@@ -173,6 +173,20 @@ def test_second_frame_confirms_same_identity_but_execution_stays_locked():
     assert second.targets[0].identity_status.value == "confirmed"
     assert second.targets[0].actionable is False
     assert second.robot_execution_enabled is False
+    assert second.targets[0].identity_hits == 2
+    assert second.targets[0].work_prototype_count == 2
+    assert second.targets[0].stable_prototype_count == 1
+    assert second.targets[0].appearance_similarity == 1.0
+    assert second.targets[0].association_cost == 0.0
+    identity = second.to_event()["targets"][0]["identity_memory"]
+    assert identity == {
+        "hits": 2,
+        "work_prototype_count": 2,
+        "stable_prototype_count": 1,
+        "appearance_similarity": 1.0,
+        "association_cost": 0.0,
+        "association_reason": None,
+    }
 
 
 def test_empty_detections_skip_encoder_and_serialize_as_empty_targets():
@@ -232,6 +246,7 @@ def test_overlay_keeps_native_dimensions_and_event_contains_plain_finite_json():
     assert overlay.shape == source.shape
     assert overlay.dtype == np.uint8
     assert not np.shares_memory(overlay, source)
+    assert not np.array_equal(overlay[2, 2], source[2, 2])
     assert json.loads(json.dumps(payload, allow_nan=False)) == payload
     assert payload["targets"][0]["identity_id"] == 1
     assert payload["canonical_rgb_source"] == "lumos_rgb"

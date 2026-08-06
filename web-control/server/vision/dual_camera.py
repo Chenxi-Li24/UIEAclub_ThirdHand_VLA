@@ -209,6 +209,12 @@ class DualCameraTarget:
     registered_depth_points: int
     actionable: bool
     reasons: tuple[str, ...]
+    identity_hits: int = 0
+    work_prototype_count: int = 0
+    stable_prototype_count: int = 0
+    appearance_similarity: Optional[float] = None
+    association_cost: Optional[float] = None
+    association_reason: Optional[str] = None
 
 
 @dataclass(frozen=True)
@@ -415,6 +421,16 @@ class DualCameraPerception:
                     registered_depth_points=point_count_by_detection[item.detection_id],
                     actionable=actionable,
                     reasons=tuple(reasons),
+                    identity_hits=0 if snapshot is None else snapshot.hits,
+                    work_prototype_count=0
+                    if snapshot is None
+                    else snapshot.work_prototype_count,
+                    stable_prototype_count=0
+                    if snapshot is None
+                    else snapshot.stable_prototype_count,
+                    appearance_similarity=assignment.appearance_similarity,
+                    association_cost=assignment.cost,
+                    association_reason=assignment.reason,
                 )
             )
         return DualCameraResult(

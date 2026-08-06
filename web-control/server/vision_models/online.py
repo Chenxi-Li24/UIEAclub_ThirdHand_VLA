@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections import deque
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 import json
 from pathlib import Path
 import re
@@ -133,13 +133,20 @@ class OnlineAnnotation:
     label: str
     score: float
     bbox_xyxy: np.ndarray
+    mask: np.ndarray = field(compare=False)
 
     def __post_init__(self) -> None:
         box = np.array(self.bbox_xyxy, dtype=float, copy=True)
         if box.shape != (4,) or not np.isfinite(box).all():
             raise ModelContractError("overlay bounding box must be a finite four-vector")
+        mask = np.asarray(self.mask)
+        if mask.ndim != 2 or mask.dtype != np.bool_ or not mask.any():
+            raise ModelContractError("overlay mask must be a non-empty 2D boolean array")
         box.setflags(write=False)
+        mask = np.array(mask, copy=True)
+        mask.setflags(write=False)
         object.__setattr__(self, "bbox_xyxy", box)
+        object.__setattr__(self, "mask", mask)
 
 
 def _target_event(target: DualCameraTarget) -> dict[str, Any]:
@@ -149,6 +156,14 @@ def _target_event(target: DualCameraTarget) -> dict[str, Any]:
         "detection_id": int(target.detection_id),
         "identity_id": None if target.identity_id is None else int(target.identity_id),
         "identity_status": target.identity_status.value,
+        "identity_memory": {
+            "hits": int(target.identity_hits),
+            "work_prototype_count": int(target.work_prototype_count),
+            "stable_prototype_count": int(target.stable_prototype_count),
+            "appearance_similarity": target.appearance_similarity,
+            "association_cost": target.association_cost,
+            "association_reason": target.association_reason,
+        },
         "label": target.label,
         "pose": None
         if pose is None
@@ -328,7 +343,13 @@ class OnlinePerceptionEngine:
             if not all(isinstance(item, InstanceDetection) for item in detections):
                 raise ModelContractError("segmenter returned a non-detection value")
             annotations = tuple(
-                OnlineAnnotation(item.detection_id, item.label, item.score, item.bbox_xyxy)
+                OnlineAnnotation(
+                    item.detection_id,
+                    item.label,
+                    item.score,
+                    item.bbox_xyxy,
+                    item.mask,
+                )
                 for item in detections
             )
             descriptors = (
@@ -462,10 +483,16 @@ def render_overlay(image_rgb: Any, result: OnlinePerceptionResult) -> np.ndarray
     canvas = np.array(source, copy=True)
     targets = {target.detection_id: target for target in result.targets}
     for annotation in result.annotations:
+        if annotation.mask.shape != canvas.shape[:2]:
+            raise ModelContractError("overlay mask must match the source image")
         x1, y1, x2, y2 = np.rint(annotation.bbox_xyxy).astype(int)
         target = targets.get(annotation.detection_id)
         actionable = bool(target and target.actionable)
         colour = (20, 220, 20) if actionable else (255, 170, 20)
+        colour_layer = np.empty_like(canvas)
+        colour_layer[:] = colour
+        blended = cv2.addWeighted(canvas, 0.72, colour_layer, 0.28, 0.0)
+        canvas[annotation.mask] = blended[annotation.mask]
         cv2.rectangle(canvas, (x1, y1), (x2, y2), colour, 1, cv2.LINE_AA)
         identity = "?" if target is None or target.identity_id is None else str(target.identity_id)
         cv2.putText(

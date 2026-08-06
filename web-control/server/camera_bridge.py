@@ -453,7 +453,30 @@ def _state_snapshot() -> dict[str, Any]:
         return dict(_state)
 
 
-def _d435_debug_frame(frame_bgr: np.ndarray, raw_depth: np.ndarray, sequence: int) -> bytes:
+def inner_roi_bounds(
+    width: int,
+    height: int,
+    fraction: float,
+) -> tuple[int, int, int, int]:
+    if any(
+        isinstance(value, bool) or not isinstance(value, int) or value < 2
+        for value in (width, height)
+    ):
+        raise ValueError("ROI dimensions must be integers of at least two pixels")
+    fraction = float(fraction)
+    if not np.isfinite(fraction) or not 0.0 < fraction <= 1.0:
+        raise ValueError("ROI fraction must be within (0, 1]")
+    margin_x = int(round(width * (1.0 - fraction) / 2.0))
+    margin_y = int(round(height * (1.0 - fraction) / 2.0))
+    return margin_x, margin_y, width - margin_x - 1, height - margin_y - 1
+
+
+def _d435_debug_frame(
+    frame_bgr: np.ndarray,
+    raw_depth: np.ndarray,
+    sequence: int,
+    inner_roi_fraction: Optional[float] = None,
+) -> bytes:
     output = np.array(frame_bgr, copy=True)
     depth_viz = np.clip(raw_depth.astype(np.float32) / 3000.0 * 255.0, 0, 255).astype(
         np.uint8
@@ -462,6 +485,23 @@ def _d435_debug_frame(frame_bgr: np.ndarray, raw_depth: np.ndarray, sequence: in
     depth_viz[raw_depth == 0] = 0
     depth_small = cv2.resize(depth_viz, (160, 120))
     output[-120:, -160:] = depth_small
+    if inner_roi_fraction is not None:
+        x1, y1, x2, y2 = inner_roi_bounds(
+            output.shape[1],
+            output.shape[0],
+            inner_roi_fraction,
+        )
+        cv2.rectangle(output, (x1, y1), (x2, y2), (0, 220, 255), 2, cv2.LINE_AA)
+        cv2.putText(
+            output,
+            f"central depth quality ROI {inner_roi_fraction:.0%}",
+            (x1 + 5, max(42, y1 - 6)),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.45,
+            (0, 220, 255),
+            1,
+            cv2.LINE_AA,
+        )
     cv2.putText(
         output,
         f"D435 RGB debug | metric depth | seq {sequence}",
@@ -487,6 +527,12 @@ def _capture_d435_once() -> None:
     try:
         import pyrealsense2 as rs
 
+        try:
+            inner_roi_fraction = load_active_view_config(
+                ACTIVE_VIEW_CONFIG
+            ).inner_roi_fraction
+        except (OSError, ValueError):
+            inner_roi_fraction = None
         pipeline = rs.pipeline()
         stream_config = rs.config()
         stream_config.enable_stream(
@@ -537,7 +583,12 @@ def _capture_d435_once() -> None:
             frame_bgr = np.array(np.asanyarray(color.get_data()), copy=True)
             raw_depth = np.array(np.asanyarray(depth.get_data()), dtype=np.uint16, copy=True)
             depth_m = depth_to_metres(raw_depth, depth_scale)
-            debug_jpeg = _d435_debug_frame(frame_bgr, raw_depth, frame_id)
+            debug_jpeg = _d435_debug_frame(
+                frame_bgr,
+                raw_depth,
+                frame_id,
+                inner_roi_fraction,
+            )
             sample = D435Sample(
                 depth=DepthFrame(
                     FrameStamp("d435_depth", frame_id, monotonic_ns), depth_m

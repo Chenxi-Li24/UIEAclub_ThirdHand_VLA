@@ -237,6 +237,7 @@ class IdentityAssignment:
     status: IdentityStatus
     cost: Optional[float]
     reason: Optional[str] = None
+    appearance_similarity: Optional[float] = None
 
 
 @dataclass(frozen=True)
@@ -563,6 +564,10 @@ class PersistentIdentityMemory:
         for row, column in matches:
             record = records[row]
             observation = observation_list[column]
+            appearance_similarity = 1.0 - self._appearance_cost(
+                record,
+                observation.descriptor,
+            )
             was_inactive = self._status(record, observation.stamp.monotonic_ns) is (
                 IdentityStatus.INACTIVE
             )
@@ -618,17 +623,23 @@ class PersistentIdentityMemory:
                 if record.confirmed and not record.reacquiring
                 else IdentityStatus.TENTATIVE,
                 cost=float(costs[row, column]),
+                appearance_similarity=float(appearance_similarity),
             )
 
         for row, column in low_quality_matches:
             record = records[row]
             observation = observation_list[column]
+            appearance_similarity = 1.0 - self._appearance_cost(
+                record,
+                observation.descriptor,
+            )
             assignments[column] = IdentityAssignment(
                 observation_id=observation.observation_id,
                 identity_id=record.identity_id,
                 status=IdentityStatus.TENTATIVE,
                 cost=float(costs[row, column]),
                 reason="low_quality_association",
+                appearance_similarity=float(appearance_similarity),
             )
 
         for column, observation in enumerate(observation_list):

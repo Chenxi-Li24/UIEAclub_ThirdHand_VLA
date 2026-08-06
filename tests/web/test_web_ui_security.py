@@ -74,6 +74,19 @@ def test_camera_page_websocket_commands_contain_ids_only() -> None:
     assert "{ cmd: 'cancel_active_view', sessionId }" in source
 
 
+def test_camera_page_exposes_real_identity_memory_diagnostics() -> None:
+    source = (
+        Path(__file__).parents[2] / "web-control/web/camera-test.html"
+    ).read_text(encoding="utf-8")
+
+    for marker in (
+        "DINO 原型相似度",
+        "REMIND work / stable",
+        "关联代价 / 原因",
+    ):
+        assert marker in source
+
+
 def test_proxy_exposes_read_only_vision_status_and_overlay_routes() -> None:
     source = (
         Path(__file__).parents[2] / "web-control/server/proxy.js"

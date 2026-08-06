@@ -91,6 +91,9 @@
         <dt>D435 深度质量</dt><dd id="active-depth">—</dd>
         <dt>稳定样本</dt><dd id="active-stable">— / 5</dd>
         <dt>剩余精调</dt><dd id="active-refinements">—</dd>
+        <dt>DINO 原型相似度</dt><dd id="identity-similarity">—</dd>
+        <dt>REMIND work / stable</dt><dd id="identity-memory">—</dd>
+        <dt>关联代价 / 原因</dt><dd id="identity-association">—</dd>
         <dt>抓取预览</dt><dd id="grasp-preview">未进入 GRASP_PREVIEW</dd>
       </dl>
       <div class="controls">
@@ -269,14 +272,34 @@
       );
       text('active-stable', `${report?.stableSamples ?? 0} / 5`);
       text('active-refinements', report?.remainingRefinements ?? '—');
-      const previewTarget = status.targets.find(
+      const diagnosticTarget = status.targets.find(
         target => target.identityId === activeControl.identityId && Array.isArray(target.positionM),
+      ) ?? status.targets.find(target => target.identityId === activeControl.identityId)
+        ?? eligibleTargets[0] ?? null;
+      const identityMemory = diagnosticTarget?.identityMemory ?? null;
+      const similarity = finite(identityMemory?.appearanceSimilarity);
+      const associationCost = finite(identityMemory?.associationCost);
+      text(
+        'identity-similarity',
+        similarity === null ? '新身份或无可靠原型比较' : `${(similarity * 100).toFixed(1)}%`,
+      );
+      text(
+        'identity-memory',
+        identityMemory === null
+          ? '—'
+          : `${identityMemory.workPrototypeCount ?? 0} / ${identityMemory.stablePrototypeCount ?? 0}` +
+            ` · hits ${identityMemory.hits ?? 0}`,
+      );
+      text(
+        'identity-association',
+        `${associationCost === null ? '—' : associationCost.toFixed(3)} / ` +
+          `${identityMemory?.associationReason ?? 'matched'}`,
       );
       text(
         'grasp-preview',
         activeControl.phase === 'grasp_preview'
-          ? previewTarget
-            ? `GRASP_PREVIEW · ${previewTarget.positionM.map(value => value.toFixed(3)).join(', ')} m · 仅预览，不能执行抓取`
+          ? diagnosticTarget && Array.isArray(diagnosticTarget.positionM)
+            ? `GRASP_PREVIEW · ${diagnosticTarget.positionM.map(value => value.toFixed(3)).join(', ')} m · 仅预览，不能执行抓取`
             : 'GRASP_PREVIEW · 深度几何待刷新 · 仅预览，不能执行抓取'
           : '未进入 GRASP_PREVIEW',
       );

@@ -29,6 +29,38 @@ function finiteXY(value) {
   return result.every(Number.isFinite) ? result : null;
 }
 
+function boundedString(value, limit = 128) {
+  return typeof value === 'string' && value ? value.slice(0, limit) : null;
+}
+
+function positionStandardDeviation(value) {
+  if (!Array.isArray(value) || value.length !== 3 ||
+      value.some(row => !Array.isArray(row) || row.length !== 3)) return null;
+  const covariance = value.map(row => row.map(Number));
+  if (!covariance.flat().every(Number.isFinite)) return null;
+  const diagonal = covariance.map((row, index) => row[index]);
+  if (diagonal.some(item => item < 0)) return null;
+  return diagonal.map(Math.sqrt);
+}
+
+function shortCalibrationId(value) {
+  if (typeof value !== 'string' || !/^sha256:[0-9a-f]{64}$/.test(value)) return null;
+  return `${value.slice(0, 19)}…`;
+}
+
+function sanitizeGraspPreview(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const pointPx = finiteXY(value.pixel_xy);
+  const pointM = finitePosition(value.xyz_m);
+  if (pointPx === null && pointM === null) return null;
+  return {
+    pointPx,
+    pointM,
+    frame: boundedString(value.frame, 64),
+    status: boundedString(value.status, 64),
+  };
+}
+
 function sanitizeIdentityMemory(value) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
   const similarity = finiteOrNull(value.appearance_similarity);
@@ -48,15 +80,42 @@ function sanitizeIdentityMemory(value) {
 function sanitizeTarget(target) {
   if (!target || typeof target !== 'object') return null;
   const pose = target.pose && typeof target.pose === 'object' ? target.pose : null;
+  const identityStatus = new Set(['tentative', 'confirmed', 'occluded', 'inactive', 'ambiguous'])
+    .has(target.identity_status) ? target.identity_status : 'unknown';
+  const positionM = finitePosition(pose ? pose.xyz_m : target.position_m);
+  const graspPreview = sanitizeGraspPreview(target.grasp_preview);
+  const perceptionReasons = boundedStrings(target.reasons);
+  const graspReasons = [];
+  if (target.actionable !== true) {
+    graspReasons.push(...(perceptionReasons.length ? perceptionReasons : ['perception_not_actionable']));
+  }
+  if (graspPreview === null) graspReasons.push('grasp_preview_unavailable');
+  graspReasons.push('physical_grasp_execution_locked');
+  let targetState = 'tracked_3d';
+  if (identityStatus !== 'confirmed') targetState = 'identity_pending';
+  else if (positionM === null) targetState = 'depth_pending';
+  else if (target.actionable !== true) targetState = 'blocked';
+  else if (graspPreview !== null) targetState = 'grasp_preview';
   return {
+    detectionId: nonNegativeIntegerOrNull(target.detection_id),
     identityId: nonNegativeIntegerOrNull(target.identity_id ?? target.id),
-    identityStatus: new Set(['tentative', 'confirmed', 'occluded', 'inactive', 'ambiguous'])
-      .has(target.identity_status) ? target.identity_status : 'unknown',
+    identityStatus,
     identityMemory: sanitizeIdentityMemory(target.identity_memory),
     label: typeof target.label === 'string' ? target.label.slice(0, 128) : 'unknown',
     score: finiteOrNull(target.score ?? target.conf),
-    positionM: finitePosition(pose ? pose.xyz_m : target.position_m),
-    reasons: boundedStrings(target.reasons),
+    positionM,
+    positionFrame: boundedString(pose?.frame, 64),
+    positionStdM: positionStandardDeviation(pose?.covariance_m2),
+    calibrationIdShort: shortCalibrationId(pose?.calibration_id),
+    registeredDepthPoints: nonNegativeIntegerOrNull(target.registered_depth_points) ?? 0,
+    targetState,
+    graspPointPx: graspPreview?.pointPx ?? null,
+    graspPointM: graspPreview?.pointM ?? null,
+    graspPointFrame: graspPreview?.frame ?? null,
+    graspPointStatus: graspPreview?.status ?? null,
+    graspAllowed: false,
+    graspReasons: [...new Set(graspReasons)],
+    reasons: perceptionReasons,
     actionable: false,
   };
 }
@@ -272,7 +331,16 @@ class VisionStatusStore {
       roles: { ...this.roles },
       sequences: { ...this.sequences },
       metrics: { ...this.metrics },
-      targets: this.targets.map(target => ({ ...target })),
+      targets: this.targets.map(target => ({
+        ...target,
+        positionM: target.positionM === null ? null : [...target.positionM],
+        positionStdM: target.positionStdM === null ? null : [...target.positionStdM],
+        graspPointPx: target.graspPointPx === null ? null : [...target.graspPointPx],
+        graspPointM: target.graspPointM === null ? null : [...target.graspPointM],
+        graspReasons: [...target.graspReasons],
+        reasons: [...target.reasons],
+        identityMemory: target.identityMemory === null ? null : { ...target.identityMemory },
+      })),
       activeView: {
         executionEnabled: false,
         control: {
@@ -302,5 +370,6 @@ module.exports = {
   VisionStatusStore,
   sanitizeActiveView,
   sanitizeIdentityMemory,
+  sanitizeGraspPreview,
   sanitizeTarget,
 };

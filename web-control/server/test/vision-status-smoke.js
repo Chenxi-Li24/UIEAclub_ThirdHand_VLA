@@ -42,6 +42,32 @@ store.updateTargets({
         dense_features: [1, 2, 3],
       },
     },
+    {
+      detection_id: 8,
+      identity_id: 4,
+      identity_status: 'confirmed',
+      label: 'cup',
+      score: 0.91,
+      actionable: true,
+      reasons: [],
+      registered_depth_points: 184,
+      pose: {
+        xyz_m: [0.342, -0.118, 0.041],
+        covariance_m2: [
+          [0.000004, 0, 0],
+          [0, 0.000009, 0],
+          [0, 0, 0.000016],
+        ],
+        frame: 'robot_base',
+        calibration_id: `sha256:${'b'.repeat(64)}`,
+      },
+      grasp_preview: {
+        pixel_xy: [63, 44],
+        xyz_m: [0.340, -0.116, 0.041],
+        frame: 'robot_base',
+        status: 'candidate',
+      },
+    },
   ],
   active_view_reports: [
     {
@@ -85,6 +111,11 @@ assert.deepEqual(current.metrics, {
 assert.equal(current.targets[0].actionable, false);
 assert.equal(current.targets[0].identityStatus, 'confirmed');
 assert.equal(current.targets[0].positionM, null);
+assert.equal(current.targets[0].targetState, 'depth_pending');
+assert.equal(current.targets[0].registeredDepthPoints, 0);
+assert.equal(current.targets[0].graspAllowed, false);
+assert.equal(current.targets[0].graspReasons.includes('grasp_preview_unavailable'), true);
+assert.equal(current.targets[0].graspReasons.includes('physical_grasp_execution_locked'), true);
 assert.deepEqual(current.targets[0].identityMemory, {
   hits: 5,
   workPrototypeCount: 4,
@@ -92,6 +123,28 @@ assert.deepEqual(current.targets[0].identityMemory, {
   appearanceSimilarity: 0.93,
   associationCost: 0.07,
   associationReason: null,
+});
+assert.deepEqual(current.targets[1], {
+  detectionId: 8,
+  identityId: 4,
+  identityStatus: 'confirmed',
+  identityMemory: null,
+  label: 'cup',
+  score: 0.91,
+  positionM: [0.342, -0.118, 0.041],
+  positionFrame: 'robot_base',
+  positionStdM: [0.002, 0.003, 0.004],
+  calibrationIdShort: 'sha256:bbbbbbbbbbbb…',
+  registeredDepthPoints: 184,
+  targetState: 'grasp_preview',
+  graspPointPx: [63, 44],
+  graspPointM: [0.34, -0.116, 0.041],
+  graspPointFrame: 'robot_base',
+  graspPointStatus: 'candidate',
+  graspAllowed: false,
+  graspReasons: ['physical_grasp_execution_locked'],
+  reasons: [],
+  actionable: false,
 });
 assert.deepEqual(current.blockers, ['calibration_unavailable']);
 assert.equal(current.activeView.executionEnabled, false);
@@ -112,7 +165,10 @@ assert.deepEqual(current.activeView.reports[0], {
 });
 assert.equal('jointsDeg' in current.activeView.reports[0], false);
 assert.equal('deltaBaseM' in current.activeView.reports[0], false);
-assert.deepEqual(store.trustedTargets(1500), [{ identityId: 3, label: 'bottle' }]);
+assert.deepEqual(store.trustedTargets(1500), [
+  { identityId: 3, label: 'bottle' },
+  { identityId: 4, label: 'cup' },
+]);
 assert.deepEqual(store.trustedTargets(3102), []);
 
 store.updateActiveViewState({

@@ -10,7 +10,6 @@ import re
 import time
 from typing import Any, Optional
 
-import cv2
 import numpy as np
 import yaml
 
@@ -30,6 +29,7 @@ from vision.types import InvalidDataError
 from .contracts import InstanceDetection, ModelContractError, validated_rgb_image
 from .active_view_online import ActiveViewEvaluationBatch, ActiveViewTargetReport
 from .offline_replay import IdentityReplayFormatError
+from .visualization import build_target_visuals, render_target_visuals
 
 
 COCO_INSTANCE_LABELS = (
@@ -480,43 +480,13 @@ def render_overlay(image_rgb: Any, result: OnlinePerceptionResult) -> np.ndarray
     source = validated_rgb_image(image_rgb)
     if not isinstance(result, OnlinePerceptionResult):
         raise ModelContractError("overlay requires an OnlinePerceptionResult")
-    canvas = np.array(source, copy=True)
-    targets = {target.detection_id: target for target in result.targets}
-    for annotation in result.annotations:
-        if annotation.mask.shape != canvas.shape[:2]:
-            raise ModelContractError("overlay mask must match the source image")
-        x1, y1, x2, y2 = np.rint(annotation.bbox_xyxy).astype(int)
-        target = targets.get(annotation.detection_id)
-        actionable = bool(target and target.actionable)
-        colour = (20, 220, 20) if actionable else (255, 170, 20)
-        colour_layer = np.empty_like(canvas)
-        colour_layer[:] = colour
-        blended = cv2.addWeighted(canvas, 0.72, colour_layer, 0.28, 0.0)
-        canvas[annotation.mask] = blended[annotation.mask]
-        cv2.rectangle(canvas, (x1, y1), (x2, y2), colour, 1, cv2.LINE_AA)
-        identity = "?" if target is None or target.identity_id is None else str(target.identity_id)
-        cv2.putText(
-            canvas,
-            f"{annotation.label} {annotation.score:.2f} id:{identity}",
-            (max(0, x1), max(12, y1 - 4)),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            0.35,
-            colour,
-            1,
-            cv2.LINE_AA,
-        )
-    status = "MODEL READY" if result.model_ready else "MODEL UNAVAILABLE"
-    cv2.putText(
-        canvas,
-        f"{status} | EXECUTION LOCKED",
-        (6, max(14, canvas.shape[0] - 6)),
-        cv2.FONT_HERSHEY_SIMPLEX,
-        0.38,
-        (255, 80, 80),
-        1,
-        cv2.LINE_AA,
+    visuals = build_target_visuals(
+        result.annotations,
+        result.targets,
+        grasp_points_px=None,
+        grasp_execution_enabled=result.robot_execution_enabled,
     )
-    return canvas
+    return render_target_visuals(source, visuals, model_ready=result.model_ready)
 
 
 def _mapping(value: Any, name: str) -> dict[str, Any]:

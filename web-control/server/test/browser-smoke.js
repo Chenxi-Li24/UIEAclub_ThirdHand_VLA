@@ -613,10 +613,23 @@ async function run() {
       robotExecutionEnabled: false,
       activeViewExecutionEnabled: false,
       targets: [{
+        detectionId: 9,
         identityId: 7,
         identityStatus: 'confirmed',
         label: 'bottle',
+        score: 0.95,
         positionM: [0.2, 0.1, 0.03],
+        positionFrame: 'robot_base',
+        positionStdM: [0.002, 0.003, 0.004],
+        registeredDepthPoints: 184,
+        targetState: 'tracked_3d',
+        graspPointPx: null,
+        graspPointM: null,
+        graspPointFrame: null,
+        graspPointStatus: null,
+        graspAllowed: false,
+        graspReasons: ['grasp_preview_unavailable', 'physical_grasp_execution_locked'],
+        reasons: [],
         identityMemory: {
           hits: 6, workPrototypeCount: 4, stablePrototypeCount: 3,
           appearanceSimilarity: 0.93, associationCost: 0.07,
@@ -670,7 +683,13 @@ async function run() {
       identityDiagnostics:
         document.getElementById('identity-similarity').textContent === '93.0%' &&
         document.getElementById('identity-memory').textContent.includes('4 / 3') &&
-        document.getElementById('identity-association').textContent.includes('0.070')
+        document.getElementById('identity-association').textContent.includes('0.070'),
+      targetDiagnostics:
+        document.getElementById('target-diagnostics').textContent.includes('持久 ID #7') &&
+        document.getElementById('target-diagnostics').textContent.includes('robot_base') &&
+        document.getElementById('target-diagnostics').textContent.includes('184') &&
+        document.getElementById('target-diagnostics').textContent.includes('未生成') &&
+        document.getElementById('target-diagnostics').textContent.includes('不允许')
     };
   })()`);
   const cameraScreenshot = await command('Page.captureScreenshot', {
@@ -756,6 +775,7 @@ async function run() {
     graspPreviewHasNoExecutionButton: activeViewUi.noGraspButton,
     activeViewRequiresEachConfirmation: activeViewUi.confirmationRequired,
     identityDiagnosticsRendered: activeViewUi.identityDiagnostics,
+    targetAlgorithmDiagnosticsRendered: activeViewUi.targetDiagnostics,
     noTtsPlayback: finalState.audioCount === 0,
     noAmbiguousExecutionCopy:
       !finalState.bodyText.includes('执行 1 个操作'),

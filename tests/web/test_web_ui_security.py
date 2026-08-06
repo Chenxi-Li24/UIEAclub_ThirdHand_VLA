@@ -53,6 +53,18 @@ def test_camera_test_page_exposes_both_camera_roles_with_id_only_active_view() -
     assert "cancel_active_view" in source
     assert "GRASP_PREVIEW" in source
     assert "每一步均需人工确认" in source
+    for marker in (
+        "实例轮廓",
+        "持久 ID",
+        "三维坐标",
+        "目标状态",
+        "抓取点",
+        "允许抓取",
+    ):
+        assert marker in source
+    assert 'id="target-diagnostics"' in source
+    assert "targetDiagnostics.replaceChildren" in source
+    assert "targetDiagnostics.innerHTML" not in source
     for forbidden in (
         "jointsDeg",
         "deltaBaseM",

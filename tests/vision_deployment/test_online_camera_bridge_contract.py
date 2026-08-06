@@ -10,7 +10,6 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-
 from vision.types import InvalidDataError
 
 ROOT = Path(__file__).parents[2]

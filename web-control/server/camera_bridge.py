@@ -406,6 +406,29 @@ def select_online_inputs(
     return calibration, robot_pose, stationary, tuple(blockers)
 
 
+def expire_active_view_on_evidence_failure(
+    coordinator: Optional[ActiveViewSessionCoordinator],
+    evidence_guard: Optional[ActiveViewEvidenceGuard],
+    blockers: tuple[str, ...],
+    *,
+    now_ns: int,
+) -> tuple[dict[str, Any], ...]:
+    """Invalidate one active session when its calibration evidence is no longer trusted."""
+
+    if coordinator is None or coordinator.session is None:
+        return ()
+    if coordinator.session.phase in {ActiveViewPhase.ABORTED, ActiveViewPhase.COMPLETE}:
+        return ()
+    if not {"calibration_changed", "calibration_unavailable"}.intersection(blockers):
+        return ()
+    evidence_id = (
+        coordinator.evidence_ids[0]
+        if evidence_guard is None
+        else evidence_guard.evidence.evidence_id
+    )
+    return tuple(coordinator.expire_evidence(evidence_id, now_ns=now_ns))
+
+
 d435_latest: LatestValueBuffer[D435Sample] = LatestValueBuffer()
 arm_pose_latest: LatestValueBuffer[ArmPoseSample] = LatestValueBuffer()
 active_view_commands = ActiveViewCommandMailbox()
@@ -685,6 +708,13 @@ def run_online_perception() -> None:
                 arm,
                 now_ns=now_ns,
             )
+            for active_event in expire_active_view_on_evidence_failure(
+                coordinator,
+                evidence_guard,
+                input_blockers,
+                now_ns=now_ns,
+            ):
+                emit_event(active_event)
             result = engine.process(
                 pair,
                 robot_pose=robot_pose,

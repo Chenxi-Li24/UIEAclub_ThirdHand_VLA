@@ -194,6 +194,53 @@ def test_online_inputs_fail_closed_when_evidence_changes_or_pose_is_stale():
     assert "robot_pose_stale" in stale[3]
 
 
+def test_calibration_change_expires_the_active_view_session_once():
+    bridge = load_python_bridge()
+    calls = []
+
+    class Coordinator:
+        session = type(
+            "Session",
+            (),
+            {"phase": bridge.ActiveViewPhase.TARGET_LOCKED},
+        )()
+
+        def expire_evidence(self, evidence_id, *, now_ns):
+            calls.append((evidence_id, now_ns))
+            self.session.phase = bridge.ActiveViewPhase.ABORTED
+            return [{"type": "active_view_state", "phase": "aborted"}]
+
+    guard = type(
+        "Guard",
+        (),
+        {
+            "evidence": type(
+                "Evidence",
+                (),
+                {"evidence_id": "a" * 64},
+            )()
+        },
+    )()
+    coordinator = Coordinator()
+
+    events = bridge.expire_active_view_on_evidence_failure(
+        coordinator,
+        guard,
+        ("calibration_changed",),
+        now_ns=123,
+    )
+    duplicate = bridge.expire_active_view_on_evidence_failure(
+        coordinator,
+        guard,
+        ("calibration_changed",),
+        now_ns=124,
+    )
+
+    assert events == ({"type": "active_view_state", "phase": "aborted"},)
+    assert duplicate == ()
+    assert calls == [("a" * 64, 123)]
+
+
 def test_active_view_command_mailbox_preserves_fifo_for_one_owner():
     bridge = load_python_bridge()
     mailbox = bridge.ActiveViewCommandMailbox()

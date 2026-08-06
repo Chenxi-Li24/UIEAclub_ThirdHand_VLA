@@ -666,6 +666,30 @@ class ActiveViewSessionCoordinator:
         self.proposal_id = None
         return [self._state_event()]
 
+    def expire_evidence(self, evidence_id: str, *, now_ns: int) -> list[dict[str, Any]]:
+        """Fail closed when evidence bound to the current session is invalidated."""
+
+        if self.session is None:
+            return [self._rejected("session_unavailable")]
+        try:
+            validated = validated_evidence_ids((evidence_id,))[0]
+        except InvalidDataError:
+            return [self._rejected("evidence_not_bound")]
+        if validated not in self.session.evidence_ids:
+            return [self._rejected("evidence_not_bound")]
+        if self.session.phase in {ActiveViewPhase.ABORTED, ActiveViewPhase.COMPLETE}:
+            return [self._rejected("evidence_expired")]
+        self.session = self.session.transition(
+            EvidenceExpired(
+                self.session.session_id,
+                validated,
+                max(now_ns, self.session.updated_ns + 1),
+            ),
+            self.config,
+        )
+        self.proposal_id = None
+        return [self._state_event()]
+
     def handle_command(
         self,
         command: Mapping[str, Any],

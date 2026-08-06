@@ -371,3 +371,40 @@ def test_coordinator_rejects_wrong_proposal_duplicate_completion_and_old_session
         now_ns=122,
     )
     assert old[-1]["type"] == "active_view_protocol_rejected"
+
+
+def test_coordinator_expires_active_session_when_calibration_evidence_changes() -> None:
+    coordinator = ActiveViewSessionCoordinator(
+        config(),
+        evidence_ids=(EVIDENCE_ID,),
+        proposal_id_factory=lambda: PROPOSAL_ID,
+    )
+    coordinator.handle_command(
+        {"type": "active_view_start", "session_id": SESSION_ID, "identity_id": 9},
+        now_ns=100,
+    )
+    coordinator.offer_proposal(coarse_proposal(), now_ns=101)
+
+    events = coordinator.expire_evidence(EVIDENCE_ID, now_ns=102)
+
+    assert events[-1]["phase"] == "aborted"
+    assert events[-1]["reasons"] == ["evidence_expired"]
+    assert coordinator.proposal_id is None
+
+
+def test_coordinator_rejects_expiry_for_unbound_evidence() -> None:
+    coordinator = ActiveViewSessionCoordinator(config(), evidence_ids=(EVIDENCE_ID,))
+    coordinator.handle_command(
+        {"type": "active_view_start", "session_id": SESSION_ID, "identity_id": 9},
+        now_ns=100,
+    )
+
+    events = coordinator.expire_evidence(
+        "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+        now_ns=101,
+    )
+
+    assert events[-1]["type"] == "active_view_protocol_rejected"
+    assert events[-1]["reason"] == "evidence_not_bound"
+    assert coordinator.session is not None
+    assert coordinator.session.phase is ActiveViewPhase.TARGET_LOCKED

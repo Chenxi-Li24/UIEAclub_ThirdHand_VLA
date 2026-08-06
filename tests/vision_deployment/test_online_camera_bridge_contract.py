@@ -106,6 +106,7 @@ const {{ CameraBridge }} = require({json.dumps(str(NODE_BRIDGE))});
 const bridge = new CameraBridge({{
   onlineEnabled: true,
   visionConfig: '/tmp/vision.yaml',
+  activeViewConfig: '/tmp/active-view.yaml',
   lumosSnapshotUrl: 'http://127.0.0.1:3001/frame.jpg'
 }});
 const writes = [];
@@ -131,6 +132,7 @@ process.stdout.write(JSON.stringify({{
   writes,
   onlineEnabled: spec.env.VISION_ONLINE_ENABLED,
   visionConfig: spec.env.VISION_CONFIG,
+  activeViewConfig: spec.env.ACTIVE_VIEW_CONFIG,
   lumosUrl: spec.env.LUMOS_SNAPSHOT_URL,
   overlayFd: spec.env.VISION_OVERLAY_FD,
   releasedStreamFlowing: paused.readableFlowing
@@ -157,6 +159,7 @@ process.stdout.write(JSON.stringify({{
         ],
         "onlineEnabled": "1",
         "visionConfig": "/tmp/vision.yaml",
+        "activeViewConfig": "/tmp/active-view.yaml",
         "lumosUrl": "http://127.0.0.1:3001/frame.jpg",
         "overlayFd": "4",
         "releasedStreamFlowing": True,

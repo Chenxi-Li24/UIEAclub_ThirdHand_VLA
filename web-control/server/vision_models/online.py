@@ -27,6 +27,7 @@ from vision.online_frames import CameraRoleMap, FramePair
 from vision.types import InvalidDataError
 
 from .contracts import InstanceDetection, ModelContractError, validated_rgb_image
+from .active_view_online import ActiveViewTargetReport
 from .offline_replay import IdentityReplayFormatError
 
 
@@ -179,11 +180,13 @@ class OnlinePerceptionResult:
     task_checkpoint_validated: bool
     robot_execution_enabled: bool
     blockers: tuple[str, ...]
+    active_view_reports: tuple[ActiveViewTargetReport, ...]
     model_error: Optional[str] = None
 
     def to_event(self) -> dict[str, Any]:
         payload = {
             "blockers": list(self.blockers),
+            "active_view_reports": [report.to_dict() for report in self.active_view_reports],
             "canonical_rgb_source": self.canonical_rgb_source,
             "frame_id": int(self.frame_id),
             "gpu_memory_reserved_gib": self.gpu_memory_reserved_gib,
@@ -226,7 +229,15 @@ def _cuda_reserved_gib() -> Optional[float]:
 class OnlinePerceptionEngine:
     """Run one latest Lumos frame through segmentation, DINO, and fusion."""
 
-    def __init__(self, segmenter, encoder, perception, config: OnlineVisionConfig) -> None:
+    def __init__(
+        self,
+        segmenter,
+        encoder,
+        perception,
+        config: OnlineVisionConfig,
+        *,
+        active_view=None,
+    ) -> None:
         if not callable(getattr(segmenter, "predict", None)):
             raise ModelContractError("segmenter must expose predict(image_rgb)")
         if not callable(getattr(encoder, "encode", None)):
@@ -237,10 +248,13 @@ class OnlinePerceptionEngine:
             raise ModelContractError("config must be an OnlineVisionConfig")
         if perception.config.roles != config.roles:
             raise ModelContractError("engine and fusion camera roles must match")
+        if active_view is not None and not callable(getattr(active_view, "evaluate", None)):
+            raise ModelContractError("active-view adapter must expose evaluate()")
         self.segmenter = segmenter
         self.encoder = encoder
         self.perception = perception
         self.config = config
+        self.active_view = active_view
         self._latencies_ms: deque[float] = deque(maxlen=256)
 
     @property
@@ -256,6 +270,7 @@ class OnlinePerceptionEngine:
         annotations: tuple[OnlineAnnotation, ...],
         model_ready: bool,
         blockers: tuple[str, ...],
+        active_view_reports: tuple[ActiveViewTargetReport, ...] = (),
         model_error: Optional[str] = None,
     ) -> OnlinePerceptionResult:
         latency_ms = max(0.0, (time.perf_counter_ns() - started_ns) / 1_000_000.0)
@@ -283,6 +298,7 @@ class OnlinePerceptionEngine:
             task_checkpoint_validated=self.config.task_checkpoint_validated,
             robot_execution_enabled=False,
             blockers=tuple(combined),
+            active_view_reports=active_view_reports,
             model_error=model_error,
         )
 
@@ -343,6 +359,47 @@ class OnlinePerceptionEngine:
             blockers.extend(reason for target in targets for reason in target.reasons)
             if not self.config.task_checkpoint_validated:
                 blockers.append("task_checkpoint_unvalidated")
+            active_view_reports: tuple[ActiveViewTargetReport, ...] = ()
+            if self.active_view is not None:
+                try:
+                    candidate_reports = tuple(
+                        self.active_view.evaluate(
+                            detections=detections,
+                            targets=targets,
+                            rgb_stamp=pair.rgb.stamp,
+                            robot_pose=robot_pose,
+                            calibration=calibration,
+                            arm_stationary=arm_stationary,
+                            now_ns=now_ns,
+                        )
+                    )
+                    if any(
+                        not isinstance(report, ActiveViewTargetReport)
+                        for report in candidate_reports
+                    ):
+                        raise ModelContractError("active-view adapter returned an invalid report")
+                    active_view_reports = candidate_reports[:256]
+                except Exception as active_view_error:
+                    if isinstance(active_view_error, (KeyboardInterrupt, SystemExit)):
+                        raise
+                    detection_id = detections[0].detection_id if detections else 0
+                    identity_id = targets[0].identity_id if targets else None
+                    active_view_reports = (
+                        ActiveViewTargetReport(
+                            detection_id=detection_id,
+                            identity_id=identity_id,
+                            kind="none",
+                            target_pose_id=None,
+                            expires_ns=None,
+                            coarse_center_xy_m=None,
+                            valid_depth_points=0,
+                            central_fraction=None,
+                            depth_acceptable=None,
+                            reasons=("active_view_adapter_unavailable",),
+                            active_view_execution_enabled=False,
+                        ),
+                    )
+                    blockers.append("active_view_adapter_unavailable")
             return self._finish(
                 pair=pair,
                 started_ns=started_ns,
@@ -350,6 +407,7 @@ class OnlinePerceptionEngine:
                 annotations=annotations,
                 model_ready=True,
                 blockers=tuple(dict.fromkeys(blockers)),
+                active_view_reports=active_view_reports,
             )
         except Exception as error:
             if isinstance(error, (KeyboardInterrupt, SystemExit)):

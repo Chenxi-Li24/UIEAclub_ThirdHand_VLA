@@ -28,6 +28,10 @@ from vision.online_frames import DepthFrame, LatestFramePairer
 from vision.types import FrameStamp
 from vision.calibration_gate import sdk_pose_transform
 from vision_models.dino import DinoMaskEncoder
+from vision_models.active_view_online import (
+    ActiveViewDryRunAdapter,
+    load_active_view_config,
+)
 from vision_models.lumos_client import LumosSnapshotClient
 from vision_models.online import (
     OnlinePerceptionEngine,
@@ -45,6 +49,12 @@ VISION_CONFIG = Path(
     os.environ.get(
         "VISION_CONFIG",
         str(Path(__file__).resolve().parents[2] / "configs/vision/remind3d.yaml"),
+    )
+).resolve()
+ACTIVE_VIEW_CONFIG = Path(
+    os.environ.get(
+        "ACTIVE_VIEW_CONFIG",
+        str(Path(__file__).resolve().parents[2] / "configs/vision/active_view.yaml"),
     )
 ).resolve()
 LUMOS_SNAPSHOT_URL = os.environ.get(
@@ -76,6 +86,7 @@ def emit_event(message: dict[str, Any]) -> None:
     safe.setdefault("ts", int(time.time() * 1000))
     if safe.get("type") in {"vision_status", "detection_result", "vision_error"}:
         safe["robot_execution_enabled"] = False
+        safe["active_view_execution_enabled"] = False
     encoded = json.dumps(
         safe,
         ensure_ascii=False,
@@ -318,6 +329,7 @@ def capture_d435(retry_initial_s: float = 0.5) -> None:
 
 def _load_online_engine():
     config = load_online_vision_config(VISION_CONFIG)
+    active_view_config = load_active_view_config(ACTIVE_VIEW_CONFIG)
     emit(
         "vision_status",
         online=False,
@@ -325,6 +337,7 @@ def _load_online_engine():
         canonical_rgb_source=config.roles.canonical_rgb_source,
         metric_depth_source=config.roles.metric_depth_source,
         task_checkpoint_validated=config.task_checkpoint_validated,
+        active_view_execution_enabled=False,
         blockers=["model_loading", "calibration_unavailable"],
     )
     segmenter = RTMDetInstanceSegmenter(
@@ -343,7 +356,14 @@ def _load_online_engine():
     perception = DualCameraPerception(
         PersistentIdentityMemory(config.identity_config), config.perception_config
     )
-    return config, OnlinePerceptionEngine(segmenter, encoder, perception, config)
+    active_view = ActiveViewDryRunAdapter(active_view_config)
+    return config, OnlinePerceptionEngine(
+        segmenter,
+        encoder,
+        perception,
+        config,
+        active_view=active_view,
+    )
 
 
 def run_online_perception() -> None:
@@ -478,6 +498,7 @@ def main() -> None:
         "bridge_ready",
         source="camera_bridge",
         vision_online_enabled=VISION_ONLINE_ENABLED,
+        active_view_execution_enabled=False,
         canonical_rgb_source="lumos_rgb",
         metric_depth_source="d435_depth",
     )

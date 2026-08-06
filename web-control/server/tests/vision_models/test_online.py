@@ -10,6 +10,7 @@ from vision.instance_pose import InstancePoseConfig
 from vision.online_frames import CameraRoleMap, FramePair, RgbFrame
 from vision.types import FrameStamp
 from vision_models.contracts import InstanceDetection, ModelContractError
+from vision_models.active_view_online import ActiveViewTargetReport
 from vision_models.online import OnlinePerceptionEngine, OnlineVisionConfig, render_overlay
 
 
@@ -122,13 +123,14 @@ def perception() -> DualCameraPerception:
     )
 
 
-def engine(detections=(None,), error=None) -> OnlinePerceptionEngine:
+def engine(detections=(None,), error=None, active_view=None) -> OnlinePerceptionEngine:
     selected = (detection(),) if detections == (None,) else detections
     return OnlinePerceptionEngine(
         FakeSegmenter(selected, error=error),
         FakeEncoder(),
         perception(),
         config(),
+        active_view=active_view,
     )
 
 
@@ -222,3 +224,62 @@ def test_overlay_keeps_native_dimensions_and_event_contains_plain_finite_json():
     assert json.loads(json.dumps(payload, allow_nan=False)) == payload
     assert payload["targets"][0]["identity_id"] == 1
     assert payload["canonical_rgb_source"] == "lumos_rgb"
+
+
+class SyntheticActiveView:
+    def evaluate(self, **kwargs):
+        target = kwargs["targets"][0]
+        return (
+            ActiveViewTargetReport(
+                detection_id=target.detection_id,
+                identity_id=target.identity_id,
+                kind="coarse_pose",
+                target_pose_id="table_left",
+                expires_ns=1_200_000_000,
+                coarse_center_xy_m=np.array([0.2, -0.1]),
+                valid_depth_points=0,
+                central_fraction=None,
+                depth_acceptable=False,
+                reasons=(),
+                active_view_execution_enabled=False,
+            ),
+        )
+
+
+class BrokenActiveView:
+    def evaluate(self, **_kwargs):
+        raise ModelContractError("synthetic active-view failure")
+
+
+def test_online_event_contains_bounded_nonexecuting_active_view_report() -> None:
+    result = engine(active_view=SyntheticActiveView()).process(
+        pair(),
+        robot_pose=None,
+        calibration=None,
+        arm_stationary=True,
+        now_ns=1_020_000_000,
+    )
+    payload = result.to_event()
+    report = payload["active_view_reports"][0]
+
+    assert report["identity_id"] == payload["targets"][0]["identity_id"]
+    assert report["active_view_execution_enabled"] is False
+    assert report["target_pose_id"] == "table_left"
+    encoded = json.dumps(report).lower()
+    for forbidden in ("move_l", "move_joint", "trajectory", "gripper", "can"):
+        assert forbidden not in encoded
+
+
+def test_active_view_adapter_error_does_not_make_model_unavailable() -> None:
+    result = engine(active_view=BrokenActiveView()).process(
+        pair(),
+        robot_pose=None,
+        calibration=None,
+        arm_stationary=True,
+        now_ns=1_020_000_000,
+    )
+
+    assert result.model_ready is True
+    assert len(result.targets) == 1
+    assert result.active_view_reports[0].reasons == ("active_view_adapter_unavailable",)
+    assert "active_view_adapter_unavailable" in result.blockers

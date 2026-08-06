@@ -6,8 +6,13 @@ from pathlib import Path
 import numpy as np
 import pytest
 
+from vision.dual_camera import DualCameraTarget
+from vision.identity import IdentityStatus
+from vision.types import FrameStamp
 from vision.types import InvalidDataError
+from vision_models.contracts import InstanceDetection
 from vision_models.active_view_online import (
+    ActiveViewDryRunAdapter,
     load_active_view_config,
     load_active_view_config_dict,
 )
@@ -133,3 +138,94 @@ def _valid_config_dict() -> dict:
         },
         "observation_poses": [],
     }
+
+
+def _detection(detection_id: int = 7) -> InstanceDetection:
+    mask = np.zeros((9, 9), dtype=bool)
+    mask[2:8, 3:6] = True
+    return InstanceDetection(
+        detection_id=detection_id,
+        label="bottle",
+        score=0.9,
+        bbox_xyxy=np.array([3.0, 2.0, 6.0, 8.0]),
+        mask=mask,
+    )
+
+
+def _target(detection_id: int = 7) -> DualCameraTarget:
+    return DualCameraTarget(
+        detection_id=detection_id,
+        label="bottle",
+        score=0.9,
+        identity_id=3,
+        identity_status=IdentityStatus.CONFIRMED,
+        pose=None,
+        registered_depth_points=0,
+        actionable=False,
+        reasons=("calibration_unavailable",),
+    )
+
+
+def test_checked_in_adapter_reports_blockers_without_motion_payload() -> None:
+    adapter = ActiveViewDryRunAdapter(
+        load_active_view_config(PROJECT_ROOT / "configs/vision/active_view.yaml")
+    )
+
+    reports = adapter.evaluate(
+        detections=(_detection(),),
+        targets=(_target(),),
+        rgb_stamp=FrameStamp("lumos_rgb", 1, 1_000),
+        robot_pose=None,
+        calibration=None,
+        arm_stationary=True,
+        now_ns=1_000,
+    )
+
+    assert len(reports) == 1
+    report = reports[0].to_dict()
+    assert report["identity_id"] == 3
+    assert report["active_view_execution_enabled"] is False
+    assert report["kind"] == "none"
+    assert "table_unvalidated" in report["reasons"]
+    assert "observation_catalog_empty" in report["reasons"]
+    assert "calibration_unavailable" in report["reasons"]
+    assert "robot_pose_unavailable" in report["reasons"]
+    encoded = str(report).lower()
+    for forbidden in ("move_l", "move_joint", "trajectory", "gripper", "can"):
+        assert forbidden not in encoded
+
+
+def test_adapter_matches_by_detection_id_and_bounds_reports() -> None:
+    adapter = ActiveViewDryRunAdapter(
+        load_active_view_config(PROJECT_ROOT / "configs/vision/active_view.yaml")
+    )
+    detections = tuple(_detection(index) for index in range(300))
+
+    reports = adapter.evaluate(
+        detections=detections,
+        targets=(_target(299),),
+        rgb_stamp=FrameStamp("lumos_rgb", 1, 1_000),
+        robot_pose=None,
+        calibration=None,
+        arm_stationary=False,
+        now_ns=1_000,
+    )
+
+    assert len(reports) == 256
+    assert reports[0].detection_id == 0
+    assert reports[-1].detection_id == 255
+    assert all(report.identity_id is None for report in reports)
+    assert all("target_result_missing" in report.reasons for report in reports)
+
+
+def test_active_view_adapter_is_a_public_model_boundary() -> None:
+    import vision_models
+
+    expected = {
+        "ActiveViewConfig",
+        "ActiveViewDryRunAdapter",
+        "ActiveViewTargetReport",
+        "load_active_view_config",
+    }
+    assert expected <= set(vision_models.__all__)
+    assert vision_models.ActiveViewDryRunAdapter is ActiveViewDryRunAdapter

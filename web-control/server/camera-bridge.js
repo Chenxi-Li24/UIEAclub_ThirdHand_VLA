@@ -75,6 +75,8 @@ class CameraBridge extends EventEmitter {
     const script = path.join(__dirname, 'camera_bridge.py');
     const visionConfig = this.config.visionConfig || process.env.VISION_CONFIG ||
       path.resolve(__dirname, '../../configs/vision/remind3d.yaml');
+    const activeViewConfig = this.config.activeViewConfig || process.env.ACTIVE_VIEW_CONFIG ||
+      path.resolve(__dirname, '../../configs/vision/active_view.yaml');
     const lumosSnapshotUrl = this.config.lumosSnapshotUrl ||
       process.env.LUMOS_SNAPSHOT_URL || 'http://127.0.0.1:3001/frame.jpg';
     const onlineEnabled = this.config.onlineEnabled === undefined
@@ -92,6 +94,7 @@ class CameraBridge extends EventEmitter {
         VISION_OVERLAY_FD: '4',
         VISION_ONLINE_ENABLED: onlineEnabled ? '1' : '0',
         VISION_CONFIG: visionConfig,
+        ACTIVE_VIEW_CONFIG: activeViewConfig,
         LUMOS_SNAPSHOT_URL: lumosSnapshotUrl,
       },
       stdio: ['pipe', 'pipe', 'pipe', 'pipe', 'pipe'],

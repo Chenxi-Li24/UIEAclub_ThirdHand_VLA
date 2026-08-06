@@ -66,6 +66,8 @@ module.exports = {
     onlineEnabled: process.env.VISION_ONLINE_ENABLED === '1',
     visionConfig: process.env.VISION_CONFIG ||
       path.resolve(__dirname, '../../configs/vision/remind3d.yaml'),
+    activeViewConfig: process.env.ACTIVE_VIEW_CONFIG ||
+      path.resolve(__dirname, '../../configs/vision/active_view.yaml'),
     lumosSnapshotUrl: process.env.LUMOS_SNAPSHOT_URL ||
       'http://127.0.0.1:3001/frame.jpg',
     yoloModel: process.env.CAMERA_YOLO_MODEL || path.join(__dirname, 'yolov8n.pt'),

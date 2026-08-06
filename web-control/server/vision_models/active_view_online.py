@@ -3,15 +3,24 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
 
 import numpy as np
 import yaml
 
+from vision.active_view_geometry import estimate_table_target
 from vision.active_view_types import ObservationPose, TablePlane
-from vision.types import InvalidDataError
+from vision.dual_camera import (
+    DualCameraCalibrationBundle,
+    DualCameraTarget,
+    StampedRobotPose,
+)
+from vision.geometry import validate_transform
+from vision.types import FrameStamp, InvalidDataError
+
+from .contracts import InstanceDetection
 
 
 _TOP_LEVEL_KEYS = {
@@ -219,6 +228,259 @@ class ActiveViewConfig:
         object.__setattr__(self, "observation_poses", poses)
 
 
+@dataclass(frozen=True)
+class ActiveViewTargetReport:
+    """Bounded presentation record; intentionally excludes all motion payloads."""
+
+    detection_id: int
+    identity_id: Optional[int]
+    kind: str
+    target_pose_id: Optional[str]
+    expires_ns: Optional[int]
+    coarse_center_xy_m: Optional[np.ndarray] = field(compare=False)
+    valid_depth_points: int
+    central_fraction: Optional[float]
+    depth_acceptable: Optional[bool]
+    reasons: tuple[str, ...]
+    active_view_execution_enabled: bool = False
+
+    def __post_init__(self) -> None:
+        if isinstance(self.detection_id, bool) or not isinstance(self.detection_id, int):
+            raise InvalidDataError("active-view report detection_id must be non-negative")
+        if self.detection_id < 0:
+            raise InvalidDataError("active-view report detection_id must be non-negative")
+        if self.identity_id is not None and (
+            isinstance(self.identity_id, bool)
+            or not isinstance(self.identity_id, int)
+            or self.identity_id < 0
+        ):
+            raise InvalidDataError("active-view report identity_id must be non-negative")
+        if self.kind not in {"none", "coarse_pose", "refine_delta"}:
+            raise InvalidDataError("active-view report kind is invalid")
+        if self.target_pose_id is not None and (
+            not isinstance(self.target_pose_id, str) or not self.target_pose_id
+        ):
+            raise InvalidDataError("active-view report target pose ID is invalid")
+        if self.expires_ns is not None and (
+            isinstance(self.expires_ns, bool)
+            or not isinstance(self.expires_ns, int)
+            or self.expires_ns < 0
+        ):
+            raise InvalidDataError("active-view report expiry is invalid")
+        if self.coarse_center_xy_m is None:
+            center = None
+        else:
+            center = np.array(self.coarse_center_xy_m, dtype=float, copy=True)
+            if center.shape != (2,) or not np.isfinite(center).all():
+                raise InvalidDataError("active-view coarse center must be a finite XY vector")
+            center.setflags(write=False)
+        if (
+            isinstance(self.valid_depth_points, bool)
+            or not isinstance(self.valid_depth_points, int)
+            or self.valid_depth_points < 0
+        ):
+            raise InvalidDataError("active-view valid depth count is invalid")
+        if self.central_fraction is not None:
+            fraction = float(self.central_fraction)
+            if not np.isfinite(fraction) or not 0.0 <= fraction <= 1.0:
+                raise InvalidDataError("active-view central fraction must be within [0, 1]")
+        else:
+            fraction = None
+        if self.depth_acceptable is not None and not isinstance(self.depth_acceptable, bool):
+            raise InvalidDataError("active-view depth quality state must be a boolean or null")
+        reasons = tuple(self.reasons)
+        if any(
+            not isinstance(reason, str) or not reason or len(reason) > 128
+            for reason in reasons
+        ):
+            raise InvalidDataError("active-view report reasons must be bounded strings")
+        if self.active_view_execution_enabled is not False:
+            raise InvalidDataError("active-view report execution must remain disabled")
+        object.__setattr__(self, "coarse_center_xy_m", center)
+        object.__setattr__(self, "central_fraction", fraction)
+        object.__setattr__(self, "reasons", reasons[:32])
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "active_view_execution_enabled": False,
+            "central_fraction": self.central_fraction,
+            "coarse_center_xy_m": (
+                None
+                if self.coarse_center_xy_m is None
+                else self.coarse_center_xy_m.tolist()
+            ),
+            "depth_acceptable": self.depth_acceptable,
+            "detection_id": self.detection_id,
+            "expires_ns": self.expires_ns,
+            "identity_id": self.identity_id,
+            "kind": self.kind,
+            "reasons": list(self.reasons),
+            "target_pose_id": self.target_pose_id,
+            "valid_depth_points": self.valid_depth_points,
+        }
+
+
+class ActiveViewDryRunAdapter:
+    """Adapt online perception outputs into non-executing active-view reports."""
+
+    max_reports = 256
+    max_frame_age_ns = 200_000_000
+
+    def __init__(self, config: ActiveViewConfig) -> None:
+        if not isinstance(config, ActiveViewConfig):
+            raise InvalidDataError("active-view adapter requires ActiveViewConfig")
+        self.config = config
+
+    def evaluate(
+        self,
+        *,
+        detections: Any,
+        targets: Any,
+        rgb_stamp: FrameStamp,
+        robot_pose: Optional[StampedRobotPose],
+        calibration: Optional[DualCameraCalibrationBundle],
+        arm_stationary: bool,
+        now_ns: int,
+    ) -> tuple[ActiveViewTargetReport, ...]:
+        detection_items = tuple(detections)
+        target_items = tuple(targets)
+        if any(not isinstance(item, InstanceDetection) for item in detection_items):
+            raise InvalidDataError("active-view adapter received an invalid detection")
+        if any(not isinstance(item, DualCameraTarget) for item in target_items):
+            raise InvalidDataError("active-view adapter received an invalid target")
+        if not isinstance(rgb_stamp, FrameStamp):
+            raise InvalidDataError("active-view adapter requires RGB frame provenance")
+        if not isinstance(arm_stationary, bool):
+            raise InvalidDataError("active-view arm state must be a boolean")
+        if (
+            isinstance(now_ns, bool)
+            or not isinstance(now_ns, int)
+            or now_ns < rgb_stamp.monotonic_ns
+        ):
+            raise InvalidDataError("active-view adapter time is invalid")
+        if robot_pose is not None and not isinstance(robot_pose, StampedRobotPose):
+            raise InvalidDataError("active-view adapter robot pose is invalid")
+        if calibration is not None and not isinstance(calibration, DualCameraCalibrationBundle):
+            raise InvalidDataError("active-view adapter calibration is invalid")
+
+        target_by_detection: dict[int, DualCameraTarget] = {}
+        for target in target_items:
+            if target.detection_id in target_by_detection:
+                raise InvalidDataError("active-view targets contain duplicate detection IDs")
+            target_by_detection[target.detection_id] = target
+
+        common_reasons: list[str] = []
+        if not self.config.dry_run_enabled:
+            common_reasons.append("active_view_dry_run_disabled")
+        if not self.config.table_plane.validated:
+            common_reasons.append("table_unvalidated")
+        if not self.config.observation_poses:
+            common_reasons.append("observation_catalog_empty")
+        if calibration is None:
+            common_reasons.append("calibration_unavailable")
+        elif not calibration.calibration.validated:
+            common_reasons.append("calibration_not_validated")
+        if robot_pose is None:
+            common_reasons.append("robot_pose_unavailable")
+        if not arm_stationary:
+            common_reasons.append("arm_not_stationary")
+        if now_ns - rgb_stamp.monotonic_ns > self.max_frame_age_ns:
+            common_reasons.append("camera_frames_stale")
+
+        reports: list[ActiveViewTargetReport] = []
+        for detection in detection_items[: self.max_reports]:
+            target = target_by_detection.get(detection.detection_id)
+            if target is None:
+                reports.append(
+                    self._blocked_report(
+                        detection.detection_id,
+                        None,
+                        ("target_result_missing",),
+                    )
+                )
+                continue
+            reasons = list(common_reasons)
+            if target.identity_id is None:
+                reasons.append("identity_unavailable")
+            coarse_center = None
+            geometry_ready = not any(
+                reason
+                in {
+                    "active_view_dry_run_disabled",
+                    "table_unvalidated",
+                    "calibration_unavailable",
+                    "calibration_not_validated",
+                    "robot_pose_unavailable",
+                    "arm_not_stationary",
+                    "camera_frames_stale",
+                    "identity_unavailable",
+                }
+                for reason in reasons
+            )
+            if geometry_ready:
+                assert calibration is not None
+                assert robot_pose is not None
+                assert target.identity_id is not None
+                try:
+                    calibration.verify_integrity()
+                    t_base_from_lumos = validate_transform(
+                        robot_pose.t_base_from_flange @ calibration.t_flange_from_lumos
+                    )
+                    estimate = estimate_table_target(
+                        target.identity_id,
+                        detection.mask,
+                        calibration.lumos,
+                        t_base_from_lumos,
+                        self.config.table_plane,
+                        rgb_stamp,
+                    )
+                    coarse_center = estimate.center_xy_m
+                    if self.config.observation_poses:
+                        reasons.append("current_joints_unavailable")
+                except InvalidDataError:
+                    reasons.append("coarse_geometry_unavailable")
+            depth_acceptable = bool(
+                target.pose is not None
+                and target.registered_depth_points >= self.config.min_depth_points
+            )
+            reports.append(
+                ActiveViewTargetReport(
+                    detection_id=detection.detection_id,
+                    identity_id=target.identity_id,
+                    kind="none",
+                    target_pose_id=None,
+                    expires_ns=None,
+                    coarse_center_xy_m=coarse_center,
+                    valid_depth_points=target.registered_depth_points,
+                    central_fraction=None,
+                    depth_acceptable=depth_acceptable,
+                    reasons=tuple(dict.fromkeys(reasons)),
+                    active_view_execution_enabled=False,
+                )
+            )
+        return tuple(reports)
+
+    @staticmethod
+    def _blocked_report(
+        detection_id: int,
+        identity_id: Optional[int],
+        reasons: tuple[str, ...],
+    ) -> ActiveViewTargetReport:
+        return ActiveViewTargetReport(
+            detection_id=detection_id,
+            identity_id=identity_id,
+            kind="none",
+            target_pose_id=None,
+            expires_ns=None,
+            coarse_center_xy_m=None,
+            valid_depth_points=0,
+            central_fraction=None,
+            depth_acceptable=None,
+            reasons=reasons,
+            active_view_execution_enabled=False,
+        )
+
+
 def load_active_view_config_dict(raw: Any) -> ActiveViewConfig:
     """Validate an untrusted mapping into an execution-locked config."""
 
@@ -365,6 +627,8 @@ def load_active_view_config(path: Path | str) -> ActiveViewConfig:
 
 __all__ = [
     "ActiveViewConfig",
+    "ActiveViewDryRunAdapter",
+    "ActiveViewTargetReport",
     "load_active_view_config",
     "load_active_view_config_dict",
 ]

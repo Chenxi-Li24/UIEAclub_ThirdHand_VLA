@@ -34,7 +34,7 @@ def _evidence_ids(values: Any, *, allow_empty: bool = False) -> tuple[str, ...]:
     return result
 
 
-def _readonly_convex_polygon(value: Any) -> np.ndarray:
+def validated_coverage_polygon(value: Any) -> np.ndarray:
     polygon = np.array(value, dtype=float, copy=True)
     if polygon.ndim != 2 or polygon.shape[1:] != (2,) or polygon.shape[0] < 3:
         raise InvalidDataError("coverage polygon must contain at least three XY vertices")
@@ -124,7 +124,7 @@ class ObservationPose:
             np.linalg.det(rotation), 1.0, atol=1e-6
         ):
             raise InvalidDataError("observation transform rotation must be rigid")
-        polygon = _readonly_convex_polygon(self.coverage_polygon_xy_m)
+        polygon = validated_coverage_polygon(self.coverage_polygon_xy_m)
         starts = tuple(self.allowed_start_pose_ids)
         if not starts or any(not isinstance(item, str) or not item for item in starts):
             raise InvalidDataError("observation pose requires allowed start pose IDs")

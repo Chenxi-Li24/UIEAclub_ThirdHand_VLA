@@ -1,5 +1,12 @@
 """Offline-first vision geometry, tracking, and Dry Run safety core."""
 
+from .active_view_types import (
+    CoarseTargetEstimate,
+    DepthQuality,
+    ObservationMoveProposal,
+    ObservationPose,
+    TablePlane,
+)
 from .camera_models import PinholeCamera, SeucmCamera
 from .calibration_gate import CalibrationAudit, audit_handeye_calibration, sdk_pose_transform
 from .depth_registration import RegisteredDepth, register_depth_to_lumos
@@ -52,6 +59,11 @@ from .types import (
 )
 
 __all__ = [
+    "CoarseTargetEstimate",
+    "DepthQuality",
+    "ObservationMoveProposal",
+    "ObservationPose",
+    "TablePlane",
     "CalibrationRef",
     "CalibrationAudit",
     "DryRunReport",

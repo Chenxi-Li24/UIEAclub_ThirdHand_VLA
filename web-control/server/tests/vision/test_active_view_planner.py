@@ -5,8 +5,15 @@ from dataclasses import replace
 import numpy as np
 import pytest
 
-from vision.active_view_planner import match_observation_pose, select_observation_pose
+from vision.active_view_planner import (
+    evaluate_depth_quality,
+    match_observation_pose,
+    propose_refinement,
+    select_observation_pose,
+)
 from vision.active_view_types import CoarseTargetEstimate, ObservationPose, TablePlane
+from vision.camera_models import PinholeCamera
+from vision.depth_registration import RegisteredDepth
 from vision.types import FrameStamp, InvalidDataError
 from vision_models.active_view_online import load_active_view_config_dict
 
@@ -237,6 +244,201 @@ def test_selector_rejects_table_calibration_change() -> None:
 def test_observation_selector_is_a_public_pure_vision_interface() -> None:
     import vision
 
+    assert "evaluate_depth_quality" in vision.__all__
     assert "match_observation_pose" in vision.__all__
+    assert "propose_refinement" in vision.__all__
     assert "select_observation_pose" in vision.__all__
+    assert vision.evaluate_depth_quality is evaluate_depth_quality
     assert vision.select_observation_pose is select_observation_pose
+
+
+def d435() -> PinholeCamera:
+    return PinholeCamera(100.0, 100.0, 50.0, 50.0, 100, 100)
+
+
+def registered_cloud(points: np.ndarray) -> RegisteredDepth:
+    points = np.asarray(points, dtype=float)
+    height, width, _ = points.shape
+    valid = np.isfinite(points).all(axis=2)
+    z_m = np.full((height, width), np.nan)
+    range_m = np.full((height, width), np.nan)
+    z_m[valid] = points[..., 2][valid]
+    range_m[valid] = np.linalg.norm(points[valid], axis=1)
+    frozen_points = np.full((height, width, 3), np.nan)
+    frozen_points[valid] = points[valid]
+    return RegisteredDepth(
+        z_m=z_m,
+        range_m=range_m,
+        valid=valid,
+        source_count=valid.astype(np.int32),
+        points_lumos_m=frozen_points,
+    )
+
+
+def point_grid(*, center_x: float = 0.0, size: int = 10) -> np.ndarray:
+    offsets = np.linspace(-0.01, 0.01, size)
+    xx, yy = np.meshgrid(offsets + center_x, offsets)
+    return np.stack((xx, yy, np.ones_like(xx)), axis=2)
+
+
+def test_good_central_depth_requests_no_extra_motion() -> None:
+    registered = registered_cloud(point_grid())
+    quality = evaluate_depth_quality(
+        registered=registered,
+        target_mask=np.ones(registered.valid.shape, dtype=bool),
+        d435=d435(),
+        t_d435_from_lumos=np.eye(4),
+        t_base_from_lumos=np.eye(4),
+        config=config(),
+    )
+
+    assert quality.valid_points == 100
+    assert quality.central_fraction == pytest.approx(1.0)
+    assert quality.acceptable is True
+    assert quality.reasons == ()
+    proposal = propose_refinement(
+        3,
+        quality,
+        np.eye(4),
+        FrameStamp("lumos+d435", 2, 1_000),
+        1_000,
+        0,
+        config(),
+        (CALIBRATION_ID,),
+    )
+    assert proposal.kind == "none"
+    assert proposal.reasons == ("depth_quality_sufficient",)
+
+
+def test_off_center_depth_produces_clipped_lateral_only_refinement() -> None:
+    registered = registered_cloud(point_grid(center_x=0.35))
+    quality = evaluate_depth_quality(
+        registered,
+        np.ones(registered.valid.shape, dtype=bool),
+        d435(),
+        np.eye(4),
+        np.eye(4),
+        config(),
+    )
+    proposal = propose_refinement(
+        3,
+        quality,
+        np.eye(4),
+        FrameStamp("lumos+d435", 2, 1_000),
+        1_000,
+        0,
+        config(),
+        (CALIBRATION_ID,),
+    )
+
+    assert quality.valid_points == 100
+    assert quality.central_fraction == pytest.approx(0.0)
+    assert quality.reasons == ("insufficient_central_coverage",)
+    assert proposal.kind == "refine_delta"
+    assert proposal.delta_base_m is not None
+    assert np.linalg.norm(proposal.delta_base_m) == pytest.approx(0.020)
+    assert proposal.delta_base_m[2] == pytest.approx(0.0)
+    np.testing.assert_allclose(proposal.rotation_delta_rad, np.zeros(3))
+
+
+def test_depth_quality_reports_sparse_and_behind_camera_points() -> None:
+    sparse = registered_cloud(point_grid(size=5))
+    sparse_quality = evaluate_depth_quality(
+        sparse,
+        np.ones(sparse.valid.shape, dtype=bool),
+        d435(),
+        np.eye(4),
+        np.eye(4),
+        config(),
+    )
+    assert sparse_quality.valid_points == 25
+    assert sparse_quality.reasons == ("insufficient_depth_points",)
+
+    behind_transform = np.eye(4)
+    behind_transform[:3, :3] = np.diag([1.0, -1.0, -1.0])
+    behind_quality = evaluate_depth_quality(
+        registered_cloud(point_grid()),
+        np.ones((10, 10), dtype=bool),
+        d435(),
+        behind_transform,
+        np.eye(4),
+        config(),
+    )
+    assert behind_quality.valid_points == 0
+    assert behind_quality.center_d435_m is None
+    assert behind_quality.reasons == (
+        "no_projectable_depth_points",
+        "insufficient_depth_points",
+        "insufficient_central_coverage",
+    )
+
+
+def test_refinement_limit_and_missing_depth_fail_closed() -> None:
+    registered = registered_cloud(point_grid(center_x=0.35))
+    quality = evaluate_depth_quality(
+        registered,
+        np.ones(registered.valid.shape, dtype=bool),
+        d435(),
+        np.eye(4),
+        np.eye(4),
+        config(),
+    )
+    exhausted = propose_refinement(
+        3,
+        quality,
+        np.eye(4),
+        FrameStamp("lumos+d435", 2, 1_000),
+        1_000,
+        3,
+        config(),
+        (CALIBRATION_ID,),
+    )
+    assert exhausted.kind == "none"
+    assert exhausted.reasons == ("view_refinement_exhausted",)
+
+    behind_transform = np.eye(4)
+    behind_transform[:3, :3] = np.diag([1.0, -1.0, -1.0])
+    missing_quality = evaluate_depth_quality(
+        registered_cloud(point_grid()),
+        np.ones((10, 10), dtype=bool),
+        d435(),
+        behind_transform,
+        np.eye(4),
+        config(),
+    )
+    missing = propose_refinement(
+        3,
+        missing_quality,
+        np.eye(4),
+        FrameStamp("lumos+d435", 2, 1_000),
+        1_000,
+        0,
+        config(),
+        (CALIBRATION_ID,),
+    )
+    assert missing.kind == "none"
+    assert missing.reasons == ("depth_geometry_unavailable",)
+
+
+def test_depth_quality_rejects_mask_and_transform_mismatch() -> None:
+    registered = registered_cloud(point_grid())
+    with pytest.raises(InvalidDataError, match="target mask"):
+        evaluate_depth_quality(
+            registered,
+            np.ones(registered.valid.shape, dtype=np.uint8),
+            d435(),
+            np.eye(4),
+            np.eye(4),
+            config(),
+        )
+    bad_transform = np.eye(4)
+    bad_transform[3, 3] = 2.0
+    with pytest.raises(InvalidDataError, match="transform"):
+        evaluate_depth_quality(
+            registered,
+            np.ones(registered.valid.shape, dtype=bool),
+            d435(),
+            bad_transform,
+            np.eye(4),
+            config(),
+        )

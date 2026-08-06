@@ -11,6 +11,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
+from vision.types import InvalidDataError
+
 ROOT = Path(__file__).parents[2]
 PYTHON_BRIDGE = ROOT / "web-control/server/camera_bridge.py"
 NODE_BRIDGE = ROOT / "web-control/server/camera-bridge.js"
@@ -266,7 +268,7 @@ def test_d435_capture_supervisor_retries_after_transient_start_failure(monkeypat
     bridge = load_python_bridge()
     attempts = []
 
-    def fake_once():
+    def fake_once(_provenance):
         attempts.append(len(attempts) + 1)
         if len(attempts) == 2:
             bridge.shutdown_flag.set()
@@ -279,6 +281,43 @@ def test_d435_capture_supervisor_retries_after_transient_start_failure(monkeypat
         bridge.shutdown_flag.clear()
 
     assert attempts == [1, 2]
+
+
+def test_d435_capture_provenance_strictly_advances_across_retries(monkeypatch):
+    """A device reconnect must not reset the process-level depth frame identity."""
+
+    bridge = load_python_bridge()
+    stamps = []
+
+    def fake_once(provenance):
+        stamps.append(provenance.next_stamp(1_000 + len(stamps)))
+        if len(stamps) == 2:
+            bridge.shutdown_flag.set()
+
+    monkeypatch.setattr(bridge, "_capture_d435_once", fake_once)
+    bridge.shutdown_flag.clear()
+    try:
+        bridge.capture_d435(retry_initial_s=0.0)
+    finally:
+        bridge.shutdown_flag.clear()
+
+    assert [stamp.source for stamp in stamps] == ["d435_depth", "d435_depth"]
+    assert [stamp.frame_id for stamp in stamps] == [1, 2]
+    assert [stamp.monotonic_ns for stamp in stamps] == [1_000, 1_001]
+
+
+def test_frame_stamp_sequencer_rejects_invalid_source_and_nonadvancing_time():
+    bridge = load_python_bridge()
+
+    with pytest.raises(InvalidDataError, match="source"):
+        bridge.FrameStampSequencer("")
+
+    provenance = bridge.FrameStampSequencer("d435_depth")
+    assert provenance.next_stamp(100).frame_id == 1
+    with pytest.raises(InvalidDataError, match="strictly advance"):
+        provenance.next_stamp(100)
+    with pytest.raises(InvalidDataError, match="strictly advance"):
+        provenance.next_stamp(True)
 
 
 def test_d435_and_lumos_outputs_cannot_block_each_other():

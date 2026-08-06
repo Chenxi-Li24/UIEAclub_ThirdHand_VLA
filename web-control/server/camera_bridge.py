@@ -24,6 +24,7 @@ import cv2
 import numpy as np
 
 from vision.camera_models import PinholeCamera
+from vision.capture_provenance import FrameStampSequencer
 from vision.dual_camera import DualCameraPerception, StampedRobotPose
 from vision.identity import PersistentIdentityMemory
 from vision.online_frames import DepthFrame, LatestFramePairer
@@ -520,7 +521,7 @@ def _d435_debug_frame(
     return encoded.tobytes()
 
 
-def _capture_d435_once() -> None:
+def _capture_d435_once(provenance: FrameStampSequencer) -> None:
     """Own the D435 exactly once and publish aligned depth in metres."""
 
     pipeline = None
@@ -571,27 +572,26 @@ def _capture_d435_once() -> None:
             resolution=[FRAME_WIDTH, FRAME_HEIGHT],
             calibration_validated=False,
         )
-        frame_id = 0
         while not shutdown_flag.is_set():
             frames = align.process(pipeline.wait_for_frames(timeout_ms=1000))
             color = frames.get_color_frame()
             depth = frames.get_depth_frame()
             if not color or not depth:
                 continue
-            frame_id += 1
             monotonic_ns = time.monotonic_ns()
+            stamp = provenance.next_stamp(monotonic_ns)
             frame_bgr = np.array(np.asanyarray(color.get_data()), copy=True)
             raw_depth = np.array(np.asanyarray(depth.get_data()), dtype=np.uint16, copy=True)
             depth_m = depth_to_metres(raw_depth, depth_scale)
             debug_jpeg = _d435_debug_frame(
                 frame_bgr,
                 raw_depth,
-                frame_id,
+                stamp.frame_id,
                 inner_roi_fraction,
             )
             sample = D435Sample(
                 depth=DepthFrame(
-                    FrameStamp("d435_depth", frame_id, monotonic_ns), depth_m
+                    stamp, depth_m
                 ),
                 camera=camera,
                 debug_jpeg=debug_jpeg,
@@ -617,8 +617,9 @@ def capture_d435(retry_initial_s: float = 0.5) -> None:
     """Retry transient USB/UVC startup failures without growing a frame queue."""
 
     backoff_s = max(0.0, float(retry_initial_s))
+    provenance = FrameStampSequencer("d435_depth")
     while not shutdown_flag.is_set():
-        _capture_d435_once()
+        _capture_d435_once(provenance)
         if shutdown_flag.is_set():
             return
         emit(

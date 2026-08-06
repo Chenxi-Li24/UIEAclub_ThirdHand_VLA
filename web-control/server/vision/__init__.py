@@ -33,6 +33,7 @@ from .active_view_types import (
     TablePlane,
 )
 from .camera_models import PinholeCamera, SeucmCamera
+from .capture_provenance import FrameStampSequencer
 from .calibration_gate import CalibrationAudit, audit_handeye_calibration, sdk_pose_transform
 from .depth_registration import RegisteredDepth, register_depth_to_lumos
 from .dual_camera import (
@@ -123,6 +124,7 @@ __all__ = [
     "DualCameraTarget",
     "StampedRobotPose",
     "FrameStamp",
+    "FrameStampSequencer",
     "GraspCandidate",
     "IdentityAssignment",
     "IdentityObservation",

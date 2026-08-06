@@ -12,6 +12,8 @@
       justify-content: space-between; align-items: center; gap: 16px; }
     header h1 { margin: 0; font-size: 17px; }
     .lock { color: #ffbd5b; font-weight: 700; }
+    #demo-banner { margin: 0; padding: 11px 20px; color: #061018; background: #ffbd5b;
+      font-weight: 800; text-align: center; letter-spacing: .02em; }
     button { border: 1px solid #3d5668; border-radius: 7px; background: #1d2a34;
       color: #eef3f6; padding: 8px 11px; cursor: pointer; }
     button:disabled { cursor: not-allowed; opacity: .45; }
@@ -52,16 +54,19 @@
       robotExecutionEnabled = false · activeViewExecutionEnabled = false
     </span>
   </header>
+  <p id="demo-banner" hidden>
+    纯浏览器模拟 · 合成相机与深度数据 · 不连接后端、机械臂或夹爪
+  </p>
   <main>
     <section class="camera-grid" aria-label="camera streams">
       <figure>
         <figcaption><strong>Lumos 主视图</strong><span>canonical RGB / identity</span></figcaption>
-        <div class="feed"><img id="lumos" src="/camera_lumos_vision"
-          data-stream="/camera_lumos_vision" alt="Lumos inference overlay"></div>
+        <div class="feed"><img id="lumos" data-stream="/camera_lumos_vision"
+          alt="Lumos inference overlay"></div>
       </figure>
       <figure>
         <figcaption><strong>D435 辅助视图</strong><span>metric depth / debug RGB</span></figcaption>
-        <div class="feed"><img id="d435" src="/camera" data-stream="/camera"
+        <div class="feed"><img id="d435" data-stream="/camera"
           alt="D435 depth debug stream"></div>
       </figure>
     </section>
@@ -106,17 +111,29 @@
       <p class="muted">Lumos 用于广角识别与身份连续性；D435 用于近场度量深度。页面只发送身份、会话和提案 ID，不发送坐标或抓取命令；每一步均需人工确认。</p>
     </aside>
   </main>
+  <script src="/active-view-demo.js"></script>
   <script>
     'use strict';
     const byId = id => document.getElementById(id);
     const text = (id, value) => { byId(id).textContent = value; };
     const finite = value => Number.isFinite(value) ? value : null;
+    const demoMode = new URLSearchParams(location.search).get('demo') === '1';
+    const demo = demoMode ? window.ThirdHandActiveViewDemo?.createActiveViewDemo() : null;
     let latestStatus = null;
     let sessionId = null;
     let proposalId = null;
     let socket = null;
 
     function sendCommand(payload) {
+      if (demoMode) {
+        const result = demo.send(payload);
+        const outcome = result.accepted === false
+          ? `模拟拒绝：${result.reason ?? 'unknown'}`
+          : `${result.action ?? 'command'} 已在浏览器模拟中受理`;
+        text('active-result', outcome);
+        if (result.sessionId) sessionId = result.sessionId;
+        return;
+      }
       if (!socket || socket.readyState !== WebSocket.OPEN) {
         text('active-result', '控制连接尚未就绪');
         return;
@@ -125,6 +142,11 @@
     }
 
     function connectControl() {
+      if (demoMode) {
+        demo.subscribe(render);
+        text('active-result', '纯浏览器模拟已就绪 · 不创建控制连接');
+        return;
+      }
       const scheme = location.protocol === 'https:' ? 'wss:' : 'ws:';
       socket = new WebSocket(`${scheme}//${location.host}/ws`);
       socket.addEventListener('open', () => text('active-result', 'ID-only 控制通道已连接'));
@@ -170,7 +192,21 @@
         setTimeout(() => { image.src = `${source}?retry=${Date.now()}`; }, delay);
       });
     }
-    document.querySelectorAll('img[data-stream]').forEach(bindRetry);
+    function initializeCameraStreams() {
+      const images = document.querySelectorAll('img[data-stream]');
+      if (demoMode) {
+        document.body.dataset.mode = 'demo';
+        byId('demo-banner').hidden = false;
+        byId('lumos').src = demo.cameraPanels.lumos;
+        byId('d435').src = demo.cameraPanels.d435;
+        return;
+      }
+      document.body.dataset.mode = 'live';
+      images.forEach(image => {
+        bindRetry(image);
+        image.src = image.dataset.stream;
+      });
+    }
 
     function render(status) {
       latestStatus = status;
@@ -187,7 +223,9 @@
       text('age', status.sourceAgeMs === null ? '—' : `${status.sourceAgeMs.toFixed(0)} ms`);
       text('targets', String(status.targets.length));
       const control = status.activeView?.control ?? {};
-      const terminalPhase = new Set(['idle', 'aborted', 'complete']).has(control.phase);
+      const restartablePhase = new Set(['idle', 'aborted', 'complete']).has(control.phase);
+      const terminalPhase = new Set(['idle', 'grasp_preview', 'aborted', 'complete'])
+        .has(control.phase);
       const targetList = byId('active-targets');
       const eligibleTargets = status.stale ? [] : status.targets.filter(
         target => target.identityStatus === 'confirmed' && Number.isSafeInteger(target.identityId),
@@ -200,7 +238,7 @@
         const start = document.createElement('button');
         start.type = 'button';
         start.textContent = '开始主动观察';
-        start.disabled = !terminalPhase;
+        start.disabled = !restartablePhase;
         start.addEventListener('click', () => {
           const identityId = target.identityId;
           sendCommand({ cmd: 'start_active_view', identityId });
@@ -331,6 +369,10 @@
     }
 
     async function refresh() {
+      if (demoMode) {
+        render(demo.snapshot());
+        return;
+      }
       try {
         const response = await fetch('/api/vision/status', { cache: 'no-store' });
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
@@ -340,9 +382,10 @@
         byId('online').className = 'bad';
       }
     }
+    initializeCameraStreams();
     refresh();
     connectControl();
-    setInterval(refresh, 1000);
+    if (!demoMode) setInterval(refresh, 1000);
   </script>
 </body>
 </html>

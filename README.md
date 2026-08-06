@@ -1,102 +1,156 @@
+<div align="center">
+
 # ThirdHand VLA
 
-ThirdHand VLA is a desktop robotic-arm platform for the Lumos Touch R1 and
-Lumos Ego camera. It combines local perception, guarded robot control, optional
-cloud VLA reasoning, and browser-based operator tools.
+**A safety-bounded research platform for visual/3D robotic perception, verifiable VLA candidates, and reproducible evidence.**<br>
+**面向视觉/三维机器人感知、可验证 VLA 候选与可复现实验证据的安全边界研究平台。**
 
-Chinese documentation: [README_CN.md](README_CN.md)
+[![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python&logoColor=white)](pyproject.toml)
+[![License](https://img.shields.io/badge/License-MIT-4C1?logo=open-source-initiative&logoColor=white)](LICENSE)
+![Research alpha](https://img.shields.io/badge/Research-alpha-F59E0B)
+[![CI workflow](https://img.shields.io/badge/CI-workflow-6B7280?logo=githubactions&logoColor=white)](.github/workflows)
 
-## Repository layout
+**[中文教程 / Chinese tutorial](README_CN.md)** · **[English tutorial](README_EN.md)**
 
-| Path | Responsibility |
-| --- | --- |
-| `src/uiea_thirdhand_vla/` | Installable Python VLA application and FastAPI console |
-| `web-control/` | Standalone Startouch SDK bridge, camera services, and operator UI |
-| `configs/` | Portable robot, camera, task, and vision configuration |
-| `scripts/` | Calibration, deployment, demo, and validation entry points |
-| `tests/` | Offline application and workflow tests |
-| `docs/` | Architecture, setup, API, safety, and research records |
+</div>
 
-See [docs/architecture.md](docs/architecture.md) for component boundaries and
-data flow.
+> **Safety status / 安全状态：** Online vision is observational; the checked-in
+> configuration keeps `robot_execution_enabled: false`. No result in this repository
+> validates vision-triggered robot motion. 在线视觉仅用于观测；仓库配置保持
+> `robot_execution_enabled: false`，没有任何结果证明视觉触发的机器人运动已经验收。
 
-## Quick start
+## Research focus / 研究主轴
 
-Python 3.10 or newer is required.
-
-```bash
-git clone https://github.com/Oliveirah007/UIEAclub_ThirdHand_VLA.git
-cd UIEAclub_ThirdHand_VLA
-python -m venv .venv
-. .venv/bin/activate
-pip install -e ".[core]"
-cp .env.example .env
-python -m uiea_thirdhand_vla
-```
-
-Open `http://localhost:8000` for the packaged FastAPI console.
-
-## Startouch hardware web control
-
-The independently deployable `web-control/` service controls the robot through
-the Startouch SDK and `can0`. Read
-[web-control/README.md](web-control/README.md) and verify the hardware stop
-before enabling motion.
-
-```bash
-cp web-control/.env.example web-control/.env
-web-control/scripts/setup_ubuntu.sh
-web-control/scripts/start_ubuntu.sh
-```
-
-Open `http://<robot-host>:3000`. The UI proxies the Startouch bridge and D435
-stream; the Lumos HTTP stream listens on port `3001` when enabled.
-
-## Fixed A/B pick-and-place demo
-
-The fixed-point demo has an independent loopback-only control page. It checks
-the branch, `can0`, point validity, joint limits, speed, logs, and competing
-control processes before motion.
-
-```bash
-bash scripts/demo_fixed_pick_place.sh
-# Or open the loopback dashboard:
-bash scripts/open_fixed_pick_place_control.sh
-```
-
-Open `http://127.0.0.1:8766`. Do not run it alongside another CAN controller.
-Detailed operating and safety instructions are in
-[web-control/FIXED_PICK_PLACE.md](web-control/FIXED_PICK_PLACE.md).
-
-## Service ports
-
-| Port | Bind/default | Service |
+| Track | What the repository supports now | Research position |
 | --- | --- | --- |
-| `8000` | `0.0.0.0` | Packaged VLA FastAPI console |
-| `3000` | `0.0.0.0` | Startouch proxy and browser UI |
-| `3001` | `0.0.0.0` | Lumos camera HTTP/MJPEG service |
-| `8766` | `127.0.0.1` | Fixed-point demo control page |
+| **Vision & 3D / 视觉与三维** | Lumos RGB, D435 depth health, instance masks, identity memory, uncertainty-aware gating, and read-only online observation. | **Primary / 主轴** — calibrated 3D and comparative study evidence remain incomplete. |
+| **Verifiable VLA / 可验证 VLA** | Structured candidates, local preview, confirmation, deterministic validation, refusal, timeout, and recovery interfaces. | **Secondary / 次轴** — candidate generation is not robot authority. |
+| **Safe Execution Platform / 安全执行平台** | Packaged console, Startouch web stack, fixed-point demo, safety/state-machine boundaries, and port separation. | **Platform / 平台** — a supervised boundary, not the paper's principal claim. |
+| **Reproducible Evidence / 可复现实验证据** | Claim, dataset, baseline, figure, and reproducibility templates with machine-readable schemas. | **Evidence contract / 证据契约** — no planned figure is a result. |
 
-Override ports through the corresponding YAML or environment configuration.
+### Maturity legend / 成熟度图例
 
-## Models and runtime data
+| Level | Meaning |
+| --- | --- |
+| **Implemented / 已实现** | Code or documented interface exists in this repository. |
+| **Verified / 已验证** | A linked, scoped test or dated measurement supports the stated behavior. |
+| **Experimental / 实验性** | Usable for bounded research/Dry Run evaluation; not a validated general capability. |
+| **Planned / 计划中** | A protocol, schema, or intended artifact exists, but no result is claimed. |
 
-Downloaded `*.pt` and `*.onnx` weights, logs, PID files, captured frames, and
-operator point backups are local runtime artifacts and are not committed. See
-[docs/model_assets.md](docs/model_assets.md) for model setup and configuration.
+### Capability status / 能力状态
 
-## Development verification
+| Capability | Maturity | Repository evidence | Boundary / interpretation |
+| --- | --- | --- | --- |
+| Dual-camera perception and persistent identity | **Experimental** | [dated REMIND-3D deployment record](docs/vision_research/REMIND3D_DEPLOYMENT_RESULTS.md) | Lumos is canonical RGB; D435 supplies metric-depth health. Missing calibration keeps targets non-actionable. |
+| Read-only online Dry Run | **Verified** | [2026-08-05 deployment record](docs/vision_research/REMIND3D_DEPLOYMENT_RESULTS.md) | The record states `robot_execution_enabled: false`; no CAN, Startouch, robot, or gripper I/O belongs to this vision path. |
+| Candidate → preview → validation/refusal boundary | **Implemented** | [Verifiable VLA track](docs/research/README.md) | It constrains a proposed decision before robot authority; no VLA comparison result is represented. |
+| Comparative figures and paper claims | **Planned** | [figure manifest](docs/research/figure_manifest.md) | Each listed figure needs source artifacts and a reproducible generation command. |
+
+## Architecture / 系统边界
+
+```mermaid
+flowchart LR
+    subgraph OBS["Observational vision data / 观测视觉数据"]
+        LUMOS["Lumos RGB service\n:3001"] --> VISION["Vision & 3D pipeline\nmask · depth health · identity · uncertainty"]
+        D435["D435 metric depth"] --> VISION
+    end
+
+    subgraph APPS["Application and operator services / 应用与操作服务"]
+        VLA["Packaged Python VLA application\n:8000"]
+        WEB["Startouch Web stack\n:3000"]
+        FIXED["Fixed-point control\n127.0.0.1:8766"]
+        VOICE["Voice / VLA candidate"] --> VLA
+        OP["Operator"] --> WEB
+        OP --> FIXED
+    end
+
+    subgraph LOCAL["Local safety/state-machine boundary / 本地安全状态机边界"]
+        CAND["Structured candidate"] --> PREVIEW["Preview · confirmation\nvalidation · refusal · timeout"]
+        VISION -. "observational context only" .-> CAND
+        VLA --> CAND
+        PREVIEW --> LOCK["Execution lock\nrobot_execution_enabled: false"]
+    end
+
+    WEB --> BRIDGE["Startouch bridge / guarded robot-control path"]
+    FIXED --> BRIDGE
+    LOCK -. "no VLA/vision command authority" .-> BRIDGE
+    BRIDGE --> ROBOT["Robot + gripper"]
+```
+
+Vision observations inform candidates, but do not grant actuator authority. The local
+boundary must produce preview, confirmation, validation, or refusal before any
+separately supervised control path is considered. The fixed-point page is loopback
+only; do not run competing CAN controllers. See [architecture details](docs/architecture.md)
+and [fixed-point safety instructions](web-control/FIXED_PICK_PLACE.md).
+
+## Safe quick start / 安全快速开始
+
+Python 3.10+ is required. This is the shortest offline L0/L1 verification path:
 
 ```bash
+git clone https://github.com/Chenxi-Li24/UIEAclub_ThirdHand_VLA.git
+cd UIEAclub_ThirdHand_VLA
+python3 -m venv .venv
+. .venv/bin/activate
+python -m pip install --upgrade pip
 pip install -e ".[core,dev]"
 ruff check src/ tests/
 mypy src/
 STARTOUCH_CAN_INTERFACE=thirdhand-test pytest tests/ -q --ignore=tests/e2e/
-pytest web-control/server/tests/ -q
 ```
 
-The test interface name prevents offline lock tests from competing with a live
-`can0` controller.
+These commands install and test local software only; they **do not authorize hardware
+motion**. Keep the physical emergency stop available before any separately approved
+hardware procedure. For service-specific setup, read the [architecture](docs/architecture.md),
+[web-control guide](web-control/README.md), and [model/runtime-data notes](docs/model_assets.md).
+
+## Evidence preview / 证据预览
+
+The [research evidence hub](docs/research/README.md) separates measured records from
+future artifacts. `Planned Evidence / 待补实验证据` means no result exists.
+`Evidence Incomplete / 待补充证据` is reserved for a partial result whose sample
+count, confidence interval, statistical method, or source evidence is absent,
+inadequate, or untraceable. Protocol readiness is recorded separately from evidence
+status.
+
+### Planned figure registry / 计划图表登记
+
+All entries below are **Planned Evidence**; intended visuals are not measurements.
+Release requirements are maintained in the [full figure manifest](docs/research/figure_manifest.md).
+
+| ID | Intended visual | Status | Required source artifact |
+| --- | --- | --- | --- |
+| V1 | Lumos mask + D435 depth + robot-base 3D | Planned Evidence | Timestamped RGB/depth, calibration, masks, 3D points, manifest |
+| V2 | Identity before/during/after occlusion | Planned Evidence | Replay frames, tracks, scores, memory, annotations, manifest |
+| V3 | Registration error, radial residuals, uncertainty | Planned Evidence | Calibration targets, residual/error/covariance records, manifest |
+| L1 | Instruction → candidate → preview → decision trace | Planned Evidence | Scenario, visual context, candidate, confirmation, validator log |
+| E1 | Baseline comparison with confidence intervals | Planned Evidence | Baseline records, counts, intervals, source CSV/JSON, manifests |
+| E2 | Controlled ablation table or curve | Planned Evidence | Variant configs, seeds, result records, source CSV/JSON |
+| E3 | Accuracy–latency–resource trade-off | Planned Evidence | Accuracy, P50/P95, FPS, resource and environment records |
+| F1 | Declared representative success/failure cases | Planned Evidence | Selection rule, scenario traces, failure taxonomy, manifests |
+
+### Dated measured deployment records / 已链接的日期测量记录
+
+These scoped observations are not comparative paper results and do not authorize
+robot execution. They are included only because the linked deployment report records
+the measurements and date.
+
+| Date | Measured record | Source |
+| --- | --- | --- |
+| 2026-08-05 | Dual-camera online Dry Run: 1,801 samples over 1,800 seconds; zero errors and zero samples with execution enabled. | [REMIND-3D deployment results](docs/vision_research/REMIND3D_DEPLOYMENT_RESULTS.md) |
+| 2026-08-05 | Real Lumos GPU smoke: six instance masks; p95 latency 48.893 ms; `robot_execution_enabled=false`. | [REMIND-3D deployment results](docs/vision_research/REMIND3D_DEPLOYMENT_RESULTS.md) |
+| 2026-08-05 | Deterministic identity replay: five frames, zero ID switches, one ambiguous observation, and zero forced ambiguous assignments. | [REMIND-3D deployment results](docs/vision_research/REMIND3D_DEPLOYMENT_RESULTS.md) |
+
+## Repository map / 仓库导航
+
+| Path | Role |
+| --- | --- |
+| [`src/uiea_thirdhand_vla/`](src/uiea_thirdhand_vla/) | Installable Python VLA application and FastAPI console (`:8000`) |
+| [`web-control/`](web-control/) | Startouch bridge, camera services, and operator UI (`:3000`; Lumos RGB `:3001`) |
+| [`configs/`](configs/) | Robot, camera, task, and vision configuration |
+| [`scripts/`](scripts/) | Calibration, deployment, demo, and validation entry points |
+| [`tests/`](tests/) | Offline application and workflow tests |
+| [`docs/research/`](docs/research/) | Research evidence contracts, schemas, and planned figure registry |
 
 ## License
 

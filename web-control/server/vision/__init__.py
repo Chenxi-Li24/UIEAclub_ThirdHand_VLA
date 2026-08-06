@@ -83,6 +83,8 @@ from .types import (
 
 __all__ = [
     "ActiveViewPhase",
+    "ActiveViewReplayError",
+    "ActiveViewReplayMetrics",
     "ActiveViewSession",
     "Cancel",
     "CoarseTargetEstimate",
@@ -158,6 +160,7 @@ __all__ = [
     "rpy_xyz_to_matrix",
     "sdk_pose_transform",
     "run_replay",
+    "run_active_view_replay",
     "transform_points",
 ]
 
@@ -169,4 +172,12 @@ def __getattr__(name: str):
         from . import replay
 
         return getattr(replay, name)
+    if name in {
+        "ActiveViewReplayError",
+        "ActiveViewReplayMetrics",
+        "run_active_view_replay",
+    }:
+        from . import active_view_replay
+
+        return getattr(active_view_replay, name)
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

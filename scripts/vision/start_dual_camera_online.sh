@@ -10,6 +10,7 @@ TASK_USER_HOME="$(getent passwd "$(id -u)" | cut -d: -f6)"
 TASK_MODEL_PYTHON="${CAMERA_PYTHON:-$TASK_USER_HOME/miniconda3/envs/thirdhand-remind3d/bin/python}"
 TASK_NODE="$(command -v node || true)"
 TASK_CONFIG="$TASK_ROOT_DIR/configs/vision/remind3d.yaml"
+TASK_ACTIVE_VIEW_CONFIG="$TASK_ROOT_DIR/configs/vision/active_view.yaml"
 TASK_LUMOS_HEALTH="http://127.0.0.1:3001/health"
 TASK_LUMOS_FRAME="http://127.0.0.1:3001/frame.jpg"
 TASK_SYSTEMD_UNIT="thirdhand-dual-camera-online"
@@ -41,6 +42,8 @@ validate_owned_pid() {
   grep -Fxq 'WEB_PORT=3100' <<<"$task_environment" || return 2
   grep -Fxq 'STARTOUCH_SIMULATE=1' <<<"$task_environment" || return 2
   grep -Fxq 'VISION_ONLINE_ENABLED=1' <<<"$task_environment" || return 2
+  grep -Fxq "ACTIVE_VIEW_CONFIG=$TASK_ACTIVE_VIEW_CONFIG" \
+    <<<"$task_environment" || return 2
   printf '%s\n' "$task_pid"
 }
 
@@ -69,6 +72,10 @@ preflight() {
     printf 'vision config not found: %s\n' "$TASK_CONFIG" >&2
     return 1
   }
+  [[ -f "$TASK_ACTIVE_VIEW_CONFIG" ]] || {
+    printf 'active-view config not found: %s\n' "$TASK_ACTIVE_VIEW_CONFIG" >&2
+    return 1
+  }
   usb_present 040e f408 || {
     printf 'Lumos USB 040e:f408 not found\n' >&2
     return 1
@@ -93,13 +100,17 @@ preflight() {
     return 1
   fi
   rm -f "$task_headers"
-  PYTHONPATH="$TASK_SERVER_DIR" "$TASK_MODEL_PYTHON" - "$TASK_CONFIG" <<'PY'
+  PYTHONPATH="$TASK_SERVER_DIR" "$TASK_MODEL_PYTHON" - \
+    "$TASK_CONFIG" "$TASK_ACTIVE_VIEW_CONFIG" <<'PY'
 import pathlib
 import pyrealsense2 as rs
 import sys
+from vision_models.active_view_online import load_active_view_config
 from vision_models.online import load_online_vision_config
 config = load_online_vision_config(pathlib.Path(sys.argv[1]))
+active_view = load_active_view_config(pathlib.Path(sys.argv[2]))
 assert config.robot_execution_enabled is False
+assert active_view.execution_enabled is False
 assert config.roles.canonical_rgb_source == "lumos_rgb"
 assert config.roles.metric_depth_source == "d435_depth"
 print("VISION_PREFLIGHT=PASS")
@@ -139,6 +150,7 @@ server_environment() {
     CAMERA_PYTHON="$TASK_MODEL_PYTHON" \
     VISION_ONLINE_ENABLED=1 \
     VISION_CONFIG="$TASK_CONFIG" \
+    ACTIVE_VIEW_CONFIG="$TASK_ACTIVE_VIEW_CONFIG" \
     LUMOS_SNAPSHOT_URL="$TASK_LUMOS_FRAME" \
     LUMOS_STREAM_URL=http://127.0.0.1:3001/camera_lumos \
     WEB_HOST=0.0.0.0 \
@@ -177,6 +189,7 @@ start_background() {
     --setenv=CAMERA_PYTHON="$TASK_MODEL_PYTHON" \
     --setenv=VISION_ONLINE_ENABLED=1 \
     --setenv=VISION_CONFIG="$TASK_CONFIG" \
+    --setenv=ACTIVE_VIEW_CONFIG="$TASK_ACTIVE_VIEW_CONFIG" \
     --setenv=LUMOS_SNAPSHOT_URL="$TASK_LUMOS_FRAME" \
     --setenv=LUMOS_STREAM_URL=http://127.0.0.1:3001/camera_lumos \
     --setenv=WEB_HOST=0.0.0.0 \

@@ -1,0 +1,157 @@
+{
+  "schema_version": 1,
+  "config": {
+    "schema_version": 1,
+    "dry_run_enabled": true,
+    "active_view_execution_enabled": false,
+    "table_plane": {
+      "normal_base": [0.0, 0.0, 1.0],
+      "offset_m": 0.0,
+      "position_rmse_m": 0.004,
+      "calibration_id": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+      "validated": true
+    },
+    "quality": {
+      "inner_roi_fraction": 0.6,
+      "coverage_margin_m": 0.01,
+      "min_depth_points": 80,
+      "min_central_fraction": 0.6,
+      "stable_sample_count": 5,
+      "max_center_deviation_m": 0.01,
+      "max_axis_mad_m": 0.005
+    },
+    "motion_proposals": {
+      "max_translation_m": 0.02,
+      "max_rotation_deg": 5.0,
+      "max_refinement_steps": 3,
+      "proposal_ttl_ms": 200
+    },
+    "observation_poses": [
+      {
+        "pose_id": "home",
+        "joints_deg": [0, 0, 0, 0, 0, 0],
+        "t_base_from_flange": [[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0.5], [0, 0, 0, 1]],
+        "coverage_polygon_xy_m": [[-0.1, -0.1], [0.1, -0.1], [0.1, 0.1], [-0.1, 0.1]],
+        "allowed_start_pose_ids": ["home"],
+        "path_validation_id": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+        "calibration_id": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+        "joint_tolerance_deg": 0.5
+      },
+      {
+        "pose_id": "table_left",
+        "joints_deg": [-10, -10, -10, -10, -10, -10],
+        "t_base_from_flange": [[1, 0, 0, -0.2], [0, 1, 0, 0.1], [0, 0, 1, 0.5], [0, 0, 0, 1]],
+        "coverage_polygon_xy_m": [[-0.6, 0.0], [-0.2, 0.0], [-0.2, 0.4], [-0.6, 0.4]],
+        "allowed_start_pose_ids": ["home"],
+        "path_validation_id": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+        "calibration_id": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+        "joint_tolerance_deg": 0.5
+      },
+      {
+        "pose_id": "table_right",
+        "joints_deg": [10, 10, 10, 10, 10, 10],
+        "t_base_from_flange": [[1, 0, 0, 0.2], [0, 1, 0, -0.1], [0, 0, 1, 0.5], [0, 0, 0, 1]],
+        "coverage_polygon_xy_m": [[0.2, -0.3], [0.6, -0.3], [0.6, 0.1], [0.2, 0.1]],
+        "allowed_start_pose_ids": ["home"],
+        "path_validation_id": "sha256:4444444444444444444444444444444444444444444444444444444444444444",
+        "calibration_id": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+        "joint_tolerance_deg": 0.5
+      }
+    ]
+  },
+  "frames": [
+    {
+      "frame_id": 1,
+      "monotonic_ns": 100,
+      "targets": [{
+        "mode": "coarse",
+        "track_key": "bottle-a",
+        "identity_id": 1,
+        "label": "bottle",
+        "calibration_id": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+        "center_xy_m": [-0.4, 0.2],
+        "covariance_xy_m2": [[0.0001, 0.0], [0.0, 0.0001]],
+        "samples_xy_m": [[-0.42, 0.18], [-0.4, 0.2], [-0.38, 0.22]],
+        "current_joints_deg": [0, 0, 0, 0, 0, 0],
+        "expected_kind": "coarse_pose",
+        "expected_pose_id": "table_left"
+      }]
+    },
+    {
+      "frame_id": 2,
+      "monotonic_ns": 200,
+      "targets": [{
+        "mode": "coarse",
+        "track_key": "bottle-b",
+        "identity_id": 2,
+        "label": "bottle",
+        "calibration_id": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+        "center_xy_m": [0.4, -0.1],
+        "covariance_xy_m2": [[0.0001, 0.0], [0.0, 0.0001]],
+        "samples_xy_m": [[0.38, -0.12], [0.4, -0.1], [0.42, -0.08]],
+        "current_joints_deg": [0, 0, 0, 0, 0, 0],
+        "expected_kind": "coarse_pose",
+        "expected_pose_id": "table_right"
+      }]
+    },
+    {
+      "frame_id": 3,
+      "monotonic_ns": 300,
+      "targets": [{
+        "mode": "coarse",
+        "track_key": "bottle-a",
+        "identity_id": 1,
+        "label": "bottle",
+        "calibration_id": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+        "center_xy_m": [0.9, 0.9],
+        "covariance_xy_m2": [[0.0001, 0.0], [0.0, 0.0001]],
+        "samples_xy_m": [[0.88, 0.88], [0.9, 0.9], [0.92, 0.92]],
+        "current_joints_deg": [0, 0, 0, 0, 0, 0],
+        "expected_kind": "none",
+        "expected_reason": "target_not_covered"
+      }]
+    },
+    {
+      "frame_id": 4,
+      "monotonic_ns": 400,
+      "targets": [{
+        "mode": "depth",
+        "track_key": "bottle-a",
+        "identity_id": 1,
+        "label": "bottle",
+        "calibration_id": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+        "valid_points": 100,
+        "central_fraction": 0.8,
+        "center_d435_m": [0.0, 0.0, 0.5],
+        "center_base_m": [0.2, 0.1, 0.5],
+        "mad_m": [0.001, 0.001, 0.001],
+        "acceptable": true,
+        "reasons": [],
+        "step_index": 0,
+        "expected_kind": "none",
+        "expected_reason": "depth_quality_sufficient"
+      }]
+    },
+    {
+      "frame_id": 5,
+      "monotonic_ns": 500,
+      "targets": [{
+        "mode": "depth",
+        "track_key": "bottle-a",
+        "identity_id": 1,
+        "label": "bottle",
+        "calibration_id": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+        "valid_points": 100,
+        "central_fraction": 0.2,
+        "center_d435_m": [0.35, 0.0, 0.5],
+        "center_base_m": [0.2, 0.1, 0.5],
+        "mad_m": [0.001, 0.001, 0.001],
+        "acceptable": false,
+        "reasons": ["insufficient_central_coverage"],
+        "step_index": 0,
+        "expected_kind": "refine_delta",
+        "expected_translation_norm_m": 0.02
+      }]
+    }
+  ]
+}

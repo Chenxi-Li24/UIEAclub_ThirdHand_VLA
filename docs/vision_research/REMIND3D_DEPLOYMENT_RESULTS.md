@@ -259,3 +259,38 @@ Hugging Face 访问权限，凭据不得写入仓库。
 4. Lumos 内参、D435-to-Lumos 外参和手眼标定仍需重新采集并独立验证，随后验收绝对三维位置。
 5. 上述项目全部通过前，在线服务只发布不可操作的 Dry Run 结果，不生成可执行抓取命令，
    不移动机械臂。
+
+## 2026-08-06 主动视角 Dry Run 记录
+
+已将“Lumos 广角发现目标 → 选择 D435 观察位姿 → 深度质量门控 → 有界微调建议”
+实现为独立可组合模块。几何估计、位姿规划、身份绑定状态机、在线适配、状态展示和回放验证
+之间仅通过不可变数据契约衔接，没有机械臂 I/O 依赖。默认配置中机器人执行和主动视角执行
+均为 `false`，桌面模型为未验证，观察位姿目录为空，因此当前不可生成任何真机动作。
+
+离线确定性回放使用 5 帧，覆盖左右两个同类实例、视野未覆盖拒绝、D435 深度合格以及
+20 mm 微调限幅：
+
+```text
+frame_count=5
+proposal_count=3
+pose_selection_accuracy=1.0
+depth_quality_acceptance_rate=0.5
+identity_switches=0
+execution_proposals=0
+rejection_reasons={depth_quality_sufficient: 1, target_not_covered: 1}
+```
+
+回放产物位于 `artifacts/vision/active-view-dry-run/offline-replay-20260806.json`，SHA-256 为
+`bf80c135019a4b36ca145f19c6abe016d0adf0da45b79ba835cc5e794c445d1e`。
+
+在不重启、不重配置现有 3100 端口服务的前提下，完成了 60 秒只读实时采样。61 个采样中
+Lumos 序列增加 899、D435 序列增加 1799，机器人执行启用样本数为 0。本次就绪性检查
+不通过：当前运行的旧进程尚未暴露新增的 `activeView` 状态，所有样本均因
+`active-view status is missing` 被拒绝。这是部署版本阻塞，不是抓取就绪证据，也没有为消除
+该阻塞而重启现场服务。
+
+实时采样产物位于 `artifacts/vision/active-view-dry-run/readiness-20260806.json`，SHA-256 为
+`611bf542bea300008633c7e9b80bf952b47648dbbc67dad9fab7e1ac156be766`。两个产物均为 gitignored 运行证据。
+
+进入任何真机观察移动前，仍必须依次完成桌面模型、Lumos 内参、D435 外参/手眼标定和
+受限观察位姿目录的独立验收；第一次发送机械臂观察动作仍需人工拍板。

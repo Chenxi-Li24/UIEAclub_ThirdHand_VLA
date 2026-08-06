@@ -786,14 +786,16 @@ stale、初态匹配或速度门禁。
 | --- | --- | --- | --- | --- | --- |
 | packaged FastAPI HTTP/WS | 配置为 `0.0.0.0:8000`；文档列出 `/api/robot/*`、`/api/camera/*`、`/api/task/*`、`/ws` | 当前 app 未见有效认证接线，CORS 为 `*` | router 文件存在但 `create_app()` 未装配，不能取得实际控制权限 | 仅接口文件中的任务/机器人停止合同，运行 app 不可依赖 | Experimental 接口合同，非可用生产 API |
 | Startouch Node HTTP | `0.0.0.0:3000`；`/`、`/diag`、`/camera`、`/camera_lumos`、`/camera_lumos_vision`、`/api/vision/status` | 无认证 | 静态页面与只读 vision status；实际控制经同服务 `/ws` | HTTP routes 不提供硬件急停 | Experimental；只能放在受控网络 |
-| Startouch Node WebSocket | `ws://<host>:3000/ws` | 无认证；只按连接级 control lock 排他 | 精确 command 集：`connect`、`disconnect`、`servo`、`preset`、`gripper`、`software_stop`、`status`、`ping`、`estop`、`grasp_object`、`estop_camera`、`camera_refresh`；运动仍经限位、稳定初态、CAN feedback/watchdog 与串行化校验 | `software_stop` 调 SDK 软件停止；`estop` 只是它的别名，**不是硬件急停**；`disconnect` 清理 bridge；`estop_camera` 只停 camera bridge | 真实控制边界，L4 现场监督；无认证，禁止暴露到不受控网络 |
+| Startouch Node WebSocket | `ws://<host>:3000/ws` | 无认证，也无 per-client ownership/authorization | 每个已连接客户端都可向共享 bridge 提交协议接受的精确 command 集：`connect`、`disconnect`、`servo`、`preset`、`gripper`、`software_stop`、`status`、`ping`、`estop`、`grasp_object`、`estop_camera`、`camera_refresh`；运动仍经限位、稳定初态、CAN feedback/watchdog、motion-active 与 queue serialization 校验，但这些是并发安全门禁，不是访问控制或调用者所有权 | `software_stop` 调 SDK 软件停止；`estop` 只是它的别名，**不是硬件急停**；`disconnect` 清理共享 bridge；`estop_camera` 只停 camera bridge | 真实控制边界；即使在受控网络，多客户端也会互相影响。L4 需由现场流程保证只有一个操作客户端，当前软件并不强制；无认证，禁止暴露到不受控网络 |
 | Lumos HTTP | `0.0.0.0:3001`；`/health`、`/frame.jpg`、`/camera_lumos` | 无认证 | camera-only、只读；frame 含 sequence/monotonic headers，不获机器人权限 | Ctrl+C/进程停止仅结束相机服务 | L3 只读；按教程改绑 loopback |
 | Voice Bridge WebSocket | 默认 `0.0.0.0:3001/v1/voice`，subprotocol `thirdhand.voice.v1` | 无认证 | audio/text → response/candidate；设计上无 RobotExecutor 且不连接 robot `/ws` | `session.stop`/断开只结束语音会话，不停止机器人 | Experimental 候选层；只能放在受控网络，且同机不能与 Lumos TCP 3001 并占 |
 | fixed demo HTTP | `127.0.0.1:8766`；GET `/api/status`；POST `/api/start`、`/api/start-auto`、`/api/stop`、`/api/continue` | 无认证，但默认仅 loopback | 只拥有自己启动的 runner；`/api/start` 为 manual，`/api/continue` 放行下一步；`/api/start-auto` 可启动自动三循环 | `/api/stop` 只停止页面拥有的 runner，不终止无关控制器，也不替代硬件急停 | Experimental、非教程入口；`/api/start-auto` 在 `validated_real_cycles: 0`、`require_step_confirmation: true` 下仍缺实现级硬门禁，L4 禁用 |
 
 `grasp_object` 当前由 `execution=false` 的授权器 fail closed，不能触发抓取；`estop_camera`
 只关闭相机 bridge；`camera_refresh` 只请求相机状态。命令名出现于协议不代表拥有执行权限，
-更不能把任何软件停止消息等同于独立硬件急停或动力切断。
+更不能把任何软件停止消息等同于独立硬件急停或动力切断。Startouch bridge 的
+per-CAN-interface `flock` 只排斥其他 controller processes，不排斥同一 Node 进程内的其他
+浏览器客户端；多个客户端可对共享连接和机器人状态相互产生影响。
 
 ### 6.10 模型和运行产物政策
 

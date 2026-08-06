@@ -88,4 +88,18 @@ module.exports = {
     // This release has no validated task checkpoint or calibration chain.
     robotExecutionEnabled: false,
   },
+
+  activeView: {
+    // Both this request and a valid short-lived approval file are required.
+    requested: process.env.ACTIVE_VIEW_EXECUTION_ENABLED === '1',
+    approvalFile: process.env.ACTIVE_VIEW_APPROVAL_FILE || '',
+    auditLog: process.env.ACTIVE_VIEW_AUDIT_LOG ||
+      path.resolve(__dirname, '../../artifacts/vision/active-view-control/events.jsonl'),
+    robotModelId: 'startouch-fasttouch-v3',
+    maxSpeedScale: 0.05,
+    maxTranslationM: 0.020,
+    maxRotationRad: 5 * Math.PI / 180,
+    maxRefinementSteps: 3,
+    requireStepConfirmation: true,
+  },
 };

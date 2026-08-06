@@ -303,6 +303,7 @@ def test_coordinator_emits_evidence_bound_proposal_and_execution_locked_state() 
     assert proposal["session_id"] == SESSION_ID
     assert proposal["evidence_ids"] == [EVIDENCE_ID]
     assert proposal["joints_deg"] == [0.0] * 6
+    assert proposal["optical_axis_base"] is None
     assert proposal["robot_execution_enabled"] is False
     assert proposal["active_view_execution_enabled"] is False
 

@@ -241,6 +241,7 @@ class ObservationMoveProposal:
     target_pose_id: Optional[str]
     joints_deg: Optional[np.ndarray] = field(compare=False)
     delta_base_m: Optional[np.ndarray] = field(compare=False)
+    optical_axis_base: Optional[np.ndarray] = field(compare=False)
     rotation_delta_rad: Optional[np.ndarray] = field(compare=False)
     evidence_ids: tuple[str, ...]
     reasons: tuple[str, ...]
@@ -264,6 +265,7 @@ class ObservationMoveProposal:
             target_pose_id=target_pose_id,
             joints_deg=joints_deg,
             delta_base_m=None,
+            optical_axis_base=None,
             rotation_delta_rad=None,
             evidence_ids=evidence_ids,
             reasons=(),
@@ -286,6 +288,7 @@ class ObservationMoveProposal:
             target_pose_id=None,
             joints_deg=None,
             delta_base_m=None,
+            optical_axis_base=None,
             rotation_delta_rad=None,
             evidence_ids=evidence_ids,
             reasons=reasons,
@@ -299,6 +302,7 @@ class ObservationMoveProposal:
         source_stamp: FrameStamp,
         expires_ns: int,
         delta_base_m: Any,
+        optical_axis_base: Any,
         rotation_delta_rad: Any,
         evidence_ids: tuple[str, ...],
     ) -> "ObservationMoveProposal":
@@ -310,6 +314,7 @@ class ObservationMoveProposal:
             target_pose_id=None,
             joints_deg=None,
             delta_base_m=delta_base_m,
+            optical_axis_base=optical_axis_base,
             rotation_delta_rad=rotation_delta_rad,
             evidence_ids=evidence_ids,
             reasons=(),
@@ -339,6 +344,7 @@ class ObservationMoveProposal:
                     self.target_pose_id,
                     self.joints_deg,
                     self.delta_base_m,
+                    self.optical_axis_base,
                     self.rotation_delta_rad,
                 )
             ):
@@ -349,7 +355,11 @@ class ObservationMoveProposal:
         elif self.kind == "coarse_pose":
             if not isinstance(self.target_pose_id, str) or not self.target_pose_id:
                 raise InvalidDataError("coarse active-view proposal requires a target pose ID")
-            if self.delta_base_m is not None or self.rotation_delta_rad is not None:
+            if (
+                self.delta_base_m is not None
+                or self.optical_axis_base is not None
+                or self.rotation_delta_rad is not None
+            ):
                 raise InvalidDataError("coarse proposal cannot contain refinement deltas")
             if reasons:
                 raise InvalidDataError("coarse proposal cannot contain rejection reasons")
@@ -373,6 +383,16 @@ class ObservationMoveProposal:
                 "delta_base_m",
                 _readonly_vector(self.delta_base_m, (3,), "delta_base_m"),
             )
+            optical_axis = _readonly_vector(
+                self.optical_axis_base,
+                (3,),
+                "optical_axis_base",
+            )
+            if not np.isclose(np.linalg.norm(optical_axis), 1.0, atol=1e-6):
+                raise InvalidDataError("optical_axis_base must be a unit vector")
+            if not np.isclose(np.dot(self.delta_base_m, optical_axis), 0.0, atol=1e-6):
+                raise InvalidDataError("refinement must be lateral to the optical axis")
+            object.__setattr__(self, "optical_axis_base", optical_axis)
             object.__setattr__(
                 self,
                 "rotation_delta_rad",

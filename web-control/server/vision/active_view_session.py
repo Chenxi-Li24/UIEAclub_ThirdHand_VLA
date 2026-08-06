@@ -786,6 +786,9 @@ class ActiveViewSessionCoordinator:
             "delta_base_m": None
             if proposal.delta_base_m is None
             else proposal.delta_base_m.tolist(),
+            "optical_axis_base": None
+            if proposal.optical_axis_base is None
+            else proposal.optical_axis_base.tolist(),
             "rotation_delta_rad": None
             if proposal.rotation_delta_rad is None
             else proposal.rotation_delta_rad.tolist(),

@@ -369,6 +369,7 @@ def propose_refinement(
         source_stamp=source_stamp,
         expires_ns=now_ns + ttl_ns,
         delta_base_m=delta_base,
+        optical_axis_base=transform[:3, 2],
         rotation_delta_rad=np.zeros(3),
         evidence_ids=evidence,
     )

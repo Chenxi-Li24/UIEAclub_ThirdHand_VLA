@@ -338,6 +338,8 @@ def test_off_center_depth_produces_clipped_lateral_only_refinement() -> None:
     assert proposal.delta_base_m is not None
     assert np.linalg.norm(proposal.delta_base_m) == pytest.approx(0.020)
     assert proposal.delta_base_m[2] == pytest.approx(0.0)
+    np.testing.assert_allclose(proposal.optical_axis_base, [0.0, 0.0, 1.0])
+    assert np.dot(proposal.delta_base_m, proposal.optical_axis_base) == pytest.approx(0.0)
     np.testing.assert_allclose(proposal.rotation_delta_rad, np.zeros(3))
 
 

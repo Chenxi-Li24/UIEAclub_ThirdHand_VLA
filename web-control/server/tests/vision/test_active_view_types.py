@@ -156,16 +156,19 @@ def test_rejected_and_refinement_proposals_have_disjoint_payloads() -> None:
         evidence_ids=(),
     )
     delta = np.array([0.01, -0.02, 0.0])
+    optical_axis = np.array([0.0, 0.0, 1.0])
     rotation = np.zeros(3)
     refined = ObservationMoveProposal.refine(
         identity_id=3,
         source_stamp=stamp,
         expires_ns=2_000,
         delta_base_m=delta,
+        optical_axis_base=optical_axis,
         rotation_delta_rad=rotation,
         evidence_ids=(EVIDENCE_ID,),
     )
     delta[:] = 9.0
+    optical_axis[:] = 9.0
     rotation[:] = 9.0
 
     assert rejected.kind == "none"
@@ -173,6 +176,7 @@ def test_rejected_and_refinement_proposals_have_disjoint_payloads() -> None:
     assert rejected.reasons == ("target_not_covered",)
     assert refined.kind == "refine_delta"
     np.testing.assert_allclose(refined.delta_base_m, [0.01, -0.02, 0.0])
+    np.testing.assert_allclose(refined.optical_axis_base, [0.0, 0.0, 1.0])
     np.testing.assert_allclose(refined.rotation_delta_rad, np.zeros(3))
     assert refined.delta_base_m.flags.writeable is False
     assert refined.joints_deg is None

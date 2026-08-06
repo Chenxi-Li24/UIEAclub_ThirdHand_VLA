@@ -4,12 +4,11 @@ import ast
 import importlib.util
 import json
 import os
-from pathlib import Path
 import subprocess
 import sys
+from pathlib import Path
 
 import numpy as np
-
 
 ROOT = Path(__file__).parents[2]
 PYTHON_BRIDGE = ROOT / "web-control/server/camera_bridge.py"
@@ -118,7 +117,9 @@ bridge.child = {{
 }};
 const spec = bridge.buildSpawnSpec();
 const rejected = bridge.send({{ type: 'detection_result', targets: [{{ actionable: true }}] }});
-const accepted = bridge.send({{ type: 'arm_state', tcp_position_m: [0,0,0], tcp_euler_rad: [0,0,0] }});
+const accepted = bridge.send({{
+  type: 'arm_state', tcp_position_m: [0,0,0], tcp_euler_rad: [0,0,0]
+}});
 const paused = new PassThrough();
 paused.pause();
 bridge.releaseMjpegStream(paused, new PassThrough());

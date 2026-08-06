@@ -7,6 +7,22 @@ from .active_view_planner import (
     propose_refinement,
     select_observation_pose,
 )
+from .active_view_session import (
+    ActiveViewPhase,
+    ActiveViewSession,
+    Cancel,
+    DepthObserved,
+    DepthStabilityDecision,
+    DepthStabilityWindow,
+    EvidenceExpired,
+    IdentityObserved,
+    InvalidTransition,
+    LockTarget,
+    MoveCompleted,
+    MoveStarted,
+    ProposalReady,
+    Settled,
+)
 from .active_view_types import (
     CoarseTargetEstimate,
     DepthQuality,
@@ -66,10 +82,24 @@ from .types import (
 )
 
 __all__ = [
+    "ActiveViewPhase",
+    "ActiveViewSession",
+    "Cancel",
     "CoarseTargetEstimate",
+    "DepthObserved",
     "DepthQuality",
+    "DepthStabilityDecision",
+    "DepthStabilityWindow",
+    "EvidenceExpired",
+    "IdentityObserved",
+    "InvalidTransition",
+    "LockTarget",
+    "MoveCompleted",
+    "MoveStarted",
     "ObservationMoveProposal",
     "ObservationPose",
+    "ProposalReady",
+    "Settled",
     "TablePlane",
     "contains_estimate",
     "estimate_table_target",

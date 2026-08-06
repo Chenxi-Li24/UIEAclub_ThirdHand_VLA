@@ -1,3 +1,4 @@
+# ruff: noqa: E501
 from __future__ import annotations
 
 import json
@@ -222,9 +223,60 @@ PREVIEW_CONTRACT_KEYS = {
         "release_gate": "gate:f1:no-cherry-pick-limitations-visible",
     },
 }
+PREVIEW_CN_VISIBLE_FIELDS = {
+    "V1": {
+        "intended_content": "Lumos 实例 mask、D435 depth 和机器人基座坐标系 3D 视图",
+        "source_data": "带时间戳的 Lumos RGB、D435 depth、calibration ID/hash、实例 masks、registered 3D points、experiment manifest",
+        "generation_command": "版本化 script/command 按 manifest 对齐帧、应用记录的 calibration 并渲染已选样本",
+        "release_gate": "manifest 和命令无需手工改图即可复现 panel",
+    },
+    "V2": {
+        "intended_content": "遮挡前、遮挡中和重捕获后的身份",
+        "source_data": "有序 replay frames、detections/masks、track IDs、association scores、memory state、occlusion annotations、experiment manifest",
+        "generation_command": "版本化 script/command 选择声明的 clips，并从 result records 渲染三个状态",
+        "release_gate": "clip split 为 held-out，且 identity labels/selection rule 已记录",
+    },
+    "V3": {
+        "intended_content": "深度注册误差、径向标定残差和不确定度视图",
+        "source_data": "calibration targets、correspondence/residual records、radial-bin metadata、registration errors、covariance/uncertainty records、manifest",
+        "generation_command": "版本化 script/command 将 source JSON/CSV 聚合为残差、误差和不确定度 panels",
+        "release_gate": "单位、聚合、calibration ID 和排除样本均已报告",
+    },
+    "L1": {
+        "intended_content": "VLA instruction、visual context、candidate、preview、confirmation 和 refusal reason",
+        "source_data": "去标识 scenario input、visual-context reference、structured candidate、preview output、confirmation event、validator/refusal log、manifest",
+        "generation_command": "版本化 script/command 从 logs 渲染完整可审计 decision trace",
+        "release_gate": "trace 不含 secret、个人信息或误导性的 actuator-success claim",
+    },
+    "E1": {
+        "intended_content": "baseline comparison 和 confidence intervals",
+        "source_data": "所有预注册 baselines 的 result records、sample counts、intervals、slices、source CSV/JSON、manifests",
+        "generation_command": "版本化 script/command 读取 result records 并计算/绘制声明的 aggregate 和 confidence intervals",
+        "release_gate": "baselines、split、interval method 和 exclusions 与矩阵一致",
+    },
+    "E2": {
+        "intended_content": "ablation table/curve",
+        "source_data": "controlled-variant result records、variant configuration、seeds、slices、source CSV/JSON、manifests",
+        "generation_command": "版本化 script/command 按 variants 分组，生成声明的 table 或 curve",
+        "release_gate": "one-delta ablation rule 和所有 controls 均有文档记录",
+    },
+    "E3": {
+        "intended_content": "accuracy-latency-resource trade-off",
+        "source_data": "accuracy、P50/P95 latency、FPS、CPU/GPU/VRAM records、hardware/environment manifests、source CSV/JSON",
+        "generation_command": "版本化 script/command 按 experiment ID 连接 metrics 并渲染 trade-off points/error bars",
+        "release_gate": "hardware、batch/input settings 和 aggregation window 可比较",
+    },
+    "F1": {
+        "intended_content": "representative success/failure cases",
+        "source_data": "声明的 case-selection rule、scenario/clip IDs、input/output traces、failure taxonomy、manifests",
+        "generation_command": "版本化 script/command 应用 selection rule 并渲染成对 success/failure cases",
+        "release_gate": "不可 cherry-pick；limitations 和 refusal/failure context 必须可见",
+    },
+}
 PREVIEW_CONTRACT_KEY_RE = re.compile(
     r"<code>((content|source|generator|gate):([a-z0-9]+):([a-z0-9-]+))</code>"
 )
+PREVIEW_CODE_TAG_RE = re.compile(r"<code>.*?</code>")
 PREVIEW_FIELD_KEY_PREFIXES = {
     "intended_content": "content",
     "source_data": "source",
@@ -285,7 +337,14 @@ def preview_contract_key(figure_id: str, field: str, value: str) -> str:
     assert prefix == PREVIEW_FIELD_KEY_PREFIXES[field]
     assert key_figure_id == figure_id.lower()
     assert slug
+    assert PREVIEW_CODE_TAG_RE.findall(value) == [f"<code>{key}</code>"]
+    assert value.count("<code>") == value.count("</code>") == 1
     return key
+
+
+def normalized_visible_preview_field(figure_id: str, field: str, value: str) -> str:
+    preview_contract_key(figure_id, field, value)
+    return " ".join(PREVIEW_CODE_TAG_RE.sub("", value).split())
 
 
 def assert_preview_contract_keys_align(documents: dict[str, str]) -> None:
@@ -306,6 +365,25 @@ def assert_preview_contract_keys_align(documents: dict[str, str]) -> None:
 
 def assert_preview_registry_alignment(documents: dict[str, str]) -> None:
     assert_preview_contract_keys_align(documents)
+
+
+def assert_preview_visible_semantics(documents: dict[str, str]) -> None:
+    assert_preview_contract_keys_align(documents)
+    registries = {path: parse_preview_registry(text) for path, text in documents.items()}
+    canonical = registries["docs/research/figure_manifest.md"]
+
+    for figure_id in PREVIEW_IDS:
+        for field in PREVIEW_FIELD_KEY_PREFIXES:
+            canonical_text = normalized_visible_preview_field(
+                figure_id, field, canonical[figure_id][field]
+            )
+            for path in ("README.md", "README_EN.md"):
+                assert normalized_visible_preview_field(
+                    figure_id, field, registries[path][figure_id][field]
+                ) == canonical_text
+            assert normalized_visible_preview_field(
+                figure_id, field, registries["README_CN.md"][figure_id][field]
+            ) == PREVIEW_CN_VISIBLE_FIELDS[figure_id][field]
 
 
 def preview_registry_documents() -> dict[str, str]:
@@ -332,12 +410,28 @@ def replace_preview_contract_key(text: str, figure_id: str, field: str, replacem
     return text.replace(line, replacement_line, 1)
 
 
+def replace_preview_visible_text(
+    text: str, figure_id: str, field: str, removed: str, replacement: str
+) -> str:
+    column = PREVIEW_FIELDS.index(field)
+    line = next(line for line in text.splitlines() if line.startswith(f"| {figure_id} |"))
+    cells = [cell.strip() for cell in line.strip().strip("|").split("|")]
+    assert removed in cells[column]
+    cells[column] = cells[column].replace(removed, replacement, 1)
+    replacement_line = "| " + " | ".join(cells) + " |"
+    return text.replace(line, replacement_line, 1)
+
+
 def test_preview_registry_rows_match_the_canonical_evidence_contract() -> None:
     assert_preview_registry_alignment(preview_registry_documents())
 
 
 def test_preview_registry_machine_keys_match_canonical_fields() -> None:
     assert_preview_contract_keys_align(preview_registry_documents())
+
+
+def test_preview_registry_visible_fields_match_canonical_contract() -> None:
+    assert_preview_visible_semantics(preview_registry_documents())
 
 
 def test_preview_registries_require_traceable_generation() -> None:
@@ -426,6 +520,20 @@ def test_preview_registry_contract_rejects_malformed_machine_keys(replacement: s
         assert_preview_contract_keys_align(documents)
 
 
+def test_preview_registry_contract_rejects_extra_code_token() -> None:
+    documents = preview_registry_documents()
+    documents["README.md"] = replace_preview_visible_text(
+        documents["README.md"],
+        "V1",
+        "intended_content",
+        "view.",
+        "view. <code>not-a-contract-key</code>",
+    )
+
+    with pytest.raises(AssertionError):
+        assert_preview_contract_keys_align(documents)
+
+
 def test_preview_registry_key_comparison_rejects_negated_natural_text() -> None:
     documents = preview_registry_documents()
     documents["README_EN.md"] = replace_preview_contract_key(
@@ -439,6 +547,30 @@ def test_preview_registry_key_comparison_rejects_negated_natural_text() -> None:
 
     with pytest.raises(AssertionError):
         assert_preview_contract_keys_align(documents)
+
+
+@pytest.mark.parametrize(
+    ("path", "figure_id", "field", "removed", "replacement"),
+    [
+        ("README.md", "V1", "release_gate", "reproduce", "do not reproduce"),
+        ("README.md", "V1", "intended_content", "instance mask, ", ""),
+        ("README_EN.md", "L1", "intended_content", "confirmation, ", ""),
+        ("README.md", "V2", "source_data", "association scores, ", ""),
+        ("README_CN.md", "E2", "source_data", "、slices", ""),
+        ("README_CN.md", "E3", "release_gate", "batch/input settings 和", ""),
+    ],
+    ids=("negated-gate", "v1-instance-mask", "l1-confirmation", "v2-scores", "e2-slices", "e3-batch"),
+)
+def test_preview_registry_contract_rejects_prose_only_drift(
+    path: str, figure_id: str, field: str, removed: str, replacement: str
+) -> None:
+    documents = preview_registry_documents()
+    documents[path] = replace_preview_visible_text(
+        documents[path], figure_id, field, removed, replacement
+    )
+
+    with pytest.raises(AssertionError):
+        assert_preview_visible_semantics(documents)
 
 
 def test_research_schemas_are_valid_json_schema_documents() -> None:

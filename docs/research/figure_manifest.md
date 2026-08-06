@@ -5,8 +5,8 @@ not a measured result. A figure can be released only after its source data,
 experiment manifest(s), and generation command are all linked and reproducible.
 This is the canonical preview registry: the README tables preserve each row's intended
 content, status, source-data requirement, generation-command requirement, and release gate.
-Each non-status field carries one exact machine-readable `<code>` contract key; translated
-README rows duplicate those keys verbatim while retaining their natural-language descriptions.
+Each non-status field carries one exact machine-readable `<code>` key for ID/field binding only.
+Translated README rows duplicate those keys verbatim; their visible prose is the semantic contract.
 
 `Planned Evidence / 待补实验证据` means no result exists; every registry entry below
 has this status. `Evidence Incomplete / 待补充证据` is reserved for a partial result

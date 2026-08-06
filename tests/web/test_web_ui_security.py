@@ -31,7 +31,9 @@ def test_camera_test_page_exposes_both_camera_roles_with_id_only_active_view() -
     ).read_text(encoding="utf-8")
 
     assert 'data-stream="/camera_lumos_vision"' in source
-    assert 'src="/camera"' in source
+    assert 'data-stream="/camera"' in source
+    assert 'src="/camera_lumos_vision"' not in source
+    assert 'src="/camera"' not in source
     assert "Lumos" in source
     assert "D435" in source
     assert "canonical RGB / identity" in source

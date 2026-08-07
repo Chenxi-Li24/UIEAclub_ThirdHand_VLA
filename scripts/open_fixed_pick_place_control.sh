@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-WORKTREE="/home/nieqingcao/arm/UIEAclub_ThirdHand_VLA-fixed-pick-place"
-PYTHON="/home/nieqingcao/miniconda3/envs/LumosTouch/bin/python"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+WORKTREE="${THIRDHAND_WORKTREE:-$(cd "$SCRIPT_DIR/.." && pwd)}"
+PYTHON="${THIRDHAND_PYTHON:-${STARTOUCH_PYTHON:-python3}}"
 
 cd "$WORKTREE"
 exec "$PYTHON" web-control/demo/demo_server.py \

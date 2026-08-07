@@ -1,0 +1,23 @@
+schema_version: 1
+dry_run_enabled: true
+active_view_execution_enabled: false
+table_plane:
+  normal_base: [0.0, 0.0, 1.0]
+  offset_m: 0.0
+  position_rmse_m: 0.010
+  calibration_id: "sha256:ca498e702d72d6e78657596b3b7a55f7a7384b17329b40abc890ea7b6f74a941"
+  validated: false
+quality:
+  inner_roi_fraction: 0.60
+  coverage_margin_m: 0.010
+  min_depth_points: 80
+  min_central_fraction: 0.60
+  stable_sample_count: 5
+  max_center_deviation_m: 0.010
+  max_axis_mad_m: 0.005
+motion_proposals:
+  max_translation_m: 0.020
+  max_rotation_deg: 5.0
+  max_refinement_steps: 3
+  proposal_ttl_ms: 200
+observation_poses: []

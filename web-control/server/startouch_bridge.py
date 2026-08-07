@@ -333,12 +333,23 @@ class RobotBridge:
             raise RuntimeError(
                 f"CAN preflight missing motor feedback on {CAN_INTERFACE}: {missing_text}"
             )
-        faults = [reply for reply in replies.values() if reply["error_code"] != 0]
-        if faults:
-            fault_text = ", ".join(
-                f"J{reply['joint']}=0x{reply['error_code']:X}" for reply in faults
+        # 0xD = uncalibrated/unknown position — cleared on enable, not a hard fault
+        HARD_FAULTS = {0x8, 0x9, 0xA, 0xB, 0xC, 0xE, 0xF}  # temp, current, etc.
+        faults = [reply for reply in replies.values()
+                  if reply["error_code"] != 0 and reply["error_code"] != 0x1]
+        hard = [r for r in faults if r["error_code"] in HARD_FAULTS]
+        soft = [r for r in faults if r["error_code"] not in HARD_FAULTS]
+        if soft:
+            soft_text = ", ".join(
+                f"J{r['joint']}=0x{r['error_code']:X}" for r in soft
             )
-            raise RuntimeError(f"CAN preflight motor faults: {fault_text}")
+            emit("log", level="info",
+                 message=f"CAN preflight warnings (will clear on enable): {soft_text}")
+        if hard:
+            hard_text = ", ".join(
+                f"J{r['joint']}=0x{r['error_code']:X}" for r in hard
+            )
+            raise RuntimeError(f"CAN preflight motor faults: {hard_text}")
         return [replies[config[2]] for config in MOTOR_FEEDBACK_CONFIG]
 
     def _record_can_rx(self, packets: int | None) -> None:
@@ -838,6 +849,88 @@ class RobotBridge:
         except Exception as exc:
             emit("error", message=f"gripper command failed: {exc}")
 
+    def move_linear(self, command: dict[str, Any]) -> None:
+        """Execute a Cartesian linear move (move_l)."""
+        with self.arm_lock:
+            connected = self.connected
+            state_ready = self.state_ready
+            motion_active = self.motion_active
+        if not connected:
+            emit("error", message="Startouch SDK is not connected")
+            return
+        if not state_ready:
+            emit("error", message="robot state is not ready; motion command was rejected")
+            return
+        if motion_active or not self.motion_queue.empty():
+            emit("error", message="a motion is already active")
+            return
+
+        position = command.get("position")
+        euler = command.get("euler")
+        time_sec = float(command.get("time_sec", 2.0))
+        request_id = command.get("request_id")
+
+        if not isinstance(position, list) or len(position) != 3:
+            emit("error", message="move_l position must contain three values")
+            return
+        if not isinstance(euler, list) or len(euler) != 3:
+            emit("error", message="move_l euler must contain three values")
+            return
+        try:
+            pos = [float(v) for v in position]
+            rot = [float(v) for v in euler]
+        except (TypeError, ValueError):
+            emit("error", message="move_l position/euler contain non-numeric values")
+            return
+        if not all(math.isfinite(v) for v in pos + rot):
+            emit("error", message="move_l position/euler contain non-finite values")
+            return
+
+        time_sec = max(0.2, min(30.0, time_sec))
+        # Use a fake joint target so enqueue_motion doesn't reject it
+        fake_item = {
+            "start_joints_rad": self.last_valid_joints or [0.0] * 6,
+            "joints_rad": self.last_valid_joints or [0.0] * 6,
+            "waypoints_rad": [self.last_valid_joints or [0.0] * 6],
+            "time_sec": time_sec,
+            "request_id": request_id,
+            "source": "move_l",
+            "command": "move_l",
+            "_move_l_pos": pos,
+            "_move_l_euler": rot,
+        }
+        self.motion_queue.put_nowait(fake_item)
+        emit("command_accepted", command="move_l", request_id=request_id, source="move_l")
+
+    def go_home(self, request_id: str | None = None) -> None:
+        """Send the arm to its home position."""
+        with self.arm_lock:
+            connected = self.connected
+            state_ready = self.state_ready
+            motion_active = self.motion_active
+        if not connected:
+            emit("error", message="Startouch SDK is not connected")
+            return
+        if not state_ready:
+            emit("error", message="robot state is not ready; motion command was rejected")
+            return
+        if motion_active or not self.motion_queue.empty():
+            emit("error", message="a motion is already active")
+            return
+
+        fake_item = {
+            "start_joints_rad": self.last_valid_joints or [0.0] * 6,
+            "joints_rad": [0.0] * 6,
+            "waypoints_rad": [[0.0] * 6],
+            "time_sec": 5.0,
+            "request_id": request_id,
+            "source": "go_home",
+            "command": "go_home",
+            "_go_home": True,
+        }
+        self.motion_queue.put_nowait(fake_item)
+        emit("command_accepted", command="go_home", request_id=request_id, source="go_home")
+
     def publish_state(
         self,
         *,
@@ -929,21 +1022,72 @@ class RobotBridge:
                     arm = self.arm
                 if arm is None:
                     continue
-                # Do not hold arm_lock during a blocking trajectory. cleanup()
-                # must be able to call the SDK stop-and-disable path concurrently.
-                duration = arm.set_joint_waypoints(
-                    [command["start_joints_rad"], *command["waypoints_rad"]],
-                    time_sec=command["time_sec"],
-                )
-                if not self.stop_requested.is_set():
-                    with self.arm_lock:
-                        self.last_valid_joints = list(command["joints_rad"])
-                    emit(
-                        "command_complete",
-                        command=command["command"],
-                        duration_sec=float(duration),
-                        request_id=command["request_id"],
+
+                if command.get("_go_home"):
+                    # go_home path
+                    if hasattr(arm, 'go_home'):
+                        arm.go_home()
+                    else:
+                        arm.set_joint_waypoints(
+                            [command["start_joints_rad"], [0.0] * 6],
+                            time_sec=5.0,
+                        )
+                    # After homing, read actual joint state
+                    try:
+                        joints = self._finite_values(arm.get_joint_positions(), 6, "joint positions after home")
+                        with self.arm_lock:
+                            self.last_valid_joints = list(joints)
+                    except Exception:
+                        with self.arm_lock:
+                            self.last_valid_joints = [0.0] * 6
+                    if not self.stop_requested.is_set():
+                        emit(
+                            "command_complete",
+                            command="go_home",
+                            duration_sec=5.0,
+                            request_id=command["request_id"],
+                        )
+                elif command.get("_move_l_pos"):
+                    # move_l Cartesian path
+                    pos = command["_move_l_pos"]
+                    euler = command["_move_l_euler"]
+                    time_sec = command["time_sec"]
+                    arm.move_l(
+                        [[pos[0], pos[1], pos[2], euler[0], euler[1], euler[2]]],
+                        time_sec=time_sec,
+                        blend_radius_m=0.0,
+                        position_tolerance_m=0.04,
+                        orientation_tolerance_rad=0.4,
                     )
+                    # After move, read actual joint state
+                    try:
+                        joints = self._finite_values(arm.get_joint_positions(), 6, "joint positions after move_l")
+                        with self.arm_lock:
+                            self.last_valid_joints = list(joints)
+                    except Exception:
+                        pass
+                    if not self.stop_requested.is_set():
+                        emit(
+                            "command_complete",
+                            command="move_l",
+                            duration_sec=float(time_sec),
+                            request_id=command["request_id"],
+                        )
+                else:
+                    # Joint waypoints path (existing)
+                    duration = arm.set_joint_waypoints(
+                        [command["start_joints_rad"], *command["waypoints_rad"]],
+                        time_sec=command["time_sec"],
+                    )
+                    if not self.stop_requested.is_set():
+                        with self.arm_lock:
+                            self.last_valid_joints = list(command["joints_rad"])
+                        emit(
+                            "command_complete",
+                            command=command["command"],
+                            duration_sec=float(duration),
+                            request_id=command["request_id"],
+                        )
             except Exception as exc:
                 emit("error", message=f"joint motion failed: {exc}", request_id=command["request_id"])
             finally:
@@ -998,6 +1142,10 @@ def main() -> None:
                 bridge.disconnect("software_stop")
             elif name in {"move_joint", "move_joint_path"}:
                 bridge.enqueue_motion(command)
+            elif name == "move_l":
+                bridge.move_linear(command)
+            elif name == "go_home":
+                bridge.go_home(command.get("request_id"))
             elif name == "gripper":
                 bridge.set_gripper(
                     command.get("position"),

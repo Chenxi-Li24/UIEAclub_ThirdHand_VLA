@@ -1,22 +1,33 @@
-﻿"""
-Gripper controller  TypeFZ / TypeLJ via startouch_sdk.
 """
+Gripper controller — TypeFZ / TypeLJ.
+"""
+
+import logging
+
+log = logging.getLogger(__name__)
 
 
 class Gripper:
-    """Gripper control for Lumos Touch R1."""
+    """Gripper control."""
 
-    def __init__(self, config):
-        self.config = config
+    def __init__(self, config=None):
+        self.config = config or {}
+        self._position = 0.06  # current position in meters (open)
 
-    def open(self, distance_mm=None):
-        pass  # TODO: implement
+    def open(self, distance_m: float = 0.06):
+        """Open gripper to position (meters)."""
+        self._position = distance_m
+        log.info(f"Gripper open → {distance_m:.3f}m")
 
-    def close(self, force=None):
-        pass  # TODO: implement
+    def close(self, distance_m: float = 0.02):
+        """Close gripper to position (meters)."""
+        self._position = distance_m
+        log.info(f"Gripper close → {distance_m:.3f}m")
 
     def get_distance(self) -> float:
-        return 0.0  # TODO: implement
+        """Get current opening distance (m)."""
+        return self._position
 
     def is_grasped(self) -> bool:
-        return False  # TODO: implement
+        """Check if object is grasped."""
+        return self._position < 0.03

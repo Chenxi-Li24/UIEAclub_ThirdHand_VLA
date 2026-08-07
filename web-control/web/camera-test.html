@@ -1,0 +1,531 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ThirdHand 双相机视觉状态</title>
+  <style>
+    :root { color-scheme: dark; font-family: Inter, system-ui, sans-serif; }
+    * { box-sizing: border-box; }
+    body { margin: 0; min-height: 100vh; background: #0c1014; color: #eef3f6; }
+    header { padding: 16px 20px; border-bottom: 1px solid #26323b; display: flex;
+      justify-content: space-between; align-items: center; gap: 16px; }
+    header h1 { margin: 0; font-size: 17px; }
+    .lock { color: #ffbd5b; font-weight: 700; }
+    #demo-banner { margin: 0; padding: 11px 20px; color: #061018; background: #ffbd5b;
+      font-weight: 800; text-align: center; letter-spacing: .02em; }
+    button { border: 1px solid #3d5668; border-radius: 7px; background: #1d2a34;
+      color: #eef3f6; padding: 8px 11px; cursor: pointer; }
+    button:disabled { cursor: not-allowed; opacity: .45; }
+    button.primary { border-color: #52a8df; background: #15334a; }
+    button.danger { border-color: #a44b4b; background: #3b2020; }
+    main { display: grid; grid-template-columns: minmax(0, 2fr) minmax(300px, 1fr);
+      align-items: start; gap: 14px; padding: 14px; }
+    .camera-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 14px; min-width: 0; align-items: start; }
+    figure, aside { margin: 0; border: 1px solid #26323b; border-radius: 10px;
+      background: #121920; overflow: hidden; }
+    figcaption { min-height: 70px; padding: 10px 13px; display: flex;
+      justify-content: space-between; align-items: flex-start; gap: 10px;
+      border-bottom: 1px solid #26323b; }
+    figcaption span, .muted { color: #91a1ad; }
+    .camera-title { display: flex; flex-direction: column; gap: 5px; }
+    .camera-title span { font-size: 12px; font-weight: 400; }
+    .stream-tools { display: flex; flex-direction: column; align-items: flex-end; gap: 5px;
+      text-align: right; font-size: 12px; }
+    .stream-tools button { padding: 4px 7px; font-size: 12px; }
+    [hidden] { display: none !important; }
+    .feed { width: 100%; min-height: 0; aspect-ratio: 16 / 9; display: grid;
+      place-items: center; background: #030608; }
+    img { display: block; width: 100%; height: 100%; object-fit: contain; }
+    aside { padding: 15px; }
+    aside h2 { margin: 0 0 12px; font-size: 15px; }
+    dl { display: grid; grid-template-columns: 130px 1fr; gap: 8px 12px; margin: 0 0 18px; }
+    dt { color: #91a1ad; } dd { margin: 0; overflow-wrap: anywhere; }
+    .ok { color: #6ee7a0; } .bad { color: #ff817a; }
+    #blockers, #active-blockers { margin: 8px 0 0; padding-left: 20px; color: #ffbd5b; }
+    #targets { font-variant-numeric: tabular-nums; }
+    #target-diagnostics { display: grid; gap: 9px; margin: 8px 0 18px; }
+    .target-card { padding: 10px; border: 1px solid #30414e; border-radius: 8px;
+      background: #0d141a; box-shadow: inset 3px 0 0 #ffb420; }
+    .target-card.ready { box-shadow: inset 3px 0 0 #3edc70; }
+    .target-card h3 { margin: 0 0 8px; font-size: 14px; }
+    .target-card dl { grid-template-columns: 96px 1fr; gap: 5px 8px; margin: 0; font-size: 12px; }
+    .target-card .grasp-no { color: #ffbd5b; }
+    .target-card .grasp-yes { color: #6ee7a0; font-weight: 700; }
+    .visual-legend { margin: -4px 0 10px; font-size: 12px; line-height: 1.45; }
+    #active-targets { display: grid; gap: 7px; margin-bottom: 12px; }
+    .target-row { display: flex; align-items: center; justify-content: space-between;
+      gap: 8px; padding: 8px; border: 1px solid #26323b; border-radius: 7px; }
+    .controls { display: flex; gap: 8px; margin: 10px 0; }
+    #active-result { min-height: 1.4em; }
+    @media (max-width: 900px) { main { grid-template-columns: 1fr; }
+      .camera-grid { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>双相机在线视觉</h1>
+    <span class="lock" id="safety-lock">
+      robotExecutionEnabled = false · activeViewExecutionEnabled = false
+    </span>
+  </header>
+  <p id="demo-banner" hidden>
+    纯浏览器模拟 · 合成相机与深度数据 · 不连接后端、机械臂或夹爪
+  </p>
+  <main>
+    <section class="camera-grid" aria-label="camera streams">
+      <figure>
+        <figcaption>
+          <span class="camera-title">
+            <strong>Lumos 主视图</strong>
+            <span>canonical RGB / identity</span>
+          </span>
+          <span class="stream-tools" id="lumos-stream-tools">
+            <span id="lumos-stream-status">实时原始画面</span>
+            <button id="lumos-overlay-toggle" type="button">查看算法叠加</button>
+          </span>
+        </figcaption>
+        <div class="feed"><img id="lumos" data-stream="/camera_lumos"
+          data-overlay-stream="/camera_lumos_vision"
+          alt="Lumos inference overlay"></div>
+      </figure>
+      <figure>
+        <figcaption><strong>D435 辅助视图</strong><span>metric depth / debug RGB</span></figcaption>
+        <div class="feed"><img id="d435" data-stream="/camera"
+          alt="D435 depth debug stream"></div>
+      </figure>
+    </section>
+    <aside>
+      <h2>部署状态</h2>
+      <dl>
+        <dt>在线</dt><dd id="online">等待状态</dd>
+        <dt>模型</dt><dd id="model">等待状态</dd>
+        <dt>Lumos 序列</dt><dd id="lumos-seq">—</dd>
+        <dt>D435 序列</dt><dd id="d435-seq">—</dd>
+        <dt>端到端延迟</dt><dd id="latency">—</dd>
+        <dt>GPU 预留</dt><dd id="gpu">—</dd>
+        <dt>状态年龄</dt><dd id="age">—</dd>
+        <dt>目标</dt><dd id="targets">0</dd>
+      </dl>
+      <h2>闭锁原因 / blockers</h2>
+      <ul id="blockers"><li>vision_not_started</li></ul>
+      <h2>目标算法状态</h2>
+      <p class="muted visual-legend">
+        实例轮廓显示在 Lumos“算法叠加”画面；下方逐目标显示持久 ID、三维坐标、
+        目标状态、抓取点与是否允许抓取。
+      </p>
+      <div id="target-diagnostics"><span class="muted">等待目标算法输出</span></div>
+      <h2>主动观察会话 / 观察建议</h2>
+      <div id="active-targets"><span class="muted">等待已确认目标</span></div>
+      <dl>
+        <dt>会话阶段</dt><dd id="active-phase">idle</dd>
+        <dt>目标身份</dt><dd id="active-identity">—</dd>
+        <dt>建议观察位</dt><dd id="active-proposal">—</dd>
+        <dt>单步上限</dt><dd id="active-max-step">—</dd>
+        <dt>证据摘要</dt><dd id="active-evidence">—</dd>
+        <dt>桌面粗位置</dt><dd id="active-coarse">—</dd>
+        <dt>D435 深度质量</dt><dd id="active-depth">—</dd>
+        <dt>稳定样本</dt><dd id="active-stable">— / 5</dd>
+        <dt>剩余精调</dt><dd id="active-refinements">—</dd>
+        <dt>DINO 原型相似度</dt><dd id="identity-similarity">—</dd>
+        <dt>REMIND work / stable</dt><dd id="identity-memory">—</dd>
+        <dt>关联代价 / 原因</dt><dd id="identity-association">—</dd>
+        <dt>抓取预览</dt><dd id="grasp-preview">未进入 GRASP_PREVIEW</dd>
+      </dl>
+      <div class="controls">
+        <button id="confirm-step" class="primary" type="button" disabled>确认本步观察运动</button>
+        <button id="cancel-session" class="danger" type="button" disabled>取消会话</button>
+      </div>
+      <p id="active-result" class="muted" role="status">尚未发起会话</p>
+      <h2>主动观察 blockers</h2>
+      <ul id="active-blockers"><li>active_view_report_unavailable</li></ul>
+      <p class="muted">Lumos 用于广角识别与身份连续性；D435 用于近场度量深度。页面只发送身份、会话和提案 ID，不发送坐标或抓取命令；每一步均需人工确认。</p>
+    </aside>
+  </main>
+  <script src="/live-camera-streams.js"></script>
+  <script src="/active-view-demo.js"></script>
+  <script>
+    'use strict';
+    const byId = id => document.getElementById(id);
+    const text = (id, value) => { byId(id).textContent = value; };
+    const finite = value => Number.isFinite(value) ? value : null;
+    const demoMode = new URLSearchParams(location.search).get('demo') === '1';
+    const demo = demoMode ? window.ThirdHandActiveViewDemo?.createActiveViewDemo() : null;
+    let latestStatus = null;
+    let sessionId = null;
+    let proposalId = null;
+    let socket = null;
+    let lumosSelector = null;
+
+    function sendCommand(payload) {
+      if (demoMode) {
+        const result = demo.send(payload);
+        const outcome = result.accepted === false
+          ? `模拟拒绝：${result.reason ?? 'unknown'}`
+          : `${result.action ?? 'command'} 已在浏览器模拟中受理`;
+        text('active-result', outcome);
+        if (result.sessionId) sessionId = result.sessionId;
+        return;
+      }
+      if (!socket || socket.readyState !== WebSocket.OPEN) {
+        text('active-result', '控制连接尚未就绪');
+        return;
+      }
+      socket.send(JSON.stringify(payload));
+    }
+
+    function connectControl() {
+      if (demoMode) {
+        demo.subscribe(render);
+        text('active-result', '纯浏览器模拟已就绪 · 不创建控制连接');
+        return;
+      }
+      const scheme = location.protocol === 'https:' ? 'wss:' : 'ws:';
+      socket = new WebSocket(`${scheme}//${location.host}/ws`);
+      socket.addEventListener('open', () => text('active-result', 'ID-only 控制通道已连接'));
+      socket.addEventListener('close', () => {
+        text('active-result', '控制通道已断开，正在重连');
+        setTimeout(connectControl, 1000);
+      });
+      socket.addEventListener('message', event => {
+        let message;
+        try { message = JSON.parse(event.data); } catch { return; }
+        if (message.type === 'active_view_command_result') {
+          const outcome = message.accepted === false || message.approved === false
+            ? `拒绝：${message.reason ?? 'unknown'}`
+            : `${message.action ?? 'command'} 已受理`;
+          text('active-result', outcome);
+          if (message.sessionId) sessionId = message.sessionId;
+        }
+        if (message.type === 'active_view_state' || message.type === 'active_view_move_ready') {
+          if (message.sessionId) sessionId = message.sessionId;
+          if (message.proposalId) proposalId = message.proposalId;
+          refresh();
+        }
+      });
+    }
+
+    byId('confirm-step').addEventListener('click', () => {
+      if (sessionId && proposalId) {
+        sendCommand({ cmd: 'confirm_active_view_step', sessionId, proposalId });
+      }
+    });
+    byId('cancel-session').addEventListener('click', () => {
+      if (sessionId) sendCommand({ cmd: 'cancel_active_view', sessionId });
+    });
+
+    function bindRetry(image) {
+      let attempts = 0;
+      image.addEventListener('load', () => { attempts = 0; });
+      image.addEventListener('error', () => {
+        attempts += 1;
+        const delay = Math.min(10000, 500 * (2 ** Math.min(attempts, 5)));
+        const source = image.dataset.stream;
+        image.removeAttribute('src');
+        setTimeout(() => { image.src = `${source}?retry=${Date.now()}`; }, delay);
+      });
+    }
+    function initializeCameraStreams() {
+      const images = document.querySelectorAll('img[data-stream]');
+      if (demoMode) {
+        document.body.dataset.mode = 'demo';
+        byId('demo-banner').hidden = false;
+        byId('lumos-stream-tools').hidden = true;
+        byId('lumos').src = demo.cameraPanels.lumos;
+        byId('d435').src = demo.cameraPanels.d435;
+        return;
+      }
+      document.body.dataset.mode = 'live';
+      images.forEach(image => {
+        bindRetry(image);
+        image.src = image.dataset.stream;
+      });
+    }
+
+    function initializeLumosStreamSelector() {
+      if (demoMode) return;
+      const image = byId('lumos');
+      const toggle = byId('lumos-overlay-toggle');
+      const statusCopy = {
+        raw: '实时原始画面',
+        checking_overlay: '正在检查算法叠加…',
+        overlay_unavailable: '算法叠加不可用，继续显示原始画面',
+        overlay: '算法叠加画面',
+      };
+      lumosSelector = window.ThirdHandLiveCameraStreams.createLumosStreamSelector({
+        rawUrl: image.dataset.stream,
+        overlayUrl: image.dataset.overlayStream,
+        applySource: source => { image.src = source; },
+        report: status => {
+          text('lumos-stream-status', statusCopy[status] ?? status);
+          toggle.disabled = status === 'checking_overlay';
+          toggle.textContent = status === 'overlay' ? '返回原始画面' : '查看算法叠加';
+        },
+        timeoutMs: 2500,
+      });
+      toggle.addEventListener('click', () => {
+        if (lumosSelector.mode() === 'overlay') lumosSelector.useRaw();
+        else lumosSelector.tryOverlay();
+      });
+      lumosSelector.useRaw();
+    }
+
+    function render(status) {
+      latestStatus = status;
+      text('online', status.online && !status.stale ? '是' : '否');
+      byId('online').className = status.online && !status.stale ? 'ok' : 'bad';
+      text('model', status.modelReady ? 'ready' : 'unavailable');
+      byId('model').className = status.modelReady ? 'ok' : 'bad';
+      text('lumos-seq', status.sequences.lumos ?? '—');
+      text('d435-seq', status.sequences.d435 ?? '—');
+      const latency = finite(status.metrics.latencyP95Ms);
+      text('latency', latency === null ? '—' : `p95 ${latency.toFixed(1)} ms`);
+      const gpu = finite(status.metrics.gpuMemoryReservedGib);
+      text('gpu', gpu === null ? '—' : `${gpu.toFixed(2)} GiB`);
+      text('age', status.sourceAgeMs === null ? '—' : `${status.sourceAgeMs.toFixed(0)} ms`);
+      text('targets', String(status.targets.length));
+      renderTargetDiagnostics(status.targets);
+      const control = status.activeView?.control ?? {};
+      const restartablePhase = new Set(['idle', 'aborted', 'complete']).has(control.phase);
+      const terminalPhase = new Set(['idle', 'grasp_preview', 'aborted', 'complete'])
+        .has(control.phase);
+      const targetList = byId('active-targets');
+      const eligibleTargets = status.stale ? [] : status.targets.filter(
+        target => target.identityStatus === 'confirmed' && Number.isSafeInteger(target.identityId),
+      );
+      targetList.replaceChildren(...eligibleTargets.map(target => {
+        const row = document.createElement('div');
+        row.className = 'target-row';
+        const label = document.createElement('span');
+        label.textContent = `#${target.identityId} · ${target.label}`;
+        const start = document.createElement('button');
+        start.type = 'button';
+        start.textContent = '开始主动观察';
+        start.disabled = !restartablePhase;
+        start.addEventListener('click', () => {
+          const identityId = target.identityId;
+          sendCommand({ cmd: 'start_active_view', identityId });
+        });
+        row.append(label, start);
+        return row;
+      }));
+      if (!eligibleTargets.length) {
+        const empty = document.createElement('span');
+        empty.className = 'muted';
+        empty.textContent = '没有新鲜且已确认身份的目标';
+        targetList.replaceChildren(empty);
+      }
+      const list = byId('blockers');
+      list.replaceChildren(...status.blockers.map(value => {
+        const item = document.createElement('li');
+        item.textContent = value;
+        return item;
+      }));
+      if (!status.blockers.length) {
+        const item = document.createElement('li');
+        item.textContent = 'none';
+        list.replaceChildren(item);
+      }
+      const activeView = status.activeView && typeof status.activeView === 'object'
+        ? status.activeView
+        : { executionEnabled: false, reports: [] };
+      const activeViewExecutionEnabled = activeView.executionEnabled;
+      const activeReports = Array.isArray(activeView.reports) ? activeView.reports : [];
+      const activeControl = activeView.control ?? {};
+      if (activeControl.sessionId) sessionId = activeControl.sessionId;
+      if (activeControl.proposalId) proposalId = activeControl.proposalId;
+      const report = activeReports.find(item => item.identityId === activeControl.identityId)
+        ?? activeReports[0] ?? null;
+      text('active-phase', activeControl.phase ?? 'idle');
+      text('active-identity', activeControl.identityId ?? report?.identityId ?? '—');
+      text(
+        'active-proposal',
+        report === null
+          ? '—'
+          : report.kind === 'none'
+            ? '无动作建议'
+            : `${report.kind} · ${report.targetPoseId ?? '未命名观察位'}`,
+      );
+      const maxStep = finite(activeControl.maxStepM);
+      text('active-max-step', maxStep === null ? '预标定观察位' : `≤ ${(maxStep * 1000).toFixed(0)} mm`);
+      text(
+        'active-evidence',
+        Array.isArray(activeControl.evidenceIdsShort) && activeControl.evidenceIdsShort.length
+          ? activeControl.evidenceIdsShort.join(' · ')
+          : '—',
+      );
+      const coarse = report?.coarseCenterXYM;
+      text(
+        'active-coarse',
+        Array.isArray(coarse) && coarse.length === 2
+          ? `${coarse[0].toFixed(3)}, ${coarse[1].toFixed(3)} m（仅观察规划）`
+          : '—',
+      );
+      const central = finite(report?.centralFraction);
+      const pointCount = report?.validDepthPoints;
+      text(
+        'active-depth',
+        report === null
+          ? '—'
+          : `${pointCount ?? 0} 点 · 中央比例 ${
+            central === null ? '—' : central.toFixed(2)
+          }`,
+      );
+      text('active-stable', `${report?.stableSamples ?? 0} / 5`);
+      text('active-refinements', report?.remainingRefinements ?? '—');
+      const diagnosticTarget = status.targets.find(
+        target => target.identityId === activeControl.identityId && Array.isArray(target.positionM),
+      ) ?? status.targets.find(target => target.identityId === activeControl.identityId)
+        ?? eligibleTargets[0] ?? null;
+      const identityMemory = diagnosticTarget?.identityMemory ?? null;
+      const similarity = finite(identityMemory?.appearanceSimilarity);
+      const associationCost = finite(identityMemory?.associationCost);
+      text(
+        'identity-similarity',
+        similarity === null ? '新身份或无可靠原型比较' : `${(similarity * 100).toFixed(1)}%`,
+      );
+      text(
+        'identity-memory',
+        identityMemory === null
+          ? '—'
+          : `${identityMemory.workPrototypeCount ?? 0} / ${identityMemory.stablePrototypeCount ?? 0}` +
+            ` · hits ${identityMemory.hits ?? 0}`,
+      );
+      text(
+        'identity-association',
+        `${associationCost === null ? '—' : associationCost.toFixed(3)} / ` +
+          `${identityMemory?.associationReason ?? 'matched'}`,
+      );
+      text(
+        'grasp-preview',
+        activeControl.phase === 'grasp_preview'
+          ? diagnosticTarget && Array.isArray(diagnosticTarget.positionM)
+            ? `GRASP_PREVIEW · ${diagnosticTarget.positionM.map(value => value.toFixed(3)).join(', ')} m · 仅预览，不能执行抓取`
+            : 'GRASP_PREVIEW · 深度几何待刷新 · 仅预览，不能执行抓取'
+          : '未进入 GRASP_PREVIEW',
+      );
+      const controlReasons = Array.isArray(activeControl.reasons) ? activeControl.reasons : [];
+      const activeReasons = controlReasons.length
+        ? controlReasons
+        : Array.isArray(report?.reasons) && report.reasons.length
+          ? report.reasons
+          : [report === null ? 'active_view_report_unavailable' : 'none'];
+      const activeList = byId('active-blockers');
+      activeList.replaceChildren(...activeReasons.map(value => {
+        const item = document.createElement('li');
+        item.textContent = value;
+        return item;
+      }));
+      byId('confirm-step').disabled = activeControl.moveReady !== true ||
+        activeControl.requiresConfirmation !== true;
+      byId('cancel-session').disabled = !activeControl.sessionId || terminalPhase;
+      text(
+        'safety-lock',
+        `robotExecutionEnabled = ${status.robotExecutionEnabled === true} · ` +
+        `activeViewExecutionEnabled = ${status.activeViewExecutionEnabled === true}`,
+      );
+      if (status.robotExecutionEnabled !== false ||
+          (status.activeViewExecutionEnabled === true && activeControl.phase !== 'moving_to_view')) {
+        text('online', '安全配置错误');
+        byId('online').className = 'bad';
+      }
+    }
+
+    function diagnosticRow(name, value, valueClass = '') {
+      const term = document.createElement('dt');
+      term.textContent = name;
+      const detail = document.createElement('dd');
+      detail.textContent = value;
+      detail.className = valueClass;
+      return [term, detail];
+    }
+
+    function renderTargetDiagnostics(targets) {
+      const targetDiagnostics = byId('target-diagnostics');
+      if (!Array.isArray(targets) || targets.length === 0) {
+        const empty = document.createElement('span');
+        empty.className = 'muted';
+        empty.textContent = '当前帧没有目标';
+        targetDiagnostics.replaceChildren(empty);
+        return;
+      }
+      const stateCopy = {
+        identity_pending: '身份待确认',
+        depth_pending: '等待稳定深度',
+        tracked_3d: '三维跟踪中',
+        blocked: '感知门控未通过',
+        grasp_preview: '抓取候选预览',
+      };
+      const cards = targets.map(target => {
+        const card = document.createElement('article');
+        card.className = `target-card${target.graspAllowed === true ? ' ready' : ''}`;
+        const title = document.createElement('h3');
+        const score = finite(target.score);
+        title.textContent = `持久 ID ${Number.isSafeInteger(target.identityId)
+          ? `#${target.identityId}` : '待分配'} · ${target.label ?? 'unknown'}` +
+          `${score === null ? '' : ` · ${(score * 100).toFixed(1)}%`}`;
+        const details = document.createElement('dl');
+        const xyz = Array.isArray(target.positionM) && target.positionM.length === 3
+          ? `${target.positionM.map(value => Number(value).toFixed(3)).join(', ')} m` +
+            `${target.positionFrame ? ` · ${target.positionFrame}` : ''}`
+          : '未获得可靠三维坐标';
+        const standardDeviation = Array.isArray(target.positionStdM) &&
+          target.positionStdM.length === 3
+          ? `σ ≤ ${(Math.max(...target.positionStdM) * 1000).toFixed(1)} mm`
+          : 'σ 未知';
+        const pointM = Array.isArray(target.graspPointM) && target.graspPointM.length === 3
+          ? `${target.graspPointM.map(value => Number(value).toFixed(3)).join(', ')} m` +
+            `${target.graspPointFrame ? ` · ${target.graspPointFrame}` : ''}`
+          : null;
+        const pointPx = Array.isArray(target.graspPointPx) && target.graspPointPx.length === 2
+          ? `像素 ${target.graspPointPx.map(value => Number(value).toFixed(0)).join(', ')}`
+          : null;
+        const graspPoint = [pointM, pointPx].filter(Boolean).join(' · ') || '未生成';
+        const graspReasons = Array.isArray(target.graspReasons) && target.graspReasons.length
+          ? target.graspReasons.join(' · ')
+          : 'gate_not_authorized';
+        const rows = [
+          ...diagnosticRow(
+            '目标状态',
+            `${stateCopy[target.targetState] ?? target.targetState ?? '未知'} · ` +
+              `${target.identityStatus ?? 'unknown'}`,
+          ),
+          ...diagnosticRow('三维坐标', `${xyz} · ${standardDeviation}`),
+          ...diagnosticRow('深度支持', `${target.registeredDepthPoints ?? 0} 个注册点`),
+          ...diagnosticRow('抓取点', graspPoint),
+          ...diagnosticRow(
+            '允许抓取',
+            target.graspAllowed === true ? '允许' : `不允许 · ${graspReasons}`,
+            target.graspAllowed === true ? 'grasp-yes' : 'grasp-no',
+          ),
+        ];
+        details.append(...rows);
+        card.append(title, details);
+        return card;
+      });
+      targetDiagnostics.replaceChildren(...cards);
+    }
+
+    async function refresh() {
+      if (demoMode) {
+        render(demo.snapshot());
+        return;
+      }
+      try {
+        const response = await fetch('/api/vision/status', { cache: 'no-store' });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        render(await response.json());
+      } catch (error) {
+        text('online', `状态不可用: ${error.message}`);
+        byId('online').className = 'bad';
+      }
+    }
+    initializeCameraStreams();
+    initializeLumosStreamSelector();
+    refresh();
+    connectControl();
+    if (!demoMode) setInterval(refresh, 1000);
+  </script>
+</body>
+</html>

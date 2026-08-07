@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>ThirdHand - Startouch 机械臂控制</title>
-  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="css/style.css?v=2">
 </head>
 <body>
   <!-- 软件停止提示 -->
@@ -36,6 +36,15 @@
       </div>
 
       <div class="topbar-actions">
+        <button class="btn-voice-toggle" id="btn-voice-toggle" type="button"
+                title="语音和文字对话" aria-controls="voice-panel" aria-expanded="false">
+          <span class="voice-toggle-led" id="voice-toggle-led" data-state="offline"></span>
+          <svg class="voice-toggle-icon" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M12 15.5a3.5 3.5 0 0 0 3.5-3.5V6a3.5 3.5 0 1 0-7 0v6a3.5 3.5 0 0 0 3.5 3.5Z"/>
+            <path d="M5.5 11.5V12a6.5 6.5 0 0 0 13 0v-.5M12 18.5V22M8.5 22h7"/>
+          </svg>
+          <span class="voice-toggle-label">语音</span>
+        </button>
         <button class="btn-estop" id="btn-estop-top" title="停止 SDK 控制进程">⏹ 软件停止</button>
         <select id="theme-select" title="切换配色">
           <option value="deepspace">科技深空</option>
@@ -55,6 +64,13 @@
     <!-- 3D 视口（grid 中间行，自动撑满） -->
     <div id="viewport">
       <div id="three-container"></div>
+
+      <div class="voice-preview-indicator" id="voice-preview-indicator" hidden
+           role="status" aria-live="polite">
+        <span>LOCAL PREVIEW</span>
+        <strong id="voice-preview-label">本地模拟</strong>
+        <small>不会发送到 LUMOS</small>
+      </div>
 
       <!-- 左上角视图工具浮动栏 -->
       <div id="view-tools">
@@ -196,8 +212,179 @@
           </div>
         </div>
       </div>
+      <!-- D435 视觉 -->
+      <div class="drawer-section" id="sec-d435">
+        <div class="sec-header">
+          <span>D435 视觉</span>
+          <button class="sec-toggle">▾</button>
+        </div>
+        <div class="sec-body">
+          <div class="camera-status" id="camera-status">
+            <span class="cam-dot" id="cam-dot"></span>
+            <span class="cam-label" id="cam-label">D435: --</span>
+          </div>
+          <div class="camera-feed-container">
+            <img id="camera-feed" src="/camera" alt="D435 feed" />
+          </div>
+          <div class="camera-label-small">Lumos 鱼眼</div>
+          <div class="camera-feed-container" style="min-height:100px">
+            <img id="lumos-feed" src="/camera_lumos" alt="Lumos feed" style="min-height:100px" />
+          </div>
+          <div id="detection-list" class="detection-list">
+            <div style="color:var(--text-secondary);font-size:0.7rem">双路视频已启用自动重连</div>
+          </div>
+          <button class="action-btn action-primary" id="btn-camera-refresh">刷新检测</button>
+        </div>
+      </div>
     </div>
   </aside>
+
+  <section id="voice-panel" aria-hidden="true" aria-label="语音和文字对话">
+    <header class="voice-panel-header">
+      <div class="voice-panel-title">
+        <span class="voice-kicker">VOICE LINK / V1</span>
+        <strong>语音和文字对话</strong>
+      </div>
+      <div class="voice-header-actions">
+        <span class="voice-status-chip" id="voice-ai-status" data-state="offline">AI 离线</span>
+        <button class="voice-icon-button" id="voice-panel-close" type="button" aria-label="关闭语音面板">×</button>
+      </div>
+    </header>
+
+    <div class="voice-signal-ribbon" aria-label="麦克风实时输入电平">
+      <div class="voice-signal-track">
+        <div class="voice-signal-fill" id="voice-level-fill"></div>
+        <div class="voice-signal-grid"></div>
+      </div>
+      <span class="voice-signal-value"><b id="voice-level-value">0</b> LVL</span>
+      <time id="voice-recording-time">00:00</time>
+    </div>
+
+    <div class="voice-panel-body">
+      <section class="voice-config-block" aria-labelledby="voice-ai-label">
+        <div class="voice-block-heading">
+          <div>
+            <span class="voice-block-index">01</span>
+            <strong id="voice-ai-label">Jetson 本地 AI</strong>
+          </div>
+          <span class="voice-session-status" id="voice-session-status" data-state="idle"
+                role="status" aria-live="polite">等待操作</span>
+        </div>
+        <div class="voice-route-options" role="group" aria-label="选择语音识别计算路径">
+          <button class="voice-route-option" type="button"
+                  data-voice-endpoint="ws://192.168.58.43:3002/v1/voice"
+                  aria-pressed="true">
+            <span class="voice-route-kicker">GPU</span>
+            <strong>高速识别</strong>
+            <small>端口 3002 · 推荐</small>
+          </button>
+          <button class="voice-route-option" type="button"
+                  data-voice-endpoint="ws://192.168.58.43:3001/v1/voice"
+                  aria-pressed="false">
+            <span class="voice-route-kicker">CPU</span>
+            <strong>兼容回退</strong>
+            <small>端口 3001 · 较慢</small>
+          </button>
+        </div>
+        <div class="voice-route-control">
+          <input id="voice-ai-endpoint" type="hidden"
+                 value="ws://192.168.58.43:3002/v1/voice">
+          <span id="voice-route-description">GPU 3002 · CUDA / float16</span>
+          <button id="voice-ai-reconnect" type="button">重新连接</button>
+        </div>
+      </section>
+
+      <section class="voice-config-block" aria-labelledby="voice-mic-label">
+        <div class="voice-block-heading">
+          <div>
+            <span class="voice-block-index">02</span>
+            <strong id="voice-mic-label">音频输入</strong>
+          </div>
+          <span class="voice-status-chip" id="voice-mic-status" data-state="off">麦克风关闭</span>
+        </div>
+        <div class="voice-device-row">
+          <select id="voice-device-select" aria-label="选择麦克风" disabled>
+            <option value="">启用后检测麦克风</option>
+          </select>
+          <button id="voice-mic-toggle" type="button">启用麦克风</button>
+        </div>
+        <p class="voice-help">只在录音期间向所选 AI 通道发送音频；关闭麦克风会立即释放设备。</p>
+      </section>
+
+      <section class="voice-capture-block" aria-labelledby="voice-capture-label">
+        <div class="voice-block-heading">
+          <div>
+            <span class="voice-block-index">03</span>
+            <strong id="voice-capture-label">语音会话</strong>
+          </div>
+          <span class="voice-limit">最长 00:30</span>
+        </div>
+        <div class="voice-record-actions">
+          <button class="voice-record-button" id="voice-record-toggle" type="button" disabled>
+            <span class="voice-record-symbol" aria-hidden="true"></span>
+            <span>开始录音</span>
+          </button>
+          <button class="voice-record-cancel" id="voice-record-cancel" type="button" disabled>
+            取消
+          </button>
+        </div>
+      </section>
+
+      <section class="voice-conversation-block" aria-labelledby="voice-transcript-label">
+        <div class="voice-block-heading">
+          <div>
+            <span class="voice-block-index">04</span>
+            <strong id="voice-transcript-label">实时对话</strong>
+          </div>
+          <span class="voice-mock-badge">VOICE + TEXT / SIM ONLY</span>
+        </div>
+        <div class="voice-conversation" id="voice-conversation" aria-live="polite"
+             aria-relevant="additions text">
+          <div class="voice-empty">
+            <span class="voice-empty-mark">LIVE</span>
+            <p>说话或输入文字，与 Jetson 本地 AI 开始对话。</p>
+          </div>
+        </div>
+        <form class="voice-text-composer" id="voice-text-form" novalidate>
+          <div class="voice-text-rail">
+            <span class="voice-text-channel" aria-hidden="true">TXT</span>
+            <label class="voice-sr-only" for="voice-text-input">输入文字指令</label>
+            <textarea id="voice-text-input" rows="1" maxlength="2000"
+                      enterkeyhint="send" autocomplete="off"
+                      aria-describedby="voice-text-help"
+                      placeholder="输入文字指令…"></textarea>
+            <button id="voice-text-send" type="submit" disabled>
+              <span>发送</span>
+              <span aria-hidden="true">↗</span>
+            </button>
+          </div>
+          <div class="voice-text-help" id="voice-text-help">
+            <span>Enter 发送 · Shift+Enter 换行</span>
+            <output id="voice-text-count" for="voice-text-input">0 / 2000</output>
+          </div>
+        </form>
+      </section>
+
+      <section class="voice-intent-card" id="voice-intent-card" aria-live="assertive" hidden>
+        <div class="voice-intent-topline">
+          <span>AI 理解 · 等待确认</span>
+          <b id="voice-intent-confidence">--</b>
+        </div>
+        <strong id="voice-intent-name">—</strong>
+        <p id="voice-intent-source">来自：“—”</p>
+        <p class="voice-intent-boundary">确认后仅更新本地 3D 模型和日志，不发送到 LUMOS。</p>
+        <div class="voice-intent-actions">
+          <button class="voice-cancel-button" id="voice-intent-cancel" type="button">取消</button>
+          <button class="voice-confirm-button" id="voice-intent-confirm" type="button">确认本地模拟</button>
+        </div>
+      </section>
+    </div>
+
+    <footer class="voice-panel-footer">
+      <span class="voice-privacy-dot"></span>
+      麦克风必须由用户手动启用；AI 候选不会向机械臂发送控制消息。
+    </footer>
+  </section>
 
   <!-- 通信日志面板（底部上滑） -->
   <div id="log-panel">
@@ -216,6 +403,6 @@
     }
   }
   </script>
-  <script type="module" src="js/main.js"></script>
+  <script type="module" src="js/main.js?v=4"></script>
 </body>
 </html>

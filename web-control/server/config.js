@@ -58,4 +58,48 @@ module.exports = {
     name: 'Startouch FastTouchV3',
     source: 'models/startouch-v3/FastTouchV3.SLDASM.urdf',
   },
+
+  camera: {
+    enabled: process.env.CAMERA_ENABLED !== '0',
+    python: process.env.CAMERA_PYTHON ||
+      path.join(os.homedir(), 'miniconda3', 'envs', 'thirdhand-remind3d', 'bin', 'python'),
+    onlineEnabled: process.env.VISION_ONLINE_ENABLED === '1',
+    visionConfig: process.env.VISION_CONFIG ||
+      path.resolve(__dirname, '../../configs/vision/remind3d.yaml'),
+    activeViewConfig: process.env.ACTIVE_VIEW_CONFIG ||
+      path.resolve(__dirname, '../../configs/vision/active_view.yaml'),
+    activeViewEvidenceDir: process.env.ACTIVE_VIEW_EVIDENCE_DIR ||
+      path.resolve(__dirname, '../../data/calibration/active-view'),
+    activeViewCameraEvidence: process.env.ACTIVE_VIEW_CAMERA_EVIDENCE || '',
+    activeViewTableEvidence: process.env.ACTIVE_VIEW_TABLE_EVIDENCE || '',
+    activeViewCatalog: process.env.ACTIVE_VIEW_CATALOG || '',
+    lumosSnapshotUrl: process.env.LUMOS_SNAPSHOT_URL ||
+      'http://127.0.0.1:3001/frame.jpg',
+    yoloModel: process.env.CAMERA_YOLO_MODEL || path.join(__dirname, 'yolov8n.pt'),
+    calibrationFile: process.env.CAMERA_CALIB_FILE ||
+      path.join(os.homedir(), 'calibration', 'd435_handeye_result.json'),
+    detectionInterval: Number(process.env.CAMERA_DETECT_INTERVAL || 10),
+    jpegQuality: Number(process.env.CAMERA_JPEG_QUALITY || 70),
+    deskZ: Number(process.env.CAMERA_DESK_Z || 0.0),
+    safeZ: Number(process.env.CAMERA_SAFE_Z || 0.12),
+  },
+
+  visionSafety: {
+    // This release has no validated task checkpoint or calibration chain.
+    robotExecutionEnabled: false,
+  },
+
+  activeView: {
+    // Both this request and a valid short-lived approval file are required.
+    requested: process.env.ACTIVE_VIEW_EXECUTION_ENABLED === '1',
+    approvalFile: process.env.ACTIVE_VIEW_APPROVAL_FILE || '',
+    auditLog: process.env.ACTIVE_VIEW_AUDIT_LOG ||
+      path.resolve(__dirname, '../../artifacts/vision/active-view-control/events.jsonl'),
+    robotModelId: 'startouch-fasttouch-v3',
+    maxSpeedScale: 0.05,
+    maxTranslationM: 0.020,
+    maxRotationRad: 5 * Math.PI / 180,
+    maxRefinementSteps: 3,
+    requireStepConfirmation: true,
+  },
 };

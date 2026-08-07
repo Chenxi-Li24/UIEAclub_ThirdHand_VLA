@@ -29,10 +29,23 @@ logs/*.jsonl
 logs/*.yaml
 logs/**/*.log
 logs/**/frames/
+logs/**
+!logs/.gitkeep
+*.pid
+
+# Downloaded ML model weights
+*.pt
+*.onnx
+
+# Robot operator backups
+configs/tasks/.fixed_pick_place_backups/
 
 # Data (runtime-generated)
 data/calibration/*.npz
 data/calibration/*.yaml
+data/calibration/active-view/
+/models/vision/
+/artifacts/vision/
 
 # OS
 .DS_Store

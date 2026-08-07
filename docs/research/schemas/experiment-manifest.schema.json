@@ -1,0 +1,71 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://uiea.example/schemas/thirdhand-experiment-manifest-v1.json",
+  "title": "ThirdHand Experiment Manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "experiment_id",
+    "research_track",
+    "hypothesis_id",
+    "git_commit",
+    "command",
+    "environment",
+    "dataset",
+    "models",
+    "calibration_id",
+    "seeds",
+    "started_at",
+    "artifacts"
+  ],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "experiment_id": { "type": "string", "minLength": 1 },
+    "research_track": { "enum": ["vision", "vla", "vision_vla"] },
+    "hypothesis_id": { "type": "string", "minLength": 1 },
+    "git_commit": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+    "command": {
+      "type": "array",
+      "items": { "type": "string" },
+      "minItems": 1
+    },
+    "environment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["python", "os", "hardware", "dependencies_lock_sha256"],
+      "properties": {
+        "python": { "type": "string" },
+        "os": { "type": "string" },
+        "hardware": { "type": "object" },
+        "dependencies_lock_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      }
+    },
+    "dataset": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["manifest", "sha256", "split"],
+      "properties": {
+        "manifest": { "type": "string" },
+        "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "split": { "enum": ["train", "validation", "test", "replay", "live"] }
+      }
+    },
+    "models": {
+      "type": "array",
+      "items": { "type": "object" },
+      "minItems": 1
+    },
+    "calibration_id": { "type": ["string", "null"] },
+    "seeds": {
+      "type": "array",
+      "items": { "type": "integer" },
+      "minItems": 1
+    },
+    "started_at": { "type": "string", "format": "date-time" },
+    "artifacts": { "type": "array", "items": { "type": "object" } }
+  }
+}

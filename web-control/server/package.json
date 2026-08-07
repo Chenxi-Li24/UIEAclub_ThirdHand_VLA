@@ -5,7 +5,22 @@
   "main": "proxy.js",
   "scripts": {
     "start": "node proxy.js",
-    "dev": "node proxy.js"
+    "dev": "node proxy.js",
+    "test:voice-protocol": "node test/protocol-smoke.js",
+    "test:grasp-authorization": "node test/grasp-authorization-smoke.js",
+    "test:active-view-authorization": "node test/active-view-authorization-smoke.js",
+    "test:active-view-controller": "node test/active-view-controller-smoke.js",
+    "test:active-view-audit-log": "node test/active-view-audit-log-smoke.js",
+    "test:active-view-browser-protocol": "node test/active-view-browser-protocol-smoke.js",
+    "test:active-view-demo": "node test/active-view-demo-smoke.js",
+    "test:active-view-demo-browser": "node test/active-view-demo-browser-smoke.js",
+    "test:live-camera-streams": "node test/live-camera-streams-smoke.js",
+    "test:live-camera-page-browser": "node test/live-camera-page-browser-smoke.js",
+    "test:lumos-proxy": "node test/lumos-proxy-smoke.js",
+    "test:vision-status": "node test/vision-status-smoke.js",
+    "test:teach-active-view": "node test/teach-active-view-pose-smoke.js",
+    "test:browser": "node test/browser-smoke.js",
+    "test": "npm run test:voice-protocol && npm run test:grasp-authorization && npm run test:active-view-authorization && npm run test:active-view-controller && npm run test:active-view-audit-log && npm run test:active-view-browser-protocol && npm run test:active-view-demo && npm run test:active-view-demo-browser && npm run test:live-camera-streams && npm run test:live-camera-page-browser && npm run test:vision-status && npm run test:teach-active-view && npm run test:lumos-proxy && npm run test:browser"
   },
   "dependencies": {
     "express": "^4.21.0",

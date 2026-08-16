@@ -1,5 +1,8 @@
 # PART D / Execution handoff
 
+中文端口、文件位置、链路和 Orchestrator 接入说明见
+`ORCHESTRATOR_INTEGRATION_CN.md`。
+
 ## Delivery status
 
 This package is directly startable and integratable for:

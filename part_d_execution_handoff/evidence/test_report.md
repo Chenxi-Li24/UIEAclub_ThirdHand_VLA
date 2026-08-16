@@ -1,7 +1,7 @@
 # PART D test report
 
 - Date: 2026-08-17 (Asia/Shanghai)
-- Implementation commit: `PENDING_IMPLEMENTATION_COMMIT`
+- Implementation commit: `dfa5dd3765267d56322f2a3a8d874bc556af4969`
 - Modes exercised: `simulate`, local no-motion `dry-run`; `real` was not run
 - Hardware access: none
 - Bridge/SDK/CAN/SSH access: none
@@ -14,7 +14,7 @@
 ```text
 PYTHONPATH=src .venv-control/bin/python -m pytest -q -p no:cacheprovider tests/control/test_startouch_fixed_waypoint_adapter.py tests/control/test_startouch_execution_service.py tests/control/test_part_d_handoff.py
 ............................................                             [100%]
-44 passed in 4.60s
+44 passed in 4.52s
 ```
 
 ```text

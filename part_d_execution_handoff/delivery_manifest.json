@@ -3,7 +3,7 @@
   "role": "execution",
   "repository": "https://github.com/Chenxi-Li24/UIEAclub_ThirdHand_VLA.git",
   "branch": "control-fixed-a-to-b",
-  "commit": "PENDING_IMPLEMENTATION_COMMIT",
+  "commit": "dfa5dd3765267d56322f2a3a8d874bc556af4969",
   "entrypoint": "web-control/server/startouch_execution_service.py",
   "adapterIds": ["startouch_fixed_waypoint_adapter_v1"],
   "executionPlanKinds": ["fixed_waypoint_a_to_b"],

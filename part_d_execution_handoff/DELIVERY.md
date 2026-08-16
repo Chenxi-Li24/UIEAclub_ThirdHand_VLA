@@ -19,7 +19,8 @@ Startouch Bridge, SDK, CAN interface, and SSH robot host were not contacted.
 | Repository | `https://github.com/Chenxi-Li24/UIEAclub_ThirdHand_VLA.git` |
 | Local path used | `/Users/Mihail/Library/Mobile Documents/com~apple~CloudDocs/XJTLU/UIEA/Control skill/UIEAclub_ThirdHand_VLA` |
 | Branch | `control-fixed-a-to-b` |
-| Implementation commit | `PENDING_IMPLEMENTATION_COMMIT` |
+| Implementation commit | `dfa5dd3765267d56322f2a3a8d874bc556af4969` |
+| Worktree at final handoff | Clean; no uncommitted task files |
 | HTTP entrypoint | `web-control/server/startouch_execution_service.py` |
 | Adapter | `web-control/scripts/startouch_fixed_waypoint_adapter.py` |
 | Existing runner reused for parsing/config validation | `web-control/scripts/fixed_pick_place.py` |
@@ -27,9 +28,10 @@ Startouch Bridge, SDK, CAN interface, and SSH robot host were not contacted.
 | Existing YAML | `configs/tasks/fixed_pick_place.yaml` |
 | Focused tests | `tests/control/test_startouch_fixed_waypoint_adapter.py`, `tests/control/test_startouch_execution_service.py`, `tests/control/test_part_d_handoff.py` |
 
-The manifest's `commit` is the immutable implementation commit. A later local
-metadata-only commit may update this SHA inside the package; this avoids falsely
-claiming that a Git commit can contain its own hash. Nothing is pushed.
+The manifest's `commit` is the immutable implementation commit. The following
+local metadata-only commit updates that SHA and the fresh evidence inside this
+package; this avoids falsely claiming that a Git commit can contain its own
+hash. Nothing is pushed.
 
 ## Reproducible environment
 

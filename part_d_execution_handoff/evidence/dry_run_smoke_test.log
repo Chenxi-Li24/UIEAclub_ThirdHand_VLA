@@ -1,0 +1,20 @@
+PART D LOCAL NO-MOTION DRY-RUN SMOKE TEST
+Date: 2026-08-17T02:33:01+08:00
+Endpoint: http://127.0.0.1:7788/v1/execution
+Request: part_d_execution_handoff/examples/execution_request_dry_run.json
+Command: curl --fail --silent --show-error --header 'Content-Type: application/json' --data @part_d_execution_handoff/examples/execution_request_dry_run.json http://127.0.0.1:7788/v1/execution
+HTTP status: 200
+Process result: success
+Real mode executed: false
+Bridge started: false
+SDK initialized: false
+CAN opened: false
+Motion/gripper command sent: false
+
+Capabilities after request:
+{"status":"ok","service":"part_d_execution","adapterId":"startouch_fixed_waypoint_adapter_v1","supportedExecutionPlanKinds":["fixed_waypoint_a_to_b"],"validatedModes":["simulate","dry-run"],"realModeEnabled":false,"busy":false,"hardwareAccess":false,"bridgeStarted":false,"sdkInitialized":false,"canOpened":false,"motionCommandsEnabled":false,"executionEndpoint":"/v1/execution","transport":"http_json","authentication":"none_loopback_only","maxBodyBytes":1048576,"requestReadTimeoutSeconds":5.0}
+
+Response:
+{"schemaVersion":"1.0","type":"execution.result","messageId":"msg-4974f80964f440b7ad083973d1b3f1f7","replyTo":"msg-part-d-dry-run-001","sessionId":"session-part-d-dry-run-001","traceId":"trace-part-d-dry-run-001","ts":1786905181021,"source":"robot","target":"orchestrator","mode":"dry-run","status":"success","payload":{"candidateId":"candidate-part-d-dry-run-001","sequenceId":"plan-part-d-dry-run-001","executor":"fixed_pick_place_adapter","executedSteps":0,"hardwareFeedbackVerified":false,"safetyEvent":false,"bridgeEvidence":{"bridgeRef":"web-control/server/startouch_bridge.py","commandCompleteCount":0,"finalRobotStateRef":null,"postMotionJointFeedbackVerified":false,"gripperFeedbackVerified":false,"canFeedbackVerified":false,"softwareStopConfirmed":false}}}
+
+Interpretation: this dry-run validates only the contract, local files, YAML, speed, and the 11-state route ending at HOME. It did not check Bridge/SDK reachability or robot state and does not prove a real pick-and-place.

@@ -1,0 +1,14 @@
+{
+  "session-part-d-simulate-001": {
+    "traceId": "trace-part-d-simulate-001",
+    "candidateId": "candidate-part-d-simulate-001",
+    "decisionId": "decision-part-d-simulate-001",
+    "targetId": "coke-01"
+  },
+  "session-part-d-dry-run-001": {
+    "traceId": "trace-part-d-dry-run-001",
+    "candidateId": "candidate-part-d-dry-run-001",
+    "decisionId": "decision-part-d-dry-run-001",
+    "targetId": "coke-01"
+  }
+}

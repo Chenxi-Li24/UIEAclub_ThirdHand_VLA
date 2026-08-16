@@ -1,0 +1,35 @@
+{
+  "schemaVersion": "1.0",
+  "type": "execution.result",
+  "messageId": "msg-part-d-unconfirmed-result-001",
+  "replyTo": "msg-part-d-unconfirmed-001",
+  "sessionId": "session-part-d-unconfirmed-001",
+  "traceId": "trace-part-d-unconfirmed-001",
+  "ts": 1786917602100,
+  "source": "robot",
+  "target": "orchestrator",
+  "mode": "simulate",
+  "status": "blocked",
+  "payload": {
+    "candidateId": "candidate-part-d-unconfirmed-001",
+    "sequenceId": "plan-part-d-unconfirmed-001",
+    "executor": "fixed_pick_place_adapter",
+    "executedSteps": 0,
+    "hardwareFeedbackVerified": false,
+    "safetyEvent": true,
+    "bridgeEvidence": {
+      "bridgeRef": "web-control/server/startouch_bridge.py",
+      "commandCompleteCount": 0,
+      "finalRobotStateRef": null,
+      "postMotionJointFeedbackVerified": false,
+      "gripperFeedbackVerified": false,
+      "canFeedbackVerified": false,
+      "softwareStopConfirmed": false
+    }
+  },
+  "error": {
+    "code": "schema_validation_failed",
+    "message": "execution.request is invalid because confirmed must be true",
+    "retryable": false
+  }
+}

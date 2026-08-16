@@ -1,0 +1,52 @@
+{
+  "schemaVersion": "1.0",
+  "type": "execution.request",
+  "messageId": "msg-control-001",
+  "replyTo": "msg-confirmation-001",
+  "sessionId": "session-control-001",
+  "traceId": "trace-control-001",
+  "ts": 1786890000000,
+  "source": "orchestrator",
+  "target": "robot",
+  "mode": "simulate",
+  "status": "ready",
+  "payload": {
+    "candidateId": "candidate-control-001",
+    "decisionId": "decision-control-001",
+    "confirmed": true,
+    "targetId": "coke-01",
+    "executionPlan": {
+      "kind": "fixed_waypoint_a_to_b",
+      "planId": "plan-control-001",
+      "adapterId": "startouch_fixed_waypoint_adapter_v1",
+      "bridgeRef": "web-control/server/startouch_bridge.py",
+      "configRef": "configs/tasks/fixed_pick_place.yaml",
+      "sourceWorkflow": "home_transit_ab",
+      "sourceZoneId": "pick_zone_a",
+      "destinationZoneId": "drop_zone_b",
+      "routeStates": [
+        "OPEN_GRIPPER_READY",
+        "MOVE_HOME_START",
+        "APPROACH_A_UP",
+        "DESCEND_TO_A_PICK",
+        "ADAPTIVE_GRASP_A",
+        "LIFT_A",
+        "TRANSFER_A_UP_TO_B_UP",
+        "DESCEND_TO_B",
+        "RELEASE_AT_B",
+        "LIFT_AFTER_RELEASE_B",
+        "RETURN_B_UP_TO_HOME"
+      ],
+      "cycles": 1,
+      "confirmEachStep": true,
+      "speedScale": 0.15
+    },
+    "safety": {
+      "uniqueTargetAuthorized": true,
+      "frameFresh": true,
+      "mutuallyExclusiveMotion": true,
+      "physicalEStopReady": false,
+      "speedScale": 0.15
+    }
+  }
+}

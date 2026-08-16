@@ -10,6 +10,7 @@ eggs/
 
 # Virtual environments
 .venv/
+.venv-control/
 venv/
 env/
 

@@ -1,0 +1,20 @@
+PART D SIMULATE SMOKE TEST
+Date: 2026-08-17T02:32:50+08:00
+Endpoint: http://127.0.0.1:7788/v1/execution
+Request: part_d_execution_handoff/examples/execution_request_simulate.json
+Command: curl --fail --silent --show-error --header 'Content-Type: application/json' --data @part_d_execution_handoff/examples/execution_request_simulate.json http://127.0.0.1:7788/v1/execution
+HTTP status: 200
+Process result: success
+Real mode executed: false
+Bridge started: false
+SDK initialized: false
+CAN opened: false
+Motion/gripper command sent: false
+
+Health before request:
+{"status":"ok","service":"part_d_execution","adapterId":"startouch_fixed_waypoint_adapter_v1","supportedExecutionPlanKinds":["fixed_waypoint_a_to_b"],"validatedModes":["simulate","dry-run"],"realModeEnabled":false,"busy":false,"hardwareAccess":false,"bridgeStarted":false,"sdkInitialized":false,"canOpened":false,"motionCommandsEnabled":false}
+
+Response:
+{"schemaVersion":"1.0","type":"execution.result","messageId":"msg-6616d73c4fce43119f8cf718a32f4505","replyTo":"msg-part-d-simulate-001","sessionId":"session-part-d-simulate-001","traceId":"trace-part-d-simulate-001","ts":1786905170089,"source":"robot","target":"orchestrator","mode":"simulate","status":"success","payload":{"candidateId":"candidate-part-d-simulate-001","sequenceId":"plan-part-d-simulate-001","executor":"fixed_pick_place_adapter","executedSteps":11,"hardwareFeedbackVerified":false,"safetyEvent":false,"bridgeEvidence":{"bridgeRef":"web-control/server/startouch_bridge.py","commandCompleteCount":0,"finalRobotStateRef":null,"postMotionJointFeedbackVerified":false,"gripperFeedbackVerified":false,"canFeedbackVerified":false,"softwareStopConfirmed":false}}}
+
+Interpretation: executedSteps=11 counts software-simulated route states. It is not hardware movement or verified pick-and-place evidence.

@@ -1,0 +1,30 @@
+{
+  "part": "D",
+  "role": "execution",
+  "repository": "https://github.com/Chenxi-Li24/UIEAclub_ThirdHand_VLA.git",
+  "branch": "control-fixed-a-to-b",
+  "commit": "PENDING_IMPLEMENTATION_COMMIT",
+  "entrypoint": "web-control/server/startouch_execution_service.py",
+  "adapterIds": ["startouch_fixed_waypoint_adapter_v1"],
+  "executionPlanKinds": ["fixed_waypoint_a_to_b"],
+  "bridgeRef": "web-control/server/startouch_bridge.py",
+  "configRef": "configs/tasks/fixed_pick_place.yaml",
+  "endpoint": "http://127.0.0.1:7788/v1/execution",
+  "healthCheck": "curl --fail --silent http://127.0.0.1:7788/health",
+  "validatedModes": ["simulate", "dry-run"],
+  "realModeExecutedForThisDelivery": false,
+  "tests": {
+    "command": "PYTHONPATH=src .venv-control/bin/python -m pytest -q -p no:cacheprovider tests/control/test_startouch_fixed_waypoint_adapter.py tests/control/test_startouch_execution_service.py tests/control/test_part_d_handoff.py",
+    "passed": 44,
+    "failed": 0
+  },
+  "knownLimitations": [
+    "dry-run is local no-motion preflight only; Bridge, SDK and robot-state reachability are not checked",
+    "startouch_action_chunk_adapter_v1 is not implemented or registered",
+    "real mode and all hardware motion are disabled and unverified",
+    "cross-message ID and authorization proof requires an Orchestrator-owned optional binding registry",
+    "Bridge/CAN/stale/timeout failure evidence is synthetic fault injection, not observed hardware evidence",
+    "the shared Schema is a sibling runtime dependency in the tested layout unless THIRDHAND_CONTRACT_SCHEMA is set",
+    "the required unconfirmed input fixture is intentionally schema-invalid because confirmed is const true"
+  ]
+}

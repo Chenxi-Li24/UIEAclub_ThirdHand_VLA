@@ -1,0 +1,46 @@
+{
+  "schemaVersion": "1.0",
+  "type": "execution.request",
+  "messageId": "msg-part-d-act-001",
+  "replyTo": "msg-policy-act-001",
+  "sessionId": "session-part-d-act-001",
+  "traceId": "trace-part-d-act-001",
+  "ts": 1786917603000,
+  "source": "orchestrator",
+  "target": "robot",
+  "mode": "simulate",
+  "status": "ready",
+  "payload": {
+    "candidateId": "candidate-part-d-act-001",
+    "decisionId": "decision-part-d-act-001",
+    "confirmed": true,
+    "targetId": "coke-01",
+    "executionPlan": {
+      "kind": "act_chunk",
+      "planId": "plan-part-d-act-001",
+      "adapterId": "startouch_action_chunk_adapter_v1",
+      "bridgeRef": "web-control/server/startouch_bridge.py",
+      "actionChunk": {
+        "sequenceId": "sequence-part-d-act-001",
+        "actionSpaceId": "startouch-j1-j6-rad-gripper-v1",
+        "jointOrder": ["J1", "J2", "J3", "J4", "J5", "J6"],
+        "jointUnit": "rad",
+        "gripperUnit": "normalized_0_1",
+        "steps": [
+          {
+            "dtMs": 100,
+            "jointsRad": [0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+            "gripperNormalized": 1.0
+          }
+        ]
+      }
+    },
+    "safety": {
+      "uniqueTargetAuthorized": true,
+      "frameFresh": true,
+      "mutuallyExclusiveMotion": true,
+      "physicalEStopReady": false,
+      "speedScale": 0.15
+    }
+  }
+}

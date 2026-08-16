@@ -1,0 +1,52 @@
+{
+  "schemaVersion": "1.0",
+  "type": "execution.request",
+  "messageId": "msg-part-d-dry-run-001",
+  "replyTo": "msg-policy-dry-run-001",
+  "sessionId": "session-part-d-dry-run-001",
+  "traceId": "trace-part-d-dry-run-001",
+  "ts": 1786917601000,
+  "source": "orchestrator",
+  "target": "robot",
+  "mode": "dry-run",
+  "status": "ready",
+  "payload": {
+    "candidateId": "candidate-part-d-dry-run-001",
+    "decisionId": "decision-part-d-dry-run-001",
+    "confirmed": true,
+    "targetId": "coke-01",
+    "executionPlan": {
+      "kind": "fixed_waypoint_a_to_b",
+      "planId": "plan-part-d-dry-run-001",
+      "adapterId": "startouch_fixed_waypoint_adapter_v1",
+      "bridgeRef": "web-control/server/startouch_bridge.py",
+      "configRef": "configs/tasks/fixed_pick_place.yaml",
+      "sourceWorkflow": "home_transit_ab",
+      "sourceZoneId": "pick_zone_a",
+      "destinationZoneId": "drop_zone_b",
+      "routeStates": [
+        "OPEN_GRIPPER_READY",
+        "MOVE_HOME_START",
+        "APPROACH_A_UP",
+        "DESCEND_TO_A_PICK",
+        "ADAPTIVE_GRASP_A",
+        "LIFT_A",
+        "TRANSFER_A_UP_TO_B_UP",
+        "DESCEND_TO_B",
+        "RELEASE_AT_B",
+        "LIFT_AFTER_RELEASE_B",
+        "RETURN_B_UP_TO_HOME"
+      ],
+      "cycles": 1,
+      "confirmEachStep": true,
+      "speedScale": 0.15
+    },
+    "safety": {
+      "uniqueTargetAuthorized": true,
+      "frameFresh": true,
+      "mutuallyExclusiveMotion": true,
+      "physicalEStopReady": false,
+      "speedScale": 0.15
+    }
+  }
+}

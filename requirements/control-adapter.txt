@@ -1,0 +1,9 @@
+# Reproduced with Python 3.12.13 on 2026-08-17.
+# Runtime configuration loader used by fixed_pick_place.py
+PyYAML==6.0.3
+
+# Local contract validation and development checks
+jsonschema==4.26.0
+pytest==9.1.1
+pytest-asyncio==1.4.0
+ruff==0.16.3

@@ -1,0 +1,11 @@
+{
+  "profile": "simulation",
+  "description": "Non-hardware foundation profile using alternate loopback ports.",
+  "services": [
+    {"id":"robot","command":"${NODE}","args":["${ROOT}/tools/fixtures/fake_service.js"],"cwd":"${ROOT}","env":{"PORT":"13000"},"bind":"127.0.0.1","port":13000,"shutdownOrder":100,"enabled":true},
+    {"id":"supervisor","command":"${NODE}","args":["${ROOT}/tools/fixtures/fake_service.js"],"cwd":"${ROOT}","env":{"PORT":"13101"},"bind":"127.0.0.1","port":13101,"shutdownOrder":90,"enabled":true},
+    {"id":"model","command":"${NODE}","args":["${ROOT}/tools/fixtures/fake_service.js"],"cwd":"${ROOT}","env":{"PORT":"13102"},"bind":"127.0.0.1","port":13102,"shutdownOrder":70,"enabled":true},
+    {"id":"speech","command":"${NODE}","args":["${ROOT}/tools/fixtures/fake_service.js"],"cwd":"${ROOT}","env":{"PORT":"13004"},"bind":"127.0.0.1","port":13004,"shutdownOrder":60,"enabled":true},
+    {"id":"vision","command":"${NODE}","args":["${ROOT}/tools/fixtures/fake_service.js"],"cwd":"${ROOT}","env":{"PORT":"13100"},"bind":"127.0.0.1","port":13100,"shutdownOrder":50,"enabled":true}
+  ]
+}

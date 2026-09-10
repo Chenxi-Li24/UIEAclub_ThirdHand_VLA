@@ -12,7 +12,8 @@
     "skills/*/*"
   ],
   "scripts": {
-    "test:contracts": "node --test tests/node/contracts/*.test.js"
+    "test:contracts": "node --test tests/node/contracts/*.test.js",
+    "test:launcher": "node --test tests/node/launcher/*.test.js"
   },
   "devDependencies": {
     "ajv": "8.17.1",

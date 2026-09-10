@@ -13,41 +13,56 @@ eggs/
 venv/
 env/
 
-# IDE
+# IDE and operating system
 .vscode/
 .idea/
 *.swp
 *.swo
-
-# Environment
-.env
-api_keys.yaml
-
-# Logs
-logs/*.csv
-logs/*.jsonl
-logs/*.yaml
-logs/**/frames/
-
-# Data (runtime-generated)
-data/calibration/*.npz
-data/calibration/*.yaml
-
-# OS
 .DS_Store
 Thumbs.db
 
-# Jupyter
+# Local configuration and secrets
+.env
+api_keys.yaml
+
+# Existing runtime output
+logs/**
+!logs/.gitkeep
+*.pid
+data/calibration/*.npz
+data/calibration/*.yaml
+data/calibration/active-view/
+/models/vision/
+/artifacts/vision/
+configs/tasks/.fixed_pick_place_backups/
+
+# Downloaded model weights and notebooks
+*.pt
+*.onnx
 .ipynb_checkpoints/
 *.ipynb
 
-# PlatformIO
-.pio/
-
-# Node (if using web frontend build)
+# Node and PlatformIO
 node_modules/
 dist/
+.pio/
 
 # Standalone Startouch web control runtime
 web-control/.env
 web-control/server/web-control.log
+
+# Unified local delivery assets: present on Ubuntu, never tracked publicly
+/local/**
+!/local/README.md
+
+# Unified mutable runtime state
+/runtime/**
+!/runtime/README.md
+
+# Archive may keep reviewed first-party source, but not copied runtime payloads
+/archive/**/node_modules/
+/archive/**/.venv/
+/archive/**/build/
+/archive/**/dist/
+/archive/**/models/
+/archive/**/logs/

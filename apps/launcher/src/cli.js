@@ -23,7 +23,8 @@ function serviceMap(items) {
 }
 
 function overallFor(command, items) {
-  if (command === 'stop') return items.every(item => item.state === 'stopped') ? 'stopped' : 'degraded';
+  if (items.length > 0 && items.every(item => item.state === 'stopped')) return 'stopped';
+  if (command === 'stop') return 'degraded';
   if (items.length === 0) return 'degraded';
   return items.every(item => item.state === 'ready') ? 'ready' : 'degraded';
 }

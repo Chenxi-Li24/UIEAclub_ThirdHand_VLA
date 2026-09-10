@@ -42,3 +42,7 @@ def test_simulated_start_status_stop_cycle():
     stopped = _run("stop")
     assert stopped.returncode == 0, stopped.stderr
     assert json.loads(stopped.stdout)["overall"] == "stopped"
+
+    final_status = _run("status")
+    assert final_status.returncode == 0, final_status.stderr
+    assert json.loads(final_status.stdout)["overall"] == "stopped"

@@ -45,3 +45,17 @@ These are pre-existing baseline gaps, not foundation regressions. Later migratio
 ## Rollback
 
 Before cutover, rollback means stopping only processes owned by this new checkout and returning to the already-running old entry points. No source restoration is needed because old projects remain unchanged.
+
+## Foundation Verification
+
+Verified on the Ubuntu host on 2026-09-10:
+
+- Python foundation suite: 10 passed. The host base interpreter is Python 3.14.6 and emits one warning because the cloned legacy `pyproject.toml` declares `asyncio_mode` while `pytest-asyncio` is not installed in that base environment.
+- Node contracts: 3 passed.
+- Node launcher and Skill Registry: 4 passed.
+- Boundary audit: `ok: true`, zero violations.
+- Manual simulation: `doctor` ready; five fake services ready; repeated `start` preserved PIDs; `stop` revoked authorization and stopped all owned services; final `status` reported stopped.
+- Process cleanup: no `tools/fixtures/fake_service.js` processes remained.
+- Existing production Startouch `node proxy.js` was not stopped, restarted, or adopted by the new launcher.
+
+The real Robot, Vision, Speech, Model, Supervisor, Web, and Skill workers have not been migrated in this foundation phase. All formal live services remain disabled in `configs/runtime/default.json`.

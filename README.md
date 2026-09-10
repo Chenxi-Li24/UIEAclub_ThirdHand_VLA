@@ -62,6 +62,27 @@ gripper, and safety details.
 
 Edit `configs/*.yaml` for your hardware setup. See `docs/setup_guide.md`.
 
+## Unified Platform Foundation
+
+The isolated Ubuntu checkout at `/home/nieqingcao/ThirdHand/UIEAclub_ThirdHand_VLA`
+contains the new unified project foundation. At this stage, only the hardware-free
+simulation profile is enabled:
+
+```bash
+THIRDHAND_PROFILE=simulation ./thirdhand doctor
+THIRDHAND_PROFILE=simulation ./thirdhand start
+THIRDHAND_PROFILE=simulation ./thirdhand status
+THIRDHAND_PROFILE=simulation ./thirdhand stop
+```
+
+The real Robot, XVisio, Speech, Model, Supervisor, Web, and Skill workers have not
+yet been migrated into the unified launcher. Existing accepted services continue
+to run from their original read-only projects. Do not use the simulation profile
+for hardware control.
+
+See `docs/DIRECTORY_MAP.md`, `docs/OPERATIONS.md`, and
+`docs/migration/FOUNDATION_BASELINE.md` for ownership, safety, and verification.
+
 ## License
 
 MIT — see [LICENSE](LICENSE)

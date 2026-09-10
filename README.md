@@ -1,89 +1,64 @@
-﻿# ThirdHand VLA -- Desktop Robotic Arm Vision-Language-Action System
+# ThirdHand VLA
 
-> **UIEA Club** | Lumos Touch R1 + Lumos Ego + Cloud VLA + Local ASR/TTS
+ThirdHand 是面向 Startouch 六轴机械臂的统一控制与 VLA 平台。本分支正在把已验证的网页控制、机械臂、视觉、语音和策略能力从多个旧目录迁入一个可审计、可一键启停的项目。
 
-A Python framework for controlling the Lumos Touch R1 desktop robotic arm
-with vision-based perception (ArUco / YOLO), cloud VLA reasoning,
-local ASR/TTS voice interaction, and a web-based control console.
+当前已正式迁移：
 
-## Architecture
+- `apps/web`：现有 Three.js/URDF 控制页面和 LAN Web Gateway；
+- `services/robot`：Startouch SDK、夹爪、CAN 状态和运动安全策略；
+- `apps/launcher`：服务生命周期、PID 所有权、日志和运行 profile；
+- `platform/contracts`、`platform/skill_registry`：Skill 协议和可用性发现；
+- 项目本地 SDK、模型与运行时清单，以及 Startouch URDF/STL 资产准备脚本。
 
+视觉、语音、VLA/ACT/DP、主动视角和自动夹取仍在后续迁移阶段。网页保留相关控件，但网关会对未迁移能力返回明确的 `service_unavailable`，不会偷偷调用旧项目。
+
+## 当前架构
+
+```text
+Windows browser
+    |
+    | http/ws://192.168.58.68:9983
+    v
+apps/web (Web Gateway)
+    |
+    | ws://127.0.0.1:3000/ws
+    v
+services/robot (only CAN owner)
+    |
+    v
+project-local Startouch SDK -> can0 -> arm and gripper
 ```
-Camera -> Perception (ArUco/YOLO) -> FSM -> Control (Robot Arm)
-   |                                     |
-   +-- Cloud VLA (reasoning) ------------+
-   +-- Voice (ASR -> NLU -> Intent) -----+
-   +-- Web Console (FastAPI + Three.js) -+
-```
 
-## Quick Start
+启动服务不会连接 SDK、使能电机、回零或运动。只有网页上的显式“连接”命令才初始化 Startouch SDK。所有关节运动还要通过限位、速度、实时状态、运动互斥和意外全零目标检查。
+
+## 快速验证
+
+安全模拟模式：
 
 ```bash
-git clone https://github.com/Chenxi-Li24/UIEAclub_ThirdHand_VLA
-cd UIEAclub_ThirdHand_VLA
-pip install -e ".[core]"
-cp .env.example .env
-python -m uiea_thirdhand_vla
-# Open http://localhost:8000
+cd /home/nieqingcao/ThirdHand/UIEAclub_ThirdHand_VLA
+./thirdhand start --profile manual-control-simulation
+# 浏览器打开 http://192.168.58.68:9983
+./thirdhand status --profile manual-control-simulation
+./thirdhand stop --profile manual-control-simulation
 ```
 
-### Startouch Hardware Web Control
-
-`web-control/` contains the hardware-tested Startouch SDK control page. The
-browser connects to an Ubuntu WebSocket service, which controls the robot
-directly through `can0`. It is separate from the VLA FastAPI console above and
-uses port `3000` by default.
+真机模式仅在机械臂周围安全、独立硬件急停可触达、`can0` 正常时使用：
 
 ```bash
-cp web-control/.env.example web-control/.env
-web-control/scripts/setup_ubuntu.sh
-web-control/scripts/start_ubuntu.sh
-# Open http://<Ubuntu-IP>:3000
+./thirdhand start --profile manual-control
+# 打开页面后，仍需人工点击“连接”
+./thirdhand stop --profile manual-control
 ```
 
-See [`web-control/README.md`](web-control/README.md) for installation, CAN bus,
-gripper, and safety details.
+软件停止依赖网页、网络、进程、操作系统和 CAN，不能替代独立硬件急停或物理断电。
 
-## Module Map
+详细说明：
 
-| Module | Path | Purpose |
-|--------|------|---------|
-| perception | src/.../perception/ | Camera, calibration, detection |
-| control | src/.../control/ | Robot arm, gripper, safety |
-| interaction | src/.../interaction/ | ASR, TTS, NLU |
-| reasoning | src/.../reasoning/ | Cloud VLA API client |
-| orchestration | src/.../orchestration/ | State machine, tasks |
-| web | src/.../web/ | FastAPI + frontend |
-| logging | src/.../logging/ | Per-run data recording |
-| config | src/.../config/ | YAML + Pydantic |
-| web-control | web-control/ | Hardware-tested Startouch SDK control page |
+- `docs/RUN_GUIDE.md`
+- `docs/DIRECTORY_MAP.md`
+- `docs/apps/WEB_GATEWAY.md`
+- `docs/services/ROBOT_SERVICE_PROTOCOL.md`
+- `docs/SKILL_PROTOCOL.md`
 
-## Configuration
-
-Edit `configs/*.yaml` for your hardware setup. See `docs/setup_guide.md`.
-
-## Unified Platform Foundation
-
-The isolated Ubuntu checkout at `/home/nieqingcao/ThirdHand/UIEAclub_ThirdHand_VLA`
-contains the new unified project foundation. At this stage, only the hardware-free
-simulation profile is enabled:
-
-```bash
-THIRDHAND_PROFILE=simulation ./thirdhand doctor
-THIRDHAND_PROFILE=simulation ./thirdhand start
-THIRDHAND_PROFILE=simulation ./thirdhand status
-THIRDHAND_PROFILE=simulation ./thirdhand stop
-```
-
-The real Robot, XVisio, Speech, Model, Supervisor, Web, and Skill workers have not
-yet been migrated into the unified launcher. Original-project services are not
-started by the unified launcher and must be run separately only when an explicit
-rollback is required. Do not use the simulation profile for hardware control.
-
-See `docs/DIRECTORY_MAP.md`, `docs/OPERATIONS.md`, and
-`docs/migration/FOUNDATION_BASELINE.md` for ownership and safety. Operational
-steps are in `docs/RUN_GUIDE.md`; Skill semantics are in `docs/SKILL_PROTOCOL.md`.
-
-## License
-
-MIT — see [LICENSE](LICENSE)
+当前分支 `refactor/unified-platform-foundation` 保持本地，不推送、不合并。

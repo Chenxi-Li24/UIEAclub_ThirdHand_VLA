@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-09-10T00:00:00Z",
+  "notes": "Replace RECORD_AFTER_IMPORT and zero sizes with measured values before using this as the local manifest.",
+  "assets": [
+    {"id":"startouch.sdk","kind":"sdk","required":true,"relativePath":"local/sdk/startouch","sha256":"RECORD_AFTER_IMPORT","sizeBytes":0,"licenseStatus":"unknown","compatibility":{"systems":["Linux"],"architectures":["x86_64"]}},
+    {"id":"xvisio.sdk","kind":"sdk","required":true,"relativePath":"local/sdk/xvisio","sha256":"RECORD_AFTER_IMPORT","sizeBytes":0,"licenseStatus":"unknown","compatibility":{"systems":["Linux"],"architectures":["x86_64"]}},
+    {"id":"asr.medium","kind":"model","required":true,"relativePath":"local/models/asr/medium","sha256":"RECORD_AFTER_IMPORT","sizeBytes":0,"licenseStatus":"unknown"},
+    {"id":"asr.realtime","kind":"model","required":true,"relativePath":"local/models/asr/realtime","sha256":"RECORD_AFTER_IMPORT","sizeBytes":0,"licenseStatus":"unknown"},
+    {"id":"asr.high","kind":"model","required":true,"relativePath":"local/models/asr/high","sha256":"RECORD_AFTER_IMPORT","sizeBytes":0,"licenseStatus":"unknown"},
+    {"id":"funasr.source","kind":"vendor-source","required":true,"relativePath":"local/vendor/funasr","sha256":"RECORD_AFTER_IMPORT","sizeBytes":0,"licenseStatus":"unknown"},
+    {"id":"runtime.python","kind":"runtime","required":true,"relativePath":"local/runtimes/python","sha256":"RECORD_AFTER_IMPORT","sizeBytes":0,"licenseStatus":"local-only","compatibility":{"systems":["Linux"],"architectures":["x86_64"]}},
+    {"id":"runtime.node","kind":"runtime","required":true,"relativePath":"local/runtimes/node","sha256":"RECORD_AFTER_IMPORT","sizeBytes":0,"licenseStatus":"local-only","compatibility":{"systems":["Linux"],"architectures":["x86_64"]}},
+    {"id":"policy.vla","kind":"model","required":false,"relativePath":"local/models/policies/vla","sha256":"","sizeBytes":0,"licenseStatus":"unknown"},
+    {"id":"policy.act","kind":"model","required":false,"relativePath":"local/models/policies/act","sha256":"","sizeBytes":0,"licenseStatus":"unknown"},
+    {"id":"policy.dp","kind":"model","required":false,"relativePath":"local/models/policies/dp","sha256":"","sizeBytes":0,"licenseStatus":"unknown"}
+  ]
+}

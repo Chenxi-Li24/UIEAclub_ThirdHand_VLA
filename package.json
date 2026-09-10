@@ -13,7 +13,8 @@
   ],
   "scripts": {
     "test:contracts": "node --test tests/node/contracts/*.test.js",
-    "test:launcher": "node --test tests/node/launcher/*.test.js"
+    "test:launcher": "node --test tests/node/launcher/*.test.js",
+    "test:skills": "node --test tests/node/skill_registry/*.test.js"
   },
   "devDependencies": {
     "ajv": "8.17.1",

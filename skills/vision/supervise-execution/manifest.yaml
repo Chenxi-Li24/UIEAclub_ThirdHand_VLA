@@ -1,0 +1,17 @@
+schema: thirdhand.skill-manifest.v1
+id: vision.supervise-execution
+version: 0.1.0
+summary: Configure read-only visual supervision rules for an approved task.
+risk: read-only
+lifecycle: worker
+runtime: node
+operations: [invoke, status, cancel]
+requires:
+  services: [vision, supervisor]
+  devices: [xvisio]
+  models: []
+schemas:
+  input: schemas/input.json
+  result: schemas/result.json
+entrypoint: src/worker.js
+healthcheck: status

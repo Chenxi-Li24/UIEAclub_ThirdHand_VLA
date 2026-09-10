@@ -18,8 +18,8 @@
     "test:lifecycle": "python -m pytest tests/integration/test_simulated_lifecycle.py -v"
   },
   "devDependencies": {
-    "ajv": "8.17.1",
+    "ajv": "8.20.0",
     "ajv-formats": "3.0.1",
-    "yaml": "2.8.1"
+    "yaml": "2.9.0"
   }
 }

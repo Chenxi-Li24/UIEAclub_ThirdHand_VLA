@@ -2,6 +2,7 @@ const crypto = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
 const { spawn } = require('node:child_process');
+const { once } = require('node:events');
 const { readState, writeStateAtomic } = require('./state-store');
 
 function isAlive(pid) {
@@ -67,6 +68,16 @@ class ServiceSupervisor {
     throw new Error('service readiness timeout');
   }
 
+  async _terminateStartedChild(child) {
+    if (!isAlive(child.pid)) return;
+    child.kill('SIGTERM');
+    await Promise.race([once(child, 'exit'), delay(this.stopTimeoutMs)]);
+    if (isAlive(child.pid)) {
+      child.kill('SIGKILL');
+      await Promise.race([once(child, 'exit'), delay(this.stopTimeoutMs)]);
+    }
+  }
+
   async startAll() {
     fs.mkdirSync(path.join(this.runtimeDir, 'run'), { recursive: true });
     fs.mkdirSync(path.join(this.runtimeDir, 'logs'), { recursive: true });
@@ -90,7 +101,15 @@ class ServiceSupervisor {
       fs.closeSync(stdoutFd);
       fs.closeSync(stderrFd);
       this.children.set(service.id, child);
-      await this._waitReady(child, readyFile);
+      try {
+        await this._waitReady(child, readyFile);
+      } catch (error) {
+        await this._terminateStartedChild(child);
+        try { fs.unlinkSync(readyFile); } catch (unlinkError) {
+          if (unlinkError.code !== 'ENOENT') throw unlinkError;
+        }
+        throw error;
+      }
       child.unref();
 
       const record = {
@@ -135,6 +154,7 @@ class ServiceSupervisor {
       if (!this._owned(record, service)) {
         record.status = 'not_owned';
         record.lastError = 'process_identity_mismatch';
+        writeStateAtomic(this.statePath, state);
         continue;
       }
       process.kill(record.pid, service.gracefulSignal || 'SIGTERM');
@@ -150,6 +170,7 @@ class ServiceSupervisor {
       }
       writeStateAtomic(this.statePath, state);
     }
+    writeStateAtomic(this.statePath, state);
     return this.status();
   }
 }

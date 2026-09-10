@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "thirdhand.service-health.v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "serviceId", "status", "version", "dependencies", "timestamp"],
+  "properties": {
+    "schema": {"const": "thirdhand.service-health.v1"},
+    "serviceId": {"type": "string", "minLength": 1},
+    "status": {"enum": ["ready", "degraded", "unavailable"]},
+    "version": {"type": "string", "minLength": 1},
+    "dependencies": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
+    "timestamp": {"type": "string", "format": "date-time"},
+    "reason": {"type": "string"}
+  }
+}

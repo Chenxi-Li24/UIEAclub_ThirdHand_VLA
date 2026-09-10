@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "thirdhand.skill-manifest.v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "id", "version", "summary", "risk", "lifecycle", "runtime", "operations", "requires", "schemas", "entrypoint", "healthcheck"],
+  "properties": {
+    "schema": {"const": "thirdhand.skill-manifest.v1"},
+    "id": {"type": "string", "pattern": "^[a-z][a-z0-9.-]+$"},
+    "version": {"type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"},
+    "summary": {"type": "string", "minLength": 1},
+    "risk": {"enum": ["read-only", "physical-motion"]},
+    "lifecycle": {"enum": ["request", "worker"]},
+    "runtime": {"enum": ["node", "python"]},
+    "operations": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"enum": ["invoke", "plan", "execute", "status", "cancel"]}},
+    "requires": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["services", "devices", "models"],
+      "properties": {
+        "services": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
+        "devices": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
+        "models": {"type": "array", "items": {"type": "string"}, "uniqueItems": true}
+      }
+    },
+    "schemas": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["input", "result"],
+      "properties": {
+        "input": {"type": "string", "minLength": 1},
+        "plan": {"type": "string", "minLength": 1},
+        "result": {"type": "string", "minLength": 1}
+      }
+    },
+    "entrypoint": {"type": "string", "minLength": 1},
+    "healthcheck": {"type": "string", "minLength": 1}
+  }
+}

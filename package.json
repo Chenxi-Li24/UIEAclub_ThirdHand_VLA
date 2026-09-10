@@ -1,0 +1,22 @@
+{
+  "name": "thirdhand-platform",
+  "version": "0.1.0",
+  "private": true,
+  "engines": {
+    "node": ">=24 <25"
+  },
+  "workspaces": [
+    "apps/*",
+    "platform/*",
+    "services/robot",
+    "skills/*/*"
+  ],
+  "scripts": {
+    "test:contracts": "node --test tests/node/contracts/*.test.js"
+  },
+  "devDependencies": {
+    "ajv": "8.17.1",
+    "ajv-formats": "3.0.1",
+    "yaml": "2.8.1"
+  }
+}

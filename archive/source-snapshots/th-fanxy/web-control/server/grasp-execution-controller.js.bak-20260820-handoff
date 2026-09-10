@@ -1,0 +1,492 @@
+'use strict';
+
+const { randomUUID } = require('crypto');
+const { authorizeGrasp } = require('./grasp-authorization');
+const { authorizePhysicalValidationGrasp } = require('./physical-validation-pregrasp');
+
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+const CONTENT_ID_PATTERN = /^sha256:[0-9a-f]{64}$/;
+
+function exactBrowserCommand(message) {
+  if (!message || typeof message !== 'object' || Array.isArray(message)) return false;
+  const keys = Object.keys(message).sort();
+  return keys.length === 2 && keys[0] === 'identityId' && keys[1] === 'previewId';
+}
+
+function vector3(value) {
+  return Array.isArray(value) && value.length === 3 && value.every(Number.isFinite);
+}
+
+function buildExecutionPlan(plan, {
+  horizontalEulerRad,
+  placeXyM,
+  verticalClearanceM,
+  graspOffsetBaseM,
+  graspApproachAdvanceM,
+}) {
+  if (!vector3(plan.graspPointM) || !vector3(plan.pregraspPointM) ||
+      !vector3(plan.retreatPointM) || !vector3(horizontalEulerRad) ||
+      !Array.isArray(placeXyM) || placeXyM.length !== 2 || !placeXyM.every(Number.isFinite) ||
+      !Number.isFinite(verticalClearanceM) || verticalClearanceM < 0.05 ||
+      !Number.isFinite(graspApproachAdvanceM) || graspApproachAdvanceM < 0 ||
+      graspApproachAdvanceM > 0.06 ||
+      !vector3(graspOffsetBaseM)) {
+    return null;
+  }
+  const sensedGraspPointM = plan.graspPointM.map(
+    (value, index) => value + graspOffsetBaseM[index]
+  );
+  const sensedRetreatPointM = plan.retreatPointM.map(
+    (value, index) => value + graspOffsetBaseM[index]
+  );
+  const sensedApproachVectorM = plan.graspPointM.map(
+    (value, index) => value - plan.pregraspPointM[index]
+  );
+  const approachNormM = Math.hypot(...sensedApproachVectorM);
+  if (!Number.isFinite(approachNormM) || approachNormM < 0.02) return null;
+  // The configured base-frame compensation defines the final TCP pose immediately
+  // before gripper closure. It must not also be interpreted as an approach vector.
+  const graspPointM = sensedGraspPointM;
+  // Side-grasp convention for this cell: stage directly behind the final pose in
+  // base X, with final Y/Z/orientation already established, then enter on X+ only.
+  const pregraspDistanceM = approachNormM;
+  const pregraspPointM = [
+    graspPointM[0] - pregraspDistanceM,
+    graspPointM[1],
+    graspPointM[2],
+  ];
+  const withinValidationWorkspace = ([x, y, z]) =>
+    x >= 0.15 && x <= 0.66 && Math.abs(y) <= 0.45 && z >= 0.04 && z <= 0.65;
+  if (!withinValidationWorkspace(graspPointM) ||
+      !withinValidationWorkspace(pregraspPointM)) return null;
+  const safeZ = Math.round(Math.max(
+    pregraspPointM[2],
+    sensedRetreatPointM[2],
+    graspPointM[2] + verticalClearanceM,
+  ) * 1e9) / 1e9;
+  if (!Number.isFinite(safeZ) || safeZ > 0.65) return null;
+
+  // Only the post-contact lift is vertical in robot-base Z.
+  const liftPointM = [graspPointM[0], graspPointM[1], safeZ];
+  const placePointM = [placeXyM[0], placeXyM[1], graspPointM[2]];
+  const placePregraspPointM = [placeXyM[0], placeXyM[1], safeZ];
+  const placeRetreatPointM = [placeXyM[0], placeXyM[1], safeZ];
+  return {
+    ...plan,
+    graspPointM,
+    pregraspPointM,
+    retreatPointM: liftPointM,
+    liftPointM,
+    placePointM,
+    placePregraspPointM,
+    placeRetreatPointM,
+    horizontalEulerRad: [...horizontalEulerRad],
+  };
+}
+
+function freezePlan(plan) {
+  return Object.freeze({
+    ...plan,
+    evidenceIds: Object.freeze([...plan.evidenceIds]),
+    graspPointM: Object.freeze([...plan.graspPointM]),
+    pregraspPointM: Object.freeze([...plan.pregraspPointM]),
+    retreatPointM: Object.freeze([...plan.retreatPointM]),
+    liftPointM: Object.freeze([...plan.liftPointM]),
+    placePointM: Object.freeze([...plan.placePointM]),
+    placePregraspPointM: Object.freeze([...plan.placePregraspPointM]),
+    placeRetreatPointM: Object.freeze([...plan.placeRetreatPointM]),
+    horizontalEulerRad: Object.freeze([...plan.horizontalEulerRad]),
+  });
+}
+
+class GraspExecutionController {
+  constructor({
+    executionEnabled,
+    getRobotState,
+    getTarget,
+    sendRobot,
+    auditLog,
+    onStatus = () => {},
+    nowMs = Date.now,
+    idFactory = randomUUID,
+    stepTimeoutMs = 30_000,
+    gripperOpenPosition = 1.0,
+    gripperOpenKp = 8.0,
+    gripperAdaptiveKp = 2.0,
+    gripperKd = 0.1,
+    gripperMinContactPosition = 0.08,
+    gripperMaxContactPosition = 0.95,
+    horizontalEulerRad = [0.0, 0.0, 0.0],
+    placeXyM = [0.26783482212847776, 0.010668622392713049],
+    verticalClearanceM = 0.10,
+    graspOffsetBaseM = [0.0, 0.0, 0.0],
+    graspApproachAdvanceM = 0.0,
+    physicalValidationExecutionEnabled = false,
+  }) {
+    this.executionEnabled = executionEnabled === true;
+    this.getRobotState = getRobotState;
+    this.getTarget = getTarget;
+    this.sendRobot = sendRobot;
+    this.auditLog = auditLog;
+    this.onStatus = onStatus;
+    this.nowMs = nowMs;
+    this.idFactory = idFactory;
+    this.stepTimeoutMs = stepTimeoutMs;
+    this.gripperOpenPosition = gripperOpenPosition;
+    this.gripperOpenKp = gripperOpenKp;
+    this.gripperAdaptiveKp = gripperAdaptiveKp;
+    this.gripperKd = gripperKd;
+    this.gripperMinContactPosition = gripperMinContactPosition;
+    this.gripperMaxContactPosition = gripperMaxContactPosition;
+    this.horizontalEulerRad = [...horizontalEulerRad];
+    this.placeXyM = [...placeXyM];
+    this.verticalClearanceM = verticalClearanceM;
+    this.graspOffsetBaseM = [...graspOffsetBaseM];
+    this.graspApproachAdvanceM = graspApproachAdvanceM;
+    this.physicalValidationExecutionEnabled = physicalValidationExecutionEnabled === true;
+    this.session = null;
+    this.inFlight = null;
+  }
+
+  get active() { return this.session !== null || this.inFlight !== null; }
+
+  begin(message, { pauseBeforeClose = false, validatedTarget = null } = {}) {
+    if (!exactBrowserCommand(message)) {
+      return { accepted: false, reason: 'browser_coordinates_forbidden' };
+    }
+    if (!Number.isSafeInteger(message.identityId) || message.identityId < 0 ||
+        typeof message.previewId !== 'string' || !CONTENT_ID_PATTERN.test(message.previewId)) {
+      return { accepted: false, reason: 'grasp_command_invalid' };
+    }
+    if (this.active) return { accepted: false, reason: 'grasp_active' };
+    const target = validatedTarget?.identityId === message.identityId &&
+      validatedTarget?.preview?.previewId === message.previewId
+      ? validatedTarget
+      : this.getTarget(message.identityId, message.previewId);
+    if (!target || target.preview?.previewId !== message.previewId) {
+      return { accepted: false, reason: 'preview_mismatch' };
+    }
+    const robot = this.getRobotState();
+    let decision = authorizeGrasp({
+      executionEnabled: this.executionEnabled,
+      bridgeConnected: robot.connected,
+      armMotionActive: robot.moving,
+      target,
+      nowMs: this.nowMs(),
+    });
+    if (!decision.approved && this.physicalValidationExecutionEnabled) {
+      decision = authorizePhysicalValidationGrasp({
+        enabled: true,
+        target,
+        robot,
+        nowMs: this.nowMs(),
+      });
+    }
+    if (!decision.approved) return { accepted: false, reason: decision.reason };
+    if (robot.stateFresh !== true || !Array.isArray(robot.tcpEulerRad) ||
+        robot.tcpEulerRad.length !== 3 || !robot.tcpEulerRad.every(Number.isFinite)) {
+      return { accepted: false, reason: 'robot_state_stale' };
+    }
+    const sessionId = this.idFactory();
+    if (!UUID_PATTERN.test(sessionId)) return { accepted: false, reason: 'session_id_invalid' };
+    const executionPlan = buildExecutionPlan(decision.plan, {
+      horizontalEulerRad: this.horizontalEulerRad,
+      placeXyM: this.placeXyM,
+      verticalClearanceM: this.verticalClearanceM,
+      graspOffsetBaseM: this.graspOffsetBaseM,
+      graspApproachAdvanceM: this.graspApproachAdvanceM,
+    });
+    if (!executionPlan) return { accepted: false, reason: 'execution_plan_invalid' };
+    this.session = {
+      sessionId,
+      plan: freezePlan(executionPlan),
+      phase: 'open',
+      pauseBeforeClose: pauseBeforeClose === true,
+    };
+    try {
+      this.auditLog.append({
+        action: 'grasp_authorized', sessionId, identityId: decision.plan.identityId,
+        previewId: decision.plan.previewId, calibrationId: decision.plan.calibrationId,
+        evidenceIds: decision.plan.evidenceIds,
+      });
+    } catch {
+      this.session = null;
+      return { accepted: false, reason: 'audit_write_failed' };
+    }
+    if (!this._sendPhase('open')) return { accepted: false, reason: 'robot_transport_unavailable' };
+    return { accepted: true, sessionId, phase: 'open' };
+  }
+
+  _phaseCommand(phase, requestId) {
+    const { plan } = this.session;
+    if (phase === 'open' || phase === 'release') {
+      return { cmd: 'gripper', position: this.gripperOpenPosition,
+        kp: this.gripperOpenKp, kd: this.gripperKd,
+        request_id: requestId, source: `grasp:${phase}` };
+    }
+    if (phase === 'close') {
+      return { cmd: 'gripper', position: 0.0,
+        kp: this.gripperAdaptiveKp, kd: this.gripperKd,
+        request_id: requestId, source: 'grasp:close' };
+    }
+    const points = {
+      pregrasp: plan.pregraspPointM,
+      descend: plan.graspPointM,
+      lift: plan.liftPointM,
+      transfer: plan.placePregraspPointM,
+      place_descend: plan.placePointM,
+      place_retreat: plan.placeRetreatPointM,
+      recovery_lift: plan.liftPointM,
+    };
+    const point = points[phase];
+    const times = {
+      pregrasp: 8.0,
+      descend: 3.0,
+      lift: 3.0,
+      transfer: 8.0,
+      place_descend: 3.0,
+      place_retreat: 3.0,
+      recovery_lift: 3.0,
+    };
+    return { cmd: 'move_l', position: [...point], euler: [...plan.horizontalEulerRad],
+      time_sec: times[phase],
+      request_id: requestId, source: `grasp:${phase}` };
+  }
+
+  _sendPhase(phase) {
+    const requestId = this.idFactory();
+    if (!UUID_PATTERN.test(requestId)) return this._abort('request_id_invalid').accepted === true;
+    const command = this._phaseCommand(phase, requestId);
+    this.inFlight = {
+      phase, requestId, expectedCommand: command.cmd, startedAtMs: this.nowMs(),
+    };
+    this.session.phase = phase;
+    try {
+      this.auditLog.append({
+        action: 'grasp_step_sent', sessionId: this.session.sessionId, phase,
+        requestId, previewId: this.session.plan.previewId,
+      });
+    } catch {
+      this._abort('audit_write_failed');
+      return false;
+    }
+    if (this.sendRobot(command) !== true) {
+      this._abort('robot_transport_unavailable');
+      return false;
+    }
+    this.onStatus(this.snapshot());
+    return true;
+  }
+
+  onRobotEvent(event) {
+    if (event?.type === 'connection' && event.connected === false) return this._abort('robot_disconnected');
+    if (event?.type === 'software_stop') return this._abort('software_stop');
+    if (event?.type === 'vision_invalidated') return this._abort(event.reason || 'vision_invalidated');
+    if (!this.inFlight || !['command_complete', 'error'].includes(event?.type)) {
+      return { handled: false, reason: 'event_ignored' };
+    }
+    if (event.request_id !== this.inFlight.requestId) return { handled: false, reason: 'request_mismatch' };
+    if (event.type === 'command_complete' && event.command !== this.inFlight.expectedCommand) {
+      return { handled: false, reason: 'command_mismatch' };
+    }
+    if (event.type === 'error') return this._abort('robot_error');
+    if (this.inFlight.expectedCommand === 'move_l' && event.reached !== true) {
+      return this._abort('cartesian_target_not_reached');
+    }
+    if (['open', 'release'].includes(this.inFlight.phase) && event.reached !== true) {
+      return this._abort('gripper_open_not_reached');
+    }
+    if (this.inFlight.phase === 'close') {
+      const contactPosition = Number(event.actual_position);
+      const contactDetected = event.reached === false && event.moved === true &&
+        Number.isFinite(contactPosition) &&
+        contactPosition >= this.gripperMinContactPosition &&
+        contactPosition <= this.gripperMaxContactPosition;
+      if (!contactDetected) return this._recoverRetreat('object_contact_not_detected');
+    }
+    const completed = this.inFlight;
+    try {
+      this.auditLog.append({
+        action: 'grasp_step_complete', sessionId: this.session.sessionId,
+        phase: completed.phase, requestId: completed.requestId,
+        previewId: this.session.plan.previewId,
+        ...(completed.phase === 'close' ? { contactPosition: event.actual_position } : {}),
+      });
+    } catch { return this._abort('audit_write_failed'); }
+    this.inFlight = null;
+    if (completed.phase === 'recovery_lift') {
+      return this._abort(this.session.failureReason || 'grasp_recovery');
+    }
+    if (completed.phase === 'descend' && this.session.pauseBeforeClose === true) {
+      const sessionId = this.session.sessionId;
+      const identityId = this.session.plan.identityId;
+      const previewId = this.session.plan.previewId;
+      try {
+        this.auditLog.append({
+          action: 'validation_grasp_pose_reached', sessionId, identityId, previewId,
+          positionM: [...this.session.plan.graspPointM],
+        });
+      } catch { return this._abort('audit_write_failed'); }
+      this.session.phase = 'paused_before_close';
+      this.onStatus({ active: true, phase: 'paused_before_close', sessionId,
+        identityId, previewId });
+      return { handled: true, status: 'paused_before_close', sessionId };
+    }
+    if (completed.phase === 'validation_adjust') {
+      const delta = completed.deltaBaseM;
+      const shifted = key => this.session.plan[key].map(
+        (value, index) => value + delta[index]
+      );
+      this.session.plan = freezePlan({
+        ...this.session.plan,
+        graspPointM: shifted('graspPointM'),
+        liftPointM: shifted('liftPointM'),
+        retreatPointM: shifted('retreatPointM'),
+      });
+      this.session.phase = 'paused_before_close';
+      this.onStatus({ active: true, phase: 'paused_before_close',
+        sessionId: this.session.sessionId, identityId: this.session.plan.identityId,
+        previewId: this.session.plan.previewId });
+      return { handled: true, status: 'paused_before_close',
+        sessionId: this.session.sessionId };
+    }
+    const next = {
+      open: 'pregrasp',
+      pregrasp: 'descend',
+      descend: 'close',
+      close: 'lift',
+      lift: 'transfer',
+      transfer: 'place_descend',
+      place_descend: 'release',
+      release: 'place_retreat',
+    }[completed.phase];
+    if (next) {
+      if (!this._sendPhase(next)) return { handled: true, status: 'aborted' };
+      return { handled: true, status: next };
+    }
+    try {
+      this.auditLog.append({
+        action: 'grasp_complete', sessionId: this.session.sessionId,
+        identityId: this.session.plan.identityId, previewId: this.session.plan.previewId,
+      });
+    } catch { return this._abort('audit_write_failed'); }
+    const sessionId = this.session.sessionId;
+    this.session = null;
+    this.onStatus({ active: false, phase: 'complete', sessionId });
+    return { handled: true, status: 'complete', sessionId };
+  }
+
+  cancel(reason = 'operator_cancelled') { return this._abort(reason); }
+
+  continueAfterPause() {
+    if (!this.session || this.inFlight || this.session.phase !== 'paused_before_close') {
+      return { accepted: false, reason: 'validation_not_paused_before_close' };
+    }
+    const robot = this.getRobotState();
+    if (!robot?.connected || robot.moving || robot.stateFresh !== true) {
+      return { accepted: false, reason: 'robot_not_stationary' };
+    }
+    this.session.pauseBeforeClose = false;
+    if (!this._sendPhase('close')) {
+      return { accepted: false, reason: 'robot_transport_unavailable' };
+    }
+    return { accepted: true, sessionId: this.session.sessionId, phase: 'close' };
+  }
+
+  adjustPausedPose(deltaBaseM) {
+    if (!this.session || this.inFlight || this.session.phase !== 'paused_before_close') {
+      return { accepted: false, reason: 'validation_not_paused_before_close' };
+    }
+    if (!vector3(deltaBaseM) || deltaBaseM.some(value => Math.abs(value) > 0.03) ||
+        Math.hypot(...deltaBaseM) > 0.03) {
+      return { accepted: false, reason: 'validation_adjustment_invalid' };
+    }
+    const robot = this.getRobotState();
+    if (!robot?.connected || robot.moving || robot.stateFresh !== true ||
+        !vector3(robot.tcpPositionM)) {
+      return { accepted: false, reason: 'robot_not_stationary' };
+    }
+    const position = robot.tcpPositionM.map((value, index) => value + deltaBaseM[index]);
+    const [x, y, z] = position;
+    if (x < 0.15 || x > 0.66 || Math.abs(y) > 0.45 || z < 0.04 || z > 0.65) {
+      return { accepted: false, reason: 'validation_workspace_rejected' };
+    }
+    const requestId = this.idFactory();
+    if (!UUID_PATTERN.test(requestId)) {
+      return { accepted: false, reason: 'request_id_invalid' };
+    }
+    const command = { cmd: 'move_l', position,
+      euler: [...this.session.plan.horizontalEulerRad], time_sec: 2.0,
+      request_id: requestId, source: 'grasp:validation_adjust' };
+    this.inFlight = { phase: 'validation_adjust', requestId,
+      expectedCommand: 'move_l', startedAtMs: this.nowMs(),
+      deltaBaseM: [...deltaBaseM] };
+    this.session.phase = 'validation_adjust';
+    try {
+      this.auditLog.append({ action: 'validation_grasp_adjust_sent',
+        sessionId: this.session.sessionId, requestId,
+        deltaBaseM: [...deltaBaseM], positionM: [...position] });
+    } catch {
+      this.inFlight = null;
+      this.session.phase = 'paused_before_close';
+      return { accepted: false, reason: 'audit_write_failed' };
+    }
+    if (this.sendRobot(command) !== true) {
+      this.inFlight = null;
+      this.session.phase = 'paused_before_close';
+      return { accepted: false, reason: 'robot_transport_unavailable' };
+    }
+    this.onStatus(this.snapshot());
+    return { accepted: true, sessionId: this.session.sessionId,
+      phase: 'validation_adjust', requestId, positionM: position };
+  }
+
+  checkTimeout() {
+    if (this.inFlight && this.nowMs() - this.inFlight.startedAtMs > this.stepTimeoutMs) {
+      return this._abort('step_timeout');
+    }
+    return { handled: false, reason: 'not_timed_out' };
+  }
+
+  snapshot() {
+    return {
+      active: this.active,
+      sessionId: this.session?.sessionId ?? null,
+      identityId: this.session?.plan.identityId ?? null,
+      previewId: this.session?.plan.previewId ?? null,
+      phase: this.inFlight?.phase ?? this.session?.phase ?? 'idle',
+      requestId: this.inFlight?.requestId ?? null,
+    };
+  }
+
+  _recoverRetreat(reason) {
+    if (!this.session || !this.inFlight) return this._abort(reason);
+    const failedPhase = this.inFlight.phase;
+    this.inFlight = null;
+    this.session.failureReason = reason;
+    try {
+      this.auditLog.append({
+        action: 'grasp_recovery_started', sessionId: this.session.sessionId,
+        failedPhase, reason, previewId: this.session.plan.previewId,
+      });
+    } catch {
+      return this._abort('audit_write_failed');
+    }
+    if (!this._sendPhase('recovery_lift')) {
+      return { handled: true, accepted: false, reason: 'robot_transport_unavailable' };
+    }
+    return { handled: true, status: 'recovery_lift', reason };
+  }
+
+  _abort(reason) {
+    if (!this.active) return { handled: false, reason: 'grasp_unavailable' };
+    const snapshot = this.snapshot();
+    this.inFlight = null;
+    this.session = null;
+    try { this.auditLog.append({ action: 'grasp_aborted', reason, ...snapshot }); } catch { /* stopped */ }
+    this.onStatus({ ...snapshot, active: false, phase: 'aborted', reason });
+    return { handled: true, accepted: false, reason };
+  }
+}
+
+module.exports = { GraspExecutionController };

@@ -1,0 +1,39 @@
+{
+  "schema": "thirdhand-execution-plan-v2",
+  "stableId": 2,
+  "requestId": "debug-req-2",
+  "evidenceId": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "motionEpoch": 3,
+  "pregraspM": [0.30, 0.05, 0.18],
+  "finalApproachM": [0.40, 0.05, 0.18],
+  "liftM": [0.40, 0.05, 0.30],
+  "prePlaceM": [0.52, -0.20, 0.22],
+  "placeM": [0.52, -0.20, 0.10],
+  "retreatM": [0.52, -0.20, 0.22],
+  "graspEulerRad": [0, 0, 0],
+  "placeEulerRad": [0, 0, 0],
+  "homePreset": "home",
+  "homeJointsDeg": [0, 15, -30, 5, 0, 0],
+  "homeToleranceDeg": 0.5,
+  "widthM": 0.06,
+  "contactMinWidthM": 0.008,
+  "contactMaxWidthM": 0.070,
+  "releaseMinWidthM": 0.074,
+  "releaseMaxWidthM": 0.080,
+  "timeSecByPhase": {
+    "final_approach": 3.334,
+    "lift": 4,
+    "transfer": 9.621,
+    "lower": 4,
+    "retreat": 4
+  },
+  "transferSegments": [
+    {
+      "position": [0.52, -0.20, 0.22],
+      "timeSec": 9.621
+    }
+  ],
+  "openPosition": 1.0,
+  "closePosition": 0.0,
+  "pathValidationId": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+}

@@ -1,0 +1,79 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>UIEA ThirdHand VLA — Control Console</title>
+    <link rel="stylesheet" href="/static/css/console.css">
+</head>
+<body>
+    <!-- Top Status Bar -->
+    <header id="status-bar">
+        <span id="robot-status" class="status-indicator disconnected">Robot: Disconnected</span>
+        <span id="task-name">Task: —</span>
+        <span id="task-state">State: IDLE</span>
+        <span id="fps-counter">FPS: —</span>
+        <span id="latency">Latency: —ms</span>
+    </header>
+
+    <!-- Main Layout -->
+    <main id="console-grid">
+        <!-- Left: Camera Feed -->
+        <section id="camera-panel" class="panel">
+            <h2>Camera</h2>
+            <div id="camera-container">
+                <img id="camera-feed" src="" alt="Camera feed loading...">
+                <canvas id="detection-overlay"></canvas>
+            </div>
+        </section>
+
+        <!-- Center: 3D Robot View -->
+        <section id="robot-panel" class="panel">
+            <h2>Robot View</h2>
+            <div id="robot-3d-container">
+                <canvas id="robot-3d-canvas"></canvas>
+            </div>
+        </section>
+
+        <!-- Right: Task Panel -->
+        <section id="task-panel" class="panel">
+            <h2>Task Control</h2>
+
+            <div id="task-selector">
+                <label for="task-dropdown">Task:</label>
+                <select id="task-dropdown">
+                    <option value="pick_place">Pick & Place</option>
+                    <option value="ar_tag_sort">ArUco Sort</option>
+                </select>
+            </div>
+
+            <div id="task-controls">
+                <button id="btn-start" class="btn btn-green">Start</button>
+                <button id="btn-pause" class="btn btn-yellow">Pause</button>
+                <button id="btn-stop" class="btn btn-red">Stop</button>
+                <button id="btn-estop" class="btn btn-emergency">E-STOP</button>
+                <button id="btn-home" class="btn btn-blue">Home</button>
+            </div>
+
+            <div id="task-params">
+                <h3>Parameters</h3>
+                <div id="param-controls"></div>
+            </div>
+        </section>
+
+        <!-- Bottom: Log -->
+        <section id="log-panel" class="panel">
+            <h2>Event Log</h2>
+            <div id="log-container">
+                <div id="log-entries"></div>
+            </div>
+        </section>
+    </main>
+
+    <!-- Scripts -->
+    <script src="/static/js/dashboard.js"></script>
+    <script src="/static/js/camera_view.js"></script>
+    <script src="/static/js/robot_3d.js"></script>
+    <script src="/static/js/task_panel.js"></script>
+</body>
+</html>

@@ -1,0 +1,18 @@
+=== PART C Policy smoke test ===
+date: 2026-08-17 01:19:52
+host: LAPTOP-UUUC1CSE
+command: python3 client/dry_run_chain.py
+
+[chain] traceId 一致: trace-demo-001
+[chain] replyTo 链连续: 11 条消息全部可回链
+[policy] OK  type
+[policy] OK  status
+[policy] OK  policy.kind
+[policy] OK  plan.kind
+[policy] OK  routeStates
+[policy] OK  traceId 保留
+[policy] OK  replyTo -> msg-005
+[policy] schema.json 校验通过
+
+结果: 全链路 dry-run 回放通过（Policy 环节与官方 demo_flow 一致）
+说明: 这只是 dry-run 链路成功，不代表真实机器人抓取完成。

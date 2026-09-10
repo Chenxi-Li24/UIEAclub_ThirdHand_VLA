@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>ThirdHand 主动视觉工作台</title>
+  <link rel="stylesheet" href="/css/active-vision.css">
+</head>
+<body>
+  <header class="topbar">
+    <div>
+      <p class="eyebrow">THIRDHAND / ACTIVE VISION</p>
+      <h1>双相机主动视觉工作台</h1>
+    </div>
+    <div class="mode-block">
+      <a href="/observation-poses.html" style="color:var(--cyan);font-size:12px">观测位采集</a>
+      <span id="system-mode" class="mode waiting">正在连接</span>
+      <span id="clock" class="clock">--:--:--</span>
+    </div>
+  </header>
+
+  <main>
+    <section class="command-card" aria-labelledby="pick-command-title">
+      <div class="section-title">
+        <div><p class="eyebrow">TASK COMMAND</p><h2 id="pick-command-title">自主夹取指令</h2></div>
+        <p>只传持久 ID；坐标与轨迹由已验证模块生成</p>
+      </div>
+      <form id="pick-command-form" class="pick-command-form">
+        <input id="pick-command-query" maxlength="128" autocomplete="off"
+          value="夹取中间的瓶子" aria-describedby="pick-command-status">
+        <button class="primary" type="submit">识别目标并开始</button>
+      </form>
+      <div id="pick-command-status" class="pick-command-status" role="status" aria-live="polite">
+        等待指令；如果同类目标有多个，请描述“中间的”或直接指定 ID。
+      </div>
+      <div id="pick-command-choices" class="pick-command-choices"></div>
+    </section>
+
+    <section class="camera-stage" aria-label="双相机实时画面">
+      <article class="camera-panel lumos-panel">
+        <div class="panel-heading">
+          <div><span class="camera-index">CAM 01</span><h2>Lumos 广角主视野</h2></div>
+          <div class="role"><b>发现 / 轮廓 / 持久 ID</b><span>RTMDet · DINOv3 · REMIND</span></div>
+        </div>
+        <div class="feed-frame">
+          <img id="lumos-feed" src="/camera_lumos_vision" data-fallback="/camera_lumos"
+            alt="Lumos 算法叠加实时画面">
+          <span class="live-badge"><i></i> LIVE</span>
+          <span id="lumos-feed-state" class="feed-state">等待视频流</span>
+        </div>
+      </article>
+
+      <article class="camera-panel depth-panel">
+        <div class="panel-heading">
+          <div><span class="camera-index">CAM 02</span><h2>D435 深度中心视野</h2></div>
+          <div class="role"><b>对心 / 深度 / 三维定位</b><span>registered RGB-D</span></div>
+        </div>
+        <div class="feed-frame">
+          <img id="d435-feed" src="/camera_d435_raw" data-fallback="/camera"
+            alt="D435 实时画面">
+          <span class="live-badge"><i></i> LIVE</span>
+          <span id="d435-feed-state" class="feed-state">等待视频流</span>
+          <span class="center-reticle" aria-hidden="true"></span>
+        </div>
+      </article>
+    </section>
+
+    <section class="pipeline-card">
+      <div class="section-title">
+        <div><p class="eyebrow">PIPELINE</p><h2>算法衔接</h2></div>
+        <p>每个模块独立输出，后一级只消费已验证结果</p>
+      </div>
+      <ol id="pipeline-stages" class="pipeline-stages"><li>等待运行时状态</li></ol>
+    </section>
+
+    <section class="work-grid">
+      <article class="targets-card">
+        <div class="section-title">
+          <div><p class="eyebrow">OBJECTS</p><h2>桌面目标</h2></div>
+          <span id="target-count" class="count">0</span>
+        </div>
+        <div class="legend">
+          <span><i class="cyan"></i>轮廓与身份</span>
+          <span><i class="amber"></i>抓取预览</span>
+          <span><i class="green"></i>允许执行</span>
+        </div>
+        <div id="target-list" class="target-list"><p class="empty">等待相机识别桌面物体…</p></div>
+      </article>
+
+      <aside class="control-stack">
+        <article class="state-card">
+          <div class="section-title"><div><p class="eyebrow">ACTIVE VIEW</p><h2>主动观察</h2></div></div>
+          <div id="active-view-state" class="state-body">尚未选择目标</div>
+          <div id="active-view-controls" class="button-row"></div>
+        </article>
+
+        <article class="state-card">
+          <div class="section-title"><div><p class="eyebrow">GRASP</p><h2>抓取状态机</h2></div></div>
+          <div id="grasp-state" class="state-body">执行锁定</div>
+        </article>
+
+        <article class="state-card blockers-card">
+          <div class="section-title"><div><p class="eyebrow">GATES</p><h2>剩余门禁</h2></div></div>
+          <ul id="global-blockers" class="blocker-list"><li>正在读取状态</li></ul>
+        </article>
+      </aside>
+    </section>
+
+    <section class="events-card">
+      <div class="section-title"><div><p class="eyebrow">EVENTS</p><h2>实时事件</h2></div><span>最近 12 条</span></div>
+      <ol id="event-log" class="event-log"><li>工作台启动</li></ol>
+    </section>
+  </main>
+
+  <script src="/js/active-vision-store.js"></script>
+  <script src="/js/active-vision-renderer.js"></script>
+  <script src="/js/active-vision-actions.js"></script>
+  <script src="/js/pick-command.js?v=20260807b"></script>
+  <script src="/js/active-vision-client.js"></script>
+</body>
+</html>

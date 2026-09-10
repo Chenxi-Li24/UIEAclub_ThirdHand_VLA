@@ -1,0 +1,26 @@
+{
+  "schema": "thirdhand-handeye-calibration-v2",
+  "T_tool_camera": {
+    "matrix_4x4": [
+      [1.0, 0.0, 0.0, 0.0],
+      [0.0, 1.0, 0.0, 0.0],
+      [0.0, 0.0, 1.0, 0.0],
+      [0.0, 0.0, 0.0, 1.0]
+    ]
+  },
+  "camera": {
+    "camera_serial": "250801DR48FP25002738",
+    "registration_id": "xvisio-sdk:250801DR48FP25002738",
+    "camera_mount_id": "lumos-ego-std:end-effector:installation-1"
+  },
+  "tcp_semantics": "configured_tool_tcp",
+  "numerically_validated": false,
+  "camera_mount_id_activation": false,
+  "activated_camera_mount_id": null,
+  "approved_for_bottle_grasp": false,
+  "physical_validation": {
+    "status": "pending",
+    "measured_error_m": null,
+    "required_3d_point_or_grasp_error_m_max": 0.01
+  }
+}

@@ -1,0 +1,22 @@
+{
+  "schemaVersion": "1.0",
+  "type": "service.error",
+  "messageId": "msg-dbbc75c58a24444a8535a2f6fbc32eaa",
+  "replyTo": "msg:policy-req-badspace-001",
+  "sessionId": "session:handoff-001",
+  "traceId": "trace:handoff-001",
+  "ts": 1786900754870,
+  "source": "policy",
+  "target": "orchestrator",
+  "mode": "dry-run",
+  "status": "failure",
+  "payload": {
+    "stage": "policy"
+  },
+  "error": {
+    "code": "incompatible_action_space",
+    "message": "actionSpaceId must be startouch-j1-j6-rad-gripper-v1",
+    "retryable": false,
+    "details": {}
+  }
+}

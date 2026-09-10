@@ -1,0 +1,300 @@
+'use strict';
+
+const { randomUUID } = require('crypto');
+const { BaseFrameTargetLock, distance } = require('./base-target-lock');
+
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+
+function vector3(value) {
+  return Array.isArray(value) && value.length === 3 && value.every(Number.isFinite);
+}
+
+function clampVector(vector, maxNorm) {
+  const norm = Math.hypot(...vector);
+  if (norm <= maxNorm) return [...vector];
+  return vector.map(value => value * maxNorm / norm);
+}
+
+class VisualAlignController {
+  constructor({
+    executionEnabled,
+    getRobotState,
+    selectBottle,
+    resetTargetPoseReference,
+    sendRobot,
+    startGrasp,
+    onStatus = () => {},
+    nowMs = Date.now,
+    idFactory = randomUUID,
+    targetLock = new BaseFrameTargetLock(),
+    graspOffsetBaseM = [0, 0, 0],
+    horizontalEulerRad = [0, 0, 0],
+    coarseStandoffM = 0.15,
+    alignStandoffM = 0.10,
+    verticalClearanceM = 0.10,
+    maxCoarseTranslationM = 0.40,
+    maxRefineStepM = 0.005,
+    alignmentToleranceM = 0.006,
+    maxRefineSteps = 20,
+    allowCalibrationPending = false,
+  }) {
+    if (typeof getRobotState !== 'function' || typeof selectBottle !== 'function' ||
+        typeof resetTargetPoseReference !== 'function' ||
+        typeof sendRobot !== 'function' || typeof startGrasp !== 'function' ||
+        !vector3(graspOffsetBaseM) || !vector3(horizontalEulerRad)) {
+      throw new TypeError('visual align controller dependencies are invalid');
+    }
+    this.executionEnabled = executionEnabled === true;
+    this.getRobotState = getRobotState;
+    this.selectBottle = selectBottle;
+    this.resetTargetPoseReference = resetTargetPoseReference;
+    this.sendRobot = sendRobot;
+    this.startGrasp = startGrasp;
+    this.onStatus = onStatus;
+    this.nowMs = nowMs;
+    this.idFactory = idFactory;
+    this.targetLock = targetLock;
+    this.graspOffsetBaseM = [...graspOffsetBaseM];
+    this.horizontalEulerRad = [...horizontalEulerRad];
+    this.coarseStandoffM = coarseStandoffM;
+    this.alignStandoffM = alignStandoffM;
+    this.verticalClearanceM = verticalClearanceM;
+    this.maxCoarseTranslationM = maxCoarseTranslationM;
+    this.maxRefineStepM = maxRefineStepM;
+    this.alignmentToleranceM = alignmentToleranceM;
+    this.maxRefineSteps = maxRefineSteps;
+    this.allowCalibrationPending = allowCalibrationPending === true;
+    this.session = null;
+    this.inFlight = null;
+  }
+
+  get active() {
+    return this.session !== null && !['complete', 'aborted', 'handed_off'].includes(this.session.phase);
+  }
+
+  snapshot() {
+    if (!this.session) return { active: false, phase: 'idle' };
+    return {
+      active: this.active,
+      sessionId: this.session.sessionId,
+      phase: this.session.phase,
+      targetIndex: this.session.targetIndex,
+      identityId: this.session.identityId,
+      refineSteps: this.session.refineSteps,
+      reason: this.session.reason,
+      lock: this.targetLock.snapshot(),
+    };
+  }
+
+  start({ targetIndex }) {
+    if (this.executionEnabled !== true) return { accepted: false, reason: 'visual_align_disabled' };
+    if (!Number.isSafeInteger(targetIndex) || targetIndex < 1 || targetIndex > 32) {
+      return { accepted: false, reason: 'target_index_invalid' };
+    }
+    if (this.active) return { accepted: false, reason: 'visual_align_active' };
+    const gate = this._robotGate();
+    if (gate !== null) return { accepted: false, reason: gate };
+    const sessionId = this.idFactory();
+    if (!UUID_PATTERN.test(sessionId)) return { accepted: false, reason: 'session_id_invalid' };
+    this.targetLock.reset();
+    this.inFlight = null;
+    this.session = {
+      sessionId,
+      targetIndex,
+      identityId: null,
+      previewId: null,
+      acquisitionTarget: null,
+      phase: 'acquiring',
+      refineSteps: 0,
+      reason: null,
+    };
+    if (this.selectBottle({ side: 'left', ordinal: targetIndex,
+      request_id: sessionId, force_reacquire: true }) !== true) {
+      return this._abort('vision_transport_unavailable');
+    }
+    this._publish();
+    return { accepted: true, sessionId, phase: 'acquiring' };
+  }
+
+  onVisionTargets(targets) {
+    if (!this.active || this.inFlight !== null) return { handled: false, reason: 'vision_not_expected' };
+    if (!['acquiring', 'waiting_coarse_fresh', 'waiting_refine_fresh'].includes(this.session.phase)) {
+      return { handled: false, reason: 'vision_phase_ignored' };
+    }
+    const gate = this._robotGate();
+    if (gate !== null) return { handled: false, reason: gate };
+    // The vision pipeline may publish every numbered bottle.  Only the one
+    // selected by the ordinal request is actionable and may seed/rebind the
+    // physical lock.
+    const calibrationOnlyBlockers = new Set([
+      'handeye_physical_validation_pending', 'handeye_activation_locked',
+    ]);
+    // Ordinal/actionability seeds identity only once. Afterwards RGB/SAM2
+    // owns identity, so a partial mask or missing depth cannot switch bottles.
+    const observations = this.session.identityId === null && Array.isArray(targets)
+      ? targets.filter(target => target?.actionable === true || (
+        this.allowCalibrationPending && target?.depthValid === true &&
+        target?.preview?.geometryAllowed === false &&
+        Array.isArray(target.preview.blockers) && target.preview.blockers.length > 0 &&
+        target.preview.blockers.every(reason => calibrationOnlyBlockers.has(reason))
+      )) : targets;
+    const observed = this.targetLock.observe(observations, this.nowMs());
+    if (observed.accepted !== true) {
+      this.session.reason = observed.reason;
+      this._publish();
+      return { handled: true, accepted: false, reason: observed.reason };
+    }
+    this.session.identityId = observed.target.identityId;
+    // Keep the evidence-bound preview that created the frozen base-frame
+    // anchor. Later frames may have valid RGB identity but unreliable depth.
+    if (observed.measurementSource === 'depth' || this.session.previewId === null) {
+      this.session.previewId = observed.target.preview.previewId;
+      this.session.acquisitionTarget = {
+        ...observed.target,
+        preview: { ...observed.target.preview },
+      };
+    }
+    this.session.reason = null;
+    if (this.session.phase === 'acquiring') return this._sendCoarseClearance(observed.pointM);
+    if (this.session.phase === 'waiting_coarse_fresh') return this._sendVerticalStaging(observed.pointM);
+    return this._refineOrHandoff(observed.pointM, observed.target);
+  }
+
+  onRobotEvent(event) {
+    if (!this.active) return { handled: false, reason: 'visual_align_inactive' };
+    if (event?.type === 'connection' && event.connected === false) return this._abort('robot_disconnected');
+    if (event?.type === 'software_stop') return this._abort('software_stop');
+    if (!this.inFlight || !['command_complete', 'error'].includes(event?.type)) {
+      return { handled: false, reason: 'event_ignored' };
+    }
+    if (event.request_id !== this.inFlight.requestId) return { handled: false, reason: 'request_mismatch' };
+    if (event.type === 'error' || event.reached === false) return this._abort('visual_align_move_failed');
+    const completedPhase = this.inFlight.phase;
+    this.inFlight = null;
+    this.targetLock.resetEvidence();
+    // Ordinal selection is only meaningful in the initial home view.  Repeating
+    // "left N" after wrist motion can silently switch to another bottle; keep
+    // the existing segmentation track and validate it in the robot-base frame.
+    if (this.resetTargetPoseReference({
+      request_id: this.session.sessionId,
+    }) !== true) return this._abort('vision_pose_reset_unavailable');
+    this.session.phase = completedPhase === 'coarse_clearance'
+      ? 'waiting_coarse_fresh' : 'waiting_refine_fresh';
+    this._publish();
+    return { handled: true, phase: this.session.phase };
+  }
+
+  cancel(reason = 'operator_cancelled') {
+    if (!this.active) return { accepted: false, reason: 'visual_align_inactive' };
+    return this._abort(reason);
+  }
+
+  _robotGate() {
+    const robot = this.getRobotState();
+    if (!robot || robot.connected !== true) return 'robot_not_connected';
+    if (robot.moving === true) return 'arm_motion_active';
+    if (robot.stateFresh !== true || robot.stationary !== true || !vector3(robot.tcpPositionM)) {
+      return 'robot_state_not_stationary';
+    }
+    return null;
+  }
+
+  _corrected(pointM) {
+    return pointM.map((value, index) => value + this.graspOffsetBaseM[index]);
+  }
+
+  _withinWorkspace([x, y, z]) {
+    return x >= 0.15 && x <= 0.66 && Math.abs(y) <= 0.45 && z >= 0.04 && z <= 0.65;
+  }
+
+  _sendCoarseClearance(pointM) {
+    const robot = this.getRobotState();
+    const final = this._corrected(pointM);
+    const position = [
+      final[0] - this.coarseStandoffM,
+      final[1],
+      Math.max(robot.tcpPositionM[2], final[2] + this.verticalClearanceM),
+    ];
+    if (!this._withinWorkspace(position) ||
+        distance(position, robot.tcpPositionM) > this.maxCoarseTranslationM) {
+      return this._abort('coarse_clearance_out_of_workspace');
+    }
+    return this._sendMove('coarse_clearance', position, 8.0);
+  }
+
+  _sendVerticalStaging(pointM) {
+    const robot = this.getRobotState();
+    const final = this._corrected(pointM);
+    // Once inside the clear approach corridor, lower in base Z only.  Y was
+    // established at clearance height and X remains safely behind the bottle.
+    const position = [robot.tcpPositionM[0], robot.tcpPositionM[1], final[2]];
+    if (!this._withinWorkspace(position) ||
+        distance(position, robot.tcpPositionM) > this.maxCoarseTranslationM) {
+      return this._abort('vertical_staging_out_of_workspace');
+    }
+    return this._sendMove('vertical_staging', position, 5.0);
+  }
+
+  _refineOrHandoff(pointM, currentTarget) {
+    const robot = this.getRobotState();
+    const final = this._corrected(pointM);
+    // Refine only the lateral/height components while staying behind the
+    // target.  The grasp controller performs the remaining motion on X+ only.
+    const desired = [robot.tcpPositionM[0], final[1], final[2]];
+    const error = desired.map((value, index) => value - robot.tcpPositionM[index]);
+    const errorM = Math.hypot(...error);
+    if (errorM <= this.alignmentToleranceM) {
+      this.session.phase = 'aligned';
+      this._publish();
+      const validatedTarget = this.session.acquisitionTarget === null ? null : {
+        ...this.session.acquisitionTarget,
+        observedAtMs: currentTarget?.observedAtMs ?? this.nowMs(),
+        identityConfirmed: currentTarget?.identityConfirmed !== false,
+        armStationary: true,
+      };
+      const result = this.startGrasp({
+        identityId: this.session.identityId,
+        previewId: this.session.previewId,
+      }, { validatedTarget });
+      if (result?.accepted !== true) return this._abort(result?.reason || 'grasp_handoff_failed');
+      this.session.phase = 'handed_off';
+      this._publish();
+      return { handled: true, accepted: true, phase: 'handed_off', grasp: result };
+    }
+    if (this.session.refineSteps >= this.maxRefineSteps) return this._abort('refine_step_limit');
+    const step = clampVector(error, this.maxRefineStepM);
+    const position = robot.tcpPositionM.map((value, index) => value + step[index]);
+    if (!this._withinWorkspace(position)) return this._abort('refine_step_out_of_workspace');
+    this.session.refineSteps += 1;
+    return this._sendMove('refine', position, 2.0);
+  }
+
+  _sendMove(phase, position, timeSec) {
+    const requestId = this.idFactory();
+    if (!UUID_PATTERN.test(requestId)) return this._abort('request_id_invalid');
+    const command = {
+      cmd: 'move_l', position: [...position], euler: [...this.horizontalEulerRad],
+      time_sec: timeSec, request_id: requestId, source: `visual_align:${phase}`,
+    };
+    if (this.sendRobot(command) !== true) return this._abort('robot_transport_unavailable');
+    this.inFlight = { phase, requestId };
+    this.session.phase = phase;
+    this._publish();
+    return { handled: true, accepted: true, phase, requestId, positionM: [...position] };
+  }
+
+  _abort(reason) {
+    if (!this.session) return { accepted: false, reason };
+    this.inFlight = null;
+    this.session.phase = 'aborted';
+    this.session.reason = reason;
+    this._publish();
+    return { handled: true, accepted: false, reason, phase: 'aborted' };
+  }
+
+  _publish() {
+    this.onStatus(this.snapshot());
+  }
+}
+
+module.exports = { VisualAlignController, clampVector };

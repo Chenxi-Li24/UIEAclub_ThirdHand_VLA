@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ThirdHand · 手眼与桌面标定</title>
+  <style>
+    :root { color-scheme: dark; --bg:#071218; --panel:#0d1c23; --line:#29414c; --cyan:#78e9ff; --green:#83e59a; --amber:#ffc966; --red:#ff8c8c; }
+    * { box-sizing:border-box; }
+    body { margin:0; background:radial-gradient(circle at top,#12303b 0,var(--bg) 46%); color:#eaf8fb; font:16px/1.5 system-ui,sans-serif; }
+    main { width:min(1180px,calc(100% - 28px)); margin:24px auto 60px; }
+    header { display:flex; justify-content:space-between; align-items:end; gap:20px; margin-bottom:18px; }
+    h1,h2,p { margin-top:0; } h1 { margin-bottom:4px; font-size:clamp(26px,4vw,42px); } h2 { font-size:19px; }
+    .eyebrow { color:var(--cyan); text-transform:uppercase; letter-spacing:.14em; font-size:12px; }
+    .safe { color:var(--green); font-weight:700; }
+    .layout { display:grid; grid-template-columns:minmax(0,1.2fr) minmax(340px,.8fr); gap:18px; }
+    .panel { background:color-mix(in srgb,var(--panel) 94%,transparent); border:1px solid var(--line); border-radius:16px; padding:20px; box-shadow:0 16px 50px #0005; }
+    .preview { aspect-ratio:4/3; overflow:hidden; border-radius:12px; background:#020608; border:1px solid var(--line); }
+    .preview img { width:100%; height:100%; object-fit:contain; display:block; }
+    .phase { color:var(--cyan); font-size:20px; font-weight:750; }
+    .instruction { min-height:76px; padding:14px 16px; border:1px solid #3a6574; border-radius:12px; background:#0b252d; color:#dffaff; }
+    .progress-head { display:flex; justify-content:space-between; margin:18px 0 8px; }
+    .progress-text { color:var(--cyan); font-size:25px; font-weight:800; }
+    .progress-grid { display:grid; grid-template-columns:repeat(8,minmax(32px,1fr)); gap:7px; }
+    .progress-grid span { display:grid; place-items:center; min-height:34px; border-radius:8px; background:#172a32; color:#81959e; }
+    .progress-grid .done { background:var(--green); color:#071218; font-weight:800; }
+    button { width:100%; min-height:60px; margin-top:18px; border:0; border-radius:12px; background:var(--cyan); color:#071218; font-size:18px; font-weight:850; cursor:pointer; }
+    button:disabled { cursor:not-allowed; background:#65777d; color:#172329; }
+    .result { min-height:52px; margin-top:12px; padding:12px 14px; border-radius:10px; background:#101f25; }
+    .result.error { color:var(--red); } .result.working { color:var(--amber); }
+    dl { display:grid; grid-template-columns:1fr auto; gap:9px 18px; margin:0; }
+    dt { color:#8fb0bd; } dd { margin:0; text-align:right; }
+    .gates { display:grid; gap:10px; margin-bottom:18px; }
+    .gate { padding:12px 14px; border:1px solid var(--line); border-radius:11px; background:#0b171d; }
+    .gate strong { display:block; color:var(--cyan); }
+    .warning { margin-top:18px; border-color:#735d2c; background:#251f10; color:#ffe5ac; }
+    code { overflow-wrap:anywhere; color:#bdd7df; }
+    @media (max-width:850px) { .layout { grid-template-columns:1fr; } header { align-items:start; flex-direction:column; } }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <div><div class="eyebrow">Calibration completion</div><h1>手眼与桌面标定</h1><p>保留已通过的双相机外参，只补齐手眼和桌面证据。</p></div>
+      <div class="safe">● 只读相机 + 只读机械臂状态</div>
+    </header>
+    <div class="layout">
+      <section class="panel">
+        <h2>D435 原始画面</h2>
+        <div class="preview"><img id="d435-preview" data-preview="/api/calibration-preview/d435.jpg" alt="D435 标定画面"></div>
+        <p style="margin:10px 0 0;color:#96acb5">每次点击只采一帧与稳定状态，不会让机械臂自动运动。</p>
+      </section>
+      <section class="panel">
+        <div id="phase" class="phase">正在读取标定状态…</div>
+        <div id="instruction" class="instruction">请保持画面清晰，等待当前阶段加载。</div>
+        <div class="progress-head"><strong>当前进度</strong><span id="progress-text" class="progress-text">—</span></div>
+        <div id="progress-grid" class="progress-grid"></div>
+        <button id="primary-button" type="button" disabled>正在加载</button>
+        <div id="result" class="result">正在校验已有证据…</div>
+      </section>
+      <section class="panel">
+        <h2>最近一次质量</h2>
+        <dl>
+          <dt>样本</dt><dd id="sample-id">—</dd>
+          <dt>分组</dt><dd id="sample-split">—</dd>
+          <dt>识别角点</dt><dd id="sample-points">—</dd>
+          <dt>重投影 RMSE</dt><dd id="sample-rmse">—</dd>
+        </dl>
+      </section>
+      <section class="panel">
+        <h2>证据门禁</h2>
+        <div class="gates">
+          <div class="gate"><strong>双相机相对外参</strong><span id="relative-status">正在校验</span></div>
+          <div class="gate"><strong>手眼标定</strong><span id="handeye-metrics">待采集</span></div>
+          <div class="gate"><strong>桌面平面</strong><span id="table-metrics">待采集</span></div>
+        </div>
+        <dl><dt>剩余门禁</dt><dd id="blockers">正在读取</dd></dl>
+        <div class="panel warning">
+          <strong>安全边界</strong><br>
+          这个页面没有运动控制。手眼阶段由你手动调整机械臂后停稳；桌面阶段由你把标定板平放到不同桌面位置。完成几何基础也不会自动启动抓取。
+        </div>
+      </section>
+    </div>
+  </main>
+  <script src="/calibration-completion.js"></script>
+</body>
+</html>

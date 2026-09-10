@@ -18,6 +18,11 @@ ARCHIVE_EXECUTABLE_REFERENCE = re.compile(
     r"\b(import|from|require|spawn|exec|command)\b[^\n]*" + re.escape(ARCHIVE_DIRECTORY),
     re.IGNORECASE,
 )
+MIGRATION_DIRECTORY = "migration/sources/"
+MIGRATION_EXECUTABLE_REFERENCE = re.compile(
+    r"\b(import|from|require|spawn|exec|command)\b[^\n]*" + re.escape(MIGRATION_DIRECTORY),
+    re.IGNORECASE,
+)
 
 
 @dataclass(frozen=True)
@@ -86,6 +91,12 @@ def audit_repository(root: Path) -> list[Violation]:
                 if ARCHIVE_EXECUTABLE_REFERENCE.search(line):
                     violations.append(
                         Violation("archive_runtime_dependency", relative, line_number, line.strip())
+                    )
+                if MIGRATION_EXECUTABLE_REFERENCE.search(line):
+                    violations.append(
+                        Violation(
+                            "migration_runtime_dependency", relative, line_number, line.strip()
+                        )
                     )
 
     for tracked in _tracked_files(root):

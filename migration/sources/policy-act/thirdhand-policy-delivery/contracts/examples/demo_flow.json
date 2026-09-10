@@ -1,0 +1,362 @@
+{
+  "description": "完整 dry-run 接线样例。所有 success 仅表示 dry-run 链路成功，不表示真实机器人完成抓取。",
+  "messages": [
+    {
+      "schemaVersion": "1.0",
+      "type": "skill.candidate",
+      "messageId": "msg-001",
+      "replyTo": null,
+      "sessionId": "session-demo-001",
+      "traceId": "trace-demo-001",
+      "ts": 1786701600000,
+      "source": "language",
+      "target": "orchestrator",
+      "mode": "dry-run",
+      "status": "pending",
+      "payload": {
+        "candidateId": "candidate-demo-001",
+        "skill": {
+          "id": "pick_and_place_bottle",
+          "version": 1
+        },
+        "sourceText": "把 A 区的这瓶可乐放到 B 区",
+        "params": {
+          "object": "coke_bottle",
+          "destination": {
+            "id": "drop_zone_b",
+            "type": "configured_drop_zone"
+          }
+        },
+        "intentConfidence": 0.96,
+        "requiresConfirmation": true,
+        "expiresAt": 1786701720000
+      }
+    },
+    {
+      "schemaVersion": "1.0",
+      "type": "confirmation.decision",
+      "messageId": "msg-002",
+      "replyTo": "msg-001",
+      "sessionId": "session-demo-001",
+      "traceId": "trace-demo-001",
+      "ts": 1786701605000,
+      "source": "ui",
+      "target": "orchestrator",
+      "mode": "dry-run",
+      "payload": {
+        "decisionId": "decision-demo-001",
+        "candidateId": "candidate-demo-001",
+        "decision": "confirmed",
+        "decidedBy": "demo-user",
+        "decidedAt": 1786701605000
+      }
+    },
+    {
+      "schemaVersion": "1.0",
+      "type": "vision.target.request",
+      "messageId": "msg-003",
+      "replyTo": "msg-002",
+      "sessionId": "session-demo-001",
+      "traceId": "trace-demo-001",
+      "ts": 1786701605100,
+      "source": "orchestrator",
+      "target": "vision",
+      "mode": "dry-run",
+      "payload": {
+        "candidateId": "candidate-demo-001",
+        "requiredLabel": "coke_bottle",
+        "cameraId": "lumos-ego-rgb",
+        "requireUniqueTarget": true,
+        "maxFrameAgeMs": 1000
+      }
+    },
+    {
+      "schemaVersion": "1.0",
+      "type": "vision.target.result",
+      "messageId": "msg-004",
+      "replyTo": "msg-003",
+      "sessionId": "session-demo-001",
+      "traceId": "trace-demo-001",
+      "ts": 1786701605400,
+      "source": "vision",
+      "target": "orchestrator",
+      "mode": "dry-run",
+      "status": "ready",
+      "payload": {
+        "candidateId": "candidate-demo-001",
+        "frame": {
+          "frameId": "frame-0103",
+          "cameraId": "lumos-ego-rgb",
+          "capturedAt": 1786701605300,
+          "widthPx": 1280,
+          "heightPx": 720
+        },
+        "target": {
+          "targetId": "coke-01",
+          "label": "coke_bottle",
+          "confidence": 0.94,
+          "bbox": {
+            "format": "xyxy",
+            "coordinateSpace": "pixel",
+            "values": [120, 80, 280, 430]
+          },
+          "maskRef": "mask-frame-0103-coke-01",
+          "frameId": "frame-0103",
+          "uniqueTarget": true,
+          "authorized": true
+        }
+      }
+    },
+    {
+      "schemaVersion": "1.0",
+      "type": "policy.action.request",
+      "messageId": "msg-005",
+      "replyTo": "msg-004",
+      "sessionId": "session-demo-001",
+      "traceId": "trace-demo-001",
+      "ts": 1786701605500,
+      "source": "orchestrator",
+      "target": "policy",
+      "mode": "dry-run",
+      "payload": {
+        "candidateId": "candidate-demo-001",
+        "target": {
+          "targetId": "coke-01",
+          "label": "coke_bottle",
+          "confidence": 0.94,
+          "bbox": {
+            "format": "xyxy",
+            "coordinateSpace": "pixel",
+            "values": [120, 80, 280, 430]
+          },
+          "maskRef": "mask-frame-0103-coke-01",
+          "frameId": "frame-0103",
+          "uniqueTarget": true,
+          "authorized": true
+        },
+        "robotStateRef": "robot-state-0042",
+        "actionSpaceId": "startouch-j1-j6-rad-gripper-v1",
+        "allowedPolicyKinds": ["fake_act", "fixed_baseline"]
+      }
+    },
+    {
+      "schemaVersion": "1.0",
+      "type": "policy.action.result",
+      "messageId": "msg-006",
+      "replyTo": "msg-005",
+      "sessionId": "session-demo-001",
+      "traceId": "trace-demo-001",
+      "ts": 1786701605800,
+      "source": "policy",
+      "target": "orchestrator",
+      "mode": "dry-run",
+      "status": "ready",
+      "payload": {
+        "candidateId": "candidate-demo-001",
+        "targetId": "coke-01",
+        "frameId": "frame-0103",
+        "policy": {
+          "id": "existing-fixed-waypoint-a-to-b",
+          "version": "1.0.0",
+          "kind": "fixed_baseline",
+          "checkpoint": null
+        },
+        "executionPlan": {
+          "kind": "fixed_waypoint_a_to_b",
+          "planId": "plan-demo-001",
+          "adapterId": "startouch_fixed_waypoint_adapter_v1",
+          "bridgeRef": "web-control/server/startouch_bridge.py",
+          "configRef": "configs/tasks/fixed_pick_place.yaml",
+          "sourceWorkflow": "home_transit_ab",
+          "sourceZoneId": "pick_zone_a",
+          "destinationZoneId": "drop_zone_b",
+          "routeStates": [
+            "OPEN_GRIPPER_READY",
+            "MOVE_HOME_START",
+            "APPROACH_A_UP",
+            "DESCEND_TO_A_PICK",
+            "ADAPTIVE_GRASP_A",
+            "LIFT_A",
+            "TRANSFER_A_UP_TO_B_UP",
+            "DESCEND_TO_B",
+            "RELEASE_AT_B",
+            "LIFT_AFTER_RELEASE_B",
+            "RETURN_B_UP_TO_HOME"
+          ],
+          "cycles": 1,
+          "confirmEachStep": true,
+          "speedScale": 0.15
+        }
+      }
+    },
+    {
+      "schemaVersion": "1.0",
+      "type": "execution.request",
+      "messageId": "msg-007",
+      "replyTo": "msg-006",
+      "sessionId": "session-demo-001",
+      "traceId": "trace-demo-001",
+      "ts": 1786701605900,
+      "source": "orchestrator",
+      "target": "robot",
+      "mode": "dry-run",
+      "status": "ready",
+      "payload": {
+        "candidateId": "candidate-demo-001",
+        "decisionId": "decision-demo-001",
+        "confirmed": true,
+        "targetId": "coke-01",
+        "executionPlan": {
+          "kind": "fixed_waypoint_a_to_b",
+          "planId": "plan-demo-001",
+          "adapterId": "startouch_fixed_waypoint_adapter_v1",
+          "bridgeRef": "web-control/server/startouch_bridge.py",
+          "configRef": "configs/tasks/fixed_pick_place.yaml",
+          "sourceWorkflow": "home_transit_ab",
+          "sourceZoneId": "pick_zone_a",
+          "destinationZoneId": "drop_zone_b",
+          "routeStates": [
+            "OPEN_GRIPPER_READY",
+            "MOVE_HOME_START",
+            "APPROACH_A_UP",
+            "DESCEND_TO_A_PICK",
+            "ADAPTIVE_GRASP_A",
+            "LIFT_A",
+            "TRANSFER_A_UP_TO_B_UP",
+            "DESCEND_TO_B",
+            "RELEASE_AT_B",
+            "LIFT_AFTER_RELEASE_B",
+            "RETURN_B_UP_TO_HOME"
+          ],
+          "cycles": 1,
+          "confirmEachStep": true,
+          "speedScale": 0.15
+        },
+        "safety": {
+          "uniqueTargetAuthorized": true,
+          "frameFresh": true,
+          "mutuallyExclusiveMotion": true,
+          "physicalEStopReady": false,
+          "speedScale": 0.15
+        }
+      }
+    },
+    {
+      "schemaVersion": "1.0",
+      "type": "execution.result",
+      "messageId": "msg-008",
+      "replyTo": "msg-007",
+      "sessionId": "session-demo-001",
+      "traceId": "trace-demo-001",
+      "ts": 1786701606200,
+      "source": "robot",
+      "target": "orchestrator",
+      "mode": "dry-run",
+      "status": "success",
+      "payload": {
+        "candidateId": "candidate-demo-001",
+        "sequenceId": "plan-demo-001",
+        "executor": "fixed_pick_place_adapter",
+        "executedSteps": 0,
+        "hardwareFeedbackVerified": false,
+        "safetyEvent": false,
+        "bridgeEvidence": {
+          "bridgeRef": "web-control/server/startouch_bridge.py",
+          "commandCompleteCount": 0,
+          "finalRobotStateRef": null,
+          "postMotionJointFeedbackVerified": false,
+          "gripperFeedbackVerified": false,
+          "canFeedbackVerified": false,
+          "softwareStopConfirmed": false
+        }
+      }
+    },
+    {
+      "schemaVersion": "1.0",
+      "type": "verification.request",
+      "messageId": "msg-009",
+      "replyTo": "msg-008",
+      "sessionId": "session-demo-001",
+      "traceId": "trace-demo-001",
+      "ts": 1786701606300,
+      "source": "orchestrator",
+      "target": "verifier",
+      "mode": "dry-run",
+      "payload": {
+        "candidateId": "candidate-demo-001",
+        "targetId": "coke-01",
+        "beforeFrameId": "frame-0103",
+        "destination": {
+          "id": "drop_zone_b",
+          "type": "configured_drop_zone"
+        },
+        "criteria": [
+          "target_left_source",
+          "target_in_drop_zone",
+          "gripper_released",
+          "no_safety_event"
+        ]
+      }
+    },
+    {
+      "schemaVersion": "1.0",
+      "type": "verification.result",
+      "messageId": "msg-010",
+      "replyTo": "msg-009",
+      "sessionId": "session-demo-001",
+      "traceId": "trace-demo-001",
+      "ts": 1786701606600,
+      "source": "verifier",
+      "target": "orchestrator",
+      "mode": "dry-run",
+      "status": "uncertain",
+      "payload": {
+        "candidateId": "candidate-demo-001",
+        "targetId": "coke-01",
+        "afterFrame": {
+          "frameId": "frame-0104",
+          "cameraId": "lumos-ego-rgb",
+          "capturedAt": 1786701606500,
+          "widthPx": 1280,
+          "heightPx": 720
+        },
+        "targetLeftSource": false,
+        "targetInDropZone": false,
+        "gripperReleased": false,
+        "wrongObjectMotion": false,
+        "safetyEvent": false,
+        "evidenceRefs": ["evidence-dry-run-no-motion-001"]
+      }
+    },
+    {
+      "schemaVersion": "1.0",
+      "type": "skill.result",
+      "messageId": "msg-011",
+      "replyTo": "msg-010",
+      "sessionId": "session-demo-001",
+      "traceId": "trace-demo-001",
+      "ts": 1786701606700,
+      "source": "orchestrator",
+      "target": "ui",
+      "mode": "dry-run",
+      "status": "success",
+      "payload": {
+        "candidateId": "candidate-demo-001",
+        "skill": {
+          "id": "pick_and_place_bottle",
+          "version": 1
+        },
+        "completionClaim": "dry_run_only",
+        "completedStages": [
+          "language",
+          "confirmation",
+          "vision",
+          "policy",
+          "execution",
+          "verification"
+        ],
+        "summary": "Dry-run 全链路通过；没有向机械臂发送运动命令。"
+      }
+    }
+  ]
+}

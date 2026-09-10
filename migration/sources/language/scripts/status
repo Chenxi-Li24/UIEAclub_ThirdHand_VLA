@@ -1,0 +1,44 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+PROJECT_ROOT=$(dirname -- "$SCRIPT_DIR")
+ENV_FILE=${RUNTIME_ENV_FILE:-$PROJECT_ROOT/config/runtime.env}
+RUN_DIR=$PROJECT_ROOT/logs/run
+
+if [[ ! -r "$ENV_FILE" ]]; then
+  echo "ERROR: runtime environment file is missing: $ENV_FILE" >&2
+  exit 1
+fi
+
+set -a
+source "$ENV_FILE"
+set +a
+
+show_process() {
+  local name=$1
+  local pid_file=$2
+  if [[ ! -r "$pid_file" ]]; then
+    echo "$name: STOPPED"
+    return
+  fi
+  local pid
+  pid=$(<"$pid_file")
+  if [[ "$pid" =~ ^[0-9]+$ ]] && kill -0 "$pid" 2>/dev/null; then
+    local resolved_cwd
+    resolved_cwd=$(readlink -f "/proc/$pid/cwd" 2>/dev/null || true)
+    echo "$name: RUNNING pid=$pid cwd=$resolved_cwd"
+  else
+    echo "$name: STOPPED (stale PID file: $pid)"
+  fi
+}
+
+show_process voice-$VOICE_PORT "$RUN_DIR/voice-$VOICE_PORT.pid"
+show_process web-$WEB_PORT "$RUN_DIR/web-$WEB_PORT.pid"
+ss -ltnp "sport = :$VOICE_PORT or sport = :$WEB_PORT" || true
+
+if command -v curl >/dev/null 2>&1; then
+  echo "$WEB_PORT runtime config:"
+  curl --silent --show-error --max-time 2 "http://$WEB_HOST:$WEB_PORT/api/runtime-config" || true
+  echo
+fi

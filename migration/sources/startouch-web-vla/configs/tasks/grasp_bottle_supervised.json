@@ -1,0 +1,60 @@
+{
+  "targetOrdinal": 1,
+  "maxObservationAgeMs": 300,
+  "maxCameraWatchdogAgeMs": 500,
+  "maxRobotAgeMs": 500,
+  "eulerRad": [
+    0.052626251,
+    0.8,
+    0.49249365
+  ],
+  "graspOffsetM": [
+    0,
+    0,
+    0
+  ],
+  "pregraspHeightM": 0.15,
+  "liftHeightM": 0.08,
+  "workspace": {
+    "x": [
+      0.15,
+      0.66
+    ],
+    "y": [
+      -0.45,
+      0.45
+    ],
+    "z": [
+      0.06,
+      0.65
+    ]
+  },
+  "homeJointsDeg": [
+    -0.163927,
+    -2.611904,
+    -4.0,
+    33.05862,
+    0.338783,
+    0.185784
+  ],
+  "homeTcpM": [
+    0.26192760180416946,
+    0.0004263206115636132,
+    0.07108979975898244
+  ],
+  "homeJointToleranceDeg": 0.6,
+  "safeTransitZM": 0.306371896,
+  "maxSpeedMps": 0.02,
+  "maxAngularSpeedRadS": 0.125,
+  "positionToleranceM": 0.008,
+  "orientationToleranceRad": 0.12,
+  "robotPoseFile": "artifacts/supervised-bottle-grasp/robot-pose-cli.json",
+  "auditJsonl": "artifacts/supervised-bottle-grasp/cli-events.jsonl",
+  "resultsJsonl": "artifacts/supervised-bottle-grasp/results.jsonl",
+  "calibrationPhysicalValidation": "pending",
+  "configurationNotes": "Original L2 bottle only. Observe Base Z 0.120 +/-0.005 m body band; use operator-measured 0.063 m diameter for axis correction, command fixed grasp Z 0.130 m. Pitch 0.8. Freeze 3D after verified hover, use fresh RGB/FK projection for supervised nearfield descent/contact/lift. No legacy XY offset. Physical validation pending.",
+  "fixedGraspBaseZM": 0.13,
+  "observationHeightBaseM": 0.12,
+  "bottleDiameterM": 0.063,
+  "observerOverlayFile": "/home/nieqingcao/arm/UIEAclub_ThirdHand_VLA/artifacts/supervised-bottle-grasp/latest-guard-failure/overlay.jpg"
+}

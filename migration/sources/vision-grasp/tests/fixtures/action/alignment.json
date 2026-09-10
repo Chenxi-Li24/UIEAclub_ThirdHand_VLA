@@ -1,0 +1,8 @@
+{
+  "schema": "thirdhand-alignment-fixture-v1",
+  "request_id": "debug-req-2",
+  "calibration_id": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+  "point_m": [0.45, 0.05, 0.18],
+  "width_m": 0.06,
+  "stable_frames": 3
+}

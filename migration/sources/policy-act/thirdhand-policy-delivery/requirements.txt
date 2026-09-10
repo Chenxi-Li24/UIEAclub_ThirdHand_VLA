@@ -1,0 +1,12 @@
+fastapi>=0.110
+uvicorn[standard]>=0.29
+jsonschema>=4.0
+numpy>=1.26
+
+# Optional — only required for the `lerobot_act` policy kind.
+# The technical plan pins a separate Python 3.12 learning env with LeRobot 0.6.0
+# (LeRobotDataset v3); the R1 control env stays on Python 3.10.
+# torch>=2.0
+# torchvision>=0.15
+# lerobot==0.6.0
+# omegaconf>=2.3

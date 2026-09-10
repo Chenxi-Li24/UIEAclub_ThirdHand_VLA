@@ -1,0 +1,116 @@
+'use strict';
+
+const CONTENT_ID = /^sha256:[0-9a-f]{64}$/;
+const REQUIRED_BLOCKERS = [
+  'handeye_activation_locked',
+  'handeye_physical_validation_pending',
+];
+const VERTICAL_CLEARANCE_M = 0.10;
+
+function vector3(value) {
+  return Array.isArray(value) && value.length === 3 && value.every(Number.isFinite);
+}
+
+function authorizePhysicalValidationGrasp({ enabled, target, robot, nowMs }) {
+  if (enabled !== true) return { approved: false, reason: 'physical_validation_disabled' };
+  if (!robot?.connected || robot.moving || robot.stateFresh !== true) {
+    return { approved: false, reason: 'robot_not_stationary' };
+  }
+  if (!target || target.identityConfirmed !== true || target.depthValid !== true ||
+      target.armStationary !== true || !target.preview) {
+    return { approved: false, reason: 'validation_target_invalid' };
+  }
+  if (!Number.isFinite(nowMs) || !Number.isFinite(target.observedAtMs) ||
+      nowMs < target.observedAtMs || nowMs - target.observedAtMs > 250) {
+    return { approved: false, reason: 'validation_target_stale' };
+  }
+  const preview = target.preview;
+  const blockers = Array.isArray(preview.blockers) ? [...preview.blockers].sort() : [];
+  if (blockers.length !== REQUIRED_BLOCKERS.length ||
+      blockers.some((value, index) => value !== REQUIRED_BLOCKERS[index])) {
+    return { approved: false, reason: 'unexpected_validation_blocker' };
+  }
+  if (!CONTENT_ID.test(preview.previewId || '') ||
+      !CONTENT_ID.test(preview.calibrationId || '') ||
+      preview.frame !== 'robot_base' || preview.identityId !== target.identityId ||
+      !Number.isSafeInteger(preview.detectionId) || preview.detectionId < 0 ||
+      !vector3(preview.pointM) || !vector3(preview.pregraspPointM) ||
+      !vector3(preview.retreatPointM) || !Number.isFinite(preview.yawRad) ||
+      !Number.isFinite(preview.widthM) || preview.widthM <= 0 ||
+      !Number.isSafeInteger(preview.stableSamples) || preview.stableSamples < 5 ||
+      !Array.isArray(preview.evidenceIds) || preview.evidenceIds.length === 0 ||
+      !preview.evidenceIds.every(value => CONTENT_ID.test(value))) {
+    return { approved: false, reason: 'validation_preview_invalid' };
+  }
+  const [x, y, z] = preview.pointM;
+  if (x < 0.15 || x > 0.65 || Math.abs(y) > 0.45 || z < 0.06 || z > 0.65) {
+    return { approved: false, reason: 'validation_workspace_rejected' };
+  }
+  return { approved: true, plan: {
+    identityId: target.identityId,
+    detectionId: preview.detectionId,
+    previewId: preview.previewId,
+    calibrationId: preview.calibrationId,
+    evidenceIds: [...preview.evidenceIds],
+    graspPointM: [...preview.pointM],
+    pregraspPointM: [...preview.pregraspPointM],
+    retreatPointM: [...preview.retreatPointM],
+    yawRad: preview.yawRad,
+    widthM: preview.widthM,
+  } };
+}
+
+function authorizePhysicalValidationPregrasp({
+  enabled, message, target, robot, nowMs,
+}) {
+  if (enabled !== true) return { approved: false, reason: 'physical_validation_disabled' };
+  const keys = Object.keys(message || {}).sort();
+  if (keys.length !== 2 || keys[0] !== 'identityId' || keys[1] !== 'previewId') {
+    return { approved: false, reason: 'validation_command_invalid' };
+  }
+  if (!Number.isSafeInteger(message.identityId) || message.identityId < 0 ||
+      typeof message.previewId !== 'string' || !CONTENT_ID.test(message.previewId)) {
+    return { approved: false, reason: 'validation_command_invalid' };
+  }
+  if (!robot?.connected || robot.moving || robot.stateFresh !== true ||
+      !vector3(robot.tcpPositionM) || !vector3(robot.tcpEulerRad)) {
+    return { approved: false, reason: 'robot_not_stationary' };
+  }
+  if (!target || target.identityId !== message.identityId ||
+      target.identityConfirmed !== true || target.depthValid !== true ||
+      target.armStationary !== true || !target.preview) {
+    return { approved: false, reason: 'validation_target_invalid' };
+  }
+  const preview = target.preview;
+  if (preview.previewId !== message.previewId || !CONTENT_ID.test(preview.calibrationId || '') ||
+      preview.frame !== 'robot_base' || !vector3(preview.pointM) ||
+      !vector3(preview.pregraspPointM) ||
+      !Number.isSafeInteger(preview.stableSamples) || preview.stableSamples < 5) {
+    return { approved: false, reason: 'validation_preview_invalid' };
+  }
+  const blockers = [...preview.blockers].sort();
+  if (blockers.length !== REQUIRED_BLOCKERS.length ||
+      blockers.some((value, index) => value !== REQUIRED_BLOCKERS[index])) {
+    return { approved: false, reason: 'unexpected_validation_blocker' };
+  }
+  if (!Number.isFinite(nowMs) || !Number.isFinite(target.observedAtMs) ||
+      nowMs < target.observedAtMs || nowMs - target.observedAtMs > 250) {
+    return { approved: false, reason: 'validation_target_stale' };
+  }
+  // Match the production grasp plan: move above the target, then descend only
+  // along base Z.  The vision preview's native pregrasp may lie along the
+  // camera ray, which can sweep the fingers sideways into the bottle.
+  const [x, y, graspZ] = preview.pointM;
+  const z = Math.max(preview.pregraspPointM[2], graspZ + VERTICAL_CLEARANCE_M);
+  if (x < 0.15 || x > 0.65 || Math.abs(y) > 0.45 || z < 0.06 || z > 0.65) {
+    return { approved: false, reason: 'validation_workspace_rejected' };
+  }
+  const displacementM = Math.hypot(
+    x - robot.tcpPositionM[0], y - robot.tcpPositionM[1], z - robot.tcpPositionM[2]
+  );
+  if (displacementM > 0.50) return { approved: false, reason: 'validation_move_too_large' };
+  return { approved: true, position: [x, y, z],
+    euler: [...robot.tcpEulerRad], displacementM };
+}
+
+module.exports = { authorizePhysicalValidationPregrasp, authorizePhysicalValidationGrasp };

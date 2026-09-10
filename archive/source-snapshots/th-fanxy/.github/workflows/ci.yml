@@ -1,0 +1,99 @@
+﻿name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  test:
+    runs-on: ubuntu-22.04
+    strategy:
+      matrix:
+        python-version: ["3.10", "3.11"]
+
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[core,dev]"
+
+      - name: Lint with ruff
+        run: ruff check src/ tests/
+
+      - name: Type check with mypy
+        run: mypy src/
+
+      - name: Test with pytest
+        run: pytest tests/ -v --ignore=tests/e2e/
+
+  vision-sdk:
+    runs-on: ubuntu-22.04
+    strategy:
+      matrix:
+        python-version: ["3.10", "3.11"]
+
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install package and build tools
+        run: |
+          python -m pip install --upgrade pip
+          pip install build
+          pip install -e "packages/thirdhand-vision-sdk[test]"
+
+      - name: Test hardware-free SDK
+        working-directory: packages/thirdhand-vision-sdk
+        run: pytest tests -q
+
+      - name: Test runtime adapter and replay parity
+        run: >-
+          env PYTHONPATH=packages/thirdhand-vision-sdk/src:web-control/server
+          pytest --confcutdir=tests/vision_deployment
+          tests/vision_deployment/test_vision_sdk_adapter.py -q
+
+      - name: Run offline examples
+        working-directory: packages/thirdhand-vision-sdk
+        run: |
+          python examples/minimal_mock.py
+          python examples/multimodal_extension.py
+
+      - name: Build wheel and source distribution
+        run: python -m build packages/thirdhand-vision-sdk
+
+  vla-preview:
+    runs-on: ubuntu-22.04
+
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Verify preview-only multimodal grounding without network or hardware
+        env:
+          VLA_PROVIDER: disabled
+        run: |
+          node web-control/server/test/camera-overlay-snapshot-smoke.js
+          node web-control/server/test/vision-status-smoke.js
+          node web-control/server/test/vla-contracts-smoke.js
+          node web-control/server/test/vla-prompt-smoke.js
+          node web-control/server/test/vla-openai-provider-smoke.js
+          node web-control/server/test/vla-mock-provider-smoke.js
+          node web-control/server/test/vla-audit-log-smoke.js
+          node web-control/server/test/vla-grounding-smoke.js
+          node web-control/server/test/vla-proxy-wiring-smoke.js
+          node web-control/server/test/vla-browser-ui-smoke.js
+          node web-control/server/test/vla-preview-e2e-smoke.js

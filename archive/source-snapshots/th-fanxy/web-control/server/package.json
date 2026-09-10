@@ -1,0 +1,43 @@
+{
+  "name": "thirdhand-web-control",
+  "version": "1.0.0",
+  "description": "ThirdHand Web Control Panel - direct Startouch SDK control on Ubuntu",
+  "main": "proxy.js",
+  "scripts": {
+    "start": "node proxy.js",
+    "dev": "node proxy.js",
+    "test:voice-protocol": "node test/protocol-smoke.js",
+    "test:grasp-authorization": "node test/grasp-authorization-smoke.js",
+    "test:grasp-controller": "node test/grasp-execution-controller-smoke.js",
+    "test:active-view-authorization": "node test/active-view-authorization-smoke.js",
+    "test:active-view-controller": "node test/active-view-controller-smoke.js",
+    "test:active-view-motion-adapter": "node test/active-view-motion-adapter-smoke.js",
+    "test:active-view-audit-log": "node test/active-view-audit-log-smoke.js",
+    "test:active-view-browser-protocol": "node test/active-view-browser-protocol-smoke.js",
+    "test:active-view-demo": "node test/active-view-demo-smoke.js",
+    "test:active-view-demo-browser": "node test/active-view-demo-browser-smoke.js",
+    "test:live-camera-streams": "node test/live-camera-streams-smoke.js",
+    "test:live-camera-page-browser": "node test/live-camera-page-browser-smoke.js",
+    "test:active-vision-workbench": "node test/active-vision-workbench-smoke.js",
+    "test:active-vision-api": "node test/active-vision-api-smoke.js",
+    "test:pick-command": "node test/pick-command-smoke.js",
+    "test:observation-pose-capture": "node test/observation-pose-capture-smoke.js",
+    "test:lumos-proxy": "node test/lumos-proxy-smoke.js",
+    "test:calibration-preview": "node test/calibration-preview-api-smoke.js",
+    "test:calibration-capture-api": "node test/calibration-capture-api-smoke.js",
+    "test:calibration-capture-client": "node test/calibration-capture-client-smoke.js",
+    "test:calibration-capture-browser": "node test/calibration-capture-browser-smoke.js",
+    "test:calibration-completion-api": "node test/calibration-completion-api-smoke.js",
+    "test:calibration-completion-client": "node test/calibration-completion-client-smoke.js",
+    "test:vision-status": "node test/vision-status-smoke.js",
+    "test:vision-runtime-preflight": "node --test test/vision-runtime-preflight.test.js",
+    "test:robot-stationarity": "node test/robot-stationarity-smoke.js",
+    "test:teach-active-view": "node test/teach-active-view-pose-smoke.js",
+    "test:browser": "node test/browser-smoke.js",
+    "test": "npm run test:voice-protocol && npm run test:grasp-authorization && npm run test:grasp-controller && npm run test:active-vision-workbench && npm run test:active-vision-api && npm run test:pick-command && npm run test:observation-pose-capture && npm run test:active-view-authorization && npm run test:active-view-controller && npm run test:active-view-motion-adapter && npm run test:active-view-audit-log && npm run test:active-view-browser-protocol && npm run test:active-view-demo && npm run test:active-view-demo-browser && npm run test:live-camera-streams && npm run test:live-camera-page-browser && npm run test:vision-status && npm run test:vision-runtime-preflight && npm run test:robot-stationarity && npm run test:teach-active-view && npm run test:lumos-proxy && npm run test:calibration-preview && npm run test:calibration-capture-api && npm run test:calibration-capture-client && npm run test:calibration-capture-browser && npm run test:calibration-completion-api && npm run test:calibration-completion-client && npm run test:browser"
+  },
+  "dependencies": {
+    "express": "^4.21.0",
+    "ws": "^8.18.0"
+  }
+}

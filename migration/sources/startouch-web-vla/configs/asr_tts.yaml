@@ -1,0 +1,38 @@
+# ============================================================
+# ASR / TTS / NLU Configuration — Voice Interaction Pipeline
+# ============================================================
+# Pipeline: mic → ASR → NLU → intent → task command
+#           response ← TTS ← text
+
+asr:
+  engine: "faster-whisper"  # faster-whisper | sensevoice | whisper-cpp
+  model_size: "small"       # tiny | base | small | medium | large-v3
+  language: "zh"
+  device: "cpu"
+  compute_type: "int8"
+  sample_rate: 16000
+  vad_enabled: true
+
+nlu:
+  engine: "local"           # local (small model) | keyword | cloud
+  local_model: null         # e.g. Qwen/Qwen2.5-0.5B-Instruct
+  intent_labels:
+    - start_task
+    - stop
+    - pause
+    - resume
+    - emergency_stop
+    - go_home
+    - jog
+
+tts:
+  engine: "edge-tts"
+  voice: "zh-CN-XiaoxiaoNeural"
+  rate: "+0%"
+  volume: "+0%"
+  device: "cpu"
+
+microphone:
+  device_index: null
+  chunk_size: 1024
+  channels: 1

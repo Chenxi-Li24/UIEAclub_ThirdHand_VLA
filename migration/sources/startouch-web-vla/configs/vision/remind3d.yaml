@@ -1,0 +1,74 @@
+schema_version: 1
+canonical_image: lumos_native_seucm
+
+models:
+  detector_backend: rtmdet_tiny_ins
+  detector_config: ../../../miniconda3/envs/thirdhand-remind3d/lib/python3.11/site-packages/mmdet/.mim/configs/rtmdet/rtmdet-ins_tiny_8xb32-300e_coco.py
+  detector_checkpoint: ../../models/vision/rtmdet/rtmdet-ins_tiny_8xb32-300e_coco_20221130_151727-ec670f7e.pth
+  detector_min_score: 0.35
+  label_set: coco
+  primary_descriptor: dinov2_small
+  primary_descriptor_id: facebook/dinov2-small
+  fallback_descriptor: facebook/dinov2-small
+  dino_max_long_side: 640
+  min_patch_coverage: 0.10
+
+roles:
+  canonical_rgb_source: lumos_rgb
+  metric_depth_source: d435_depth
+  debug_rgb_source: d435_rgb
+  fusion_mode: cross_camera
+
+online:
+  enabled: true
+  scheduling: latest_only
+  max_pending_frames: 1
+  max_targets_per_frame: 256
+  detector_device: cuda:0
+  descriptor_device: cuda:0
+  task_checkpoint_validated: false
+  min_depth_m: 0.10
+  max_depth_m: 2.0
+
+timing:
+  max_frame_skew_ns: 50000000
+  max_frame_age_ns: 200000000
+  max_robot_pose_skew_ns: 50000000
+  stale_after_ns: 2000000000
+
+identity:
+  max_cosine_distance: 0.40
+  ambiguity_margin: 0.03
+  appearance_weight: 0.80
+  position_weight: 0.20
+  max_position_distance_m: 0.20
+  position_gate_max_age_ns: 500000000
+  occluded_after_ns: 300000000
+  inactive_after_ns: 1500000000
+  min_confirmed_hits: 2
+  min_memory_confidence: 0.80
+  min_memory_visibility: 0.50
+  work_bank_size: 8
+  stable_bank_size: 12
+  max_identities: 64
+  reacquire_confirmed_hits: 2
+  max_actionable_position_std_m: 0.025
+  max_actionable_pose_age_ns: 200000000
+  min_actionable_pose_hits: 2
+
+instance_pose:
+  min_points: 80
+  erosion_px: 3
+  mad_scale: 3.5
+  noise_floor_m: 0.002
+
+limits:
+  gpu_memory_limit_gib: 7.2
+  latency_p95_limit_ms: 300.0
+
+safety:
+  stop_and_look_only: true
+  require_valid_calibration: true
+  reject_ambiguous_identity: true
+  require_valid_depth_for_action: true
+  robot_execution_enabled: false

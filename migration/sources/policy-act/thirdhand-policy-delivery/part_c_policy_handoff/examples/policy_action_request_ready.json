@@ -1,0 +1,40 @@
+{
+  "schemaVersion": "1.0",
+  "type": "policy.action.request",
+  "messageId": "msg:policy-req-ready-001",
+  "replyTo": "msg:vision-result-001",
+  "sessionId": "session:handoff-001",
+  "traceId": "trace:handoff-001",
+  "ts": 1786886198799,
+  "source": "orchestrator",
+  "target": "policy",
+  "mode": "dry-run",
+  "payload": {
+    "candidateId": "candidate:pick-coke-001",
+    "target": {
+      "targetId": "coke:xvisio-frame-254cbb0af2fba3d5:0",
+      "label": "coke_bottle",
+      "confidence": 0.94,
+      "bbox": {
+        "format": "xyxy",
+        "coordinateSpace": "pixel",
+        "values": [
+          213,
+          368,
+          307,
+          478
+        ]
+      },
+      "maskRef": "file:mask_000.png",
+      "frameId": "xvisio-frame-254cbb0af2fba3d5",
+      "uniqueTarget": true,
+      "authorized": true
+    },
+    "robotStateRef": "robot-state-0042",
+    "actionSpaceId": "startouch-j1-j6-rad-gripper-v1",
+    "allowedPolicyKinds": [
+      "fixed_baseline",
+      "fake_act"
+    ]
+  }
+}

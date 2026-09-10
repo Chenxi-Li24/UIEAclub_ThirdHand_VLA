@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://uiea.example/schemas/thirdhand-result-record-v1.json",
+  "title": "ThirdHand Result Record",
+  "description": "One machine-readable measurement emitted by an experiment artifact.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "experiment_id",
+    "metric",
+    "value",
+    "unit",
+    "aggregation",
+    "sample_count",
+    "confidence_interval",
+    "slice",
+    "source_artifact"
+  ],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "experiment_id": { "type": "string", "minLength": 1 },
+    "metric": { "type": "string", "minLength": 1 },
+    "value": { "type": ["number", "integer", "boolean", "null"] },
+    "unit": { "type": "string", "minLength": 1 },
+    "aggregation": {
+      "enum": ["raw", "mean", "median", "p50", "p95", "max", "rate", "count"]
+    },
+    "sample_count": { "type": "integer", "minimum": 0 },
+    "confidence_interval": {
+      "oneOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["level", "lower", "upper", "method"],
+          "properties": {
+            "level": { "type": "number", "exclusiveMinimum": 0, "maximum": 1 },
+            "lower": { "type": "number" },
+            "upper": { "type": "number" },
+            "method": { "type": "string", "minLength": 1 }
+          }
+        }
+      ]
+    },
+    "slice": {
+      "oneOf": [
+        { "type": "string" },
+        { "type": "object" },
+        { "type": "null" }
+      ]
+    },
+    "source_artifact": { "type": "string", "minLength": 1 }
+  }
+}

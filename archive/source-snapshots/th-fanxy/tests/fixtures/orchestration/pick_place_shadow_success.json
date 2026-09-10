@@ -1,0 +1,5 @@
+{
+  "schema_version": "1.0.0",
+  "robot_execution_enabled": false,
+  "replay_bundle_file": "pick_place_success.json"
+}

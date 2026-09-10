@@ -1,0 +1,460 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ThirdHand - Startouch 机械臂控制</title>
+  <link rel="stylesheet" href="css/style.css?v=3">
+</head>
+<body>
+  <!-- 软件停止提示 -->
+  <div id="estop-overlay">
+    <div class="estop-box">
+      <div class="estop-icon">⏹</div>
+      <div class="estop-text" id="stop-title">正在停止 SDK</div>
+      <div class="estop-sub" id="stop-detail">等待电机失能确认；硬件急停请使用独立急停装置</div>
+      <button class="action-btn action-primary" id="btn-stop-reconnect">重新连接 SDK</button>
+    </div>
+  </div>
+
+  <!-- 主布局：grid 三行 -->
+  <div id="app">
+    <!-- 顶部状态栏 -->
+    <header id="topbar">
+      <div class="topbar-brand">
+        <span class="brand-name">ThirdHand</span>
+        <span class="brand-model">Startouch</span>
+      </div>
+
+      <div class="topbar-status">
+        <div class="conn-indicator" id="conn-indicator">
+          <span class="conn-dot" id="conn-dot"></span>
+          <span class="conn-ip" id="conn-ip">未连接</span>
+        </div>
+        <span class="hb-label" id="hb-label">SDK: --</span>
+        <span class="state-badge" id="state-badge">--</span>
+      </div>
+
+      <div class="topbar-actions">
+        <button class="btn-voice-toggle" id="btn-voice-toggle" type="button"
+                title="语音和文字对话" aria-controls="voice-panel" aria-expanded="false">
+          <span class="voice-toggle-led" id="voice-toggle-led" data-state="offline"></span>
+          <svg class="voice-toggle-icon" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M12 15.5a3.5 3.5 0 0 0 3.5-3.5V6a3.5 3.5 0 1 0-7 0v6a3.5 3.5 0 0 0 3.5 3.5Z"/>
+            <path d="M5.5 11.5V12a6.5 6.5 0 0 0 13 0v-.5M12 18.5V22M8.5 22h7"/>
+          </svg>
+          <span class="voice-toggle-label">语音</span>
+        </button>
+        <button class="btn-estop" id="btn-estop-top" title="停止 SDK 控制进程">⏹ 软件停止</button>
+        <select id="theme-select" title="切换配色">
+          <option value="deepspace">科技深空</option>
+          <option value="industrial">工业橙黑</option>
+          <option value="cyber">赛博紫黑</option>
+          <option value="dark">暗黑</option>
+          <option value="green">暗绿</option>
+          <option value="blue">暗蓝</option>
+          <option value="purple">暗紫</option>
+          <option value="orange">暗橙</option>
+          <option value="light">亮白</option>
+        </select>
+        <button class="btn-drawer-toggle" id="btn-drawer-toggle" title="控制面板">☰</button>
+      </div>
+    </header>
+
+    <!-- 3D 视口（grid 中间行，自动撑满） -->
+    <div id="viewport">
+      <div id="three-container"></div>
+
+      <div class="voice-preview-indicator" id="voice-preview-indicator" hidden
+           role="status" aria-live="polite">
+        <span>CONFIRMATION PREVIEW</span>
+        <strong id="voice-preview-label">确认前 3D 预览</strong>
+        <small>确认前不会发送硬件命令</small>
+      </div>
+
+      <!-- 左上角视图工具浮动栏 -->
+      <div id="view-tools">
+        <button class="tool-btn active" id="btn-tool-grid" title="切换网格">⊞</button>
+        <button class="tool-btn active" id="btn-tool-axes" title="切换坐标轴">✛</button>
+        <button class="tool-btn" id="btn-tool-reset" title="重置视角">⟲</button>
+        <div class="tool-divider"></div>
+        <button class="tool-btn active" id="btn-tool-floor" title="地面安装">⬛</button>
+        <button class="tool-btn" id="btn-tool-wall" title="壁挂安装">⬜</button>
+      </div>
+
+      <!-- 连接配置 + 日志开关浮动条 -->
+      <div id="conn-bar">
+        <span class="conn-input">Ubuntu 本机 · can0</span>
+        <button class="conn-btn" id="btn-connect">连接</button>
+        <button class="conn-btn conn-btn-danger" id="btn-disconnect" style="display:none">断开</button>
+        <div class="conn-divider"></div>
+        <button class="conn-btn conn-btn-log" id="btn-log-toggle" title="通信日志">📋日志</button>
+      </div>
+    </div>
+
+    <!-- 底部状态栏 -->
+    <footer id="statusbar">
+      <div class="statusbar-joints" id="statusbar-joints">
+        <span class="sjoint" id="sj1">J1:--°</span>
+        <span class="sjoint" id="sj2">J2:--°</span>
+        <span class="sjoint" id="sj3">J3:--°</span>
+        <span class="sjoint" id="sj4">J4:--°</span>
+        <span class="sjoint" id="sj5">J5:--°</span>
+        <span class="sjoint" id="sj6">J6:--°</span>
+      </div>
+      <div class="statusbar-right">
+        <span class="stcp" id="stcp">TCP: --</span>
+      </div>
+    </footer>
+  </div>
+
+  <!-- 右侧控制抽屉（body 级浮动，不参与 grid） -->
+  <aside id="control-drawer">
+    <div class="drawer-handle" id="drawer-handle" title="收起面板">◂</div>
+
+    <div class="drawer-content">
+      <!-- 关节控制 -->
+      <div class="drawer-section" id="sec-joints">
+        <div class="sec-header">
+          <span>关节控制</span>
+          <button class="sec-toggle">▾</button>
+        </div>
+        <div class="sec-body" id="joint-controls-body">
+          <!-- 动态生成 -->
+        </div>
+      </div>
+
+      <!-- 预设位置 -->
+      <div class="drawer-section" id="sec-presets">
+        <div class="sec-header">
+          <span>预设位置</span>
+          <button class="sec-toggle">▾</button>
+        </div>
+        <div class="sec-body">
+          <div class="preset-grid" id="preset-grid"></div>
+        </div>
+      </div>
+
+      <!-- 操作 -->
+      <div class="drawer-section" id="sec-actions">
+        <div class="sec-header">
+          <span>操作</span>
+          <button class="sec-toggle">▾</button>
+        </div>
+        <div class="sec-body">
+          <button class="action-btn action-primary" id="btn-send">发送到机械臂</button>
+          <div class="action-row">
+            <button class="action-btn action-secondary" id="btn-home">六轴 0° 姿态</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 夹爪控制 -->
+      <div class="drawer-section" id="sec-gripper">
+        <div class="sec-header">
+          <span>夹爪控制</span>
+          <button class="sec-toggle">▾</button>
+        </div>
+        <div class="sec-body">
+          <div class="joint-label">
+            <span class="joint-name">目标开度</span>
+            <span class="joint-value" id="gripper-value">100%</span>
+          </div>
+          <input type="range" class="joint-slider" id="gripper-slider" min="0" max="1" step="0.01" value="1">
+          <div class="joint-label">
+            <span class="joint-name">实时反馈</span>
+            <span class="joint-value" id="gripper-actual">--</span>
+          </div>
+          <div class="action-row">
+            <button class="action-btn action-secondary" id="btn-gripper-close">闭合</button>
+            <button class="action-btn action-secondary" id="btn-gripper-open">打开</button>
+          </div>
+          <button class="action-btn action-primary" id="btn-gripper-send">发送到夹爪</button>
+        </div>
+      </div>
+
+      <!-- 实时角度 -->
+      <div class="drawer-section" id="sec-rt-angles">
+        <div class="sec-header">
+          <span>实时角度</span>
+          <button class="sec-toggle">▾</button>
+        </div>
+        <div class="sec-body">
+          <div class="rt-angles" id="rt-angles-display">
+            <span class="rt-angle" id="rt-j1">J1: --°</span>
+            <span class="rt-angle" id="rt-j2">J2: --°</span>
+            <span class="rt-angle" id="rt-j3">J3: --°</span>
+            <span class="rt-angle" id="rt-j4">J4: --°</span>
+            <span class="rt-angle" id="rt-j5">J5: --°</span>
+            <span class="rt-angle" id="rt-j6">J6: --°</span>
+          </div>
+          <label class="toggle-label">
+            <input type="checkbox" id="chk-sync" checked>
+            <span>同步 3D 模型</span>
+          </label>
+        </div>
+      </div>
+
+      <!-- 末端位置 -->
+      <div class="drawer-section" id="sec-tcp">
+        <div class="sec-header">
+          <span>末端位置 (mm)</span>
+          <button class="sec-toggle">▾</button>
+        </div>
+        <div class="sec-body">
+          <div class="tcp-grid">
+            <span class="tcp-label">X</span><span class="tcp-val" id="tcp-x">0.0</span>
+            <span class="tcp-label">Y</span><span class="tcp-val" id="tcp-y">0.0</span>
+            <span class="tcp-label">Z</span><span class="tcp-val" id="tcp-z">0.0</span>
+            <span class="tcp-label">Rx</span><span class="tcp-val" id="tcp-rx">0.0</span>
+            <span class="tcp-label">Ry</span><span class="tcp-val" id="tcp-ry">0.0</span>
+            <span class="tcp-label">Rz</span><span class="tcp-val" id="tcp-rz">0.0</span>
+          </div>
+        </div>
+      </div>
+      <!-- D435 视觉 -->
+      <div class="drawer-section" id="sec-d435">
+        <div class="sec-header">
+          <span>D435 视觉</span>
+          <button class="sec-toggle">▾</button>
+        </div>
+        <div class="sec-body">
+          <div class="camera-status" id="camera-status">
+            <span class="cam-dot" id="cam-dot"></span>
+            <span class="cam-label" id="cam-label">D435: --</span>
+          </div>
+          <div class="camera-feed-container">
+            <img id="camera-feed" src="/camera" alt="D435 feed" />
+          </div>
+          <div class="camera-label-small">Lumos 鱼眼</div>
+          <div class="camera-feed-container" style="min-height:100px">
+            <img id="lumos-feed" src="/camera_lumos_vision" alt="Lumos 算法叠加画面" style="min-height:100px" />
+          </div>
+          <a href="/active-vision.html" class="action-btn action-primary"
+             style="display:block;text-align:center;text-decoration:none;margin:8px 0 10px">
+            打开双相机自主抓取工作台
+          </a>
+          <section class="grounding-panel" aria-labelledby="grounding-title">
+            <div class="grounding-heading">
+              <strong id="grounding-title">自然语言目标选择</strong>
+              <span>GPT → Vision ID</span>
+            </div>
+            <form id="grounding-form" class="grounding-form" novalidate>
+              <label for="grounding-query">目标描述</label>
+              <div class="grounding-input-row">
+                <input id="grounding-query" type="text" maxlength="256"
+                       autocomplete="off" placeholder="例如：夹取可乐"
+                       aria-describedby="grounding-safety grounding-result" />
+                <button id="grounding-submit" type="submit">选择 ID</button>
+              </div>
+            </form>
+            <div id="grounding-status" class="grounding-status" role="status"
+                 aria-live="polite">等待目标描述</div>
+            <div id="grounding-result" class="grounding-result" aria-live="polite"></div>
+            <p id="grounding-safety" class="grounding-safety">
+              语义模块仅选择已有持久 ID；自主对心与抓取请进入上方工作台。
+            </p>
+          </section>
+          <div id="detection-list" class="detection-list">
+            <div style="color:var(--text-secondary);font-size:0.7rem">双路视频已启用自动重连</div>
+          </div>
+          <button class="action-btn action-primary" id="btn-camera-refresh">刷新检测</button>
+        </div>
+      </div>
+    </div>
+  </aside>
+
+  <section id="voice-panel" aria-hidden="true" aria-label="语音和文字对话">
+    <header class="voice-panel-header">
+      <div class="voice-panel-title">
+        <span class="voice-kicker">VOICE LINK / V1</span>
+        <strong>语音和文字对话</strong>
+      </div>
+      <div class="voice-header-actions">
+        <span class="voice-status-chip" id="voice-ai-status" data-state="offline">AI 离线</span>
+        <button class="voice-icon-button" id="voice-panel-close" type="button" aria-label="关闭语音面板">×</button>
+      </div>
+    </header>
+
+    <div class="voice-signal-ribbon" aria-label="麦克风实时输入电平">
+      <div class="voice-signal-track">
+        <div class="voice-signal-fill" id="voice-level-fill"></div>
+        <div class="voice-signal-grid"></div>
+      </div>
+      <span class="voice-signal-value"><b id="voice-level-value">0</b> LVL</span>
+      <time id="voice-recording-time">00:00</time>
+    </div>
+
+    <div class="voice-panel-body">
+      <section class="voice-config-block" aria-labelledby="voice-ai-label">
+        <div class="voice-block-heading">
+          <div>
+            <span class="voice-block-index">01</span>
+            <strong id="voice-ai-label">Ubuntu PC 本地 AI</strong>
+          </div>
+          <span class="voice-session-status" id="voice-session-status" data-state="idle"
+                role="status" aria-live="polite">等待操作</span>
+        </div>
+        <div class="voice-route-control">
+          <input id="voice-ai-endpoint" type="hidden" value="">
+          <span aria-hidden="true"></span>
+          <button id="voice-ai-reconnect" type="button">重新连接</button>
+        </div>
+        <div class="voice-asr-heading">
+          <strong>ASR 模型</strong>
+          <span class="voice-asr-summary" role="status" aria-live="polite">
+            <b id="voice-asr-state">STOPPED</b>
+            <span>设备 <b id="voice-asr-device">--</b></span>
+            <span>最近延迟 <b id="voice-asr-latency">--</b></span>
+          </span>
+        </div>
+        <div class="voice-asr-model-options" role="group" aria-label="选择 ASR 模型">
+          <button class="voice-asr-model-option" type="button"
+                  data-model-id="whisper-small" aria-pressed="false">
+            <strong>Medium</strong>
+            <small>Whisper Small · 默认中英文整句识别</small>
+          </button>
+          <button class="voice-asr-model-option" type="button"
+                  data-model-id="paraformer-streaming" aria-pressed="false">
+            <strong>Real-time</strong>
+            <small>Paraformer CPU · 中文流式识别，降低 GPU 占用</small>
+          </button>
+          <button class="voice-asr-model-option" type="button"
+                  data-model-id="fun-asr-nano" aria-pressed="false">
+            <strong>High</strong>
+            <small>Fun-ASR-Nano · 实验模型，较高 GPU 显存占用</small>
+          </button>
+        </div>
+      </section>
+
+      <section class="voice-config-block" aria-labelledby="voice-mic-label">
+        <div class="voice-block-heading">
+          <div>
+            <span class="voice-block-index">02</span>
+            <strong id="voice-mic-label">音频输入</strong>
+          </div>
+          <span class="voice-status-chip" id="voice-mic-status" data-state="off">麦克风关闭</span>
+        </div>
+        <div class="voice-device-row">
+          <select id="voice-device-select" aria-label="选择麦克风" disabled>
+            <option value="">启用后检测麦克风</option>
+          </select>
+          <button id="voice-mic-toggle" type="button">启用麦克风</button>
+        </div>
+        <p class="voice-help">只在录音期间向所选 AI 通道发送音频；关闭麦克风会立即释放设备。</p>
+      </section>
+
+      <section class="voice-config-block" aria-labelledby="voice-speaker-label">
+        <div class="voice-block-heading">
+          <div>
+            <span class="voice-block-index">03</span>
+            <strong id="voice-speaker-label">音频输出</strong>
+          </div>
+          <span class="voice-status-chip" id="voice-speaker-status" data-state="default">默认设备</span>
+        </div>
+        <div class="voice-device-row">
+          <select id="voice-speaker-select" aria-label="选择扬声器" disabled>
+            <option value="">使用系统默认</option>
+          </select>
+          <button id="voice-speaker-refresh" type="button" disabled>刷新</button>
+        </div>
+        <p class="voice-help">TTS 语音播报的输出设备。留空使用系统默认扬声器。</p>
+      </section>
+
+      <section class="voice-capture-block" aria-labelledby="voice-capture-label">
+        <div class="voice-block-heading">
+          <div>
+            <span class="voice-block-index">04</span>
+            <strong id="voice-capture-label">语音会话</strong>
+          </div>
+          <span class="voice-limit">最长 00:30</span>
+        </div>
+        <div class="voice-record-actions">
+          <button class="voice-record-button" id="voice-record-toggle" type="button" disabled>
+            <span class="voice-record-symbol" aria-hidden="true"></span>
+            <span>开始录音</span>
+          </button>
+          <button class="voice-record-cancel" id="voice-record-cancel" type="button" disabled>
+            取消
+          </button>
+        </div>
+      </section>
+
+      <section class="voice-conversation-block" aria-labelledby="voice-transcript-label">
+        <div class="voice-block-heading">
+          <div>
+            <span class="voice-block-index">05</span>
+            <strong id="voice-transcript-label">实时对话</strong>
+          </div>
+          <span class="voice-mock-badge">VOICE + TEXT / CONFIRM</span>
+        </div>
+        <div class="voice-conversation" id="voice-conversation" aria-live="polite"
+             aria-relevant="additions text">
+          <div class="voice-empty">
+            <span class="voice-empty-mark">LIVE</span>
+            <p>说话或输入文字，由本地 AI 生成候选；真机动作必须确认。</p>
+          </div>
+        </div>
+        <form class="voice-text-composer" id="voice-text-form" novalidate>
+          <div class="voice-text-rail">
+            <span class="voice-text-channel" aria-hidden="true">TXT</span>
+            <label class="voice-sr-only" for="voice-text-input">输入文字指令</label>
+            <textarea id="voice-text-input" rows="1" maxlength="2000"
+                      enterkeyhint="send" autocomplete="off"
+                      aria-describedby="voice-text-help"
+                      placeholder="输入文字指令…"></textarea>
+            <button id="voice-text-send" type="submit" disabled>
+              <span>发送</span>
+              <span aria-hidden="true">↗</span>
+            </button>
+          </div>
+          <div class="voice-text-help" id="voice-text-help">
+            <span>Enter 发送 · Shift+Enter 换行</span>
+            <output id="voice-text-count" for="voice-text-input">0 / 2000</output>
+          </div>
+        </form>
+      </section>
+
+      <section class="voice-intent-card" id="voice-intent-card" aria-live="assertive" hidden>
+        <div class="voice-intent-topline">
+          <span>AI 理解 · 等待确认</span>
+          <b id="voice-intent-confidence">--</b>
+        </div>
+        <strong id="voice-intent-name">—</strong>
+        <p id="voice-intent-source">来自：“—”</p>
+        <p class="voice-intent-boundary">3D 仅用于确认前预览。确认后由 3000 服务验证状态并发送真机命令；成功必须以真实反馈为准。</p>
+        <div class="voice-intent-actions">
+          <button class="voice-guide-button" id="voice-intent-guide" type="button">告诉我怎么做</button>
+          <button class="voice-cancel-button" id="voice-intent-cancel" type="button">不执行</button>
+          <button class="voice-confirm-button" id="voice-intent-confirm" type="button">确认并执行真机</button>
+        </div>
+      </section>
+    </div>
+
+    <footer class="voice-panel-footer">
+      <span class="voice-privacy-dot"></span>
+      AI 只生成候选；除明确“停止”外，真机动作都必须人工确认。软件停止不等于物理急停。
+    </footer>
+  </section>
+
+  <!-- 通信日志面板（底部上滑） -->
+  <div id="log-panel">
+    <div class="log-header">
+      <span>通信日志</span>
+      <button class="log-close" id="btn-log-close">✕</button>
+    </div>
+    <div class="log-area" id="log-area"></div>
+  </div>
+
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "./js/lib/three.module.js",
+      "three/addons/": "./js/lib/"
+    }
+  }
+  </script>
+  <script src="js/grounding-ui.js?v=1"></script>
+    <script type="module" src="js/main.js?v=10"></script>
+</body>
+</html>

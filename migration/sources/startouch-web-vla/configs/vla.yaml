@@ -1,0 +1,25 @@
+# ============================================================
+# VLA (Vision-Language-Action) Configuration
+# ============================================================
+# Cloud API that reasons about camera frames and suggests actions.
+# The VLA does NOT directly control the robot — suggestions are
+# validated by the state machine and safety system.
+
+provider: "anthropic"       # anthropic | deepseek | openai
+model: "claude-sonnet-4-20250514"
+max_tokens: 4096
+
+# --- Image Encoding ---
+image_max_side: 1024
+image_quality: 85
+image_format: "jpeg"
+
+# --- Session ---
+history_size: 20            # Max messages retained in session
+
+# --- Trigger Conditions ---
+trigger_on:
+  multiple_objects: true    # DETECT: >1 object found → ask VLA to choose
+  error_recovery: true      # ERROR: ask VLA for recovery strategy
+  idle_query: true          # IDLE: open-ended user questions
+  confidence_threshold: 0.7 # Trigger if detector conf < this

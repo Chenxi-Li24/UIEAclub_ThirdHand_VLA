@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Fixed Pick and Place 控制台</title>
+  <link rel="stylesheet" href="demo.css">
+</head>
+<body>
+  <main class="shell">
+    <header>
+      <div>
+        <p class="eyebrow">THIRDHAND · UBUNTU LOCAL CONTROL</p>
+        <h1>Fixed Pick and Place</h1>
+        <p class="subtitle">A ⇄ B · 抬升 25 cm · 当前速度与循环数见启动预检</p>
+      </div>
+      <div class="status-pill" id="demo-status" data-state="IDLE">IDLE</div>
+    </header>
+
+    <section class="safety">
+      <strong>现场安全</strong>
+      <span>开始前清空工作区，确认人员在场且物理急停可用。</span>
+    </section>
+
+    <section class="overview">
+      <article>
+        <span>当前阶段</span>
+        <strong id="demo-stage">IDLE</strong>
+      </article>
+      <article>
+        <span>进程</span>
+        <strong id="demo-pid">未占用</strong>
+      </article>
+      <article>
+        <span>资源策略</span>
+        <strong>冲突即退出</strong>
+      </article>
+      <article>
+        <span>停止策略</span>
+        <strong>cleanup + 失能</strong>
+      </article>
+    </section>
+
+    <section class="actions">
+      <button id="start-demo" class="start">手动逐步演示</button>
+      <button id="start-auto-demo" class="auto-start">一键自动循环 3 次</button>
+      <button id="continue-demo" class="continue" disabled>执行下一步</button>
+      <button id="stop-demo" class="stop" disabled>停止并失能</button>
+      <p id="demo-message">正在读取状态…</p>
+    </section>
+
+    <section class="log-card">
+      <div class="log-heading">
+        <div>
+          <span>实时日志</span>
+          <small id="last-log">尚无日志文件</small>
+        </div>
+        <button id="scroll-log">滚动到底部</button>
+      </div>
+      <pre id="demo-log" aria-live="polite">等待服务状态…</pre>
+    </section>
+  </main>
+  <script src="demo.js"></script>
+</body>
+</html>

@@ -1,0 +1,791 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://uiea.club/thirdhand/contracts/schema.json",
+  "title": "ThirdHand Skill Integration Protocol",
+  "description": "四个独立 Python 环境之间的统一消息合同。环境可以使用不同依赖，但必须通过本合同交换消息。",
+  "x-ai-contract": {
+    "purpose": "Connect Language, Vision, Policy and Robot services without merging their Python environments.",
+    "nonNegotiableRules": [
+      "Do not invent new field names when an existing field can represent the value.",
+      "Preserve traceId from skill.candidate through skill.result.",
+      "Never send robot motion before confirmation.decision with decision=confirmed.",
+      "Never substitute another detected object when coke_bottle is missing or ambiguous.",
+      "Always label execution mode as simulate, dry-run or real, matching the existing runner CLI.",
+      "Never report verified real success without hardware feedback and visual verification.",
+      "Add an adapter around an existing module instead of rewriting its model code."
+    ],
+    "changePolicy": "Breaking changes require team agreement and a schemaVersion major-version increase."
+  },
+  "oneOf": [
+    { "$ref": "#/$defs/skillCandidateMessage" },
+    { "$ref": "#/$defs/confirmationDecisionMessage" },
+    { "$ref": "#/$defs/visionTargetRequestMessage" },
+    { "$ref": "#/$defs/visionTargetResultMessage" },
+    { "$ref": "#/$defs/policyActionRequestMessage" },
+    { "$ref": "#/$defs/policyActionResultMessage" },
+    { "$ref": "#/$defs/executionRequestMessage" },
+    { "$ref": "#/$defs/executionResultMessage" },
+    { "$ref": "#/$defs/verificationRequestMessage" },
+    { "$ref": "#/$defs/verificationResultMessage" },
+    { "$ref": "#/$defs/skillResultMessage" },
+    { "$ref": "#/$defs/serviceErrorMessage" }
+  ],
+  "$defs": {
+    "component": {
+      "type": "string",
+      "enum": ["language", "ui", "orchestrator", "vision", "policy", "robot", "verifier"]
+    },
+    "mode": {
+      "type": "string",
+      "enum": ["simulate", "dry-run", "real"],
+      "description": "与现有 fixed_pick_place.py CLI 对齐：simulate=纯模拟；dry-run=真实 SDK 初始化但禁止机械运动；real=允许真机运动。"
+    },
+    "status": {
+      "type": "string",
+      "enum": ["pending", "ready", "running", "success", "failure", "uncertain", "rejected", "blocked"]
+    },
+    "identifier": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+    },
+    "errorDetail": {
+      "type": "object",
+      "properties": {
+        "code": { "$ref": "#/$defs/identifier" },
+        "message": { "type": "string", "minLength": 1, "maxLength": 1000 },
+        "retryable": { "type": "boolean" },
+        "details": { "type": "object" }
+      },
+      "required": ["code", "message", "retryable"],
+      "additionalProperties": false
+    },
+    "baseMessage": {
+      "type": "object",
+      "properties": {
+        "schemaVersion": { "const": "1.0" },
+        "type": { "type": "string" },
+        "messageId": { "$ref": "#/$defs/identifier" },
+        "replyTo": {
+          "oneOf": [
+            { "$ref": "#/$defs/identifier" },
+            { "type": "null" }
+          ]
+        },
+        "sessionId": { "$ref": "#/$defs/identifier" },
+        "traceId": { "$ref": "#/$defs/identifier" },
+        "ts": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Unix epoch time in milliseconds."
+        },
+        "source": { "$ref": "#/$defs/component" },
+        "target": { "$ref": "#/$defs/component" },
+        "mode": { "$ref": "#/$defs/mode" },
+        "status": { "$ref": "#/$defs/status" },
+        "payload": { "type": "object" },
+        "error": {
+          "oneOf": [
+            { "$ref": "#/$defs/errorDetail" },
+            { "type": "null" }
+          ]
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "type",
+        "messageId",
+        "replyTo",
+        "sessionId",
+        "traceId",
+        "ts",
+        "source",
+        "target",
+        "mode",
+        "payload"
+      ]
+    },
+    "skillRef": {
+      "type": "object",
+      "properties": {
+        "id": { "const": "pick_and_place_bottle" },
+        "version": { "const": 1 }
+      },
+      "required": ["id", "version"],
+      "additionalProperties": false
+    },
+    "destination": {
+      "type": "object",
+      "properties": {
+        "id": { "$ref": "#/$defs/identifier" },
+        "type": { "const": "configured_drop_zone" }
+      },
+      "required": ["id", "type"],
+      "additionalProperties": false
+    },
+    "frameRef": {
+      "type": "object",
+      "properties": {
+        "frameId": { "$ref": "#/$defs/identifier" },
+        "cameraId": { "$ref": "#/$defs/identifier" },
+        "capturedAt": { "type": "integer", "minimum": 0 },
+        "widthPx": { "type": "integer", "minimum": 1 },
+        "heightPx": { "type": "integer", "minimum": 1 }
+      },
+      "required": ["frameId", "cameraId", "capturedAt", "widthPx", "heightPx"],
+      "additionalProperties": false
+    },
+    "bbox": {
+      "type": "object",
+      "properties": {
+        "format": { "const": "xyxy" },
+        "coordinateSpace": { "const": "pixel" },
+        "values": {
+          "type": "array",
+          "prefixItems": [
+            { "type": "integer", "minimum": 0 },
+            { "type": "integer", "minimum": 0 },
+            { "type": "integer", "minimum": 0 },
+            { "type": "integer", "minimum": 0 }
+          ],
+          "items": false,
+          "minItems": 4,
+          "maxItems": 4
+        }
+      },
+      "required": ["format", "coordinateSpace", "values"],
+      "additionalProperties": false
+    },
+    "targetRef": {
+      "type": "object",
+      "properties": {
+        "targetId": { "$ref": "#/$defs/identifier" },
+        "label": { "const": "coke_bottle" },
+        "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+        "bbox": { "$ref": "#/$defs/bbox" },
+        "maskRef": { "$ref": "#/$defs/identifier" },
+        "frameId": { "$ref": "#/$defs/identifier" },
+        "uniqueTarget": { "const": true },
+        "authorized": { "const": true }
+      },
+      "required": [
+        "targetId",
+        "label",
+        "confidence",
+        "bbox",
+        "maskRef",
+        "frameId",
+        "uniqueTarget",
+        "authorized"
+      ],
+      "additionalProperties": false
+    },
+    "startouchJointsRad": {
+      "type": "array",
+      "description": "Startouch J1-J6，单位 rad，顺序和限制与现有 startouch_bridge.py 完全一致。",
+      "prefixItems": [
+        { "type": "number", "minimum": -2.827433388, "maximum": 2.827433388 },
+        { "type": "number", "minimum": -0.20943951, "maximum": 3.508111796 },
+        { "type": "number", "minimum": -3.193952531, "maximum": 0 },
+        { "type": "number", "minimum": -1.710422666, "maximum": 1.710422666 },
+        { "type": "number", "minimum": -1.710422666, "maximum": 1.710422666 },
+        { "type": "number", "minimum": -2.862339973, "maximum": 2.862339973 }
+      ],
+      "items": false,
+      "minItems": 6,
+      "maxItems": 6
+    },
+    "actionStep": {
+      "type": "object",
+      "properties": {
+        "dtMs": { "type": "integer", "minimum": 1, "maximum": 30000 },
+        "jointsRad": { "$ref": "#/$defs/startouchJointsRad" },
+        "gripperNormalized": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "与现有 Startouch 配置一致：0=闭合，1=张开。"
+        }
+      },
+      "required": ["dtMs", "jointsRad", "gripperNormalized"],
+      "additionalProperties": false
+    },
+    "actionChunk": {
+      "type": "object",
+      "properties": {
+        "sequenceId": { "$ref": "#/$defs/identifier" },
+        "actionSpaceId": { "const": "startouch-j1-j6-rad-gripper-v1" },
+        "jointOrder": { "const": ["J1", "J2", "J3", "J4", "J5", "J6"] },
+        "jointUnit": { "const": "rad" },
+        "gripperUnit": { "const": "normalized_0_1" },
+        "steps": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/actionStep" },
+          "minItems": 1,
+          "maxItems": 1000
+        }
+      },
+      "required": ["sequenceId", "actionSpaceId", "jointOrder", "jointUnit", "gripperUnit", "steps"],
+      "additionalProperties": false
+    },
+    "fixedWaypointPlan": {
+      "type": "object",
+      "description": "复用现有 Startouch bridge、A/B 示教点和 home_transit_ab 前半段，单向完成 A 到 B 后回 HOME；不得执行会把瓶子带回 A 的后半段。",
+      "properties": {
+        "kind": { "const": "fixed_waypoint_a_to_b" },
+        "planId": { "$ref": "#/$defs/identifier" },
+        "adapterId": { "const": "startouch_fixed_waypoint_adapter_v1" },
+        "bridgeRef": { "const": "web-control/server/startouch_bridge.py" },
+        "configRef": { "const": "configs/tasks/fixed_pick_place.yaml" },
+        "sourceWorkflow": { "const": "home_transit_ab" },
+        "sourceZoneId": { "const": "pick_zone_a" },
+        "destinationZoneId": { "const": "drop_zone_b" },
+        "routeStates": {
+          "const": [
+            "OPEN_GRIPPER_READY",
+            "MOVE_HOME_START",
+            "APPROACH_A_UP",
+            "DESCEND_TO_A_PICK",
+            "ADAPTIVE_GRASP_A",
+            "LIFT_A",
+            "TRANSFER_A_UP_TO_B_UP",
+            "DESCEND_TO_B",
+            "RELEASE_AT_B",
+            "LIFT_AFTER_RELEASE_B",
+            "RETURN_B_UP_TO_HOME"
+          ]
+        },
+        "cycles": { "const": 1 },
+        "confirmEachStep": { "const": true },
+        "speedScale": { "const": 0.15 }
+      },
+      "required": [
+        "kind",
+        "planId",
+        "adapterId",
+        "bridgeRef",
+        "configRef",
+        "sourceWorkflow",
+        "sourceZoneId",
+        "destinationZoneId",
+        "routeStates",
+        "cycles",
+        "confirmEachStep",
+        "speedScale"
+      ],
+      "additionalProperties": false
+    },
+    "actChunkPlan": {
+      "type": "object",
+      "description": "ACT 输出必须先经过 adapter 转为现有 Startouch move_joint/move_joint_path/gripper 命令，不能直接写 CAN。",
+      "properties": {
+        "kind": { "const": "act_chunk" },
+        "planId": { "$ref": "#/$defs/identifier" },
+        "adapterId": { "const": "startouch_action_chunk_adapter_v1" },
+        "bridgeRef": { "const": "web-control/server/startouch_bridge.py" },
+        "actionChunk": { "$ref": "#/$defs/actionChunk" }
+      },
+      "required": ["kind", "planId", "adapterId", "bridgeRef", "actionChunk"],
+      "additionalProperties": false
+    },
+    "executionPlan": {
+      "oneOf": [
+        { "$ref": "#/$defs/fixedWaypointPlan" },
+        { "$ref": "#/$defs/actChunkPlan" }
+      ]
+    },
+    "skillCandidatePayload": {
+      "type": "object",
+      "properties": {
+        "candidateId": { "$ref": "#/$defs/identifier" },
+        "skill": { "$ref": "#/$defs/skillRef" },
+        "sourceText": { "type": "string", "minLength": 1, "maxLength": 2000 },
+        "params": {
+          "type": "object",
+          "properties": {
+            "object": { "const": "coke_bottle" },
+            "destination": { "$ref": "#/$defs/destination" }
+          },
+          "required": ["object", "destination"],
+          "additionalProperties": false
+        },
+        "intentConfidence": { "type": "number", "minimum": 0, "maximum": 1 },
+        "requiresConfirmation": { "const": true },
+        "expiresAt": { "type": "integer", "minimum": 0 }
+      },
+      "required": [
+        "candidateId",
+        "skill",
+        "sourceText",
+        "params",
+        "requiresConfirmation",
+        "expiresAt"
+      ],
+      "additionalProperties": false
+    },
+    "skillCandidateMessage": {
+      "allOf": [{ "$ref": "#/$defs/baseMessage" }],
+      "properties": {
+        "type": { "const": "skill.candidate" },
+        "source": { "const": "language" },
+        "target": { "const": "orchestrator" },
+        "status": { "const": "pending" },
+        "payload": { "$ref": "#/$defs/skillCandidatePayload" }
+      },
+      "required": ["type", "source", "target", "status", "payload"],
+      "unevaluatedProperties": false
+    },
+    "confirmationDecisionMessage": {
+      "allOf": [{ "$ref": "#/$defs/baseMessage" }],
+      "properties": {
+        "type": { "const": "confirmation.decision" },
+        "source": { "const": "ui" },
+        "target": { "const": "orchestrator" },
+        "payload": {
+          "type": "object",
+          "properties": {
+            "decisionId": { "$ref": "#/$defs/identifier" },
+            "candidateId": { "$ref": "#/$defs/identifier" },
+            "decision": { "type": "string", "enum": ["confirmed", "rejected"] },
+            "decidedBy": { "type": "string", "minLength": 1, "maxLength": 128 },
+            "decidedAt": { "type": "integer", "minimum": 0 }
+          },
+          "required": ["decisionId", "candidateId", "decision", "decidedBy", "decidedAt"],
+          "additionalProperties": false
+        }
+      },
+      "required": ["type", "source", "target", "payload"],
+      "unevaluatedProperties": false
+    },
+    "visionTargetRequestMessage": {
+      "allOf": [{ "$ref": "#/$defs/baseMessage" }],
+      "properties": {
+        "type": { "const": "vision.target.request" },
+        "source": { "const": "orchestrator" },
+        "target": { "const": "vision" },
+        "payload": {
+          "type": "object",
+          "properties": {
+            "candidateId": { "$ref": "#/$defs/identifier" },
+            "requiredLabel": { "const": "coke_bottle" },
+            "cameraId": { "$ref": "#/$defs/identifier" },
+            "requireUniqueTarget": { "const": true },
+            "maxFrameAgeMs": { "type": "integer", "minimum": 1, "maximum": 5000 }
+          },
+          "required": ["candidateId", "requiredLabel", "cameraId", "requireUniqueTarget", "maxFrameAgeMs"],
+          "additionalProperties": false
+        }
+      },
+      "required": ["type", "source", "target", "payload"],
+      "unevaluatedProperties": false
+    },
+    "visionTargetResultMessage": {
+      "properties": {
+        "type": { "const": "vision.target.result" },
+        "source": { "const": "vision" },
+        "target": { "const": "orchestrator" },
+        "status": { "type": "string", "enum": ["ready", "rejected", "failure", "uncertain"] },
+        "payload": {
+          "type": "object",
+          "properties": {
+            "candidateId": { "$ref": "#/$defs/identifier" },
+            "frame": { "$ref": "#/$defs/frameRef" },
+            "target": { "$ref": "#/$defs/targetRef" },
+            "rejectionReason": {
+              "type": "string",
+              "enum": ["no_coke", "ambiguous_coke", "non_coke", "stale_frame", "camera_unavailable"]
+            }
+          },
+          "required": ["candidateId", "frame"],
+          "additionalProperties": false
+        }
+      },
+      "required": ["type", "source", "target", "status", "payload"],
+      "allOf": [
+        { "$ref": "#/$defs/baseMessage" },
+        {
+          "if": { "properties": { "status": { "const": "ready" } }, "required": ["status"] },
+          "then": { "properties": { "payload": { "required": ["target"] } } },
+          "else": { "properties": { "payload": { "required": ["rejectionReason"] } } }
+        }
+      ],
+      "unevaluatedProperties": false
+    },
+    "policyActionRequestMessage": {
+      "allOf": [{ "$ref": "#/$defs/baseMessage" }],
+      "properties": {
+        "type": { "const": "policy.action.request" },
+        "source": { "const": "orchestrator" },
+        "target": { "const": "policy" },
+        "payload": {
+          "type": "object",
+          "properties": {
+            "candidateId": { "$ref": "#/$defs/identifier" },
+            "target": { "$ref": "#/$defs/targetRef" },
+            "robotStateRef": { "$ref": "#/$defs/identifier" },
+            "actionSpaceId": { "const": "startouch-j1-j6-rad-gripper-v1" },
+            "allowedPolicyKinds": {
+              "type": "array",
+              "items": { "type": "string", "enum": ["lerobot_act", "fake_act", "fixed_baseline"] },
+              "minItems": 1,
+              "uniqueItems": true
+            }
+          },
+          "required": ["candidateId", "target", "robotStateRef", "actionSpaceId", "allowedPolicyKinds"],
+          "additionalProperties": false
+        }
+      },
+      "required": ["type", "source", "target", "payload"],
+      "unevaluatedProperties": false
+    },
+    "policyActionResultMessage": {
+      "properties": {
+        "type": { "const": "policy.action.result" },
+        "source": { "const": "policy" },
+        "target": { "const": "orchestrator" },
+        "status": { "type": "string", "enum": ["ready", "failure", "uncertain"] },
+        "payload": {
+          "type": "object",
+          "properties": {
+            "candidateId": { "$ref": "#/$defs/identifier" },
+            "targetId": { "$ref": "#/$defs/identifier" },
+            "frameId": { "$ref": "#/$defs/identifier" },
+            "policy": {
+              "type": "object",
+              "properties": {
+                "id": { "$ref": "#/$defs/identifier" },
+                "version": { "type": "string", "minLength": 1, "maxLength": 64 },
+                "kind": { "type": "string", "enum": ["lerobot_act", "fake_act", "fixed_baseline"] },
+                "checkpoint": { "type": ["string", "null"], "maxLength": 500 }
+              },
+              "required": ["id", "version", "kind", "checkpoint"],
+              "additionalProperties": false
+            },
+            "executionPlan": { "$ref": "#/$defs/executionPlan" }
+          },
+          "required": ["candidateId", "targetId", "frameId", "policy"],
+          "additionalProperties": false
+        }
+      },
+      "required": ["type", "source", "target", "status", "payload"],
+      "allOf": [
+        { "$ref": "#/$defs/baseMessage" },
+        {
+          "if": { "properties": { "status": { "const": "ready" } }, "required": ["status"] },
+          "then": { "properties": { "payload": { "required": ["executionPlan"] } } }
+        }
+      ],
+      "unevaluatedProperties": false
+    },
+    "executionRequestMessage": {
+      "properties": {
+        "type": { "const": "execution.request" },
+        "source": { "const": "orchestrator" },
+        "target": { "const": "robot" },
+        "status": { "const": "ready" },
+        "payload": {
+          "type": "object",
+          "properties": {
+            "candidateId": { "$ref": "#/$defs/identifier" },
+            "decisionId": { "$ref": "#/$defs/identifier" },
+            "confirmed": { "const": true },
+            "targetId": { "$ref": "#/$defs/identifier" },
+            "executionPlan": { "$ref": "#/$defs/executionPlan" },
+            "safety": {
+              "type": "object",
+              "properties": {
+                "uniqueTargetAuthorized": { "const": true },
+                "frameFresh": { "const": true },
+                "mutuallyExclusiveMotion": { "const": true },
+                "physicalEStopReady": { "type": "boolean" },
+                "speedScale": { "type": "number", "exclusiveMinimum": 0, "maximum": 0.15 }
+              },
+              "required": [
+                "uniqueTargetAuthorized",
+                "frameFresh",
+                "mutuallyExclusiveMotion",
+                "physicalEStopReady",
+                "speedScale"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": ["candidateId", "decisionId", "confirmed", "targetId", "executionPlan", "safety"],
+          "additionalProperties": false
+        }
+      },
+      "required": ["type", "source", "target", "status", "payload"],
+      "allOf": [
+        { "$ref": "#/$defs/baseMessage" },
+        {
+          "if": { "properties": { "mode": { "const": "real" } }, "required": ["mode"] },
+          "then": {
+            "properties": {
+              "payload": {
+                "properties": {
+                  "safety": { "properties": { "physicalEStopReady": { "const": true } } }
+                }
+              }
+            }
+          }
+        }
+      ],
+      "unevaluatedProperties": false
+    },
+    "executionResultMessage": {
+      "properties": {
+        "type": { "const": "execution.result" },
+        "source": { "const": "robot" },
+        "target": { "const": "orchestrator" },
+        "status": { "type": "string", "enum": ["success", "failure", "blocked"] },
+        "payload": {
+          "type": "object",
+          "properties": {
+            "candidateId": { "$ref": "#/$defs/identifier" },
+            "sequenceId": { "$ref": "#/$defs/identifier" },
+            "executor": {
+              "type": "string",
+              "enum": ["fake", "startouch_bridge", "fixed_pick_place_adapter"]
+            },
+            "executedSteps": { "type": "integer", "minimum": 0 },
+            "hardwareFeedbackVerified": { "type": "boolean" },
+            "safetyEvent": { "type": "boolean" },
+            "bridgeEvidence": {
+              "type": "object",
+              "properties": {
+                "bridgeRef": { "const": "web-control/server/startouch_bridge.py" },
+                "commandCompleteCount": { "type": "integer", "minimum": 0 },
+                "finalRobotStateRef": {
+                  "oneOf": [
+                    { "$ref": "#/$defs/identifier" },
+                    { "type": "null" }
+                  ]
+                },
+                "postMotionJointFeedbackVerified": { "type": "boolean" },
+                "gripperFeedbackVerified": { "type": "boolean" },
+                "canFeedbackVerified": { "type": "boolean" },
+                "softwareStopConfirmed": { "type": "boolean" }
+              },
+              "required": [
+                "bridgeRef",
+                "commandCompleteCount",
+                "finalRobotStateRef",
+                "postMotionJointFeedbackVerified",
+                "gripperFeedbackVerified",
+                "canFeedbackVerified",
+                "softwareStopConfirmed"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "candidateId",
+            "sequenceId",
+            "executor",
+            "executedSteps",
+            "hardwareFeedbackVerified",
+            "safetyEvent",
+            "bridgeEvidence"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": ["type", "source", "target", "status", "payload"],
+      "allOf": [
+        { "$ref": "#/$defs/baseMessage" },
+        {
+          "if": {
+            "properties": { "mode": { "const": "real" }, "status": { "const": "success" } },
+            "required": ["mode", "status"]
+          },
+          "then": {
+            "properties": {
+              "payload": {
+                "properties": {
+                  "hardwareFeedbackVerified": { "const": true },
+                  "bridgeEvidence": {
+                    "properties": {
+                      "postMotionJointFeedbackVerified": { "const": true },
+                      "gripperFeedbackVerified": { "const": true },
+                      "canFeedbackVerified": { "const": true }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      ],
+      "unevaluatedProperties": false
+    },
+    "verificationRequestMessage": {
+      "allOf": [{ "$ref": "#/$defs/baseMessage" }],
+      "properties": {
+        "type": { "const": "verification.request" },
+        "source": { "const": "orchestrator" },
+        "target": { "const": "verifier" },
+        "payload": {
+          "type": "object",
+          "properties": {
+            "candidateId": { "$ref": "#/$defs/identifier" },
+            "targetId": { "$ref": "#/$defs/identifier" },
+            "beforeFrameId": { "$ref": "#/$defs/identifier" },
+            "destination": { "$ref": "#/$defs/destination" },
+            "criteria": {
+              "type": "array",
+              "const": ["target_left_source", "target_in_drop_zone", "gripper_released", "no_safety_event"]
+            }
+          },
+          "required": ["candidateId", "targetId", "beforeFrameId", "destination", "criteria"],
+          "additionalProperties": false
+        }
+      },
+      "required": ["type", "source", "target", "payload"],
+      "unevaluatedProperties": false
+    },
+    "verificationResultMessage": {
+      "properties": {
+        "type": { "const": "verification.result" },
+        "source": { "const": "verifier" },
+        "target": { "const": "orchestrator" },
+        "status": { "type": "string", "enum": ["success", "failure", "uncertain"] },
+        "payload": {
+          "type": "object",
+          "properties": {
+            "candidateId": { "$ref": "#/$defs/identifier" },
+            "targetId": { "$ref": "#/$defs/identifier" },
+            "afterFrame": { "$ref": "#/$defs/frameRef" },
+            "targetLeftSource": { "type": "boolean" },
+            "targetInDropZone": { "type": "boolean" },
+            "gripperReleased": { "type": "boolean" },
+            "wrongObjectMotion": { "type": "boolean" },
+            "safetyEvent": { "type": "boolean" },
+            "evidenceRefs": {
+              "type": "array",
+              "items": { "$ref": "#/$defs/identifier" },
+              "minItems": 1,
+              "uniqueItems": true
+            }
+          },
+          "required": [
+            "candidateId",
+            "targetId",
+            "afterFrame",
+            "targetLeftSource",
+            "targetInDropZone",
+            "gripperReleased",
+            "wrongObjectMotion",
+            "safetyEvent",
+            "evidenceRefs"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": ["type", "source", "target", "status", "payload"],
+      "allOf": [
+        { "$ref": "#/$defs/baseMessage" },
+        {
+          "if": { "properties": { "status": { "const": "success" } }, "required": ["status"] },
+          "then": {
+            "properties": {
+              "payload": {
+                "properties": {
+                  "targetLeftSource": { "const": true },
+                  "targetInDropZone": { "const": true },
+                  "gripperReleased": { "const": true },
+                  "wrongObjectMotion": { "const": false },
+                  "safetyEvent": { "const": false }
+                }
+              }
+            }
+          }
+        }
+      ],
+      "unevaluatedProperties": false
+    },
+    "skillResultMessage": {
+      "properties": {
+        "type": { "const": "skill.result" },
+        "source": { "const": "orchestrator" },
+        "target": { "type": "string", "enum": ["ui", "language"] },
+        "status": { "type": "string", "enum": ["success", "failure", "uncertain", "rejected", "blocked"] },
+        "payload": {
+          "type": "object",
+          "properties": {
+            "candidateId": { "$ref": "#/$defs/identifier" },
+            "skill": { "$ref": "#/$defs/skillRef" },
+            "completionClaim": {
+              "type": "string",
+              "enum": ["simulated_only", "dry_run_only", "verified_real_success", "no_success_claim"]
+            },
+            "completedStages": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": ["language", "confirmation", "vision", "policy", "execution", "verification"]
+              },
+              "uniqueItems": true
+            },
+            "summary": { "type": "string", "minLength": 1, "maxLength": 1000 }
+          },
+          "required": ["candidateId", "skill", "completionClaim", "completedStages", "summary"],
+          "additionalProperties": false
+        }
+      },
+      "required": ["type", "source", "target", "status", "payload"],
+      "allOf": [
+        { "$ref": "#/$defs/baseMessage" },
+        {
+          "if": {
+            "properties": { "mode": { "const": "real" }, "status": { "const": "success" } },
+            "required": ["mode", "status"]
+          },
+          "then": {
+            "properties": {
+              "payload": { "properties": { "completionClaim": { "const": "verified_real_success" } } }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "mode": { "const": "simulate" } }, "required": ["mode"] },
+          "then": {
+            "properties": {
+              "payload": { "properties": { "completionClaim": { "const": "simulated_only" } } }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "mode": { "const": "dry-run" } }, "required": ["mode"] },
+          "then": {
+            "properties": {
+              "payload": { "properties": { "completionClaim": { "const": "dry_run_only" } } }
+            }
+          }
+        }
+      ],
+      "unevaluatedProperties": false
+    },
+    "serviceErrorMessage": {
+      "allOf": [{ "$ref": "#/$defs/baseMessage" }],
+      "properties": {
+        "type": { "const": "service.error" },
+        "status": { "const": "failure" },
+        "payload": {
+          "type": "object",
+          "properties": {
+            "stage": {
+              "type": "string",
+              "enum": ["language", "confirmation", "vision", "policy", "execution", "verification", "orchestration"]
+            }
+          },
+          "required": ["stage"],
+          "additionalProperties": false
+        },
+        "error": { "$ref": "#/$defs/errorDetail" }
+      },
+      "required": ["type", "status", "payload", "error"],
+      "unevaluatedProperties": false
+    }
+  }
+}

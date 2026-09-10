@@ -1,0 +1,32 @@
+schema_version: 1
+
+depth:
+  min_points: 80
+  erosion_px: 3
+  mad_scale: 3.5
+  noise_floor_m: 0.002
+  inner_roi_fraction: 0.60
+  min_central_fraction: 0.80
+  max_axis_mad_m: 0.005
+
+object:
+  min_height_m: 0.010
+  max_height_m: 0.250
+
+gripper:
+  min_width_m: 0.010
+  max_width_m: 0.085
+  width_margin_m: 0.006
+
+motion:
+  pregrasp_clearance_m: 0.080
+  retreat_clearance_m: 0.100
+
+workspace:
+  min_m: [-0.30, -0.40, 0.01]
+  max_m: [0.50, 0.40, 0.40]
+
+stability:
+  sample_count: 5
+  max_center_deviation_m: 0.010
+  max_axis_mad_m: 0.005

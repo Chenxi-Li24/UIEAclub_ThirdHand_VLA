@@ -1,0 +1,6 @@
+target_type: charuco
+squaresX: 12
+squaresY: 9
+squareLength: 0.015
+markerLength: 0.01125
+dictionary: DICT_5X5_100

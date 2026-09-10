@@ -67,3 +67,20 @@ web-control/server/web-control.log
 /archive/**/dist/
 /archive/**/models/
 /archive/**/logs/
+
+# Source snapshot payloads that must never enter Git if reintroduced later
+/migration/sources/**/.git/
+/migration/sources/**/.venv/
+/migration/sources/**/.conda-*/
+/migration/sources/**/node_modules/
+/migration/sources/**/runtime/
+/migration/sources/**/models/
+/migration/sources/**/artifacts/
+/migration/sources/**/logs/
+/migration/sources/**/build/
+/migration/sources/**/.mypy_cache/
+/migration/sources/**/.ruff_cache/
+/migration/sources/**/.superpowers/
+/archive/source-snapshots/**/.mypy_cache/
+/archive/source-snapshots/**/.ruff_cache/
+/archive/source-snapshots/**/.superpowers/

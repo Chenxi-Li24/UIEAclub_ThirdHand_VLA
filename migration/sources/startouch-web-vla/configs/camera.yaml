@@ -1,0 +1,23 @@
+# ============================================================
+# Camera Configuration — Lumos Ego
+# ============================================================
+# See: https://www.lumosbot.tech/products/ego/
+# SDK: https://github.com/lumos-open/FastUMI_Camera
+
+model: "std"                # std (with ToF) | lite (no depth)
+device_path: "/dev/video0"
+width: 1280
+height: 720
+fps: 30
+pixel_format: "RGB"
+
+calibration_file: null      # Path to intrinsics .npz/.yaml
+camera_model: "seucm"       # seucm | fisheye | pinhole
+
+depth_enabled: false
+depth_width: 640
+depth_height: 480
+depth_fps: 15
+depth_unit: "mm"
+depth_invalid_value: 0
+tof_extrinsics: null        # 4x4 RGB-to-Depth transform

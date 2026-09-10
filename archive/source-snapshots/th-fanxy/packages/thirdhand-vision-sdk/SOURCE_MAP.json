@@ -1,0 +1,96 @@
+{
+  "schema_version": 1,
+  "source_commit": "1bb7b2e5cf359ded362481413bbf987fad33c9ef",
+  "records": [
+    {
+      "source_path": "web-control/server/vision/camera_models.py",
+      "source_sha256": "bbee7daa354c2e2952a6942c3defdd3eae0511058e2b28b7938389fe7df8a58a",
+      "sdk_paths": ["src/thirdhand_vision/core/camera.py"],
+      "notes": "Pinhole and SEUCM projection contracts"
+    },
+    {
+      "source_path": "web-control/server/vision/geometry.py",
+      "source_sha256": "56abb4e2454c180a7ced33e9a5db423ca78b786b10f999c9f51f2a8372237ce9",
+      "sdk_paths": ["src/thirdhand_vision/core/transforms.py"],
+      "notes": "Validated SE(3) helpers"
+    },
+    {
+      "source_path": "web-control/server/vision/depth_registration.py",
+      "source_sha256": "03abc60031ba1291dbcbd87dafbbb1a902fce21964eed780120ba6202798d3ce",
+      "sdk_paths": ["src/thirdhand_vision/geometry/depth.py"],
+      "notes": "Cross-camera depth registration and nearest-depth rasterization"
+    },
+    {
+      "source_path": "web-control/server/vision/instance_pose.py",
+      "source_sha256": "0722ee8d62cddbcafb8d1837cf056b67abb57a95efc2c32ecfc8f68d187763d9",
+      "sdk_paths": ["src/thirdhand_vision/geometry/pose.py"],
+      "notes": "Mask erosion, median/MAD filtering and covariance"
+    },
+    {
+      "source_path": "web-control/server/vision_models/contracts.py",
+      "source_sha256": "099e7bc1c624435cebf515cc6a8675375e9f3587494b937d2bf2efea6bb2c164",
+      "sdk_paths": ["src/thirdhand_vision/core/types.py", "src/thirdhand_vision/detection/base.py"],
+      "notes": "Model-side immutable detection contracts"
+    },
+    {
+      "source_path": "web-control/server/vision_models/rtmdet.py",
+      "source_sha256": "f0f75cd28162d8cf78a550749ea8858d821d834e435e162d0e9429d01dfcaf39",
+      "sdk_paths": ["src/thirdhand_vision/detection/rtmdet.py"],
+      "notes": "Lazy RTMDet instance-segmentation adapter"
+    },
+    {
+      "source_path": "web-control/server/vision_models/dino.py",
+      "source_sha256": "970bb31e2e82466b262b18b97c0f6a1f0df30bc6427f5c8f0e573a0ec65e9f75",
+      "sdk_paths": ["src/thirdhand_vision/features/dino.py"],
+      "notes": "DINOv2 dense features and mask-weighted pooling"
+    },
+    {
+      "source_path": "web-control/server/vision/identity.py",
+      "source_sha256": "02442520c0834ef2fc42e23c1495e7301c6dc1d41a07fcd6e3fb7e1f970d2cec",
+      "sdk_paths": ["src/thirdhand_vision/identity/memory.py"],
+      "notes": "REMIND-style engineering subset for persistent identity"
+    },
+    {
+      "source_path": "web-control/server/vision/tracking.py",
+      "source_sha256": "49760dff5cb4b9dda0f670362898ed37a9917d1b7d27877668ac7bf11e8d2cc6",
+      "sdk_paths": ["src/thirdhand_vision/identity/tracker.py"],
+      "notes": "Timestamp-aware covariance-weighted 3D tracker"
+    },
+    {
+      "source_path": "web-control/server/vision/dual_camera.py",
+      "source_sha256": "0a016fa65ba0b0546cd9032d6300f8da0a6ce80b4f32cc672026f91a90b2e278",
+      "sdk_paths": ["src/thirdhand_vision/pipeline/offline.py"],
+      "notes": "Fusion ordering and fail-closed 3D composition"
+    },
+    {
+      "source_path": "web-control/server/vision_models/online.py",
+      "source_sha256": "f609beb9b8f06147760bfdb423fc69f9eb51dc207b2412f9e7268ba36cf625ba",
+      "sdk_paths": ["src/thirdhand_vision/pipeline/config.py", "src/thirdhand_vision/pipeline/offline.py"],
+      "notes": "Online model orchestration adapted into caller-driven offline flow"
+    },
+    {
+      "source_path": "web-control/server/vision/active_view_types.py",
+      "source_sha256": "1dc2e2cc1601dcad3c8ffc161c932a1a628ee4f9b52f6e9bfc55e7a3d3f31989",
+      "sdk_paths": ["src/thirdhand_vision/active_view/types.py"],
+      "notes": "Advisory active-view data contracts"
+    },
+    {
+      "source_path": "web-control/server/vision/active_view_geometry.py",
+      "source_sha256": "dd432db8bfd33a19b6bd5faf8e1faced9d201d72587cc793e220f6ebfe6f5ca9",
+      "sdk_paths": ["src/thirdhand_vision/active_view/planner.py"],
+      "notes": "Depth and target geometry used by advisory planning"
+    },
+    {
+      "source_path": "web-control/server/vision/active_view_planner.py",
+      "source_sha256": "c793b44f2ca1b76c81ea7726476d1a5042011f6f22d28e4d6eb97f7751d13bbc",
+      "sdk_paths": ["src/thirdhand_vision/active_view/planner.py"],
+      "notes": "Catalog selection, quality checks and bounded refinement"
+    },
+    {
+      "source_path": "configs/vision/remind3d.yaml",
+      "source_sha256": "732fb2df9051ac4aa26c8e8f71e598de8c518e60b61a3cbaa82cbe6406e8e12e",
+      "sdk_paths": ["configs/default.yaml"],
+      "notes": "Machine-independent algorithm thresholds adapted from deployment config"
+    }
+  ]
+}

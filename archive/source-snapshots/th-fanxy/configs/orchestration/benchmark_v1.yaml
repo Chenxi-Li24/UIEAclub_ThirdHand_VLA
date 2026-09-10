@@ -1,0 +1,44 @@
+schema_version: 1.0.0
+benchmark_id: orchestration-shadow-v1
+robot_execution_enabled: false
+entries:
+- scenario_id: clean_success
+  family: clean_success
+  fixture: ../../tests/fixtures/orchestration/benchmark/clean_success.json
+  content_id: sha256:2a4fe399b3d8473203ddac46014d4186dd7f2a746f4c754e0bb34b5d1885c938
+- scenario_id: effect_fail
+  family: effect_fail
+  fixture: ../../tests/fixtures/orchestration/benchmark/effect_fail.json
+  content_id: sha256:2a6d7084b562a90e7b3bc9981aeb909a292bf9ba31bb544c7f607936d78f0c18
+- scenario_id: effect_unknown_resolved
+  family: effect_unknown_resolved
+  fixture: ../../tests/fixtures/orchestration/benchmark/effect_unknown_resolved.json
+  content_id: sha256:7a7232c27b94cec1c461de6991ced04046fb926ed02f80e301ec08c3cf7504c1
+- scenario_id: effect_unknown_exhausted
+  family: effect_unknown_exhausted
+  fixture: ../../tests/fixtures/orchestration/benchmark/effect_unknown_exhausted.json
+  content_id: sha256:1ef63d17356f1fb87584921a048a2bc8bfe85b5d22fe5c4bb46b9f9ae2d2577b
+- scenario_id: handoff_fail
+  family: handoff_fail
+  fixture: ../../tests/fixtures/orchestration/benchmark/handoff_fail.json
+  content_id: sha256:7939196a619638ac40df32bdfc2ca3c91f96489fa02762638b39f342eee3402d
+- scenario_id: handoff_unknown_resolved
+  family: handoff_unknown_resolved
+  fixture: ../../tests/fixtures/orchestration/benchmark/handoff_unknown_resolved.json
+  content_id: sha256:66fd4964e491b64e11a05570dba05d258eb5c32f8ecdfb6507332016042f816f
+- scenario_id: stale_post_observation
+  family: stale_post_observation
+  fixture: ../../tests/fixtures/orchestration/benchmark/stale_post_observation.json
+  content_id: sha256:7288449ead8e81e27492f8740c73822c9fb293573b4b71ba9aacea5ea837d529
+- scenario_id: ambiguous_identity
+  family: ambiguous_identity
+  fixture: ../../tests/fixtures/orchestration/benchmark/ambiguous_identity.json
+  content_id: sha256:ac9586ac6f62fc6add1b8569236144eb9ad62b40343a2b30452b4e76bca78648
+- scenario_id: invalid_depth_calibration
+  family: invalid_depth_calibration
+  fixture: ../../tests/fixtures/orchestration/benchmark/invalid_depth_calibration.json
+  content_id: sha256:711111ca3b2b893ea2a3650c284e470e3b5bcdacc31ca8012975fd4039eb014d
+- scenario_id: timeout_retry_goal_fail
+  family: timeout_retry_goal_fail
+  fixture: ../../tests/fixtures/orchestration/benchmark/timeout_retry_goal_fail.json
+  content_id: sha256:e56a4128e553d52a08e5a5c426229f64961e6711853fd1a61faa86f04e6e4eaa

@@ -1,0 +1,25 @@
+{
+  "part": "C",
+  "role": "policy",
+  "repository": "/home/nieqingcao/thirdhand-policy",
+  "branch": "not-in-git",
+  "commit": "not-in-git",
+  "entrypoint": "main.py",
+  "policyKinds": ["fixed_baseline", "fake_act", "lerobot_act"],
+  "executionPlanKinds": ["fixed_waypoint_a_to_b", "act_chunk"],
+  "actionSpaceId": "startouch-j1-j6-rad-gripper-v1",
+  "endpoint": "http://192.168.58.68:8080/v1/policy/action",
+  "healthCheck": "curl http://192.168.58.68:8080/healthz",
+  "checkpoint": null,
+  "tests": {
+    "command": "python3 -m pytest tests/ -q",
+    "passed": 27,
+    "failed": 0
+  },
+  "knownLimitations": [
+    "Vision 尚未交付 robot_base 三维抓取位姿与标定 ID；lerobot_act 真机抓取暂不可用（fixed_baseline 不受影响）",
+    "lerobot_act 真推理未验证：缺真实 ACT checkpoint 与 torch/lerobot 0.6.0 环境",
+    "startouch_action_chunk_adapter_v1 未注册；act_chunk 按契约 fail-closed（回退 fixed_baseline 或 policy_unavailable）",
+    "代码未纳入 git 仓库；branch/commit 待定"
+  ]
+}

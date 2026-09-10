@@ -1,0 +1,171 @@
+{
+  "schemaVersion": "1.0",
+  "skill": {
+    "id": "pick_and_place_bottle",
+    "version": 1,
+    "displayName": "Pick and Place Coke Bottle",
+    "description": "在用户明确确认后，定位唯一可乐瓶，生成动作，执行抓取放置，并验证结果。"
+  },
+  "contract": "./schema.json",
+  "ownership": {
+    "language": "语音或文字输入、意图理解、Skill 选择、参数填充、确认卡片",
+    "vision": "唯一可乐目标检测、mask、帧新鲜度、执行前授权和执行后证据",
+    "policy": "输出 fixed waypoint execution plan，或输出经 adapter 转换的 LeRobot ACT action chunk",
+    "robot": "复用现有 Startouch JSON-lines bridge、示教点、反馈校验、安全停止和互斥控制",
+    "orchestrator": "状态机、超时、重试、trace、跨服务调用和最终结果"
+  },
+  "services": {
+    "language": {
+      "transport": "existing_voice_protocol_adapter",
+      "endpointEnv": "THIRDHAND_LANGUAGE_ENDPOINT",
+      "produces": ["skill.candidate"]
+    },
+    "vision": {
+      "transport": "http_json",
+      "endpointEnv": "THIRDHAND_VISION_ENDPOINT",
+      "accepts": ["vision.target.request"],
+      "produces": ["vision.target.result"]
+    },
+    "policy": {
+      "transport": "http_json",
+      "endpointEnv": "THIRDHAND_POLICY_ENDPOINT",
+      "accepts": ["policy.action.request"],
+      "produces": ["policy.action.result"]
+    },
+    "robot": {
+      "transport": "existing_startouch_json_lines_adapter",
+      "endpointEnv": "THIRDHAND_ROBOT_ENDPOINT",
+      "accepts": ["execution.request"],
+      "produces": ["execution.result"],
+      "reuses": [
+        "web-control/server/startouch_bridge.py",
+        "web-control/scripts/fixed_pick_place.py",
+        "configs/tasks/fixed_pick_place.yaml"
+      ]
+    },
+    "verifier": {
+      "transport": "http_json",
+      "endpointEnv": "THIRDHAND_VERIFIER_ENDPOINT",
+      "accepts": ["verification.request"],
+      "produces": ["verification.result"]
+    }
+  },
+  "stateMachine": [
+    {
+      "order": 1,
+      "state": "awaiting_confirmation",
+      "input": "skill.candidate",
+      "output": "confirmation.decision",
+      "failureRule": "rejected or expired candidates end without calling Vision, Policy or Robot"
+    },
+    {
+      "order": 2,
+      "state": "authorizing_target",
+      "input": "vision.target.request",
+      "output": "vision.target.result",
+      "failureRule": "no Coke, ambiguous Coke, non-Coke or stale frame must reject motion"
+    },
+    {
+      "order": 3,
+      "state": "planning_action",
+      "input": "policy.action.request",
+      "output": "policy.action.result",
+      "failureRule": "missing checkpoint, incompatible startouch-j1-j6-rad-gripper-v1 action space or invalid execution plan blocks execution"
+    },
+    {
+      "order": 4,
+      "state": "executing",
+      "input": "execution.request",
+      "output": "execution.result",
+      "failureRule": "safety failure, stale state, CAN fault or concurrent motion causes safe stop"
+    },
+    {
+      "order": 5,
+      "state": "verifying",
+      "input": "verification.request",
+      "output": "verification.result",
+      "failureRule": "uncertain evidence must stay uncertain and must not be upgraded to success"
+    },
+    {
+      "order": 6,
+      "state": "completed",
+      "input": "all prior stage results",
+      "output": "skill.result",
+      "failureRule": "simulate and dry-run flows may succeed as integration demos but may not claim verified real success"
+    }
+  ],
+  "timeoutsMs": {
+    "language": 60000,
+    "confirmation": 120000,
+    "vision": 10000,
+    "policy": 15000,
+    "execution": 120000,
+    "verification": 15000
+  },
+  "safetyInvariants": [
+    "requiresConfirmation is always true",
+    "confirmation must reference the same candidateId and traceId",
+    "only one authorized coke_bottle target may proceed",
+    "a detector must never fall back to the highest-confidence non-Coke object",
+    "execution.request requires confirmed=true",
+    "real mode requires physicalEStopReady=true",
+    "speedScale must be greater than zero and no more than 0.15",
+    "simulate and dry-run outcomes must be clearly labelled",
+    "verified real success requires hardware feedback and visual verification",
+    "all stages preserve traceId and record their messageId/replyTo chain",
+    "fixed_waypoint_a_to_b requires pick_zone_a as source and drop_zone_b as destination",
+    "the existing home_transit_ab second half must not run because it moves the bottle from B back to A"
+  ],
+  "existingRobotFoundation": {
+    "githubRevision": "6c6b79f05c41f5dfa6ea335c0f81331b3d399b19",
+    "evidenceLevel": "GitHub code and documentation inspected; hardware was not revalidated during this contract update",
+    "actionSpaceId": "startouch-j1-j6-rad-gripper-v1",
+    "jointOrder": ["J1", "J2", "J3", "J4", "J5", "J6"],
+    "jointUnit": "rad",
+    "gripperConvention": {
+      "closed": 0.0,
+      "open": 1.0
+    },
+    "nativeBridgeCommands": [
+      "connect",
+      "disconnect",
+      "software_stop",
+      "move_joint",
+      "move_joint_path",
+      "move_l",
+      "go_home",
+      "gripper",
+      "get_state",
+      "shutdown"
+    ],
+    "nativeEvidenceEvents": [
+      "connection",
+      "robot_state",
+      "command_accepted",
+      "command_complete",
+      "motion_state",
+      "error"
+    ],
+    "fixedWaypointReuse": {
+      "sourceWorkflow": "home_transit_ab",
+      "sourceZoneId": "pick_zone_a",
+      "destinationZoneId": "drop_zone_b",
+      "skillRoute": "use only OPEN_GRIPPER_READY through RETURN_B_UP_TO_HOME",
+      "reason": "the remaining existing states pick the bottle at B and return it to A",
+      "requiredAdapter": "startouch_fixed_waypoint_adapter_v1",
+      "currentDemoSpeedScale": 0.15,
+      "existingRunnerHardLimit": 0.3
+    }
+  },
+  "aiContinuationRules": [
+    "Read contracts/README_CN.md and contracts/schema.json before editing an integration module.",
+    "Do not modify the contract merely to fit one module; write a small adapter first.",
+    "Validate every inbound and outbound message.",
+    "Return service.error rather than silently dropping or guessing missing fields.",
+    "Keep model-specific tensors, images and checkpoints behind references; do not embed large binary data in JSON.",
+    "Do not connect Language directly to robot execution.",
+    "Use the existing Startouch bridge instead of creating a second CAN or SDK owner.",
+    "Do not run the complete existing home_transit_ab workflow for this one-way Skill.",
+    "Do not enable real motion while implementing or testing the contract."
+  ]
+}

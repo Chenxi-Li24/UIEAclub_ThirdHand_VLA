@@ -1,0 +1,54 @@
+[build-system]
+requires = ["setuptools>=77", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "thirdhand-vision-sdk"
+version = "0.1.0"
+description = "Hardware-free reusable vision algorithms from ThirdHand"
+license = "MIT"
+license-files = ["LICENSE", "LICENSES.md"]
+requires-python = ">=3.10"
+dependencies = [
+  "numpy>=1.24",
+  "scipy>=1.10",
+  "PyYAML>=6.0",
+  "opencv-python-headless>=4.8",
+]
+
+[project.optional-dependencies]
+models = [
+  "torch>=2.1",
+  "transformers>=4.40",
+  "mmengine>=0.10",
+  "mmdet>=3.3",
+]
+test = ["pytest>=8"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.package-data]
+thirdhand_vision = ["py.typed"]
+
+[tool.setuptools.data-files]
+"share/thirdhand-vision-sdk" = [
+  "LICENSE",
+  "LICENSES.md",
+  "README.md",
+  "SOURCE_MAP.json",
+]
+"share/thirdhand-vision-sdk/configs" = ["configs/default.yaml"]
+"share/thirdhand-vision-sdk/docs" = [
+  "docs/ALGORITHMS.md",
+  "docs/API.md",
+  "docs/MIGRATION.md",
+  "docs/TEST_REPORT.md",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]

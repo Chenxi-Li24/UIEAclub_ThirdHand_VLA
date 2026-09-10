@@ -1,0 +1,29 @@
+# ============================================================
+# Web Console Configuration
+# ============================================================
+
+server:
+  host: "0.0.0.0"
+  port: 8000
+  reload: false
+  workers: 1
+
+static_dir: "src/uiea_thirdhand_vla/web/static"
+templates_dir: "src/uiea_thirdhand_vla/web/templates"
+
+cors:
+  origins: ["*"]
+
+websocket:
+  ping_interval: 30
+  ping_timeout: 10
+  max_message_size_mb: 16
+
+video:
+  method: "mjpeg"           # mjpeg | webrtc | websocket-frames
+  max_fps: 15
+  quality: 70
+  overlay_detections: true
+
+robot_3d:
+  urdf_path: null           # null = simplified cylinder model

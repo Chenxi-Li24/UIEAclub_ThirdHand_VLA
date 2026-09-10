@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ThirdHand 双相机外参重新拟合</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      font-family: Inter, "Noto Sans SC", system-ui, sans-serif;
+      --bg: #071014;
+      --panel: #101b20;
+      --panel-soft: #14242b;
+      --line: #29404a;
+      --text: #edf8f7;
+      --muted: #91aaa9;
+      --cyan: #62d7da;
+      --green: #75e29b;
+      --amber: #ffc76b;
+      --red: #ff8f86;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      color: var(--text);
+      background:
+        radial-gradient(circle at 15% -10%, rgba(34, 133, 140, .23), transparent 34rem),
+        linear-gradient(160deg, #071014 0%, #0a1318 56%, #071014 100%);
+    }
+    header {
+      min-height: 72px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 20px;
+      padding: 15px 22px;
+      border-bottom: 1px solid var(--line);
+      background: rgba(7, 16, 20, .88);
+      backdrop-filter: blur(12px);
+    }
+    header h1 { margin: 0; font-size: 18px; letter-spacing: .02em; }
+    header p { margin: 5px 0 0; color: var(--muted); font-size: 12px; }
+    .back-link {
+      flex: none;
+      color: var(--cyan);
+      text-decoration: none;
+      border: 1px solid #315864;
+      border-radius: 8px;
+      padding: 8px 11px;
+      background: rgba(18, 50, 57, .65);
+    }
+    .safety-banner {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 22px;
+      color: #211800;
+      background: linear-gradient(90deg, #ffc768, #ffe0a0);
+      font-size: 13px;
+      font-weight: 800;
+    }
+    .safety-dot { width: 9px; height: 9px; border-radius: 50%; background: #211800; }
+    main {
+      display: grid;
+      grid-template-columns: minmax(0, 1.8fr) minmax(330px, .8fr);
+      gap: 16px;
+      padding: 16px;
+      max-width: 1680px;
+      margin: 0 auto;
+    }
+    .camera-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+    figure, .panel {
+      margin: 0;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      overflow: hidden;
+      background: linear-gradient(145deg, rgba(18, 32, 38, .98), rgba(10, 20, 24, .98));
+      box-shadow: 0 16px 38px rgba(0, 0, 0, .2);
+    }
+    figcaption {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 14px;
+      min-height: 66px;
+      padding: 11px 14px;
+      border-bottom: 1px solid var(--line);
+    }
+    .camera-name { display: grid; gap: 3px; }
+    .camera-name strong { font-size: 14px; }
+    .camera-name span, .camera-role { color: var(--muted); font-size: 11px; }
+    .live-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      color: var(--green);
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: .08em;
+    }
+    .live-pill::before {
+      content: "";
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: currentColor;
+      box-shadow: 0 0 12px currentColor;
+    }
+    .feed { display: grid; place-items: center; min-height: 280px; background: #020607; }
+    .feed.lumos { aspect-ratio: 1; }
+    .feed.d435 { aspect-ratio: 4 / 3; }
+    .feed img { display: block; width: 100%; height: 100%; object-fit: contain; }
+    .camera-note {
+      grid-column: 1 / -1;
+      padding: 12px 14px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      color: var(--muted);
+      background: rgba(13, 29, 34, .72);
+      font-size: 12px;
+      line-height: 1.6;
+    }
+    .panel { padding: 16px; }
+    .panel h2 { margin: 0; font-size: 15px; }
+    .panel-section { padding: 16px 0; border-bottom: 1px solid var(--line); }
+    .panel-section:first-child { padding-top: 0; }
+    .panel-section:last-child { border-bottom: 0; padding-bottom: 0; }
+    .section-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+    #progress-text { color: var(--cyan); font-size: 21px; font-weight: 900; font-variant-numeric: tabular-nums; }
+    #phase-label { margin: 0 0 5px; color: var(--cyan); font-size: 15px; font-weight: 900; }
+    #progress-purpose { color: var(--muted); font-size: 11px; }
+    #progress-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 5px; margin-top: 12px; }
+    #progress-grid span {
+      display: grid;
+      place-items: center;
+      min-height: 30px;
+      border: 1px solid #35505b;
+      border-radius: 7px;
+      color: var(--muted);
+      background: #0a1418;
+      font-size: 11px;
+      font-weight: 800;
+    }
+    #progress-grid span.done { color: #06120b; border-color: var(--green); background: var(--green); }
+    dl { display: grid; grid-template-columns: 1fr auto; gap: 9px 14px; margin: 13px 0 0; }
+    dt { color: var(--muted); }
+    dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; }
+    .target-spec {
+      margin: 11px 0 0;
+      padding: 10px 11px;
+      border-left: 3px solid var(--cyan);
+      color: #c6dcda;
+      background: rgba(28, 70, 75, .22);
+      font-size: 12px;
+      line-height: 1.65;
+    }
+    #validation-state { font-weight: 800; }
+    #validation-state.ok { color: var(--green); }
+    .pending-text { color: var(--amber); }
+    #remaining-blockers { max-width: 250px; color: var(--amber); line-height: 1.45; }
+    #capture-result {
+      min-height: 58px;
+      margin: 0 0 12px;
+      padding: 11px 12px;
+      border: 1px solid #31515c;
+      border-radius: 9px;
+      color: #c9dedd;
+      background: #0a1519;
+      line-height: 1.55;
+    }
+    #capture-result.working { color: var(--cyan); }
+    #capture-result.error { color: var(--red); border-color: #663f41; }
+    #capture-button {
+      width: 100%;
+      min-height: 50px;
+      border: 1px solid #75e4e6;
+      border-radius: 10px;
+      color: #031112;
+      background: linear-gradient(135deg, #69dbdd, #7be6bb);
+      font: inherit;
+      font-weight: 900;
+      cursor: pointer;
+      box-shadow: 0 10px 28px rgba(62, 208, 201, .17);
+    }
+    #capture-button:disabled { cursor: not-allowed; opacity: .42; filter: saturate(.4); }
+    .steps { margin: 11px 0 0; padding-left: 20px; color: #c2d6d5; font-size: 12px; line-height: 1.65; }
+    .steps li + li { margin-top: 5px; }
+    @media (max-width: 1080px) {
+      main { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 720px) {
+      header { align-items: flex-start; }
+      .camera-grid { grid-template-columns: 1fr; }
+      main { padding: 10px; }
+      .safety-banner { padding-inline: 14px; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div>
+      <h1>双相机外参 · 重新拟合与独立验证</h1>
+      <p>Lumos 广角 + D435 度量深度 · 固定内参，只求相机间 6 自由度外参</p>
+    </div>
+    <a class="back-link" href="/camera-test.html">返回视觉状态</a>
+  </header>
+  <div class="safety-banner">
+    <span class="safety-dot" aria-hidden="true"></span>
+    只采集相机图像，不连接、不移动机械臂或夹爪；外参通过后也不会自动启用抓取。
+  </div>
+  <main>
+    <section class="camera-grid" aria-label="双相机实时画面">
+      <figure>
+        <figcaption>
+          <span class="camera-name">
+            <strong>Lumos 广角相机</strong>
+            <span>1280 × 1280 原始采集 / 页面实时预览</span>
+          </span>
+          <span class="live-pill">LIVE</span>
+        </figcaption>
+        <div class="feed lumos">
+          <img id="calibration-lumos" data-preview="/api/calibration-preview/lumos.jpg"
+            alt="Lumos 实时画面">
+        </div>
+      </figure>
+      <figure>
+        <figcaption>
+          <span class="camera-name">
+            <strong>Intel RealSense D435</strong>
+            <span>640 × 480 RGB / 度量深度相机</span>
+          </span>
+          <span class="live-pill">LIVE</span>
+        </figcaption>
+        <div class="feed d435">
+          <img id="calibration-d435" data-preview="/api/calibration-preview/d435.jpg"
+            alt="D435 实时画面">
+        </div>
+      </figure>
+      <div class="camera-note">
+        两路画面都要完整看到同一块标定板。先采 12 个拟合姿态并求解，再采 10 个未参与拟合的新姿态独立验证。每次只移动或倾斜标定板，机械臂保持静止；下一姿态至少平移 15 mm 或旋转 3°。
+      </div>
+    </section>
+
+    <aside class="panel" aria-label="采集控制与质量状态">
+      <section class="panel-section">
+        <p id="phase-label">正在读取阶段…</p>
+        <div class="section-head">
+          <span>
+            <strong>当前数据进度</strong><br>
+            <span id="progress-purpose">读取中</span>
+          </span>
+          <span id="progress-text">0 / 12</span>
+        </div>
+        <div id="progress-grid" aria-label="当前标定阶段姿态进度"></div>
+        <p class="target-spec">
+          标定板：12 列 × 9 行 · 方格 15 mm · 标记 11.25 mm<br>
+          字典：DICT_5X5_100 · 公共角点门限：24
+        </p>
+      </section>
+
+      <section class="panel-section">
+        <h2>最新一次质量</h2>
+        <dl>
+          <dt>姿态编号</dt><dd id="sample-id">—</dd>
+          <dt>公共角点</dt><dd id="common-points">—</dd>
+          <dt>D435 RMSE ≤ 1.5</dt><dd id="d435-rmse">—</dd>
+          <dt>Lumos P95</dt><dd id="lumos-p95">—</dd>
+          <dt>双帧采集时差</dt><dd id="capture-skew">—</dd>
+        </dl>
+      </section>
+
+      <section class="panel-section">
+        <h2>新外参拟合指标</h2>
+        <dl>
+          <dt>拟合中位误差</dt><dd id="fit-median">—</dd>
+          <dt>拟合 P95 ≤ 3.0</dt><dd id="fit-p95">—</dd>
+          <dt>相机基线</dt><dd id="fit-baseline">—</dd>
+          <dt>相对旋转</dt><dd id="fit-rotation">—</dd>
+        </dl>
+      </section>
+
+      <section class="panel-section">
+        <h2>验证状态</h2>
+        <dl>
+          <dt>双相机外参</dt><dd id="validation-state" class="pending-text">读取中</dd>
+          <dt>剩余门禁</dt><dd id="remaining-blockers">读取中</dd>
+        </dl>
+      </section>
+
+      <section class="panel-section">
+        <p id="capture-result" role="status" aria-live="polite">正在读取已有采集进度…</p>
+        <button id="capture-button" type="button">读取阶段…</button>
+        <ol class="steps">
+          <li>阶段 1：采 12 个不同拟合姿态；旧外参误差只显示诊断，不作为拒绝条件。</li>
+          <li>阶段 2：同一按钮求解新外参；两台相机内参保持固定。</li>
+          <li>阶段 3：再采 10 个未参与拟合的新姿态，独立验证新外参。</li>
+        </ol>
+      </section>
+    </aside>
+  </main>
+  <script src="/calibration-capture.js"></script>
+</body>
+</html>

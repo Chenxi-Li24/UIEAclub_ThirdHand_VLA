@@ -1,0 +1,12 @@
+logs/*
+!logs/.gitkeep
+**/__pycache__/
+*.py[cod]
+config/secrets*.env
+config/*.local.env
+.pytest_cache/
+
+# 本地交付物体积很大。未来如建立 Git 仓库，应另外决定模型和运行环境的发布方式。
+models/
+runtime/
+MANIFEST.sha256

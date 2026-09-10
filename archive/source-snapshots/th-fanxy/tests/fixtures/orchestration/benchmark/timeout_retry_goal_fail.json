@@ -1,0 +1,231 @@
+{
+  "condition": "chained",
+  "expectation": {
+    "dispatch_max": 2,
+    "dispatch_min": 2,
+    "failure_category": "execution_and_goal",
+    "final_state": "STOPPED",
+    "recovery_max": 1,
+    "recovery_min": 1,
+    "replan_max": 0,
+    "replan_min": 0
+  },
+  "family": "timeout_retry_goal_fail",
+  "replay": {
+    "ground_truth": [
+      {
+        "attempt": 0,
+        "effect": "UNKNOWN",
+        "handoff": "UNKNOWN",
+        "step_id": "pick-1",
+        "task_goal": "UNKNOWN"
+      },
+      {
+        "attempt": 1,
+        "effect": "PASS",
+        "handoff": "UNKNOWN",
+        "step_id": "pick-1",
+        "task_goal": "FAIL"
+      }
+    ],
+    "observations": [
+      {
+        "episode_id": "timeout_retry_goal_fail",
+        "evidence": [
+          {
+            "evidence_id": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            "kind": "synthetic_grounded_state",
+            "observed_monotonic_ns": 10,
+            "source": "benchmark-generator"
+          }
+        ],
+        "facts": [
+          {
+            "evidence_ids": [
+              "sha256:1111111111111111111111111111111111111111111111111111111111111111"
+            ],
+            "name": "safety_clear",
+            "value": true
+          }
+        ],
+        "monotonic_ns": 10,
+        "objects": [
+          {
+            "actionable": true,
+            "ambiguous": false,
+            "depth_valid": true,
+            "evidence_ids": [
+              "sha256:1111111111111111111111111111111111111111111111111111111111111111"
+            ],
+            "identity_id": 7,
+            "label": "cup",
+            "position_std_m": null,
+            "region_ids": [],
+            "visible": true
+          }
+        ],
+        "robot": {
+          "evidence_ids": [
+            "sha256:1111111111111111111111111111111111111111111111111111111111111111"
+          ],
+          "held_object_id": null,
+          "holding_known": true
+        },
+        "sequence": 1,
+        "snapshot_id": "timeout_retry_goal_fail-snapshot-1",
+        "source": "synthetic-benchmark",
+        "source_version": "1.0.0"
+      },
+      {
+        "episode_id": "timeout_retry_goal_fail",
+        "evidence": [
+          {
+            "evidence_id": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+            "kind": "synthetic_grounded_state",
+            "observed_monotonic_ns": 20,
+            "source": "benchmark-generator"
+          }
+        ],
+        "facts": [
+          {
+            "evidence_ids": [
+              "sha256:2222222222222222222222222222222222222222222222222222222222222222"
+            ],
+            "name": "safety_clear",
+            "value": true
+          }
+        ],
+        "monotonic_ns": 20,
+        "objects": [
+          {
+            "actionable": true,
+            "ambiguous": false,
+            "depth_valid": true,
+            "evidence_ids": [
+              "sha256:2222222222222222222222222222222222222222222222222222222222222222"
+            ],
+            "identity_id": 7,
+            "label": "cup",
+            "position_std_m": null,
+            "region_ids": [],
+            "visible": true
+          }
+        ],
+        "robot": {
+          "evidence_ids": [
+            "sha256:2222222222222222222222222222222222222222222222222222222222222222"
+          ],
+          "held_object_id": null,
+          "holding_known": true
+        },
+        "sequence": 2,
+        "snapshot_id": "timeout_retry_goal_fail-snapshot-2",
+        "source": "synthetic-benchmark",
+        "source_version": "1.0.0"
+      },
+      {
+        "episode_id": "timeout_retry_goal_fail",
+        "evidence": [
+          {
+            "evidence_id": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+            "kind": "synthetic_grounded_state",
+            "observed_monotonic_ns": 30,
+            "source": "benchmark-generator"
+          }
+        ],
+        "facts": [
+          {
+            "evidence_ids": [
+              "sha256:3333333333333333333333333333333333333333333333333333333333333333"
+            ],
+            "name": "object_follows_gripper",
+            "value": true
+          },
+          {
+            "evidence_ids": [
+              "sha256:3333333333333333333333333333333333333333333333333333333333333333"
+            ],
+            "name": "place_ready",
+            "value": true
+          },
+          {
+            "evidence_ids": [
+              "sha256:3333333333333333333333333333333333333333333333333333333333333333"
+            ],
+            "name": "safety_clear",
+            "value": true
+          }
+        ],
+        "monotonic_ns": 30,
+        "objects": [
+          {
+            "actionable": true,
+            "ambiguous": false,
+            "depth_valid": true,
+            "evidence_ids": [
+              "sha256:3333333333333333333333333333333333333333333333333333333333333333"
+            ],
+            "identity_id": 7,
+            "label": "cup",
+            "position_std_m": null,
+            "region_ids": [],
+            "visible": true
+          }
+        ],
+        "robot": {
+          "evidence_ids": [
+            "sha256:3333333333333333333333333333333333333333333333333333333333333333"
+          ],
+          "held_object_id": 7,
+          "holding_known": true
+        },
+        "sequence": 3,
+        "snapshot_id": "timeout_retry_goal_fail-snapshot-3",
+        "source": "synthetic-benchmark",
+        "source_version": "1.0.0"
+      }
+    ],
+    "plan": {
+      "episode_id": "timeout_retry_goal_fail",
+      "steps": [
+        {
+          "arguments": [
+            {
+              "frame": null,
+              "name": "target_id",
+              "unit": null,
+              "value": 7
+            },
+            {
+              "frame": null,
+              "name": "destination_region",
+              "unit": null,
+              "value": "tray"
+            }
+          ],
+          "contract_version": "0.1.0",
+          "skill_id": "tabletop.pick",
+          "step_id": "pick-1"
+        }
+      ],
+      "task_goal": [
+        {
+          "expected_value": null,
+          "fact_name": null,
+          "kind": "object_in_region",
+          "max_age_ns": null,
+          "object_arg": "target_id",
+          "predicate_id": "goal.object_in_tray",
+          "region_arg": "destination_region"
+        }
+      ]
+    },
+    "receipt_statuses": [
+      "timed_out",
+      "completed"
+    ]
+  },
+  "robot_execution_enabled": false,
+  "scenario_id": "timeout_retry_goal_fail",
+  "schema_version": "1.0.0"
+}

@@ -1,0 +1,31 @@
+ThirdHand Policy 模块 — 交付包
+=================================
+版本:     1.0
+日期:     2026-08-17
+交付人:   Policy owner
+
+本包内容
+--------
+- HANDOFF.md            主交接说明（端口 / 文件位置 / 运行方式 / 链路与边界）
+- README_CN.md          模块说明（消息类型 / 字段映射 / 环境变量）
+- thirdhand_policy/     Policy 服务源码
+- client/               Orchestrator 联调示例
+    orchestrator_client.py   怎么构造请求、怎么 POST、怎么解析响应
+    dry_run_chain.py         用官方 demo_flow.json 跑全链路回放
+- contracts/            契约文件（schema.json / skill.json / demo_flow.json）
+- tests/                21 个单元测试（全部通过）
+- main.py / requirements.txt   启动入口与依赖
+
+联调前提
+--------
+- Policy 服务默认端口 8080（THIRDHAND_POLICY_PORT 可改）。
+- fixed_baseline / fake_act 联调无需 GPU 与 torch/lerobot。
+- lerobot_act 需另建 Python 3.12 + LeRobot 0.6.0 环境。
+
+已知缺口
+--------
+1. Vision 尚未交付 robot_base 三维抓取位姿与标定 ID；
+   lerobot_act 真机抓取暂不可用（fixed_baseline 不受影响）。
+2. lerobot_act 真推理未验证（缺真实 ACT checkpoint）。
+3. startouch_action_chunk_adapter_v1 尚未注册（act_chunk 当前按契约回退
+   fixed_baseline 或 fail-closed）。

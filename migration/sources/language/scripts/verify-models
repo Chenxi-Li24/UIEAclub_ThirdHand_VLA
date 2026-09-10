@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+PROJECT_ROOT=$(dirname -- "$SCRIPT_DIR")
+PYTHON_BIN=${PYTHON_BIN:-$PROJECT_ROOT/runtime/python/bin/python3.11}
+
+exec "$PYTHON_BIN" "$SCRIPT_DIR/verify_models.py" "$@"

@@ -1,0 +1,6 @@
+schema_version: 1
+thresholds:
+  identity_switch_delta_max: 0
+  pose_rmse_m_max: 0.005
+  covariance_abs_max: 0.0001
+  descriptor_cosine_delta_max: 0.02

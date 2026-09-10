@@ -1,0 +1,33 @@
+depth:
+  min_m: 0.10
+  max_m: 2.00
+
+pose:
+  min_points: 80
+  erosion_px: 3
+  mad_scale: 3.5
+  noise_floor_m: 0.002
+
+identity:
+  max_cosine_distance: 0.40
+  ambiguity_margin: 0.03
+  appearance_weight: 0.80
+  position_weight: 0.20
+  max_position_distance_m: 0.20
+  position_gate_max_age_ns: 500000000
+  occluded_after_ns: 300000000
+  inactive_after_ns: 1500000000
+  min_confirmed_hits: 2
+  min_memory_confidence: 0.80
+  min_memory_visibility: 0.50
+  work_bank_size: 8
+  stable_bank_size: 12
+  max_identities: 64
+  reacquire_confirmed_hits: 2
+  max_actionable_position_std_m: 0.025
+  max_actionable_pose_age_ns: 200000000
+  min_actionable_pose_hits: 2
+
+extensions:
+  mode: isolate
+

@@ -1,3 +1,7 @@
 *.sh text eol=lf
 web-control/web/js/lib/** -whitespace
 *.urdf -whitespace
+
+# Preserve imported source snapshots byte-for-byte during migration.
+migration/sources/** -whitespace
+archive/source-snapshots/** -whitespace

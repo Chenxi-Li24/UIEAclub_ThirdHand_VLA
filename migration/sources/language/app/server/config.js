@@ -1,0 +1,214 @@
+/**
+ * ThirdHand Web Control - Startouch configuration.
+ */
+const os = require('os');
+const path = require('path');
+
+const simulate = process.env.STARTOUCH_SIMULATE === '1';
+const requestedSpeedScale = Number(process.env.STARTOUCH_SPEED_SCALE || 0.05);
+const speedScale = Number.isFinite(requestedSpeedScale)
+  ? Math.max(0.01, Math.min(1, requestedSpeedScale))
+  : 0.05;
+const requestedVlaTimeoutMs = Number(process.env.VLA_TIMEOUT_MS || 8000);
+const vlaTimeoutMs = Number.isFinite(requestedVlaTimeoutMs)
+  ? Math.max(1000, Math.min(30000, requestedVlaTimeoutMs))
+  : 8000;
+const defaultArmRoot = path.join(os.homedir(), 'arm');
+const activeViewFoundationDir = process.env.ACTIVE_VIEW_EVIDENCE_DIR ||
+  path.resolve(__dirname, '../../data/calibration/active-view-foundation');
+
+module.exports = {
+  web: {
+    host: process.env.WEB_HOST || '0.0.0.0',
+    port: Number(process.env.WEB_PORT || 3000),
+  },
+
+  robot: {
+    python: process.env.STARTOUCH_PYTHON ||
+      (simulate
+        ? 'python3'
+        : path.join(os.homedir(), 'miniconda3', 'envs', 'LumosTouch', 'bin', 'python')),
+    sdkPath: process.env.STARTOUCH_SDK_PATH || path.join(defaultArmRoot, 'startouch_sdk'),
+    canInterface: process.env.STARTOUCH_CAN_INTERFACE || 'can0',
+    gripper: process.env.STARTOUCH_GRIPPER !== '0',
+    requireCanRx: process.env.STARTOUCH_REQUIRE_CAN_RX !== '0',
+    canRxStaleSec: Number(process.env.STARTOUCH_CAN_RX_STALE_SEC || 1),
+    simulate,
+    dryRun: process.env.STARTOUCH_DRY_RUN === '1',
+    pollIntervalMs: Number(process.env.STARTOUCH_POLL_INTERVAL_MS || 100),
+    jointLogIntervalMs: Number(process.env.STARTOUCH_JOINT_LOG_INTERVAL_MS || 100),
+    initSettleSec: Number(process.env.STARTOUCH_INIT_SETTLE_SEC || 2),
+    initSampleCount: Number(process.env.STARTOUCH_INIT_SAMPLE_COUNT || 3),
+    initMaxDriftDeg: Number(process.env.STARTOUCH_INIT_MAX_DRIFT_DEG || 2),
+    speedScale,
+    minMoveTimeSec: Number(process.env.STARTOUCH_MIN_MOVE_TIME_SEC || 0.5),
+    maxMoveTimeSec: Number(process.env.STARTOUCH_MAX_MOVE_TIME_SEC || 30),
+  },
+
+  language: {
+    voiceEndpoint: process.env.VOICE_ENDPOINT || 'ws://192.168.58.68:3001/v1/voice',
+    upstreamWs: process.env.LANGUAGE_UPSTREAM_WS || '',
+    manualUpstreamControl: process.env.MANUAL_UPSTREAM_CONTROL === '1',
+    realControlEnabled: process.env.LANGUAGE_REAL_CONTROL === '1',
+    directionalEnabled: process.env.DIRECTIONAL_CONTROL_ENABLED === '1',
+    directionalRealControlEnabled: process.env.DIRECTIONAL_REAL_CONTROL === '1',
+    candidateTtlMs: 120_000,
+    stateMaxAgeMs: 500,
+    maxDeltaDeg: null,
+    speedScale: 0.05,
+    jointToleranceDeg: 1,
+    gripperOpenTarget: Number(process.env.LANGUAGE_GRIPPER_OPEN_TARGET || 1.0),
+    gripperCloseTarget: Number(process.env.LANGUAGE_GRIPPER_CLOSE_TARGET || 0.0),
+    gripperTimeoutMs: Number(process.env.LANGUAGE_GRIPPER_TIMEOUT_MS || 5000),
+  },
+
+  jointLimitsDeg: [
+    [-162, 162],
+    [-12, 201],
+    [-183, 0],
+    [-98, 98],
+    [-98, 98],
+    [-164, 164],
+  ],
+
+  jointMaxSpeedsDegS: [300, 300, 300, 1000, 1000, 1000],
+
+  presets: {
+    home: [0, 0, 0, 0, 0, 0],
+  },
+
+  model: {
+    name: 'Startouch FastTouchV3',
+    source: 'models/startouch-v3/FastTouchV3.SLDASM.urdf',
+  },
+
+  camera: {
+    enabled: process.env.CAMERA_ENABLED !== '0',
+    python: process.env.CAMERA_PYTHON ||
+      path.join(os.homedir(), 'miniconda3', 'envs', 'thirdhand-remind3d', 'bin', 'python'),
+    onlineEnabled: process.env.VISION_ONLINE_ENABLED === '1',
+    visionConfig: process.env.VISION_CONFIG ||
+      path.resolve(__dirname, '../../configs/vision/remind3d.yaml'),
+    activeViewConfig: process.env.ACTIVE_VIEW_CONFIG ||
+      path.resolve(__dirname, '../../configs/vision/active_view.yaml'),
+    graspPreviewConfig: process.env.GRASP_PREVIEW_CONFIG ||
+      path.resolve(__dirname, '../../configs/vision/grasp_preview.yaml'),
+    activeViewEvidenceDir: activeViewFoundationDir,
+    activeViewCameraEvidence: process.env.ACTIVE_VIEW_CAMERA_EVIDENCE ||
+      path.join(activeViewFoundationDir, 'camera.json'),
+    activeViewTableEvidence: process.env.ACTIVE_VIEW_TABLE_EVIDENCE ||
+      path.join(activeViewFoundationDir, 'table.json'),
+    activeViewCatalog: process.env.ACTIVE_VIEW_CATALOG ||
+      path.join(activeViewFoundationDir, 'observation-catalog.json'),
+    lumosSnapshotUrl: process.env.LUMOS_SNAPSHOT_URL ||
+      'http://127.0.0.1:3001/frame_raw.jpg',
+    yoloModel: process.env.CAMERA_YOLO_MODEL || path.join(__dirname, 'yolov8n.pt'),
+    calibrationFile: process.env.CAMERA_CALIB_FILE ||
+      path.join(os.homedir(), 'calibration', 'd435_handeye_result.json'),
+    detectionInterval: Number(process.env.CAMERA_DETECT_INTERVAL || 10),
+    jpegQuality: Number(process.env.CAMERA_JPEG_QUALITY || 70),
+    deskZ: Number(process.env.CAMERA_DESK_Z || 0.0),
+    safeZ: Number(process.env.CAMERA_SAFE_Z || 0.12),
+  },
+
+  lumos: {
+    managed: process.env.CAMERA_ENABLED !== '0' && !process.env.LUMOS_STREAM_URL &&
+      process.env.LUMOS_MANAGED !== '0',
+    externalStreamUrl: process.env.LUMOS_STREAM_URL || '',
+    python: process.env.LUMOS_PYTHON ||
+      path.join(os.homedir(), 'miniconda3', 'envs', 'thirdhand-remind3d', 'bin', 'python'),
+    host: process.env.LUMOS_HTTP_HOST || '127.0.0.1',
+    port: Number(process.env.LUMOS_HTTP_PORT || 3001),
+    outputSize: Number(process.env.LUMOS_OUTPUT_SIZE || 480),
+    fps: Number(process.env.LUMOS_FPS || 15),
+  },
+
+  calibrationCapture: {
+    python: process.env.CALIBRATION_CAPTURE_PYTHON ||
+      path.resolve(__dirname, '../../.venv/bin/python'),
+    script: process.env.CALIBRATION_CAPTURE_SCRIPT ||
+      path.resolve(__dirname, '../../scripts/vision/dual_camera_refit_workflow.py'),
+    fitOutput: process.env.CALIBRATION_CAPTURE_FIT_OUTPUT ||
+      path.resolve(__dirname, '../../data/calibration/dual-camera-refit/fit'),
+    validationOutput: process.env.CALIBRATION_CAPTURE_VALIDATION_OUTPUT ||
+      path.resolve(__dirname, '../../data/calibration/dual-camera-refit/validation'),
+    candidateOutput: process.env.CALIBRATION_CAPTURE_CANDIDATE_OUTPUT ||
+      path.resolve(__dirname, '../../data/calibration/dual-camera-refit/candidate.json'),
+    seed: process.env.CALIBRATION_CAPTURE_SEED ||
+      path.resolve(__dirname, '../../configs/vision/calibration/legacy_dual_camera_candidate.json'),
+    target: process.env.CALIBRATION_CAPTURE_TARGET ||
+      path.resolve(__dirname, '../../configs/vision/calibration/charuco_12x9.yaml'),
+    lumosUrl: process.env.CALIBRATION_CAPTURE_LUMOS_URL ||
+      'http://127.0.0.1:3001/frame_raw.jpg',
+    d435Url: process.env.CALIBRATION_CAPTURE_D435_URL ||
+      `http://127.0.0.1:${Number(process.env.WEB_PORT || 3000)}/camera_d435_raw`,
+  },
+
+  calibrationCompletion: {
+    python: process.env.CALIBRATION_COMPLETION_PYTHON ||
+      path.resolve(__dirname, '../../.venv/bin/python'),
+    script: process.env.CALIBRATION_COMPLETION_SCRIPT ||
+      path.resolve(__dirname, '../../scripts/vision/calibration_completion_workflow.py'),
+    candidate: process.env.CALIBRATION_COMPLETION_CANDIDATE ||
+      path.resolve(__dirname, '../../data/calibration/dual-camera-refit/candidate.json'),
+    relativeValidation: process.env.CALIBRATION_COMPLETION_RELATIVE_VALIDATION ||
+      path.resolve(
+        __dirname,
+        '../../data/calibration/dual-camera-refit/validation/legacy-dual-camera-validation.json'
+      ),
+    handeyeOutput: process.env.CALIBRATION_COMPLETION_HANDEYE_OUTPUT ||
+      path.resolve(__dirname, '../../data/calibration/handeye-current'),
+    handeyeResult: process.env.CALIBRATION_COMPLETION_HANDEYE_RESULT ||
+      path.resolve(__dirname, '../../data/calibration/handeye-current/result.json'),
+    tableOutput: process.env.CALIBRATION_COMPLETION_TABLE_OUTPUT ||
+      path.resolve(__dirname, '../../data/calibration/table-current'),
+    tableResult: process.env.CALIBRATION_COMPLETION_TABLE_RESULT ||
+      path.resolve(__dirname, '../../data/calibration/table-current/result.json'),
+    foundationOutput: process.env.CALIBRATION_COMPLETION_FOUNDATION_OUTPUT ||
+      path.resolve(__dirname, '../../data/calibration/active-view-foundation'),
+    target: process.env.CALIBRATION_COMPLETION_TARGET ||
+      path.resolve(__dirname, '../../configs/vision/calibration/charuco_12x9.yaml'),
+    d435Url: process.env.CALIBRATION_COMPLETION_D435_URL ||
+      `http://127.0.0.1:${Number(process.env.WEB_PORT || 3000)}/camera_d435_raw`,
+    robotUrl: process.env.CALIBRATION_COMPLETION_ROBOT_URL ||
+      'ws://127.0.0.1:3000/ws',
+  },
+
+  visionSafety: {
+    // Physical grasping requires an explicit process-level opt in. The
+    // perception model, calibration and geometric preview still gate every
+    // individual command server-side.
+    robotExecutionEnabled: process.env.VISION_GRASP_EXECUTION_ENABLED === '1',
+    graspAuditLog: process.env.GRASP_AUDIT_LOG ||
+      path.resolve(__dirname, '../../artifacts/vision/grasp-control/events.jsonl'),
+  },
+
+  vla: {
+    // Language grounding is preview-only and disabled until explicitly configured.
+    provider: process.env.VLA_PROVIDER || 'disabled',
+    model: process.env.VLA_MODEL || 'gpt-5.6-terra',
+    timeoutMs: vlaTimeoutMs,
+    auditLog: process.env.VLA_AUDIT_LOG ||
+      path.resolve(__dirname, '../../artifacts/vision/vla-grounding/events.jsonl'),
+  },
+
+  activeView: {
+    // Both this request and a valid short-lived approval file are required.
+    requested: process.env.ACTIVE_VIEW_EXECUTION_ENABLED === '1',
+    approvalFile: process.env.ACTIVE_VIEW_APPROVAL_FILE || '',
+    auditLog: process.env.ACTIVE_VIEW_AUDIT_LOG ||
+      path.resolve(__dirname, '../../artifacts/vision/active-view-control/events.jsonl'),
+    poseCaptures: process.env.ACTIVE_VIEW_POSE_CAPTURES ||
+      path.join(activeViewFoundationDir, 'observation-captures.json'),
+    observationCatalog: process.env.ACTIVE_VIEW_CATALOG ||
+      path.join(activeViewFoundationDir, 'observation-catalog.json'),
+    robotModelId: 'startouch-fasttouch-v3',
+    maxSpeedScale: 0.05,
+    // Six hardware-friendly micro-steps retain the original total budgets:
+    // 60 mm translation and 15 degrees rotation at most.
+    maxTranslationM: 0.010,
+    maxRotationRad: 2.5 * Math.PI / 180,
+    maxRefinementSteps: 6,
+    requireStepConfirmation: true,
+  },
+};

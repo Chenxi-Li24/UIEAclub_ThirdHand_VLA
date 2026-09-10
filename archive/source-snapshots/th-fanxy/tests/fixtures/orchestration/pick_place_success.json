@@ -1,0 +1,227 @@
+{
+  "plan": {
+    "episode_id": "fixture-pick-place-1",
+    "task_goal": [
+      {
+        "predicate_id": "goal.object_in_tray",
+        "kind": "object_in_region",
+        "object_arg": "target_id",
+        "region_arg": "destination_region"
+      }
+    ],
+    "steps": [
+      {
+        "step_id": "pick-1",
+        "skill_id": "tabletop.pick",
+        "contract_version": "0.1.0",
+        "arguments": [
+          {"name": "target_id", "value": 7},
+          {"name": "destination_region", "value": "tray"}
+        ]
+      },
+      {
+        "step_id": "place-1",
+        "skill_id": "tabletop.place",
+        "contract_version": "0.1.0",
+        "arguments": [
+          {"name": "target_id", "value": 7},
+          {"name": "destination_region", "value": "tray"}
+        ]
+      }
+    ]
+  },
+  "observations": [
+    {
+      "episode_id": "fixture-pick-place-1",
+      "snapshot_id": "pick-pre",
+      "sequence": 1,
+      "monotonic_ns": 10,
+      "source": "checked-fixture",
+      "source_version": "1",
+      "objects": [
+        {
+          "identity_id": 7,
+          "label": "cup",
+          "visible": true,
+          "ambiguous": false,
+          "actionable": true,
+          "depth_valid": true,
+          "region_ids": [],
+          "evidence_ids": ["sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"]
+        }
+      ],
+      "robot": {
+        "holding_known": true,
+        "held_object_id": null,
+        "evidence_ids": ["sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"]
+      },
+      "facts": [
+        {
+          "name": "safety_clear",
+          "value": true,
+          "evidence_ids": ["sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"]
+        }
+      ],
+      "evidence": [
+        {
+          "evidence_id": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+          "kind": "fixture",
+          "source": "checked-fixture",
+          "observed_monotonic_ns": 10
+        }
+      ]
+    },
+    {
+      "episode_id": "fixture-pick-place-1",
+      "snapshot_id": "pick-post",
+      "sequence": 2,
+      "monotonic_ns": 20,
+      "source": "checked-fixture",
+      "source_version": "1",
+      "objects": [
+        {
+          "identity_id": 7,
+          "label": "cup",
+          "visible": true,
+          "ambiguous": false,
+          "actionable": true,
+          "depth_valid": true,
+          "region_ids": [],
+          "evidence_ids": ["sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"]
+        }
+      ],
+      "robot": {
+        "holding_known": true,
+        "held_object_id": 7,
+        "evidence_ids": ["sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"]
+      },
+      "facts": [
+        {
+          "name": "safety_clear",
+          "value": true,
+          "evidence_ids": ["sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"]
+        },
+        {
+          "name": "object_follows_gripper",
+          "value": true,
+          "evidence_ids": ["sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"]
+        },
+        {
+          "name": "place_ready",
+          "value": true,
+          "evidence_ids": ["sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"]
+        }
+      ],
+      "evidence": [
+        {
+          "evidence_id": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+          "kind": "fixture",
+          "source": "checked-fixture",
+          "observed_monotonic_ns": 20
+        }
+      ]
+    },
+    {
+      "episode_id": "fixture-pick-place-1",
+      "snapshot_id": "place-pre",
+      "sequence": 3,
+      "monotonic_ns": 30,
+      "source": "checked-fixture",
+      "source_version": "1",
+      "objects": [
+        {
+          "identity_id": 7,
+          "label": "cup",
+          "visible": true,
+          "ambiguous": false,
+          "actionable": true,
+          "depth_valid": true,
+          "region_ids": [],
+          "evidence_ids": ["sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"]
+        }
+      ],
+      "robot": {
+        "holding_known": true,
+        "held_object_id": 7,
+        "evidence_ids": ["sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"]
+      },
+      "facts": [
+        {
+          "name": "safety_clear",
+          "value": true,
+          "evidence_ids": ["sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"]
+        },
+        {
+          "name": "destination_known",
+          "value": true,
+          "evidence_ids": ["sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"]
+        }
+      ],
+      "evidence": [
+        {
+          "evidence_id": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+          "kind": "fixture",
+          "source": "checked-fixture",
+          "observed_monotonic_ns": 30
+        }
+      ]
+    },
+    {
+      "episode_id": "fixture-pick-place-1",
+      "snapshot_id": "place-post",
+      "sequence": 4,
+      "monotonic_ns": 40,
+      "source": "checked-fixture",
+      "source_version": "1",
+      "objects": [
+        {
+          "identity_id": 7,
+          "label": "cup",
+          "visible": true,
+          "ambiguous": false,
+          "actionable": true,
+          "depth_valid": true,
+          "region_ids": ["tray"],
+          "evidence_ids": ["sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"]
+        }
+      ],
+      "robot": {
+        "holding_known": true,
+        "held_object_id": null,
+        "evidence_ids": ["sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"]
+      },
+      "facts": [
+        {
+          "name": "safety_clear",
+          "value": true,
+          "evidence_ids": ["sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"]
+        }
+      ],
+      "evidence": [
+        {
+          "evidence_id": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+          "kind": "fixture",
+          "source": "checked-fixture",
+          "observed_monotonic_ns": 40
+        }
+      ]
+    }
+  ],
+  "receipt_statuses": ["completed", "completed"],
+  "ground_truth": [
+    {
+      "step_id": "pick-1",
+      "attempt": 0,
+      "effect": "PASS",
+      "handoff": "PASS",
+      "task_goal": "UNKNOWN"
+    },
+    {
+      "step_id": "place-1",
+      "attempt": 0,
+      "effect": "PASS",
+      "handoff": "UNKNOWN",
+      "task_goal": "PASS"
+    }
+  ]
+}

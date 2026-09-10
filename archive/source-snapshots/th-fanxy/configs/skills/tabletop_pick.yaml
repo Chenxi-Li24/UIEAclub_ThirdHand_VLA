@@ -1,0 +1,61 @@
+skill_id: tabletop.pick
+version: 0.1.0
+executor_kind: fake
+inputs:
+  - name: target_id
+    value_type: integer
+    required: true
+  - name: destination_region
+    value_type: text
+    required: true
+policy_cards:
+  - policy_id: fake.pick
+    version: 0.1.0
+    executor_kind: fake
+    capability_tags: [tabletop, pick, offline]
+preconditions:
+  - predicate_id: pick.fresh
+    kind: observation_fresh
+    max_age_ns: 1000000000
+  - predicate_id: pick.visible
+    kind: object_visible
+    object_arg: target_id
+  - predicate_id: pick.unambiguous
+    kind: object_unambiguous
+    object_arg: target_id
+  - predicate_id: pick.actionable
+    kind: object_actionable
+    object_arg: target_id
+  - predicate_id: pick.depth
+    kind: object_depth_valid
+    object_arg: target_id
+  - predicate_id: pick.gripper_empty
+    kind: robot_holds_nothing
+invariants:
+  - predicate_id: pick.safety_clear
+    kind: fact_equals
+    fact_name: safety_clear
+    expected_value: true
+expected_effects:
+  - predicate_id: pick.held
+    kind: robot_holds_object
+    object_arg: target_id
+  - predicate_id: pick.following
+    kind: fact_equals
+    fact_name: object_follows_gripper
+    expected_value: true
+handoff_rules:
+  - next_skill_id: tabletop.place
+    predicates:
+      - predicate_id: pick.place_held
+        kind: robot_holds_object
+        object_arg: target_id
+      - predicate_id: pick.place_ready
+        kind: fact_equals
+        fact_name: place_ready
+        expected_value: true
+recovery:
+  reobservations: 2
+  retries: 1
+  world_changes: 2
+  retryable_failures: [execution_failed, execution_timeout, effect_fail]

@@ -1,0 +1,44 @@
+skill_id: tabletop.place
+version: 0.1.0
+executor_kind: fake
+inputs:
+  - name: target_id
+    value_type: integer
+    required: true
+  - name: destination_region
+    value_type: text
+    required: true
+policy_cards:
+  - policy_id: fake.place
+    version: 0.1.0
+    executor_kind: fake
+    capability_tags: [tabletop, place, offline]
+preconditions:
+  - predicate_id: place.fresh
+    kind: observation_fresh
+    max_age_ns: 1000000000
+  - predicate_id: place.held
+    kind: robot_holds_object
+    object_arg: target_id
+  - predicate_id: place.destination
+    kind: fact_equals
+    fact_name: destination_known
+    expected_value: true
+invariants:
+  - predicate_id: place.safety_clear
+    kind: fact_equals
+    fact_name: safety_clear
+    expected_value: true
+expected_effects:
+  - predicate_id: place.in_region
+    kind: object_in_region
+    object_arg: target_id
+    region_arg: destination_region
+  - predicate_id: place.gripper_empty
+    kind: robot_holds_nothing
+handoff_rules: []
+recovery:
+  reobservations: 2
+  retries: 1
+  world_changes: 2
+  retryable_failures: [execution_failed, execution_timeout, effect_fail]

@@ -1,0 +1,50 @@
+{
+  "schemaVersion": "1.0",
+  "type": "policy.action.result",
+  "messageId": "msg-4a5e07d63e4a4ed1aa8b8f26a7e89c26",
+  "replyTo": "msg:policy-req-ready-001",
+  "sessionId": "session:handoff-001",
+  "traceId": "trace:handoff-001",
+  "ts": 1786900754862,
+  "source": "policy",
+  "target": "orchestrator",
+  "mode": "dry-run",
+  "status": "ready",
+  "payload": {
+    "candidateId": "candidate:pick-coke-001",
+    "targetId": "coke:xvisio-frame-254cbb0af2fba3d5:0",
+    "frameId": "xvisio-frame-254cbb0af2fba3d5",
+    "policy": {
+      "id": "fixed_baseline",
+      "version": "1.0",
+      "kind": "fixed_baseline",
+      "checkpoint": null
+    },
+    "executionPlan": {
+      "kind": "fixed_waypoint_a_to_b",
+      "planId": "plan-1149660aa01d4a6aa3daf827ad87015c",
+      "adapterId": "startouch_fixed_waypoint_adapter_v1",
+      "bridgeRef": "web-control/server/startouch_bridge.py",
+      "configRef": "configs/tasks/fixed_pick_place.yaml",
+      "sourceWorkflow": "home_transit_ab",
+      "sourceZoneId": "pick_zone_a",
+      "destinationZoneId": "drop_zone_b",
+      "routeStates": [
+        "OPEN_GRIPPER_READY",
+        "MOVE_HOME_START",
+        "APPROACH_A_UP",
+        "DESCEND_TO_A_PICK",
+        "ADAPTIVE_GRASP_A",
+        "LIFT_A",
+        "TRANSFER_A_UP_TO_B_UP",
+        "DESCEND_TO_B",
+        "RELEASE_AT_B",
+        "LIFT_AFTER_RELEASE_B",
+        "RETURN_B_UP_TO_HOME"
+      ],
+      "cycles": 1,
+      "confirmEachStep": true,
+      "speedScale": 0.15
+    }
+  }
+}

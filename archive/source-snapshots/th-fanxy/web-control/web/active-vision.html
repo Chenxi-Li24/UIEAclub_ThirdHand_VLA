@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>ThirdHand RGB-D 视觉</title>
+  <link rel="stylesheet" href="/css/active-vision.css">
+</head>
+<body>
+  <main class="vision-shell">
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">THIRDHAND / XVISIO RGB-D</p>
+        <h1>瓶子识别与深度融合</h1>
+      </div>
+      <div class="status-row">
+        <span id="system-mode" class="mode waiting">正在连接</span>
+        <span id="clock" class="clock">--:--:--</span>
+      </div>
+    </header>
+
+    <section class="fusion-card" aria-label="XVisio RGB-D算法融合画面">
+      <div class="fusion-frame">
+        <img id="fusion-feed" src="/camera_lumos_vision" data-fallback="/camera_lumos"
+          alt="XVisio RGB-D识别、编号、深度边框与抓取点融合画面">
+        <div class="live-badge"><i></i><span id="fusion-feed-state">等待视频流</span></div>
+        <aside class="depth-hud" aria-label="实时深度状态">
+          <strong id="depth-health">深度连接中</strong>
+          <span>数据年龄 <b id="depth-source-age">—</b></span>
+          <span id="target-readout">目标：—</span>
+          <span id="depth-readout">深度：—</span>
+        </aside>
+      </div>
+    </section>
+  </main>
+
+  <script src="/js/active-vision-store.js"></script>
+  <script src="/js/active-vision-renderer.js"></script>
+  <script src="/js/active-vision-client.js"></script>
+</body>
+</html>
+

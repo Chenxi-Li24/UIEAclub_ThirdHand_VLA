@@ -1,0 +1,31 @@
+schema_version: 1.0.0
+source_path: web-control/server/startouch_bridge.py
+source_commit: 2e1ab2460d3ef323dc8702564833062e43fc6c4c
+robot_execution_enabled: false
+allowed_frames:
+  - robot_base
+allowed_calibration_ids:
+  - handeye-current
+joint_min_rad:
+  - -2.827433388230814
+  - -0.20943951023931956
+  - -3.193952531149623
+  - -1.710422666954443
+  - -1.710422666954443
+  - -2.8623399732707004
+joint_max_rad:
+  - 2.827433388230814
+  - 3.5081117965086026
+  - 0.0
+  - 1.710422666954443
+  - 1.710422666954443
+  - 2.8623399732707004
+duration_min_sec: 0.2
+duration_max_sec: 30.0
+speed_min_percent: 1.0
+speed_max_percent: 100.0
+position_tolerance_min_m: 0.001
+position_tolerance_max_m: 0.04
+orientation_tolerance_min_rad: 0.01
+orientation_tolerance_max_rad: 0.4
+gripper_max_distance_m: 0.08

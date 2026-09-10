@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "query": "夹取可乐",
+  "frameId": 1842,
+  "frameMonotonicNs": 987654321,
+  "observedAtMs": 1000,
+  "imageSha256": "sha256:e0de5bb5a40f56136f5d953922c73107ccbbea4edce7f5973120573316b60d35",
+  "jpegBase64": "/9hDT0tF/9k=",
+  "candidates": [
+    {
+      "identityId": 12,
+      "detectionId": 3,
+      "label": "bottle",
+      "identityStatus": "confirmed",
+      "detectionScore": 0.94
+    },
+    {
+      "identityId": 15,
+      "detectionId": 4,
+      "label": "can",
+      "identityStatus": "confirmed",
+      "detectionScore": 0.91
+    }
+  ],
+  "decision": {
+    "decision": "select",
+    "identity_id": 12,
+    "ambiguous": false,
+    "explanation": "ID 12 是可乐瓶。",
+    "semantic_score": 0.91
+  }
+}

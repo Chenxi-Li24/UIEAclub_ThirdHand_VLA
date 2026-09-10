@@ -1,0 +1,22 @@
+{
+  "schemaVersion": "1.0",
+  "type": "service.error",
+  "messageId": "msg-ae72939902ec4f5686d40a8c2d9a0b11",
+  "replyTo": "msg:policy-req-invalid-001",
+  "sessionId": "session:handoff-001",
+  "traceId": "trace:handoff-001",
+  "ts": 1786900754869,
+  "source": "policy",
+  "target": "orchestrator",
+  "mode": "dry-run",
+  "status": "failure",
+  "payload": {
+    "stage": "policy"
+  },
+  "error": {
+    "code": "target_not_authorized",
+    "message": "target.authorized must be true",
+    "retryable": false,
+    "details": {}
+  }
+}

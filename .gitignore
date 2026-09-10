@@ -60,6 +60,9 @@ web-control/server/web-control.log
 /runtime/**
 !/runtime/README.md
 
+# Robot geometry is local runtime payload; Git stores its manifest and importer.
+/assets/robot/startouch-v3/
+
 # Archive may keep reviewed first-party source, but not copied runtime payloads
 /archive/**/node_modules/
 /archive/**/.venv/

@@ -1,0 +1,39 @@
+{
+  "profile": "manual-control-simulation",
+  "description": "Migrated web and Startouch Robot Service with simulated hardware.",
+  "services": [
+    {
+      "id": "robot",
+      "command": "${NODE}",
+      "args": ["${ROOT}/services/robot/src/server.js"],
+      "cwd": "${ROOT}",
+      "env": {
+        "ROBOT_HOST": "127.0.0.1",
+        "ROBOT_PORT": "13000",
+        "STARTOUCH_SIMULATE": "1",
+        "STARTOUCH_REQUIRE_CAN_RX": "0",
+        "STARTOUCH_INIT_SETTLE_SEC": "0"
+      },
+      "bind": "127.0.0.1",
+      "port": 13000,
+      "shutdownOrder": 100,
+      "enabled": true
+    },
+    {
+      "id": "web",
+      "command": "${NODE}",
+      "args": ["${ROOT}/apps/web/src/server.js"],
+      "cwd": "${ROOT}",
+      "env": {
+        "WEB_HOST": "192.168.58.68",
+        "WEB_PORT": "9983",
+        "ROBOT_WS_URL": "ws://127.0.0.1:13000/ws"
+      },
+      "bind": "192.168.58.68",
+      "allowLan": true,
+      "port": 9983,
+      "shutdownOrder": 10,
+      "enabled": true
+    }
+  ]
+}

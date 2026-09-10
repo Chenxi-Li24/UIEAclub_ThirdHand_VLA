@@ -143,6 +143,15 @@
       "sha256": "",
       "sizeBytes": 0,
       "licenseStatus": "unknown"
+    },
+    {
+      "id": "robot.startouch-v3.geometry",
+      "kind": "robot-geometry",
+      "required": true,
+      "relativePath": "assets/robot/startouch-v3",
+      "sha256": "332e73b07bb051f99ce5752c477f6f0a1c414908d58604ed019ffc7be162a4a3",
+      "sizeBytes": 22441714,
+      "licenseStatus": "local-only"
     }
   ]
 }

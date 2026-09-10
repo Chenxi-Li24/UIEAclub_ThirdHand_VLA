@@ -1,0 +1,55 @@
+'use strict';
+
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const path = require('node:path');
+
+const { loadServiceConfig } = require('../../../apps/launcher/src/service-config');
+
+const ROOT = path.resolve(__dirname, '../../..');
+
+function load(profile) {
+  return loadServiceConfig(
+    path.join(ROOT, 'configs', 'runtime', `${profile}.json`),
+    { root: ROOT, nodePath: process.execPath },
+  );
+}
+
+test('manual simulation profile launches migrated robot and web services', () => {
+  const services = load('manual-control-simulation');
+  assert.deepEqual(services.map(item => item.id), ['robot', 'web']);
+
+  const [robot, web] = services;
+  assert.equal(robot.bind, '127.0.0.1');
+  assert.equal(robot.port, 13000);
+  assert.equal(robot.env.STARTOUCH_SIMULATE, '1');
+  assert.equal(robot.args[0], path.join(ROOT, 'services/robot/src/server.js'));
+
+  assert.equal(web.bind, '192.168.58.68');
+  assert.equal(web.port, 9983);
+  assert.equal(web.env.ROBOT_WS_URL, 'ws://127.0.0.1:13000/ws');
+  assert.equal(web.args[0], path.join(ROOT, 'apps/web/src/server.js'));
+});
+
+test('manual hardware profile never enables simulation or automatic motion', () => {
+  const services = load('manual-control');
+  const robot = services.find(item => item.id === 'robot');
+  const web = services.find(item => item.id === 'web');
+
+  assert.equal(robot.env.STARTOUCH_SIMULATE, '0');
+  assert.equal(robot.env.STARTOUCH_CAN_INTERFACE, 'can0');
+  assert.equal(robot.port, 3000);
+  assert.equal(robot.args.length, 1);
+  assert.equal(web.env.ROBOT_WS_URL, 'ws://127.0.0.1:3000/ws');
+});
+
+test('default profile knows migrated entrypoints but keeps them disabled', () => {
+  const services = load('default');
+  const robot = services.find(item => item.id === 'robot');
+  const web = services.find(item => item.id === 'web');
+
+  assert.equal(robot.enabled, false);
+  assert.equal(web.enabled, false);
+  assert.equal(robot.args[0], path.join(ROOT, 'services/robot/src/server.js'));
+  assert.equal(web.args[0], path.join(ROOT, 'apps/web/src/server.js'));
+});

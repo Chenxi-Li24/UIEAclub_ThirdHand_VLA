@@ -1,12 +1,12 @@
 {
   "profile": "default",
-  "description": "Final port ownership. Live services remain disabled until their migration plans pass acceptance.",
+  "description": "Known production entrypoints. Services stay disabled until their acceptance profile is selected.",
   "services": [
-    {"id":"robot","command":"${NODE}","args":[],"cwd":"${ROOT}","env":{},"bind":"127.0.0.1","port":3000,"shutdownOrder":100,"enabled":false,"unavailableReason":"service_not_migrated"},
+    {"id":"robot","command":"${NODE}","args":["${ROOT}/services/robot/src/server.js"],"cwd":"${ROOT}","env":{"ROBOT_HOST":"127.0.0.1","ROBOT_PORT":"3000"},"bind":"127.0.0.1","port":3000,"shutdownOrder":100,"enabled":false,"unavailableReason":"operator_profile_required"},
     {"id":"supervisor","command":"${NODE}","args":[],"cwd":"${ROOT}","env":{},"bind":"127.0.0.1","port":3101,"shutdownOrder":90,"enabled":false,"unavailableReason":"service_not_migrated"},
     {"id":"model","command":"${NODE}","args":[],"cwd":"${ROOT}","env":{},"bind":"127.0.0.1","port":3102,"shutdownOrder":70,"enabled":false,"unavailableReason":"service_not_migrated"},
     {"id":"speech","command":"${NODE}","args":[],"cwd":"${ROOT}","env":{},"bind":"127.0.0.1","port":3004,"shutdownOrder":60,"enabled":false,"unavailableReason":"service_not_migrated"},
     {"id":"vision","command":"${NODE}","args":[],"cwd":"${ROOT}","env":{},"bind":"127.0.0.1","port":3100,"shutdownOrder":50,"enabled":false,"unavailableReason":"service_not_migrated"},
-    {"id":"web","command":"${NODE}","args":[],"cwd":"${ROOT}","env":{},"bind":"0.0.0.0","allowLan":true,"port":9983,"shutdownOrder":10,"enabled":false,"unavailableReason":"service_not_migrated"}
+    {"id":"web","command":"${NODE}","args":["${ROOT}/apps/web/src/server.js"],"cwd":"${ROOT}","env":{"WEB_HOST":"192.168.58.68","WEB_PORT":"9983","ROBOT_WS_URL":"ws://127.0.0.1:3000/ws"},"bind":"192.168.58.68","allowLan":true,"port":9983,"shutdownOrder":10,"enabled":false,"unavailableReason":"operator_profile_required"}
   ]
 }

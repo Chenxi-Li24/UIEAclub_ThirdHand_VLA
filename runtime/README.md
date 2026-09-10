@@ -9,3 +9,5 @@ This ignored directory is created and owned by `./thirdhand` while the unified p
 - `cache/`: rebuildable inference and application caches.
 
 No file below these subdirectories is source code or a durable configuration. `stop` only signals processes whose recorded identity still matches; it never trusts a PID by itself.
+
+The foundation `simulation` profile uses this directory for five fake services on alternate loopback ports. The default live profile remains disabled until each hardware service is migrated and separately accepted.

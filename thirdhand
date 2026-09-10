@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)"
+LOCAL_NODE="$ROOT/local/runtimes/node/bin/node"
+
+if [[ -x "$LOCAL_NODE" ]] && [[ "$($LOCAL_NODE -p 'process.versions.node.split(`.`)[0]')" == "24" ]]; then
+  NODE="$LOCAL_NODE"
+elif command -v node >/dev/null 2>&1 && [[ "$(node -p 'process.versions.node.split(`.`)[0]')" == "24" ]]; then
+  NODE="$(command -v node)"
+else
+  echo "ThirdHand requires Node.js 24; run setup-assets or install a compatible system Node." >&2
+  exit 2
+fi
+
+exec "$NODE" "$ROOT/apps/launcher/src/cli.js" "$@"

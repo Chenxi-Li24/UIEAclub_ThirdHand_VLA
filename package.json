@@ -14,7 +14,8 @@
   "scripts": {
     "test:contracts": "node --test tests/node/contracts/*.test.js",
     "test:launcher": "node --test tests/node/launcher/*.test.js",
-    "test:skills": "node --test tests/node/skill_registry/*.test.js"
+    "test:skills": "node --test tests/node/skill_registry/*.test.js",
+    "test:lifecycle": "python -m pytest tests/integration/test_simulated_lifecycle.py -v"
   },
   "devDependencies": {
     "ajv": "8.17.1",

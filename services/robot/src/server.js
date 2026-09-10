@@ -1,0 +1,132 @@
+#!/usr/bin/env node
+'use strict';
+
+const fs = require('node:fs');
+const http = require('node:http');
+const path = require('node:path');
+const { WebSocket, WebSocketServer } = require('ws');
+const { loadConfig } = require('./config');
+const { RobotController } = require('./robot-controller');
+
+function writeJson(response, status, payload) {
+  const body = JSON.stringify(payload);
+  response.writeHead(status, {
+    'content-type': 'application/json; charset=utf-8',
+    'content-length': Buffer.byteLength(body),
+    'cache-control': 'no-store',
+  });
+  response.end(body);
+}
+
+function createRobotService(options = {}) {
+  const defaults = loadConfig(options.env);
+  const config = {
+    ...defaults,
+    ...options,
+    robot: { ...defaults.robot, ...(options.robot || {}) },
+  };
+  const controller = new RobotController(config.robot);
+  const sockets = new Set();
+  let closing = false;
+
+  const server = http.createServer((request, response) => {
+    if (request.method === 'GET' && request.url === '/health') {
+      writeJson(response, 200, controller.health());
+      return;
+    }
+    writeJson(response, 404, { error: 'not_found' });
+  });
+  const wss = new WebSocketServer({ noServer: true });
+
+  controller.on('message', message => {
+    const payload = JSON.stringify(message);
+    for (const socket of sockets) {
+      if (socket.readyState === WebSocket.OPEN) socket.send(payload);
+    }
+  });
+
+  server.on('upgrade', (request, socket, head) => {
+    if (request.url !== '/ws') {
+      socket.destroy();
+      return;
+    }
+    wss.handleUpgrade(request, socket, head, ws => wss.emit('connection', ws));
+  });
+
+  wss.on('connection', socket => {
+    sockets.add(socket);
+    socket.send(JSON.stringify(controller.configMessage()));
+    socket.on('message', data => {
+      let message;
+      try {
+        message = JSON.parse(data.toString('utf8'));
+      } catch {
+        socket.send(JSON.stringify({
+          type: 'error',
+          code: 'invalid_json',
+          msg: 'Invalid JSON message',
+        }));
+        return;
+      }
+      controller.handleCommand(message, reply => {
+        if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify(reply));
+      });
+    });
+    socket.on('close', () => sockets.delete(socket));
+  });
+
+  return {
+    controller,
+    async start() {
+      await controller.start();
+      await new Promise((resolve, reject) => {
+        server.once('error', reject);
+        server.listen(config.port, config.host, resolve);
+      });
+      fs.mkdirSync(path.dirname(config.readyFile), { recursive: true });
+      fs.writeFileSync(config.readyFile, `${JSON.stringify({
+        ready: true,
+        serviceId: 'robot',
+        pid: process.pid,
+      })}\n`);
+      return server.address();
+    },
+    async close() {
+      if (closing) return;
+      closing = true;
+      for (const socket of sockets) socket.terminate();
+      await new Promise(resolve => wss.close(resolve));
+      await new Promise(resolve => server.listening ? server.close(resolve) : resolve());
+      await controller.shutdown();
+      try {
+        fs.unlinkSync(config.readyFile);
+      } catch (error) {
+        if (error.code !== 'ENOENT') throw error;
+      }
+    },
+  };
+}
+
+async function main() {
+  const service = createRobotService();
+  const address = await service.start();
+  console.log(`ThirdHand Robot Service listening on ${address.address}:${address.port}`);
+
+  let stopping = false;
+  const stop = async () => {
+    if (stopping) return;
+    stopping = true;
+    await service.close();
+  };
+  process.on('SIGINT', () => stop().then(() => process.exit(0)));
+  process.on('SIGTERM', () => stop().then(() => process.exit(0)));
+}
+
+if (require.main === module) {
+  main().catch(error => {
+    console.error(error.stack || error.message);
+    process.exitCode = 1;
+  });
+}
+
+module.exports = { createRobotService };

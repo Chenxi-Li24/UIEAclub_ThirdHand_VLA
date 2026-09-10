@@ -11,6 +11,19 @@ from pathlib import Path
 from typing import Any
 
 
+IGNORED_TREE_PARTS = {".git", ".pytest_cache", "__pycache__"}
+
+
+def _asset_files(path: Path) -> list[Path]:
+    return sorted(
+        item
+        for item in path.rglob("*")
+        if item.is_file()
+        and not any(part in IGNORED_TREE_PARTS for part in item.relative_to(path).parts)
+        and item.suffix != ".pyc"
+    )
+
+
 def sha256_path(path: Path) -> str:
     """Hash a file or a directory tree using stable relative paths."""
     digest = hashlib.sha256()
@@ -20,7 +33,7 @@ def sha256_path(path: Path) -> str:
                 digest.update(chunk)
         return digest.hexdigest()
 
-    for child in sorted(item for item in path.rglob("*") if item.is_file()):
+    for child in _asset_files(path):
         digest.update(child.relative_to(path).as_posix().encode("utf-8"))
         digest.update(b"\0")
         with child.open("rb") as stream:
@@ -32,7 +45,7 @@ def sha256_path(path: Path) -> str:
 def size_path(path: Path) -> int:
     if path.is_file():
         return path.stat().st_size
-    return sum(item.stat().st_size for item in path.rglob("*") if item.is_file())
+    return sum(item.stat().st_size for item in _asset_files(path))
 
 
 def _inside(root: Path, candidate: Path) -> bool:

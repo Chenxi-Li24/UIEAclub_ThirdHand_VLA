@@ -5,7 +5,8 @@ from pathlib import Path
 import pytest
 
 from tools.assets.import_assets import import_asset
-from tools.assets.verify_assets import verify_manifest
+from tools.assets.record_assets import record_manifest
+from tools.assets.verify_assets import sha256_path, size_path, verify_manifest
 
 
 def _sha(data: bytes) -> str:
@@ -114,3 +115,51 @@ def test_import_asset_refuses_different_existing_destination(tmp_path: Path):
 
     assert result["status"] == "destination_conflict"
     assert destination.read_bytes() == b"existing"
+
+
+def test_directory_measurement_ignores_generated_python_cache(tmp_path: Path):
+    runtime = tmp_path / "runtime"
+    runtime.mkdir()
+    (runtime / "python").write_bytes(b"interpreter")
+    expected_hash = sha256_path(runtime)
+    expected_size = size_path(runtime)
+
+    cache = runtime / "lib/__pycache__"
+    cache.mkdir(parents=True)
+    (cache / "module.cpython-311.pyc").write_bytes(b"generated")
+
+    assert sha256_path(runtime) == expected_hash
+    assert size_path(runtime) == expected_size
+
+
+def test_record_manifest_measures_existing_assets_atomically(tmp_path: Path):
+    asset = tmp_path / "local/models/example.bin"
+    asset.parent.mkdir(parents=True)
+    asset.write_bytes(b"model")
+    template = tmp_path / "template.json"
+    template.write_text(
+        json.dumps(
+            {
+                "schemaVersion": 1,
+                "assets": [
+                    {
+                        "id": "example",
+                        "kind": "model",
+                        "required": True,
+                        "relativePath": "local/models/example.bin",
+                        "sha256": "",
+                        "sizeBytes": 0,
+                        "licenseStatus": "unknown",
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    output = tmp_path / "recorded.json"
+
+    document = record_manifest(tmp_path, template, output)
+
+    assert document["assets"][0]["sha256"] == _sha(b"model")
+    assert document["assets"][0]["sizeBytes"] == 5
+    assert json.loads(output.read_text(encoding="utf-8")) == document

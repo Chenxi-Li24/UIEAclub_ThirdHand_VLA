@@ -54,6 +54,7 @@ web-control/server/web-control.log
 # Unified local delivery assets: present on Ubuntu, never tracked publicly
 /local/**
 !/local/README.md
+/configs/assets/manifest.local.json
 
 # Unified mutable runtime state
 /runtime/**

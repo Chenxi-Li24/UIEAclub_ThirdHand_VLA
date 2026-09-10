@@ -10,4 +10,6 @@ Expected payloads include:
 - `models/policies/{vla,act,dp}/`: optional policy checkpoints; missing assets keep the corresponding Skill unavailable.
 - `runtimes/{python,node}/`: project-local runtimes validated for the host Ubuntu release.
 
-Use `./thirdhand setup-assets` for an explicit copy and `./thirdhand verify-assets` before startup. Imports must record source, size, SHA-256, compatibility, and license status. Startup never downloads assets implicitly. Never commit binaries, model weights, copied runtimes, credentials, or vendor payloads from this directory.
+Use `tools/assets/import_assets.py` for an explicit collision-safe copy and `./thirdhand verify-assets` before startup. Imports must record source, size, SHA-256, compatibility, and license status. Startup never downloads assets implicitly. Never commit binaries, model weights, copied runtimes, credentials, or vendor payloads from this directory.
+
+The Ubuntu 20.04 installation currently contains the Startouch and XVisio SDKs, FunASR source, three ASR models, Python 3.11.15, Node 24.18.0, and a read-only calibration source copy. See `docs/assets/ASSET_PROVENANCE.md` and `configs/assets/ubuntu20.manifest.json` for exact mappings and hashes.

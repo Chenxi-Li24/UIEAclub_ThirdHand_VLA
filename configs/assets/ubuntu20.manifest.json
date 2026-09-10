@@ -1,0 +1,148 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-09-10T10:54:58.057648+00:00",
+  "hostProfile": "ubuntu20-x86_64",
+  "hashAlgorithm": "thirdhand-directory-sha256-v1",
+  "assets": [
+    {
+      "id": "startouch.sdk",
+      "kind": "sdk",
+      "required": true,
+      "relativePath": "local/sdk/startouch",
+      "sha256": "315afed369f55153d22bba57b0f81bd5c6641ebb51b126f7bfede7dba25e535d",
+      "sizeBytes": 10215642,
+      "licenseStatus": "unknown",
+      "compatibility": {
+        "systems": [
+          "Linux"
+        ],
+        "architectures": [
+          "x86_64"
+        ]
+      }
+    },
+    {
+      "id": "xvisio.sdk",
+      "kind": "sdk",
+      "required": true,
+      "relativePath": "local/sdk/xvisio",
+      "sha256": "ba6cb9866b6ff3b9434885f6fac2d3dde8b5e91f8e480e46dfeece4ed94103c0",
+      "sizeBytes": 111237102,
+      "licenseStatus": "unknown",
+      "compatibility": {
+        "systems": [
+          "Linux"
+        ],
+        "architectures": [
+          "x86_64"
+        ]
+      }
+    },
+    {
+      "id": "funasr.source",
+      "kind": "vendor-source",
+      "required": true,
+      "relativePath": "local/vendor/funasr",
+      "sha256": "22fdcb052c967b491e1376a7aa0f136b202b5321e3a90bab3923bc3e4c66e800",
+      "sizeBytes": 102789179,
+      "licenseStatus": "recorded"
+    },
+    {
+      "id": "calibration.source",
+      "kind": "calibration",
+      "required": false,
+      "relativePath": "local/calibration/source",
+      "sha256": "81272440b3c5f8517296c4c077ee28e205be4d90ed664d24978047bbcb2f985e",
+      "sizeBytes": 6788101,
+      "licenseStatus": "local-only"
+    },
+    {
+      "id": "asr.medium",
+      "kind": "model",
+      "required": true,
+      "relativePath": "local/models/asr/medium",
+      "sha256": "1066d1affff5cfb42c5cf85581181f8aa2cbf348fc253ad03dc8a67f40bed145",
+      "sizeBytes": 486212372,
+      "licenseStatus": "unknown"
+    },
+    {
+      "id": "asr.realtime",
+      "kind": "model",
+      "required": true,
+      "relativePath": "local/models/asr/realtime",
+      "sha256": "c9ee247e385631ba5e6d5c910bde4a09d11e0a2308d69c88502d4256c22ff09f",
+      "sizeBytes": 889361523,
+      "licenseStatus": "unknown"
+    },
+    {
+      "id": "asr.high",
+      "kind": "model",
+      "required": true,
+      "relativePath": "local/models/asr/high",
+      "sha256": "17f049fe0a5ae7ae37991b0a569e6170d33a5c27702c1d838a6b7e3e1d04a410",
+      "sizeBytes": 3664661483,
+      "licenseStatus": "unknown"
+    },
+    {
+      "id": "runtime.python",
+      "kind": "runtime",
+      "required": true,
+      "relativePath": "local/runtimes/python",
+      "sha256": "29183a93922d910d07bd314bf0fbe7517ec83cb6dc85a4e4c4d5ed05b1c91ce6",
+      "sizeBytes": 11516802464,
+      "licenseStatus": "local-only",
+      "compatibility": {
+        "systems": [
+          "Linux"
+        ],
+        "architectures": [
+          "x86_64"
+        ]
+      }
+    },
+    {
+      "id": "runtime.node",
+      "kind": "runtime",
+      "required": true,
+      "relativePath": "local/runtimes/node",
+      "sha256": "77b8720b59f0c7bc69ccdd1b53820eaa12e0fa4df28ddd29894a0d53241820e5",
+      "sizeBytes": 844528434,
+      "licenseStatus": "local-only",
+      "compatibility": {
+        "systems": [
+          "Linux"
+        ],
+        "architectures": [
+          "x86_64"
+        ]
+      }
+    },
+    {
+      "id": "policy.vla",
+      "kind": "model",
+      "required": false,
+      "relativePath": "local/models/policies/vla",
+      "sha256": "",
+      "sizeBytes": 0,
+      "licenseStatus": "unknown"
+    },
+    {
+      "id": "policy.act",
+      "kind": "model",
+      "required": false,
+      "relativePath": "local/models/policies/act",
+      "sha256": "",
+      "sizeBytes": 0,
+      "licenseStatus": "unknown"
+    },
+    {
+      "id": "policy.dp",
+      "kind": "model",
+      "required": false,
+      "relativePath": "local/models/policies/dp",
+      "sha256": "",
+      "sizeBytes": 0,
+      "licenseStatus": "unknown"
+    }
+  ]
+}

@@ -1,5 +1,8 @@
 # Unified Foundation Operations
 
+For a copy-paste startup and verification sequence, port status, rollback, and
+hardware migration gates, see `docs/RUN_GUIDE.md`.
+
 The unified project is operated from its repository root with one native command:
 
 ```bash
@@ -16,7 +19,10 @@ No command invokes `sudo`, `systemd`, package installation, or an implicit netwo
 
 `THIRDHAND_PROFILE=simulation` selects five deterministic fake services on loopback ports 13000, 13004, 13100, 13101, and 13102. This profile never opens CAN, USB cameras, microphones, GPUs, or model files. It is the only runnable profile in the foundation phase.
 
-The default profile records final ownership of 9983, 3000, 3100, and 3004, but all live services are disabled with `service_not_migrated`. Accepted old services continue running from their original projects until a later cutover is explicitly approved.
+The default profile records final ownership of 9983, 3000, 3100, and 3004, but all
+live services are disabled with `service_not_migrated`. Accepted old services
+are not managed or started by this launcher; they are run separately only for an
+explicitly approved rollback.
 
 ## Commands
 

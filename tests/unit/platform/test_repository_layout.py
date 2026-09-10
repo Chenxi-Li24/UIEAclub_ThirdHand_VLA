@@ -37,3 +37,12 @@ def test_local_and_runtime_payloads_are_ignored():
     )
     assert result.returncode == 0
     assert set(result.stdout.splitlines()) == set(probes)
+
+
+def test_each_skill_manifest_has_protocol_document():
+    missing = sorted(
+        path.parent.relative_to(ROOT).as_posix()
+        for path in (ROOT / "skills").glob("*/*/manifest.yaml")
+        if not (path.parent / "SKILL.md").is_file()
+    )
+    assert missing == []

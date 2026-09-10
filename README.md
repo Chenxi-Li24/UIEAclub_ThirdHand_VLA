@@ -76,12 +76,13 @@ THIRDHAND_PROFILE=simulation ./thirdhand stop
 ```
 
 The real Robot, XVisio, Speech, Model, Supervisor, Web, and Skill workers have not
-yet been migrated into the unified launcher. Existing accepted services continue
-to run from their original read-only projects. Do not use the simulation profile
-for hardware control.
+yet been migrated into the unified launcher. Original-project services are not
+started by the unified launcher and must be run separately only when an explicit
+rollback is required. Do not use the simulation profile for hardware control.
 
 See `docs/DIRECTORY_MAP.md`, `docs/OPERATIONS.md`, and
-`docs/migration/FOUNDATION_BASELINE.md` for ownership, safety, and verification.
+`docs/migration/FOUNDATION_BASELINE.md` for ownership and safety. Operational
+steps are in `docs/RUN_GUIDE.md`; Skill semantics are in `docs/SKILL_PROTOCOL.md`.
 
 ## License
 

@@ -22,6 +22,7 @@ function loadConfig(env = process.env) {
     || path.join(ROOT, 'local', 'sdk', 'startouch');
   const generatedModulePath = path.join(
     ROOT, 'local', 'generated', 'startouch-python',
+    'startouch_sdk', 'interface_py',
   );
   return {
     host: env.ROBOT_HOST || '127.0.0.1',

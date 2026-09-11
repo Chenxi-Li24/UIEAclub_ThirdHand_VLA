@@ -71,6 +71,23 @@ def ignore_sdk_artifacts(_directory: str, names: list[str]) -> set[str]:
     return ignored
 
 
+def stage_runtime(source: Path, extension: Path, staged: Path) -> Path:
+    sdk_root = staged / "startouch_sdk"
+    interface_dir = sdk_root / "interface_py"
+    interface_dir.mkdir(parents=True)
+
+    staged_extension = interface_dir / extension.name
+    shutil.copy2(extension, staged_extension)
+    shutil.copy2(source / "interface_py/startouchclass.py", interface_dir)
+    shutil.copy2(source / "src/libstartouch.so", interface_dir)
+    shutil.copytree(source / "src/config", sdk_root / "src/config")
+    shutil.copytree(
+        source / "src/param_csv_gripper",
+        sdk_root / "param_csv_gripper",
+    )
+    return staged_extension
+
+
 def build(
     project_root: Path,
     sdk_path: Path,
@@ -114,29 +131,33 @@ def build(
             extension,
             source / "interface_py" / "startouchclass.py",
             source / "src" / "libstartouch.so",
+            source / "src/config/robot_kinematics.yaml",
+            source / "src/config/FastTouchV2.SLDASM.urdf",
+            source / "src/param_csv_gripper",
         ]
-        missing = [str(item) for item in required if not item.is_file()]
+        missing = [str(item) for item in required if not item.exists()]
         if missing:
             raise FileNotFoundError(f"build output is incomplete: {missing}")
 
         staged = temporary / "runtime"
-        staged.mkdir()
-        for item in required:
-            shutil.copy2(item, staged / item.name)
+        staged_extension = stage_runtime(source, extension, staged)
 
         smoke_env = {
             **os.environ,
-            "PYTHONPATH": str(staged),
+            "PYTHONPATH": str(staged_extension.parent),
         }
         subprocess.run(
             [
                 str(python),
                 "-c",
                 "import startouch; from startouchclass import SingleArm; "
+                "arm=SingleArm(can_interface_='can0', gripper=True, dry_run=True); "
+                "del arm; "
                 "print(startouch.__file__, SingleArm.__name__)",
             ],
             check=True,
             env=smoke_env,
+            cwd=staged / "startouch_sdk" / "src",
         )
 
         if output.exists():
@@ -147,8 +168,8 @@ def build(
     return {
         "status": "ready",
         "python": str(python),
-        "modulePath": str(output),
-        "extension": str(output / extension.name),
+        "modulePath": str(output / "startouch_sdk/interface_py"),
+        "extension": str(output / staged_extension.relative_to(staged)),
     }
 
 

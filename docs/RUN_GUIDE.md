@@ -100,7 +100,8 @@ SDK 内的二进制扩展必须匹配项目 Python 版本。首次导入 SDK、�
   --python local/runtimes/python/bin/python
 ```
 
-脚本在临时目录编译并进行导入测试，产物写入 `local/generated/startouch-python`；不会修改 `local/sdk/startouch`。执行脚本的 Python 需要提供 pybind11 2.10 或更高版本。
+脚本在临时目录编译并以 `dry_run` 构造 `SingleArm` 验证资源加载，产物写入 `local/generated/startouch-python`；不会修改 `local/sdk/startouch`。执行脚本的 Python 需要提供 pybind11 2.10 或更高版本。
+生成包内部保留厂商库硬编码要求的 `startouch_sdk/src/config` 层级；Robot Service 实际加载 `local/generated/startouch-python/startouch_sdk/interface_py`。
 
 ### 4.3 启动
 

@@ -1,0 +1,13 @@
+{
+  "name": "@thirdhand/vision-service",
+  "version": "0.1.0",
+  "private": true,
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "test": "node --test ../../tests/node/vision_service/*.test.js"
+  },
+  "dependencies": {
+    "ws": "8.21.3"
+  }
+}

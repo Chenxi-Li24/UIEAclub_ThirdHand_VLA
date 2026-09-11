@@ -122,7 +122,7 @@ test('web gateway serves UI and proxies only robot commands', async (t) => {
 
   const vision = await fetch(`${origin}/api/vision/status`);
   assert.equal(vision.status, 503);
-  assert.equal((await vision.json()).code, 'service_unavailable');
+  assert.equal((await vision.json()).code, 'vision_upstream_unavailable');
 
   const browser = new WebSocket(`ws://127.0.0.1:${address.port}/ws`);
   const next = inbox(browser);

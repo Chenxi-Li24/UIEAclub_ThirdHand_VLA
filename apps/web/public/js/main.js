@@ -256,7 +256,9 @@ class ArmModel {
 
 // === WSClient ===
 class WSClient {
-  constructor() {
+  constructor(pathname = "/ws", label = "WS") {
+    this.pathname = pathname;
+    this.label = label;
     this.ws = null;
     this.connected = false;
     this.listeners = {};
@@ -267,8 +269,8 @@ class WSClient {
 
   connect() {
     const proto = location.protocol === 'https:' ? 'wss' : 'ws';
-    const url = `${proto}://${location.host}/ws`;
-    console.log(`[WS] connecting to ${url}...`);
+    const url = `${proto}://${location.host}${this.pathname}`;
+    console.log(`[${this.label}] connecting to ${url}...`);
 
     this.ws = new WebSocket(url);
 
@@ -334,7 +336,8 @@ class WSClient {
 
 // === UIControls ===
 class UIControls {
-  constructor(wsClient, armModel) {
+  constructor(wsClient, visionWsClient, armModel) {
+    this.visionWs = visionWsClient;
     this.ws = wsClient;
     this.arm = armModel;
     this.sliders = [];
@@ -734,11 +737,23 @@ class UIControls {
       });
     });
 
-    this.ws.on('detection_result', (data) => {
+    this.visionWs.on("detection_result", (data) => {
       const list = document.getElementById('detection-list');
       if (!list) return;
       list.replaceChildren();
-      for (const obj of (data.objects || [])) {
+      const objects = (data.targets || data.objects || []).map(obj => {
+        if (!data.targets) return obj;
+        return {
+          ...obj,
+          id: obj.stableId,
+          spatialLabel: `#${obj.stableId}`,
+          conf: obj.score,
+          leftOrdinal: obj.stableId,
+          actionable: false,
+          blockers: ["grasp_execution_not_migrated"],
+        };
+      });
+      for (const obj of objects) {
         const item = document.createElement('div');
         item.className = 'detection-item';
         const label = document.createElement('span');
@@ -771,7 +786,7 @@ class UIControls {
           btn.className = 'det-grasp-btn';
           btn.textContent = `${obj.selected ? '已选 ' : '选择 '}${prefix}${ordinal}`;
           btn.addEventListener('click', () => {
-            this.ws.send({ cmd: 'select_vision_target', side, ordinal });
+            this.visionWs.send({ type: "select_target", stableId: obj.stableId });
             this._log(`→ 选择视觉目标 ${prefix}${ordinal}`);
           });
           actions.appendChild(btn);
@@ -796,7 +811,7 @@ class UIControls {
         empty.textContent = 'No objects detected';
         list.appendChild(empty);
       }
-      if (!(data.objects || []).some(obj => obj.selected === true)) {
+      if (!objects.some(obj => obj.selected === true)) {
         this.selectedVisionTarget = null;
       }
       this.visionTargetExecutionEnabled = data.robotExecutionEnabled === true;
@@ -815,6 +830,25 @@ class UIControls {
     };
 
     this.ws.on('xvision_connection', applyXVisionStatus);
+    this.visionWs.on("runtime_status", data => {
+      const cameraReady = data.camera?.status === "ready";
+      const inferenceError = data.inference?.status === "error"
+        ? data.inference.error : null;
+      applyXVisionStatus({
+        camera_ready: cameraReady,
+        error: data.camera?.error || inferenceError,
+      });
+      if (cameraReady && inferenceError && xvisionStream === "vision") {
+        xvisionStream = "raw";
+        document.querySelectorAll("[data-xvision-stream]").forEach(button => {
+          const active = button.dataset.xvisionStream === "raw";
+          button.classList.toggle("active", active);
+          button.setAttribute("aria-pressed", String(active));
+        });
+        reloadXVisionFeed(true);
+        this._log(`⚠ 视觉模型不可用，已切换原始画面: ${inferenceError}`);
+      }
+    });
     this.ws.on('camera_status', applyXVisionStatus);
 
     this.ws.on('grasp_status', (data) => {
@@ -823,6 +857,9 @@ class UIControls {
       this._log(`视觉夹取: ${this.graspPhase}${data.reason ? ` (${data.reason})` : ''}`);
     });
 
+    this.visionWs.on("vision_warning", data => {
+      this._log("⚠ Vision: " + (data.error || data.stage || "warning"));
+    });
     this.ws.on('camera_error', (data) => {
       this._log('⚠ Camera: ' + (data.msg || data.message || 'error'));
     });
@@ -1269,11 +1306,12 @@ function startApp() {
     if (window.innerWidth <= 900) voice.closePanel();
   });
 
+  const visionWs = new WSClient("/vision", "Vision WS");
   const ws = new WSClient();
   const viewport = document.getElementById('three-container');
   const scene = new SceneManager(viewport);
   const arm = new ArmModel(scene.scene);
-  ui = new UIControls(ws, arm);
+  ui = new UIControls(ws, visionWs, arm);
 
   // 主题切换
   const themeSelect = document.getElementById('theme-select');
@@ -1296,6 +1334,7 @@ function startApp() {
   arm.loadingPromise.then(() => {
     ui.build();
     ui.bindViewControls(scene);
+    visionWs.connect();
     ws.connect();
     arm.setJointAngles([0, 0, 0, 0, 0, 0]);
     ui.setJointValues([0, 0, 0, 0, 0, 0]);

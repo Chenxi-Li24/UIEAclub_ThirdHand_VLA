@@ -6,8 +6,10 @@ const http = require('node:http');
 const path = require('node:path');
 const { WebSocketServer } = require('ws');
 const { loadConfig } = require('./config');
+const { proxyHttpRequest } = require('./http-proxy');
 const { RobotProxy } = require('./robot-proxy');
 const { serveStatic } = require('./static-server');
+const { VisionProxy } = require('./vision-proxy');
 const { WebSocketProxy } = require('./websocket-proxy');
 const VOICE_PROTOCOL = 'thirdhand.voice.v1';
 
@@ -24,6 +26,7 @@ function writeJson(response, status, payload) {
 function createWebGateway(options = {}) {
   const config = { ...loadConfig(options.env), ...options };
   const robotProxy = new RobotProxy(config.robotWsUrl);
+  const visionProxy = new VisionProxy(config.visionWsUrl);
   const voiceProxy = new WebSocketProxy(config.voiceWsUrl, {
     subprotocol: VOICE_PROTOCOL,
   });
@@ -34,6 +37,7 @@ function createWebGateway(options = {}) {
     if (request.method === 'GET' && pathname === '/api/runtime-config') {
       writeJson(response, 200, {
         voice: { endpoint: '/voice', protocol: VOICE_PROTOCOL },
+        vision: { endpoint: '/vision' },
       });
       return;
     }
@@ -43,18 +47,25 @@ function createWebGateway(options = {}) {
         serviceId: 'web',
         dependencies: {
           robot: { url: config.robotWsUrl },
-          vision: { status: 'not_migrated' },
+          vision: { url: config.visionHttpUrl },
           voice: { url: config.voiceWsUrl },
         },
       });
       return;
     }
-    if (pathname.startsWith('/api/vision') || pathname.startsWith('/camera/')) {
-      writeJson(response, 503, {
-        code: 'service_unavailable',
-        service: 'vision',
-        msg: 'Vision Service has not been migrated into the unified project yet',
-      });
+    const visionGetRoutes = new Set([
+      '/api/vision/status',
+      '/camera/xvisio/raw',
+      '/camera/xvisio/vision',
+      '/camera/xvisio/depth',
+    ]);
+    const visionPostRoutes = new Set([
+      '/api/vision/select',
+      '/api/vision/release',
+    ]);
+    if ((request.method === 'GET' && visionGetRoutes.has(pathname)) ||
+        (request.method === 'POST' && visionPostRoutes.has(pathname))) {
+      proxyHttpRequest(request, response, config.visionHttpUrl, pathname);
       return;
     }
     if (serveStatic(request, response, config)) return;
@@ -62,6 +73,7 @@ function createWebGateway(options = {}) {
   });
 
   const robotWss = new WebSocketServer({ noServer: true });
+  const visionWss = new WebSocketServer({ noServer: true });
   const voiceWss = new WebSocketServer({
     noServer: true,
     handleProtocols(protocols) {
@@ -75,6 +87,15 @@ function createWebGateway(options = {}) {
         socket,
         head,
         ws => robotWss.emit('connection', ws),
+      );
+      return;
+    }
+    if (request.url === '/vision') {
+      visionWss.handleUpgrade(
+        request,
+        socket,
+        head,
+        ws => visionWss.emit('connection', ws),
       );
       return;
     }
@@ -98,6 +119,7 @@ function createWebGateway(options = {}) {
     );
   });
   robotWss.on('connection', socket => robotProxy.attach(socket));
+  visionWss.on('connection', socket => visionProxy.attach(socket));
   voiceWss.on('connection', socket => voiceProxy.attach(socket));
 
   return {
@@ -118,8 +140,10 @@ function createWebGateway(options = {}) {
       if (closing) return;
       closing = true;
       robotProxy.close();
+      visionProxy.close();
       voiceProxy.close();
       await new Promise(resolve => robotWss.close(resolve));
+      await new Promise(resolve => visionWss.close(resolve));
       await new Promise(resolve => voiceWss.close(resolve));
       await new Promise(resolve => server.listening ? server.close(resolve) : resolve());
       try {

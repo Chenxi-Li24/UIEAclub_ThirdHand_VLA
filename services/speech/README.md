@@ -1,4 +1,22 @@
-# Jetson Voice Bridge
+# ThirdHand Ubuntu Speech Service
+
+本目录是统一项目的正式语音服务，不再以 Jetson 3001/3002 为运行入口。服务由 `local/runtimes/python/bin/python` 启动，仅监听 `127.0.0.1:3004`，网页统一通过 9983 的同源 `/voice` WebSocket 访问。
+
+## 正式组成
+
+- `voice_bridge.py`：`thirdhand.voice.v1` WebSocket 服务、会话和消息校验；
+- `asr_model_manager.py`：Medium、Real-time、High 三模型目录和切换生命周期；
+- `whisper_backend.py`：Medium Whisper 模型适配；
+- `funasr_backends.py`：Real-time Paraformer 和 High Fun-ASR 模型适配；
+- `voice_agent.py`：保留现有 Claude 对话兼容逻辑并生成候选动作；
+- `tts_bridge.py`：语音回复桥接；
+- `runtime.py`：监听器 readiness 与模型 readiness 分离，原子写 ready 文件；
+- `model_paths.py`：只允许从统一项目的 `local/models/asr` 读取模型。
+
+正常启动使用 `./thirdhand start --profile manual-control`。单独诊断可运行 `local/runtimes/python/bin/python services/speech/src/voice_bridge.py --host 127.0.0.1 --port 3004`。
+
+候选动作默认只供页面预览，不直接控制机械臂。以下内容保留为迁移来源和协议背景，其中 Jetson 地址与旧端口不再是统一项目的正式启动方式。
+
 
 `voice_bridge.py` 是网页与 Jetson 现有语音程序之间的薄桥接层。它只导入
 `voice_agent.py` 中的 `WhisperASR` 和 `ClaudeAgent`：

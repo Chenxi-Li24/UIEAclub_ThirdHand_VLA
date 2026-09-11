@@ -84,6 +84,15 @@
       "licenseStatus": "unknown"
     },
     {
+      "id": "vision.grounded-sam",
+      "kind": "model",
+      "required": true,
+      "relativePath": "local/models/vision/huggingface",
+      "sha256": "d28ede518609515cdcf88fbd49556481c8faa6442e5bb08c474fbcf0a54b35ae",
+      "sizeBytes": 3388538945,
+      "licenseStatus": "unknown"
+    },
+    {
       "id": "runtime.python",
       "kind": "runtime",
       "required": true,

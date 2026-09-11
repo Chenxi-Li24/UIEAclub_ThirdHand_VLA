@@ -740,7 +740,9 @@ class ClaudeAgent:
       - DeepSeek Anthropic-compatible endpoint (fallback)
     """
 
-    CC_SWITCH_DB = "/home/chenxi/.cc-switch/cc-switch.db"
+    CC_SWITCH_DB = os.path.expanduser(
+        os.environ.get("CC_SWITCH_DB", "~/.cc-switch/cc-switch.db")
+    )
     CC_SWITCH_PROXY = "http://127.0.0.1:15721"
 
     def __init__(self, api_key: str = None, model: str = "auto", provider: str = "auto"):

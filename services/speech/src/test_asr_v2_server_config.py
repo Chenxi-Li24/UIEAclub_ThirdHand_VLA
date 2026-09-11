@@ -19,7 +19,7 @@ class AsrV2ServerConfigTests(unittest.TestCase):
 
         self.assertEqual(args.host, "127.0.0.1")
         self.assertEqual(args.port, 3004)
-        self.assertEqual(args.model_root, str(MODEL_ROOT))
+        self.assertIsNone(args.model_root)
         self.assertEqual(args.paraformer_device, "cpu")
 
     def test_manager_factories_bind_the_three_approved_local_backends(self) -> None:

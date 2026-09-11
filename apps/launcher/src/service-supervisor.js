@@ -58,8 +58,8 @@ class ServiceSupervisor {
     );
   }
 
-  async _waitReady(child, readyFile) {
-    const deadline = Date.now() + this.startTimeoutMs;
+  async _waitReady(child, readyFile, timeoutMs = this.startTimeoutMs) {
+    const deadline = Date.now() + timeoutMs;
     while (Date.now() < deadline) {
       if (child.exitCode !== null) throw new Error(`service exited with code ${child.exitCode}`);
       if (fs.existsSync(readyFile)) return;
@@ -102,7 +102,7 @@ class ServiceSupervisor {
       fs.closeSync(stderrFd);
       this.children.set(service.id, child);
       try {
-        await this._waitReady(child, readyFile);
+        await this._waitReady(child, readyFile, service.startTimeoutMs);
       } catch (error) {
         await this._terminateStartedChild(child);
         try { fs.unlinkSync(readyFile); } catch (unlinkError) {

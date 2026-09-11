@@ -53,3 +53,31 @@ test('default profile knows migrated entrypoints but keeps them disabled', () =>
   assert.equal(robot.args[0], path.join(ROOT, 'services/robot/src/server.js'));
   assert.equal(web.args[0], path.join(ROOT, 'apps/web/src/server.js'));
 });
+test('manual control starts internal services before the web gateway', () => {
+  const services = load('manual-control').filter(item => item.enabled);
+  assert.deepEqual(
+    services.map(item => item.id),
+    ['robot', 'speech', 'vision', 'web'],
+  );
+
+  const speech = services.find(item => item.id === 'speech');
+  const vision = services.find(item => item.id === 'vision');
+  const web = services.find(item => item.id === 'web');
+  assert.equal(speech.port, 3004);
+  assert.equal(speech.bind, '127.0.0.1');
+  assert.match(speech.command, /local\/runtimes\/python\/bin\/python$/);
+  assert.ok(speech.startTimeoutMs >= 120000);
+  assert.equal(vision.port, 3100);
+  assert.equal(vision.bind, '127.0.0.1');
+  assert.equal(vision.args[0], path.join(ROOT, 'services/vision/src/server.js'));
+  assert.equal(
+    vision.env.VISION_PYTHON,
+    path.join(ROOT, 'local/runtimes/python/bin/python'),
+  );
+  assert.ok(vision.startTimeoutMs >= 30000);
+  assert.equal(web.env.VOICE_WS_URL, 'ws://127.0.0.1:3004/v1/voice');
+  assert.equal(web.env.VISION_HTTP_URL, 'http://127.0.0.1:3100');
+  assert.equal(web.env.VISION_WS_URL, 'ws://127.0.0.1:3100/ws');
+  assert.ok(web.shutdownOrder > vision.shutdownOrder);
+  assert.ok(vision.shutdownOrder > services[0].shutdownOrder);
+});

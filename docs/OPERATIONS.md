@@ -16,7 +16,7 @@
 |---|---|---|---|
 | `simulation` | 平台基础生命周期测试 | 否 | 五个 fake service |
 | `manual-control-simulation` | 网页和 Robot Service 集成测试 | 否 | Robot 13000 + Web 9983 |
-| `manual-control` | 人工监督的 Startouch 真机控制 | 仅显式网页连接后 | Robot 3000 + Web 9983 |
+| `manual-control` | 人工监督的真机控制、语音和视觉 | Robot 仅在网页显式连接后访问 CAN；Vision 访问 XVisio | Robot 3000 + Speech 3004 + Vision 3100 + Web 9983 |
 | `default` | 记录最终端口所有权 | 否，条目禁用 | 未选择正式验收 profile |
 
 `start` 只启动 profile 中 `enabled: true` 的服务。服务必须写入
@@ -34,10 +34,12 @@
 
 ## Startup Order
 
-`shutdownOrder` 数值高的服务先启动、先停止。当前手动控制 profile：
+服务按 profile 中的排列顺序启动；`shutdownOrder` 数值高的服务先停止。当前手动控制 profile：
 
-1. Robot Service，顺序 100；
-2. Web Gateway，顺序 10。
+1. Robot Service 启动，但不连接 SDK；
+2. Speech Service 载入正式本地 ASR；
+3. Vision Service 启动 XVisio 采集，识别模型独立加载；
+4. Web Gateway 最后监听 LAN 9983。
 
 Robot Service 启动只产生空闲 Python 桥；浏览器连接 Web Gateway 也不会连接 SDK。只有浏览器显式发送 `{"cmd":"connect"}` 才允许 Robot Service 初始化硬件。
 
@@ -53,7 +55,8 @@ Robot Service 启动只产生空闲 Python 桥；浏览器连接 Web Gateway 也
 ## Failure Rules
 
 - Robot Service 不可达：网页仍打开，但机械臂命令返回 `robot_service_unavailable`；
-- Vision/Speech 尚未迁移：相关 HTTP 或 WebSocket 命令返回 `service_unavailable`；
+- Speech 不可达：`/voice` 关闭并显示本地语音服务不可用，不回退 Jetson 3001/3002；
+- Vision 不可达：网页返回 `vision_upstream_unavailable`；模型失败时原始视频仍保持可用；
 - CAN 无反馈或反馈过期：拒绝构造机械臂或拒绝运动；
 - SDK 状态不足六关节、含非有限数或超过 500 ms：拒绝运动；
 - 运动中的第二条命令：拒绝；

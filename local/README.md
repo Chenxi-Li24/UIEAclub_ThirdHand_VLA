@@ -5,10 +5,15 @@ This directory contains the large or license-sensitive payloads required by the 
 Expected payloads include:
 
 - `sdk/startouch/`: the hardware-matched Startouch SDK and native libraries.
+- `sdk/xvisio/`: XVisio SDK headers, libraries, udev rules, and vendor documentation.
 - `vendor/funasr/`: the pinned FunASR source tree used by the speech service.
 - `models/asr/{medium,realtime,high}/`: the three approved ASR model families.
+- `models/vision/huggingface/`: local Grounding DINO and SAM2 checkpoints.
 - `models/policies/{vla,act,dp}/`: optional policy checkpoints; missing assets keep the corresponding Skill unavailable.
 - `runtimes/{python,node}/`: project-local runtimes validated for the host Ubuntu release.
+
+Run `PYTHONPATH=. python3 tools/assets/prepare_ubuntu_assets.py` to copy
+missing assets from approved local sources without downloading or overwriting conflicts.
 
 Use `tools/assets/import_assets.py` for an explicit collision-safe copy and `./thirdhand verify-assets` before startup. Imports must record source, size, SHA-256, compatibility, and license status. Startup never downloads assets implicitly. Never commit binaries, model weights, copied runtimes, credentials, or vendor payloads from this directory.
 

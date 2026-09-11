@@ -11,15 +11,14 @@
 - Startouch 网页控制与三维 URDF 模型；
 - 独立 Robot Service；
 - 关节、预设位、夹爪、状态读取和软件停止；
+- XVisio RGB-D 原始画面、深度画面、Grounded-SAM 检测框和稳定目标选择；
+- 正式 Ubuntu 本地语音服务，包含 Medium、Real-time、High 三个 ASR 模型；
+- 语音文字对话和候选动作预览，默认不向机械臂执行候选动作；
 - 模拟模式的一键启动、状态检查和关闭。
 
 尚不可运行：
-
-- 页面中的实时视觉、目标检测、目标选择和视觉夹取；
-- 页面中的语音识别及语音控制；
+- 受监督视觉夹取的运动执行；
 - VLA、ACT、Diffusion Policy、主动视角和自动夹取。
-
-未迁移命令返回 `service_unavailable`。正式代码不会回退调用旧目录。
 
 ## 2. 登录并进入项目
 
@@ -113,6 +112,8 @@ SDK 内的二进制扩展必须匹配项目 Python 版本。首次导入 SDK、�
 
 - Web 监听 `192.168.58.68:9983`；
 - Robot Service 只监听 `127.0.0.1:3000`；
+- Speech Service 只监听 `127.0.0.1:3004`；
+- Vision Service 只监听 `127.0.0.1:3100`；
 - Python 桥已就绪，但不会构造 `SingleArm`；
 - 电机不会被服务启动动作使能。
 
@@ -163,6 +164,10 @@ pgrep -af 'services/robot/src/server.js|apps/web/src/server.js|startouch_bridge.
 cat runtime/run/state.json
 tail -n 100 runtime/logs/robot.stdout.log
 tail -n 100 runtime/logs/robot.stderr.log
+tail -n 100 runtime/logs/speech.stdout.log
+tail -n 100 runtime/logs/speech.stderr.log
+tail -n 100 runtime/logs/vision.stdout.log
+tail -n 100 runtime/logs/vision.stderr.log
 tail -n 100 runtime/logs/web.stdout.log
 tail -n 100 runtime/logs/web.stderr.log
 ```
@@ -180,6 +185,8 @@ assets/robot/startouch-v3
 校验并从旧副本准备：
 
 ```bash
+PYTHONPATH=. python3 tools/assets/prepare_ubuntu_assets.py --manifest configs/assets/ubuntu20.manifest.json
+
 PYTHONPATH=. python3 tools/assets/prepare_robot_assets.py \
   --source /path/to/startouch-v3 \
   --manifest configs/assets/ubuntu20.manifest.json
@@ -192,6 +199,8 @@ SDK、模型、Python/Node 运行时和机器人几何都保留在 Ubuntu 统一
 ```bash
 npm test --workspace services/robot
 npm test --workspace apps/web
+node --test tests/node/vision_service/*.test.js
+PYTHONPATH=src python3 -m pytest -q tests/python/speech_service tests/python/vision_service
 node --test tests/node/launcher/*.test.js
 PYTHONPATH=src python3 -m pytest -q tests/python/robot_service/test_bridge_simulation.py
 PYTHONPATH=src:. python3 -m pytest -q tests/unit/platform tests/integration/test_simulated_lifecycle.py
@@ -208,8 +217,8 @@ git diff --check
 | `192.168.58.68:9983` | Web Gateway | 局域网页面和浏览器 WebSocket |
 | `127.0.0.1:3000` | Robot Service | 真机 Startouch 服务 |
 | `127.0.0.1:13000` | Robot Service | 模拟 profile |
-| `127.0.0.1:3100` | Vision Service | 尚未迁移 |
-| `127.0.0.1:3001/3002` | Speech Service | 页面预留，尚未迁移 |
+| `127.0.0.1:3100` | Vision Service | XVisio 原始/识别/深度流和目标选择 |
+| `127.0.0.1:3004` | Speech Service | 正式本地 ASR、对话和候选动作 |
 
 本机已有另一个程序只在 Tailscale 地址 `100.85.63.78:9983` 监听；已验证它可与本项目绑定的 LAN 地址 `192.168.58.68:9983` 共存。
 

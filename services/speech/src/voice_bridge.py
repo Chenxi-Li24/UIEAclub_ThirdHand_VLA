@@ -18,6 +18,7 @@ import asyncio
 import json
 import logging
 import math
+import os
 from pathlib import Path
 import struct
 import time
@@ -27,6 +28,7 @@ from typing import Any, Callable, Optional
 
 from asr_model_manager import ModelBusyError, ModelSwitchError
 from model_paths import build_model_paths
+from runtime import remove_ready_file, write_ready_file
 
 try:
     from tts_bridge import TTSBridge
@@ -1874,6 +1876,7 @@ async def run_server(args: argparse.Namespace) -> None:
         WEBSOCKET_PATH,
         WEBSOCKET_SUBPROTOCOL,
     )
+    ready_file = os.environ.get("THIRDHAND_READY_FILE")
     async with serve(
         bridge.handle_connection,
         args.host,
@@ -1883,11 +1886,21 @@ async def run_server(args: argparse.Namespace) -> None:
         compression=None,
         ping_interval=None,
     ):
-        await asyncio.Future()
+        if ready_file:
+            model_status = (
+                model_manager.status()
+                if model_manager is not None
+                else {"state": "STOPPED"}
+            )
+            write_ready_file(ready_file, model_status)
+        try:
+            await asyncio.Future()
+        finally:
+            if ready_file:
+                remove_ready_file(ready_file)
 
 
 def parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
-    project_root = Path(__file__).resolve().parents[1]
     parser = argparse.ArgumentParser(
         description="Bridge browser audio to the Ubuntu PC voice agent."
     )

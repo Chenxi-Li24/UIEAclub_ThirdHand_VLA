@@ -20,6 +20,7 @@ function loadConfig(env = process.env) {
     assetsDir: env.ROBOT_ASSETS_DIR || path.join(ROOT, 'assets', 'robot'),
     readyFile: env.THIRDHAND_READY_FILE || path.join(ROOT, 'runtime', 'run', 'web.ready'),
     robotWsUrl: env.ROBOT_WS_URL || 'ws://127.0.0.1:3000/ws',
+    voiceWsUrl: env.VOICE_WS_URL || 'ws://127.0.0.1:3004/v1/voice',
   };
 }
 

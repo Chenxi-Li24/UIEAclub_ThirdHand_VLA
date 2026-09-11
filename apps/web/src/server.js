@@ -8,6 +8,8 @@ const { WebSocketServer } = require('ws');
 const { loadConfig } = require('./config');
 const { RobotProxy } = require('./robot-proxy');
 const { serveStatic } = require('./static-server');
+const { WebSocketProxy } = require('./websocket-proxy');
+const VOICE_PROTOCOL = 'thirdhand.voice.v1';
 
 function writeJson(response, status, payload) {
   const body = JSON.stringify(payload);
@@ -22,10 +24,19 @@ function writeJson(response, status, payload) {
 function createWebGateway(options = {}) {
   const config = { ...loadConfig(options.env), ...options };
   const robotProxy = new RobotProxy(config.robotWsUrl);
+  const voiceProxy = new WebSocketProxy(config.voiceWsUrl, {
+    subprotocol: VOICE_PROTOCOL,
+  });
   let closing = false;
 
   const server = http.createServer((request, response) => {
     const pathname = new URL(request.url, 'http://localhost').pathname;
+    if (request.method === 'GET' && pathname === '/api/runtime-config') {
+      writeJson(response, 200, {
+        voice: { endpoint: '/voice', protocol: VOICE_PROTOCOL },
+      });
+      return;
+    }
     if (request.method === 'GET' && pathname === '/health') {
       writeJson(response, 200, {
         status: 'ready',
@@ -33,7 +44,7 @@ function createWebGateway(options = {}) {
         dependencies: {
           robot: { url: config.robotWsUrl },
           vision: { status: 'not_migrated' },
-          voice: { status: 'not_migrated' },
+          voice: { url: config.voiceWsUrl },
         },
       });
       return;
@@ -50,15 +61,44 @@ function createWebGateway(options = {}) {
     writeJson(response, 404, { error: 'not_found' });
   });
 
-  const wss = new WebSocketServer({ noServer: true });
+  const robotWss = new WebSocketServer({ noServer: true });
+  const voiceWss = new WebSocketServer({
+    noServer: true,
+    handleProtocols(protocols) {
+      return protocols.has(VOICE_PROTOCOL) ? VOICE_PROTOCOL : false;
+    },
+  });
   server.on('upgrade', (request, socket, head) => {
-    if (request.url !== '/ws') {
+    if (request.url === '/ws') {
+      robotWss.handleUpgrade(
+        request,
+        socket,
+        head,
+        ws => robotWss.emit('connection', ws),
+      );
+      return;
+    }
+    if (request.url !== '/voice') {
       socket.destroy();
       return;
     }
-    wss.handleUpgrade(request, socket, head, ws => wss.emit('connection', ws));
+    const requestedProtocols = String(
+      request.headers['sec-websocket-protocol'] || '',
+    ).split(',').map(value => value.trim());
+    if (!requestedProtocols.includes(VOICE_PROTOCOL)) {
+      socket.write('HTTP/1.1 426 Upgrade Required\r\n\r\n');
+      socket.destroy();
+      return;
+    }
+    voiceWss.handleUpgrade(
+      request,
+      socket,
+      head,
+      ws => voiceWss.emit('connection', ws),
+    );
   });
-  wss.on('connection', socket => robotProxy.attach(socket));
+  robotWss.on('connection', socket => robotProxy.attach(socket));
+  voiceWss.on('connection', socket => voiceProxy.attach(socket));
 
   return {
     async start() {
@@ -78,7 +118,9 @@ function createWebGateway(options = {}) {
       if (closing) return;
       closing = true;
       robotProxy.close();
-      await new Promise(resolve => wss.close(resolve));
+      voiceProxy.close();
+      await new Promise(resolve => robotWss.close(resolve));
+      await new Promise(resolve => voiceWss.close(resolve));
       await new Promise(resolve => server.listening ? server.close(resolve) : resolve());
       try {
         fs.unlinkSync(config.readyFile);

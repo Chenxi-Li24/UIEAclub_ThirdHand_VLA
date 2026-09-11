@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>ThirdHand - Startouch 机械臂控制</title>
-  <link rel="stylesheet" href="css/style.css?v=3">
+  <link rel="stylesheet" href="css/style.css?v=4">
 </head>
 <body>
   <!-- 软件停止提示 -->
@@ -281,31 +281,40 @@
         <div class="voice-block-heading">
           <div>
             <span class="voice-block-index">01</span>
-            <strong id="voice-ai-label">Jetson 本地 AI</strong>
+            <strong id="voice-ai-label">Ubuntu PC 本地 AI</strong>
           </div>
           <span class="voice-session-status" id="voice-session-status" data-state="idle"
                 role="status" aria-live="polite">等待操作</span>
         </div>
-        <div class="voice-route-options" role="group" aria-label="选择语音识别计算路径">
-          <button class="voice-route-option" type="button"
-                  data-voice-endpoint="" data-voice-port="3002"
-                  aria-pressed="true">
-            <span class="voice-route-kicker">GPU</span>
-            <strong>高速识别</strong>
-            <small>端口 3002 · 推荐</small>
-          </button>
-          <button class="voice-route-option" type="button"
-                  data-voice-endpoint="" data-voice-port="3001"
-                  aria-pressed="false">
-            <span class="voice-route-kicker">CPU</span>
-            <strong>兼容回退</strong>
-            <small>端口 3001 · 较慢</small>
-          </button>
-        </div>
         <div class="voice-route-control">
           <input id="voice-ai-endpoint" type="hidden" value="">
-          <span id="voice-route-description">GPU 3002 · CUDA / float16</span>
+          <span aria-hidden="true"></span>
           <button id="voice-ai-reconnect" type="button">重新连接</button>
+        </div>
+        <div class="voice-asr-heading">
+          <strong>ASR 模型</strong>
+          <span class="voice-asr-summary" role="status" aria-live="polite">
+            <b id="voice-asr-state">STOPPED</b>
+            <span>设备 <b id="voice-asr-device">--</b></span>
+            <span>最近延迟 <b id="voice-asr-latency">--</b></span>
+          </span>
+        </div>
+        <div class="voice-asr-model-options" role="group" aria-label="选择 ASR 模型">
+          <button class="voice-asr-model-option" type="button"
+                  data-model-id="whisper-small" aria-pressed="false">
+            <strong>Medium</strong>
+            <small>Whisper Small · 默认中英文整句识别</small>
+          </button>
+          <button class="voice-asr-model-option" type="button"
+                  data-model-id="paraformer-streaming" aria-pressed="false">
+            <strong>Real-time</strong>
+            <small>Paraformer CPU · 中文流式识别，降低 GPU 占用</small>
+          </button>
+          <button class="voice-asr-model-option" type="button"
+                  data-model-id="fun-asr-nano" aria-pressed="false">
+            <strong>High</strong>
+            <small>Fun-ASR-Nano · 实验模型，较高 GPU 显存占用</small>
+          </button>
         </div>
       </section>
 
@@ -326,10 +335,27 @@
         <p class="voice-help">只在录音期间向所选 AI 通道发送音频；关闭麦克风会立即释放设备。</p>
       </section>
 
-      <section class="voice-capture-block" aria-labelledby="voice-capture-label">
+      <section class="voice-config-block" aria-labelledby="voice-speaker-label">
         <div class="voice-block-heading">
           <div>
             <span class="voice-block-index">03</span>
+            <strong id="voice-speaker-label">音频输出</strong>
+          </div>
+          <span class="voice-status-chip" id="voice-speaker-status" data-state="default">默认设备</span>
+        </div>
+        <div class="voice-device-row">
+          <select id="voice-speaker-select" aria-label="选择扬声器" disabled>
+            <option value="">使用系统默认</option>
+          </select>
+          <button id="voice-speaker-refresh" type="button" disabled>刷新</button>
+        </div>
+        <p class="voice-help">TTS 语音播报的输出设备。留空使用系统默认扬声器。</p>
+      </section>
+
+      <section class="voice-capture-block" aria-labelledby="voice-capture-label">
+        <div class="voice-block-heading">
+          <div>
+            <span class="voice-block-index">04</span>
             <strong id="voice-capture-label">语音会话</strong>
           </div>
           <span class="voice-limit">最长 00:30</span>
@@ -348,16 +374,16 @@
       <section class="voice-conversation-block" aria-labelledby="voice-transcript-label">
         <div class="voice-block-heading">
           <div>
-            <span class="voice-block-index">04</span>
+            <span class="voice-block-index">05</span>
             <strong id="voice-transcript-label">实时对话</strong>
           </div>
-          <span class="voice-mock-badge">VOICE + TEXT / SIM ONLY</span>
+          <span class="voice-mock-badge">VOICE + TEXT / CONFIRM</span>
         </div>
         <div class="voice-conversation" id="voice-conversation" aria-live="polite"
              aria-relevant="additions text">
           <div class="voice-empty">
             <span class="voice-empty-mark">LIVE</span>
-            <p>说话或输入文字，与 Jetson 本地 AI 开始对话。</p>
+            <p>说话或输入文字，由本地 AI 生成候选；真机动作必须确认。</p>
           </div>
         </div>
         <form class="voice-text-composer" id="voice-text-form" novalidate>
@@ -387,17 +413,18 @@
         </div>
         <strong id="voice-intent-name">—</strong>
         <p id="voice-intent-source">来自：“—”</p>
-        <p class="voice-intent-boundary">确认后仅更新本地 3D 模型和日志，不发送到 LUMOS。</p>
+        <p class="voice-intent-boundary">3D 仅用于确认前预览。确认后由 3000 服务验证状态并发送真机命令；成功必须以真实反馈为准。</p>
         <div class="voice-intent-actions">
-          <button class="voice-cancel-button" id="voice-intent-cancel" type="button">取消</button>
-          <button class="voice-confirm-button" id="voice-intent-confirm" type="button">确认本地模拟</button>
+          <button class="voice-guide-button" id="voice-intent-guide" type="button">告诉我怎么做</button>
+          <button class="voice-cancel-button" id="voice-intent-cancel" type="button">不执行</button>
+          <button class="voice-confirm-button" id="voice-intent-confirm" type="button">确认并执行真机</button>
         </div>
       </section>
     </div>
 
     <footer class="voice-panel-footer">
       <span class="voice-privacy-dot"></span>
-      麦克风必须由用户手动启用；AI 候选不会向机械臂发送控制消息。
+      AI 只生成候选；除明确“停止”外，真机动作都必须人工确认。软件停止不等于物理急停。
     </footer>
   </section>
 
@@ -419,6 +446,6 @@
   }
   </script>
   <script src="js/runtime-endpoints.js?v=1"></script>
-  <script type="module" src="js/main.js?v=5"></script>
+  <script type="module" src="js/main.js?v=6"></script>
 </body>
 </html>

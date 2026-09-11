@@ -1,26 +1,94 @@
 const VOICE_PROTOCOL = 'thirdhand.voice.v1';
-const GPU_ENDPOINT = window.ThirdHandRuntimeEndpoints.voiceEndpoint(3002, window.location);
-const CPU_ENDPOINT = window.ThirdHandRuntimeEndpoints.voiceEndpoint(3001, window.location);
-const DEFAULT_ENDPOINT = GPU_ENDPOINT;
-const LEGACY_DEFAULT_ENDPOINT = 'ws://127.0.0.1:3001/v1/voice';
-const ENDPOINT_MIGRATION_KEY = 'voiceAiEndpointDefaultV4';
+const DEFAULT_ENDPOINT = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/voice`;
+const ENDPOINT_MIGRATION_KEY = 'voiceAiEndpointUnifiedGatewayV1';
 const TARGET_SAMPLE_RATE = 16000;
 const FRAME_MS = 100;
 const FRAME_SAMPLES = TARGET_SAMPLE_RATE * FRAME_MS / 1000;
 const MAX_RECORDING_MS = 30000;
 const MAX_BUFFERED_BYTES = 1024 * 1024;
 const SESSION_READY_TIMEOUT_MS = 5000;
+function normalizeVoiceEndpoint(value) {
+  try {
+    const endpoint = new URL(value || '/voice', location.href);
+    if (endpoint.protocol === 'http:') endpoint.protocol = 'ws:';
+    if (endpoint.protocol === 'https:') endpoint.protocol = 'wss:';
+    if (!['ws:', 'wss:'].includes(endpoint.protocol)) return null;
+    return endpoint.toString();
+  } catch {
+    return null;
+  }
+}
+
+const DIRECTIONAL_ACTIONS = [
+  'turn.left', 'turn.right', 'lift.up', 'lift.down',
+  'wrist.pitch.up', 'wrist.pitch.down',
+  'wrist.yaw.left', 'wrist.yaw.right',
+  'wrist.roll.clockwise', 'wrist.roll.counterclockwise'
+];
+const DIRECTIONAL_FAMILIES = Object.freeze({
+  'turn.left': 'turn', 'turn.right': 'turn',
+  'lift.up': 'lift', 'lift.down': 'lift',
+  'wrist.pitch.up': 'wrist.pitch', 'wrist.pitch.down': 'wrist.pitch',
+  'wrist.yaw.left': 'wrist.yaw', 'wrist.yaw.right': 'wrist.yaw',
+  'wrist.roll.clockwise': 'wrist.roll',
+  'wrist.roll.counterclockwise': 'wrist.roll'
+});
+
+function validDirectionalMoves(params) {
+  if (!params || Object.keys(params).sort().join(',') !== 'moves' ||
+      !Array.isArray(params.moves) || params.moves.length < 2 || params.moves.length > 5) {
+    return false;
+  }
+  const families = new Set();
+  return params.moves.every(move => {
+    const family = DIRECTIONAL_FAMILIES[move?.action];
+    const valid = Boolean(
+      family && !families.has(family) &&
+      Number.isFinite(move?.deltaDeg) && move.deltaDeg > 0 &&
+      Object.keys(move).sort().join(',') === 'action,deltaDeg'
+    );
+    if (valid) families.add(family);
+    return valid;
+  });
+}
+
+// Lazy-imported TTS player — loaded on demand so the panel opens fast.
+let _TTSPlayer = null;
+function _lazyTTSPlayer() {
+  if (!_TTSPlayer) {
+    _TTSPlayer = import('./tts-player.js?v=2').then(m => m.TTSPlayer);
+  }
+  return _TTSPlayer;
+}
 
 const INTENT_VALIDATORS = {
-  'robot.estop': () => true,
+  'joint.set': params =>
+    Number.isInteger(params?.joint) && params.joint >= 1 && params.joint <= 6 &&
+    Number.isFinite(params?.targetDeg),
+  'joint.step': params =>
+    Number.isInteger(params?.joint) && params.joint >= 1 && params.joint <= 6 &&
+    Number.isFinite(params?.deltaDeg),
   'robot.status': () => true,
-  'robot.preset': args => args?.name === 'home',
+  'robot.home': () => true,
   'gripper.open': () => true,
   'gripper.close': () => true,
-  'gripper.grip': () => true,
-  'gripper.set_position': args =>
-    Number.isInteger(args?.position) && args.position >= 0 && args.position <= 3800
+  'safety.stop.request': () => true,
+  'pick_and_place_bottle': params =>
+    params?.object === 'coke_bottle' &&
+    params?.destination?.id === 'drop_zone_b' &&
+    params?.destination?.type === 'configured_drop_zone' &&
+    Object.keys(params.destination).length === 2 &&
+    Object.keys(params).length === 2
 };
+for (const action of DIRECTIONAL_ACTIONS) {
+  INTENT_VALIDATORS[action] = params => Boolean(
+    params?.action === action &&
+    Number.isFinite(params?.deltaDeg) &&
+    params.deltaDeg > 0 &&
+    Object.keys(params).sort().join(',') === 'action,deltaDeg'
+  );
+}
+INTENT_VALIDATORS['directional.compound'] = validDirectionalMoves;
 
 function createId() {
   if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
@@ -384,24 +452,44 @@ export class VoiceControl {
     this.toggleButton = document.getElementById('btn-voice-toggle');
     this.endpointInput = document.getElementById('voice-ai-endpoint');
     this.endpointButtons = [...document.querySelectorAll('[data-voice-endpoint]')];
-    this.endpointButtons.forEach(button => {
-      const port = Number(button.dataset.voicePort);
-      if (port === 3002) button.dataset.voiceEndpoint = GPU_ENDPOINT;
-      if (port === 3001) button.dataset.voiceEndpoint = CPU_ENDPOINT;
-    });
     this.endpointDescription = document.getElementById('voice-route-description');
     this.reconnectButton = document.getElementById('voice-ai-reconnect');
     this.deviceSelect = document.getElementById('voice-device-select');
+    this.speakerSelect = document.getElementById('voice-speaker-select');
+    this.speakerRefreshButton = document.getElementById('voice-speaker-refresh');
+    this.speakerDeviceId = '';  // '' = system default
+    this._hasSpeakerUI = !!(this.speakerSelect && this.speakerRefreshButton);
     this.micButton = document.getElementById('voice-mic-toggle');
     this.recordButton = document.getElementById('voice-record-toggle');
     this.recordCancelButton = document.getElementById('voice-record-cancel');
+    this.guideButton = document.getElementById('voice-intent-guide');
     this.textForm = document.getElementById('voice-text-form');
     this.textInput = document.getElementById('voice-text-input');
     this.textSendButton = document.getElementById('voice-text-send');
+    this.asrModelButtons = [...document.querySelectorAll('[data-model-id]')];
+    this.asrModelStatus = {
+      state: 'STOPPED',
+      activeModelId: null,
+      device: null,
+      error: null,
+      lastLatencyMs: null
+    };
     this.candidateSimulator = options.candidateSimulator || Object.freeze({
       supports: () => false,
-      simulate: () => ({ ok: false, message: '本地模拟器尚未准备好。' })
+      simulate: () => ({ ok: false, message: '本地模拟器尚未准备好。' }),
+      clear: () => {}
     });
+    this.robotChannel = options.robotChannel || Object.freeze({
+      isReady: () => false,
+      canConfirm: () => false,
+      send: () => false
+    });
+    this.onExecutionResult = options.onExecutionResult;
+    this.runtimeVoiceEndpoint = DEFAULT_ENDPOINT;
+    this.directionalRuntime = { enabled: false, realControlEnabled: false };
+    this.executionPending = false;
+    this.candidatePreviewReady = false;
+    this.ignoredResultCandidateIds = new Set();
     this.onPanelOpen = options.onPanelOpen;
     this.onPanelClose = options.onPanelClose;
     this.encoder = new StreamingPcmEncoder();
@@ -418,6 +506,9 @@ export class VoiceControl {
     this.lastSocketErrorAt = 0;
     this.textComposing = false;
     this.compositionEndedAt = Number.NEGATIVE_INFINITY;
+    this.ttsPlayer = null;  // lazy-created on first assistant.audio
+    this.ttsInitPromise = null;
+    this.ttsPlaybackGeneration = 0;
     if (this.panel) this.panel.inert = true;
 
     this.microphone = new MicrophoneManager({
@@ -429,27 +520,42 @@ export class VoiceControl {
     });
 
     this.voiceSocket = new VoiceSocket({
-      onState: state => this._renderAiState(state),
+      onState: state => {
+        this._renderAiState(state);
+        if (state === 'ready') this.voiceSocket.sendJson('model.list', null);
+        this._renderAsrModelStatus(this.asrModelStatus);
+      },
       onMessage: message => this._handleVoiceMessage(message),
       onError: message => this._handleSocketError(message)
     });
   }
 
-  init() {
+  async init() {
     if (!this.panel || !this.toggleButton) return;
 
-    const storedEndpoint = localStorage.getItem('voiceAiEndpoint');
-    const endpointMigrationComplete =
-      localStorage.getItem(ENDPOINT_MIGRATION_KEY) === '1';
-    const storedEndpointIsValid =
-      typeof storedEndpoint === 'string' &&
-      /^wss?:\/\//i.test(storedEndpoint);
-    const savedEndpoint = endpointMigrationComplete && storedEndpointIsValid
-      ? storedEndpoint
-      : DEFAULT_ENDPOINT;
+    try {
+      const response = await fetch('/api/runtime-config', { cache: 'no-store' });
+      if (response.ok) {
+        const runtimeConfig = await response.json();
+        const configuredEndpoint =
+          runtimeConfig?.voice?.endpoint ||
+          runtimeConfig?.language?.voiceEndpoint;
+        const normalizedEndpoint = normalizeVoiceEndpoint(configuredEndpoint);
+        if (normalizedEndpoint) this.runtimeVoiceEndpoint = normalizedEndpoint;
+        if (runtimeConfig?.language?.directional) {
+          this.directionalRuntime = { ...this.directionalRuntime, ...runtimeConfig.language.directional };
+        }
+      }
+    } catch (error) {
+      console.warn('[VoiceControl] runtime config unavailable; using same-host default', error);
+    }
+    const savedEndpoint = this.runtimeVoiceEndpoint;
     localStorage.setItem(ENDPOINT_MIGRATION_KEY, '1');
     localStorage.setItem('voiceAiEndpoint', savedEndpoint);
     this.endpointInput.value = savedEndpoint;
+    if (this.endpointButtons[0]) {
+      this.endpointButtons[0].dataset.voiceEndpoint = savedEndpoint;
+    }
     this._renderEndpointRoute(savedEndpoint);
 
     this.toggleButton.addEventListener('click', () => this.togglePanel());
@@ -460,8 +566,17 @@ export class VoiceControl {
         this._selectAiRoute(button.dataset.voiceEndpoint);
       });
     });
+    this.asrModelButtons.forEach(button => {
+      button.addEventListener('click', () => {
+        this._selectAsrModel(button.dataset.modelId);
+      });
+    });
     this.micButton.addEventListener('click', () => this._toggleMicrophone());
     this.deviceSelect.addEventListener('change', () => this._changeMicrophone());
+    if (this._hasSpeakerUI) {
+      this.speakerSelect.addEventListener('change', () => this._changeSpeaker());
+      this.speakerRefreshButton.addEventListener('click', () => this._refreshSpeakers());
+    }
     this.recordButton.addEventListener('click', () => {
       if (this.recording || this.starting) this.stopRecording();
       else this.startRecording();
@@ -502,13 +617,19 @@ export class VoiceControl {
     });
     document.getElementById('voice-intent-confirm').addEventListener('click', () => this._confirmCandidate());
     document.getElementById('voice-intent-cancel').addEventListener('click', () => this._cancelCandidate());
+    this.guideButton.addEventListener('click', () => this._guideCandidate());
     document.addEventListener('visibilitychange', () => {
       if (!document.hidden && this.microphone.ready) this.microphone.refreshDevices();
+    });
+    navigator.mediaDevices?.addEventListener?.('devicechange', () => {
+      if (!this.panel.classList.contains('open')) return;
+      this._refreshSpeakers();
     });
     window.addEventListener('pagehide', () => this.dispose(), { once: true });
 
     this._renderMicState('off');
     this._renderAiState('offline');
+    this._renderAsrModelStatus(this.asrModelStatus);
     this._renderTextComposer();
     this._connectAi();
   }
@@ -526,6 +647,38 @@ export class VoiceControl {
     this.toggleButton.setAttribute('aria-expanded', 'true');
     if (!this.voiceSocket.isReady()) this._connectAi();
     if (this.microphone.ready) this.microphone.refreshDevices();
+    this._refreshSpeakers();
+    // Resume AudioContext for TTS playback (must be inside user gesture).
+    this._initTTSPlayer();
+  }
+
+  async _initTTSPlayer() {
+    if (this.ttsInitPromise) return this.ttsInitPromise;
+    this.ttsInitPromise = (async () => {
+      try {
+        const TTSPlayer = await _lazyTTSPlayer();
+        if (!this.ttsPlayer) {
+          this.ttsPlayer = new TTSPlayer({
+            onState: (/* state */) => { /* reserved for future LED */ },
+            sinkId: this.speakerDeviceId
+          });
+        }
+        await this.ttsPlayer.init();
+        // Apply saved speaker preference.
+        if (this.speakerDeviceId) {
+          try { await this.ttsPlayer.setSinkId(this.speakerDeviceId); } catch (_) {}
+        }
+      } catch (err) {
+        console.warn('[VoiceControl] TTSPlayer init failed:', err);
+        this.ttsPlayer = null;
+      }
+    })();
+    return this.ttsInitPromise;
+  }
+
+  _interruptTTSPlayback() {
+    this.ttsPlaybackGeneration += 1;
+    this.ttsPlayer?.stop();
   }
 
   closePanel() {
@@ -544,6 +697,11 @@ export class VoiceControl {
     clearTimeout(this.sessionReadyTimer);
     this.voiceSocket.disconnect();
     await this.microphone.dispose();
+    if (this.ttsPlayer) {
+      try { await this.ttsPlayer.dispose(); } catch (_) { /* noop */ }
+      this.ttsPlayer = null;
+    }
+    this.ttsInitPromise = null;
   }
 
   async startRecording() {
@@ -564,6 +722,7 @@ export class VoiceControl {
       return;
     }
 
+    this._interruptTTSPlayback();
     this.sessionId = createId();
     this.requestMode = 'audio';
     this.encoder.reset(this.microphone.audioContext?.sampleRate || 48000);
@@ -693,7 +852,7 @@ export class VoiceControl {
     const requestedEndpoint = this.endpointInput.value.trim();
     const endpoint = /^wss?:\/\//i.test(requestedEndpoint)
       ? requestedEndpoint
-      : DEFAULT_ENDPOINT;
+      : this.runtimeVoiceEndpoint;
     this.endpointInput.value = endpoint;
     localStorage.setItem('voiceAiEndpoint', endpoint);
     this._renderEndpointRoute(endpoint);
@@ -717,10 +876,8 @@ export class VoiceControl {
     });
 
     if (this.endpointDescription) {
-      if (endpoint === GPU_ENDPOINT) {
-        this.endpointDescription.textContent = 'GPU 3002 · CUDA / float16';
-      } else if (endpoint === CPU_ENDPOINT || endpoint === LEGACY_DEFAULT_ENDPOINT) {
-        this.endpointDescription.textContent = 'CPU 3001 · int8 兼容回退';
+      if (endpoint === this.runtimeVoiceEndpoint) {
+        this.endpointDescription.textContent = '运行时配置 · Whisper · Claude';
       } else {
         this.endpointDescription.textContent = '测试或自定义 AI 通道';
       }
@@ -763,6 +920,62 @@ export class VoiceControl {
     }
   }
 
+  // ------------------------------------------------------------------
+  // Speaker / audio output
+  // ------------------------------------------------------------------
+
+  async _refreshSpeakers() {
+    if (!this._hasSpeakerUI || !navigator.mediaDevices?.enumerateDevices) return;
+    this.speakerRefreshButton.disabled = true;
+    this.speakerSelect.disabled = true;
+    try {
+      const devices = (await navigator.mediaDevices.enumerateDevices())
+        .filter(d => d.kind === 'audiooutput' && d.deviceId && d.deviceId !== 'default');
+      this._renderSpeakers(devices);
+    } catch (err) {
+      console.warn('[VoiceControl] speaker enumeration failed:', err);
+    } finally {
+      this.speakerRefreshButton.disabled = false;
+      this.speakerSelect.disabled = false;
+    }
+  }
+
+  _renderSpeakers(devices) {
+    const previous = this.speakerSelect.value;
+    this.speakerSelect.replaceChildren();
+    this.speakerSelect.add(new Option('系统默认', ''));
+    if (!devices.length) {
+      this.speakerSelect.disabled = true;
+      return;
+    }
+    for (const device of devices) {
+      const label = device.label || `扬声器 ${device.deviceId.slice(0, 8)}`;
+      this.speakerSelect.add(new Option(label, device.deviceId));
+    }
+    if ([...this.speakerSelect.options].some(o => o.value === previous)) {
+      this.speakerSelect.value = previous;
+    }
+    this.speakerSelect.disabled = false;
+  }
+
+  async _changeSpeaker() {
+    const deviceId = this.speakerSelect.value;
+    this.speakerDeviceId = deviceId;
+    // Apply to existing TTSPlayer if already initialized.
+    if (this.ttsPlayer && this.ttsPlayer.audioContext) {
+      try {
+        await this.ttsPlayer.setSinkId(deviceId);
+      } catch (err) {
+        console.warn('[VoiceControl] setSinkId failed:', err);
+      }
+    }
+    const name = deviceId
+      ? (this.speakerSelect.selectedOptions[0]?.textContent || deviceId)
+      : '系统默认';
+    this._showNotice(`已切换音频输出: ${name}`, 'success');
+    document.getElementById('voice-speaker-status').textContent = name;
+  }
+
   _handleSamples(samples, sampleRate) {
     if (!this.recording) return;
     if (this.encoder.inputSampleRate !== sampleRate && this.encoder.sequence === 0) {
@@ -780,6 +993,14 @@ export class VoiceControl {
     if (message.type !== 'pong' && message.sessionId && message.sessionId !== this.sessionId) return;
 
     switch (message.type) {
+      case 'model.list':
+        this._renderAsrModelStatus(message.payload?.status || {});
+        break;
+
+      case 'model.status':
+        this._renderAsrModelStatus(message.payload || {});
+        break;
+
       case 'session.ready':
         clearTimeout(this.sessionReadyTimer);
         this.starting = false;
@@ -802,7 +1023,9 @@ export class VoiceControl {
         break;
 
       case 'session.processing':
-        if (message.payload?.inputMode === 'text' || this.requestMode === 'text') {
+        if (message.payload?.inputMode === 'guide') {
+          this._setSessionState('thinking', 'AI 正在生成引导');
+        } else if (message.payload?.inputMode === 'text' || this.requestMode === 'text') {
           this._setSessionState('thinking', 'AI 正在理解');
         } else {
           this._setSessionState('processing', '正在识别');
@@ -819,18 +1042,71 @@ export class VoiceControl {
         this._renderAssistantResponse(message.payload?.text || '');
         break;
 
-      case 'intent.candidate':
-        this._removeThinking();
-        this.pendingCandidate = message.payload;
-        this._renderCandidate(message.payload);
-        this._setSessionState('confirm', 'AI 已理解，等待确认');
+      case 'assistant.audio': {
+        if (this.recording || this.starting) break;
+        const playbackGeneration = this.ttsPlaybackGeneration;
+        this._initTTSPlayer().then(() => {
+          const audioData = message.payload?.audio;
+          const format = message.payload?.format || 'audio/mpeg';
+          if (
+            playbackGeneration === this.ttsPlaybackGeneration &&
+            !this.recording &&
+            !this.starting &&
+            this.ttsPlayer &&
+            audioData
+          ) {
+            this.ttsPlayer.playBase64(audioData, format).catch(() => {
+              // Silently ignore; TTS playback failure should not block the UI.
+            });
+          }
+        }).catch(() => { /* TTS module failed to load; ignore */ });
         break;
+      }
+
+      case 'intent.candidate': {
+        this._removeThinking();
+        const candidate = message.payload;
+        if (!this.robotChannel.isReady?.() || !this.robotChannel.send?.({
+          type: 'skill.candidate',
+          candidate
+        })) {
+          this._showNotice('3000 控制通道未连接，候选未注册，不能执行。', 'error');
+          this._setSessionState('error', '控制通道未连接');
+          break;
+        }
+        if (candidate?.requiresConfirmation === false && candidate?.intent === 'safety.stop.request') {
+          this._createMessage('system', '已立即提交软件停止请求。', '软件停止不等于物理急停');
+          this.executionPending = true;
+          this._setSessionState('processing', '正在请求软件停止');
+          this._renderControls();
+          break;
+        }
+        this.pendingCandidate = candidate;
+        this.candidatePreviewReady = false;
+        try {
+          const preview = this.candidateSimulator.simulate(candidate) || {};
+          if (preview.ok === false) throw new Error(preview.message || '3D 预览失败');
+          this.candidatePreviewReady = true;
+        } catch (error) {
+          this._showNotice(error?.message || '本地 3D 预览失败，候选不可确认。', 'error');
+        }
+        this._renderCandidate(candidate);
+        this._setSessionState('confirm', '已预览，等待确认');
+        break;
+      }
+
+      case 'execution.result': {
+        this._showNotice('Voice Bridge 不允许执行动作；请刷新页面并检查版本。', 'error');
+        break;
+      }
 
       case 'session.completed':
         this.requestMode = null;
         this._removeThinking();
         this._renderControls();
-        if (!this.pendingCandidate) this._setSessionState('ready', '可以输入或录音');
+        if (!this.pendingCandidate && !this.executionPending) {
+          this._setSessionState('ready', '可以输入或录音');
+        }
         break;
 
       case 'session.cancelled':
@@ -894,6 +1170,11 @@ export class VoiceControl {
       this._removeThinking();
       this._setSessionState('error', '文字请求已中断');
       this._showNotice('AI 连接已中断，文字草稿之外的请求未重发。', 'error');
+    } else if (state === 'offline' && this.requestMode === 'candidate') {
+      this.requestMode = null;
+      this._removeThinking();
+      this._setSessionState('error', '候选操作请求已中断');
+      this._showNotice('Ubuntu PC AI 连接已中断；没有发送任何真机控制指令。', 'error');
     }
     this._renderControls();
   }
@@ -973,12 +1254,71 @@ export class VoiceControl {
       this.requestMode === 'text' ? '处理中' : '发送';
   }
 
+  _selectAsrModel(modelId) {
+    if (
+      !modelId ||
+      modelId === this.asrModelStatus.activeModelId ||
+      this.recording ||
+      this.starting ||
+      Number(this.asrModelStatus.recordingCount) > 0 ||
+      ['LOADING', 'SWITCHING'].includes(this.asrModelStatus.state) ||
+      !this.voiceSocket.isReady()
+    ) return;
+
+    this._renderAsrModelStatus({
+      ...this.asrModelStatus,
+      state: 'SWITCHING',
+      error: null
+    });
+    if (!this.voiceSocket.sendJson('model.select', null, { modelId })) {
+      this._renderAsrModelStatus({
+        ...this.asrModelStatus,
+        state: 'ERROR',
+        activeModelId: null,
+        device: null,
+        error: 'ASR model switch could not be sent.'
+      });
+    }
+  }
+
+  _renderAsrModelStatus(status) {
+    this.asrModelStatus = { ...this.asrModelStatus, ...status };
+    const state = this.asrModelStatus.state || 'STOPPED';
+    const stateNode = document.getElementById('voice-asr-state');
+    const deviceNode = document.getElementById('voice-asr-device');
+    const latencyNode = document.getElementById('voice-asr-latency');
+    const summary = stateNode?.closest('.voice-asr-summary');
+    if (stateNode) stateNode.textContent = state;
+    if (deviceNode) deviceNode.textContent = this.asrModelStatus.device || '--';
+    if (latencyNode) {
+      const latency = this.asrModelStatus.lastLatencyMs;
+      latencyNode.textContent = Number.isFinite(latency) ? `${latency.toFixed(1)} ms` : '--';
+    }
+    if (summary) {
+      summary.dataset.state = state;
+      summary.title = this.asrModelStatus.error || '';
+    }
+
+    const locked =
+      this.recording ||
+      this.starting ||
+      Number(this.asrModelStatus.recordingCount) > 0 ||
+      ['LOADING', 'SWITCHING'].includes(state) ||
+      !this.voiceSocket.isReady();
+    this.asrModelButtons.forEach(button => {
+      const active = button.dataset.modelId === this.asrModelStatus.activeModelId;
+      button.setAttribute('aria-pressed', String(active));
+      button.disabled = locked;
+    });
+  }
+
   _renderControls() {
-    const routeLocked = this.requestMode !== null || Boolean(this.pendingCandidate);
+    const routeLocked = this.requestMode !== null || Boolean(this.pendingCandidate) || this.executionPending;
     this.endpointButtons.forEach(button => {
       button.disabled = routeLocked;
     });
     this.reconnectButton.disabled = routeLocked;
+    this._renderAsrModelStatus(this.asrModelStatus);
     this._renderRecordButton();
     this._renderTextComposer();
   }
@@ -1041,54 +1381,109 @@ export class VoiceControl {
   _renderCandidate(candidate) {
     const card = document.getElementById('voice-intent-card');
     const supported = this._isAllowedCandidate(candidate);
-    const intentLabel = this._intentLabel(candidate.intent, candidate.args);
+    const intentLabel = this._intentLabel(candidate.intent, candidate.payload?.params);
     document.getElementById('voice-intent-name').textContent = intentLabel;
     document.getElementById('voice-intent-source').textContent =
       `来自：“${candidate.sourceText || this.finalTranscript || '—'}”`;
     document.getElementById('voice-intent-confidence').textContent =
       Number.isFinite(candidate.confidence) ? `${Math.round(candidate.confidence * 100)}%` : '--';
     const confirmButton = document.getElementById('voice-intent-confirm');
-    confirmButton.disabled = !supported;
-    confirmButton.textContent = supported ? '确认本地模拟' : '不支持本地模拟';
+    const ready = supported && this.robotChannel.isReady?.() && this.robotChannel.canConfirm?.();
+    confirmButton.disabled = !ready;
+    confirmButton.textContent = ready ? '确认并执行真机' : '控制链路未就绪';
     card.hidden = false;
     this.panel.classList.add('has-candidate');
   }
 
   _confirmCandidate() {
     if (!this.pendingCandidate || !this._isAllowedCandidate(this.pendingCandidate)) return;
-    try {
-      const result = this.candidateSimulator.simulate(this.pendingCandidate) || {};
-      if (result.ok === false) {
-        this._showNotice(result.message || '本地模拟失败，没有发送控制指令。', 'error');
-        return;
-      }
-      const label = this._intentLabel(this.pendingCandidate.intent, this.pendingCandidate.args);
-      this._createMessage(
-        'system',
-        result.message || `已完成本地模拟：${label}`,
-        '仅更新本地 3D 模型和日志 · 未发送至 LUMOS'
-      );
-      this._resetCandidate();
-      this._setSessionState('ready', '本地模拟完成');
-    } catch (error) {
-      this._showNotice(error?.message || '本地模拟失败，没有发送控制指令。', 'error');
+    if (!this.robotChannel.isReady?.() || !this.robotChannel.canConfirm?.()) {
+      this._showNotice('需要 /ws、SDK、IDLE 与 500ms 内新鲜状态全部就绪后才能确认。', 'error');
+      return;
     }
+
+    const candidate = this.pendingCandidate;
+    const sent = this.robotChannel.send?.({
+      type: 'confirmation.decision',
+      candidateId: candidate.candidateId,
+      traceId: candidate.traceId,
+      decision: 'approve'
+    });
+    if (!sent) {
+      this._showNotice('确认消息发送失败，未执行真机动作。', 'error');
+      return;
+    }
+    this._interruptTTSPlayback();
+    this.executionPending = true;
+    const label = this._intentLabel(candidate.intent, candidate.payload?.params);
+    this._createMessage(
+      'system',
+      `已确认执行：${label}`,
+      '等待真实 command_complete 与新鲜 robot_state 双重验证'
+    );
+    this._resetCandidate();
+    this._setSessionState('processing', '真机执行验证中');
   }
 
   _cancelCandidate() {
     if (!this.pendingCandidate) return;
-    this._createMessage('system', `已取消：${this._intentLabel(this.pendingCandidate.intent, this.pendingCandidate.args)}`, '没有发送控制指令');
+    const candidate = this.pendingCandidate;
+    this.ignoredResultCandidateIds.add(candidate.candidateId);
+    const sent = this.robotChannel.send?.({
+      type: 'confirmation.decision',
+      candidateId: candidate.candidateId,
+      traceId: candidate.traceId,
+      decision: 'reject'
+    });
+    this._sendCandidateAction('reject', candidate);
+    this.candidateSimulator.clear?.('候选已取消');
+    this._interruptTTSPlayback();
+    this.requestMode = null;
+    this._createMessage('system', `已取消：${this._intentLabel(candidate.intent, candidate.payload?.params)}`, '没有发送真机控制指令');
     this._resetCandidate();
-    this._setSessionState('ready', '可以输入或录音');
+    this._setSessionState(sent ? 'ready' : 'error', sent ? '已取消' : '取消消息发送失败');
+  }
+
+  _guideCandidate() {
+    if (!this.pendingCandidate) return;
+    const candidate = this.pendingCandidate;
+    this.ignoredResultCandidateIds.add(candidate.candidateId);
+    this.robotChannel.send?.({
+      type: 'confirmation.decision',
+      candidateId: candidate.candidateId,
+      traceId: candidate.traceId,
+      decision: 'reject'
+    });
+    this.candidateSimulator.clear?.('已切换为操作引导');
+    if (!this._sendCandidateAction('guide', candidate)) return;
+    this._interruptTTSPlayback();
+    this.requestMode = 'candidate';
+    const label = this._intentLabel(candidate.intent, candidate.payload?.params);
+    this._createMessage('system', `请求操作引导：${label}`, '正在询问 Claude · 尚未执行');
+    this._resetCandidate();
+    this._renderThinking();
+    this._setSessionState('thinking', 'AI 正在生成引导');
+  }
+
+  _sendCandidateAction(action, candidate) {
+    const sent = this.voiceSocket.sendJson('candidate.action', this.sessionId, {
+      candidateId: candidate.candidateId,
+      action
+    });
+    if (!sent) {
+      this._showNotice('候选操作没有发送成功，请检查 Ubuntu PC AI 连接。', 'error');
+    }
+    return sent;
   }
 
   _resetCandidate() {
     this.pendingCandidate = null;
+    this.candidatePreviewReady = false;
     document.getElementById('voice-intent-card').hidden = true;
     this.panel.classList.remove('has-candidate');
     const confirmButton = document.getElementById('voice-intent-confirm');
     confirmButton.disabled = false;
-    confirmButton.textContent = '确认本地模拟';
+    confirmButton.textContent = '确认并执行真机';
     this._renderControls();
   }
 
@@ -1145,24 +1540,90 @@ export class VoiceControl {
 
   _isAllowedCandidate(candidate) {
     const validator = INTENT_VALIDATORS[candidate?.intent];
+    const supportedSkill =
+      candidate?.skill === 'manual_joint_control@1' ||
+      candidate?.skill === 'directional_joint_control@1' ||
+      candidate?.skill === 'pick_and_place_bottle@1';
     return Boolean(
+      supportedSkill &&
+      candidate?.requiresConfirmation === true &&
+      this.candidatePreviewReady &&
       validator &&
-      validator(candidate?.args || {}) &&
+      validator(candidate?.payload?.params || {}) &&
       this.candidateSimulator.supports?.(candidate)
     );
   }
 
-  _intentLabel(intent, args = {}) {
+  _intentLabel(intent, params = {}) {
+    if (intent === 'directional.compound' && validDirectionalMoves(params)) {
+      return params.moves.map(move => this._intentLabel(move.action, move)).join(' + ');
+    }
     const labels = {
-      'robot.estop': '模拟机械臂停止意图',
-      'robot.status': '读取本地模型状态',
-      'robot.preset': `本地预览预设位 ${args?.name || ''}`.trim(),
-      'gripper.open': '本地预览：打开夹爪',
-      'gripper.close': '本地预览：关闭夹爪',
-      'gripper.grip': '本地预览：夹取',
-      'gripper.set_position': `本地预览：夹爪位置 ${args?.position ?? '--'}`
+      'joint.set': `J${params?.joint ?? '?'} 到 ${params?.targetDeg ?? '--'}°`,
+      'joint.step': `J${params?.joint ?? '?'} ${Number(params?.deltaDeg) >= 0 ? '+' : ''}${params?.deltaDeg ?? '--'}°`,
+      'robot.status': '读取真实机械臂状态',
+      'robot.home': '返回右侧 Home 预设位置',
+      'gripper.open': '打开夹爪',
+      'gripper.close': '闭合夹爪',
+      'safety.stop.request': '立即请求软件停止',
+      'turn.left': `底座向左转 ${params?.deltaDeg ?? '--'}°`,
+      'turn.right': `底座向右转 ${params?.deltaDeg ?? '--'}°`,
+      'lift.up': `整体抬高 ${params?.deltaDeg ?? '--'}°`,
+      'lift.down': `整体降低 ${params?.deltaDeg ?? '--'}°`,
+      'wrist.pitch.up': `镜头抬头 ${params?.deltaDeg ?? '--'}°`,
+      'wrist.pitch.down': `镜头低头 ${params?.deltaDeg ?? '--'}°`,
+      'wrist.yaw.left': `镜头向左 ${params?.deltaDeg ?? '--'}°`,
+      'wrist.yaw.right': `镜头向右 ${params?.deltaDeg ?? '--'}°`,
+      'wrist.roll.clockwise': `镜头顺时针 ${params?.deltaDeg ?? '--'}°`,
+      'wrist.roll.counterclockwise': `镜头逆时针 ${params?.deltaDeg ?? '--'}°`,
+      'pick_and_place_bottle': '抓取一个可乐瓶并放到 B 区（外部 Skill）'
     };
     return labels[intent] || `不支持的动作：${intent || 'unknown'}`;
+  }
+
+  handleRobotMessage(message) {
+    if (!message || typeof message.type !== 'string') return;
+    if (message.type === 'ws_connection') {
+      if (!message.connected && this.executionPending) {
+        this.executionPending = false;
+        this._showNotice('控制页面与 3000 断开；服务端将尝试软件停止，结果未知。', 'error');
+        this._setSessionState('error', '控制通道断开');
+      }
+      if (this.pendingCandidate) this._renderCandidate(this.pendingCandidate);
+      this._renderControls();
+      return;
+    }
+    if (message.type === 'runtime-readiness') {
+      if (this.pendingCandidate) this._renderCandidate(this.pendingCandidate);
+      return;
+    }
+    if (message.type === 'skill.candidate.rejected') {
+      this.candidateSimulator.clear?.('候选被控制服务拒绝');
+      this._showNotice(message.message || message.reason || '候选被控制服务拒绝。', 'error');
+      this._resetCandidate();
+      this._setSessionState('error', '候选不可执行');
+      return;
+    }
+    if (message.type === 'execution.request') {
+      this.executionPending = true;
+      this._setSessionState('processing', '真机执行验证中');
+      this._renderControls();
+      return;
+    }
+    if (message.type !== 'skill.result') return;
+    if (this.ignoredResultCandidateIds.delete(message.candidateId)) return;
+
+    this.executionPending = false;
+    this.candidateSimulator.clear?.('真实执行结果已返回');
+    const success = message.success === true;
+    const resultText = message.message || (success ? '真机动作已验证完成。' : '真机动作失败或结果不确定。');
+    this._createMessage(success ? 'system' : 'error', resultText, success ? '真实硬件反馈已验证' : '未报告为成功');
+    this._setSessionState(success ? 'ready' : 'error', success ? '执行完成' : '执行失败');
+    this._renderControls();
+    this.onExecutionResult?.(message);
+    if (this.voiceSocket.isReady()) {
+      this.voiceSocket.sendJson('tts.request', this.sessionId || createId(), { text: resultText });
+    }
   }
 
   async _handleDeviceLost() {

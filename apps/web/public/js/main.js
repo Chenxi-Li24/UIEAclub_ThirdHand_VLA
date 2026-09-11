@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { STLLoader } from 'three/addons/loaders/STLLoader.js';
 import { ColladaLoader } from 'three/addons/loaders/ColladaLoader.js';
-import { VoiceControl } from './voice-control.js';
+import { VoiceControl } from './voice-control.js?v=9';
 console.log('[main.js] Modules imported, THREE keys:', Object.keys(THREE).length);
 
 // === SceneManager ===

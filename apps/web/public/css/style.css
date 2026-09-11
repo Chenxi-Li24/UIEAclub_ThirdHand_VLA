@@ -1515,7 +1515,8 @@ html, body {
 .voice-inline-control button,
 .voice-device-row button,
 .voice-cancel-button,
-.voice-confirm-button {
+.voice-confirm-button,
+.voice-guide-button {
   min-height: 34px;
   padding: 0 12px;
   border: 1px solid var(--border);
@@ -1897,9 +1898,20 @@ html, body {
 
 .voice-intent-actions {
   display: grid;
-  grid-template-columns: 0.7fr 1.3fr;
+  grid-template-columns: 1.15fr 0.75fr 0.85fr;
   gap: 7px;
   margin-top: 2px;
+}
+
+.voice-guide-button {
+  background: transparent;
+  color: var(--text-secondary);
+  border-color: var(--border);
+}
+
+.voice-guide-button:hover {
+  border-color: var(--text-secondary);
+  color: var(--text-primary);
 }
 
 .voice-cancel-button:hover {
@@ -1954,7 +1966,8 @@ html, body {
 .voice-inline-control button:focus-visible,
 .voice-device-row button:focus-visible,
 .voice-cancel-button:focus-visible,
-.voice-confirm-button:focus-visible {
+.voice-confirm-button:focus-visible,
+.voice-guide-button:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }

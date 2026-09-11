@@ -26,6 +26,7 @@ class StartouchBridge extends EventEmitter {
       ...process.env,
       PYTHONUNBUFFERED: '1',
       STARTOUCH_SDK_PATH: this.config.sdkPath,
+      STARTOUCH_MODULE_PATH: this.config.modulePath || '',
       STARTOUCH_CAN_INTERFACE: this.config.canInterface,
       STARTOUCH_GRIPPER: this.config.gripper ? '1' : '0',
       STARTOUCH_REQUIRE_CAN_RX: this.config.requireCanRx ? '1' : '0',

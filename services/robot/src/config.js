@@ -18,13 +18,22 @@ function boolFrom(env, name, fallback) {
 
 function loadConfig(env = process.env) {
   const localPython = path.join(ROOT, 'local', 'runtimes', 'python', 'bin', 'python');
+  const sdkPath = env.STARTOUCH_SDK_PATH
+    || path.join(ROOT, 'local', 'sdk', 'startouch');
+  const generatedModulePath = path.join(
+    ROOT, 'local', 'generated', 'startouch-python',
+  );
   return {
     host: env.ROBOT_HOST || '127.0.0.1',
     port: numberFrom(env, 'ROBOT_PORT', 3000, 0, 65535),
     readyFile: env.THIRDHAND_READY_FILE || path.join(ROOT, 'runtime', 'run', 'robot.ready'),
     robot: {
       python: env.STARTOUCH_PYTHON || (fs.existsSync(localPython) ? localPython : 'python3'),
-      sdkPath: env.STARTOUCH_SDK_PATH || path.join(ROOT, 'local', 'sdk', 'startouch'),
+      sdkPath,
+      modulePath: env.STARTOUCH_MODULE_PATH
+        || (fs.existsSync(generatedModulePath)
+          ? generatedModulePath
+          : path.join(sdkPath, 'interface_py')),
       canInterface: env.STARTOUCH_CAN_INTERFACE || 'can0',
       gripper: boolFrom(env, 'STARTOUCH_GRIPPER', true),
       requireCanRx: boolFrom(env, 'STARTOUCH_REQUIRE_CAN_RX', true),

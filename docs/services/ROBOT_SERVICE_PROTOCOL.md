@@ -64,6 +64,8 @@ Node 与 Python 通过 stdin 发送 NDJSON 命令，通过专用文件描述符 
 
 `STARTOUCH_SIMULATE=1` 使用内置模拟机械臂；自动测试不得关闭该选项。真机桥在连接时要求项目本地 SDK 路径存在，并可要求 `can0` 最近有反馈。
 
+SDK 源码目录由 `STARTOUCH_SDK_PATH` 指定；与运行时 Python ABI 匹配的扩展目录由 `STARTOUCH_MODULE_PATH` 指定。未显式设置后者时，配置优先使用 `local/generated/startouch-python`，不存在时才回退到 SDK 的 `interface_py`。准备脚本只写入 Git 忽略的生成目录。
+
 ## Safety
 
 `software_stop`/兼容 `estop` 并不是独立硬件急停。若 2 秒内不能确认 SDK 清理，Node 会报告无法确认失能并终止桥接进程，但仍不能保证硬件已经安全断电。

@@ -23,6 +23,7 @@ except ImportError:  # Windows simulator tests do not provide fcntl.
 
 
 SDK_PATH = os.path.expanduser(os.environ.get("STARTOUCH_SDK_PATH", ""))
+MODULE_PATH = os.path.expanduser(os.environ.get("STARTOUCH_MODULE_PATH", ""))
 CAN_INTERFACE = os.environ.get("STARTOUCH_CAN_INTERFACE", "can0")
 SIMULATE = os.environ.get("STARTOUCH_SIMULATE", "0") == "1"
 DRY_RUN = os.environ.get("STARTOUCH_DRY_RUN", "0") == "1"
@@ -584,11 +585,13 @@ class RobotBridge:
             else:
                 if not SDK_PATH:
                     raise RuntimeError("STARTOUCH_SDK_PATH is required")
-                interface_path = os.path.join(SDK_PATH, "interface_py")
-                if not os.path.isdir(interface_path):
-                    raise FileNotFoundError(f"Startouch interface directory not found: {interface_path}")
-                if interface_path not in sys.path:
-                    sys.path.insert(0, interface_path)
+                module_path = MODULE_PATH or os.path.join(SDK_PATH, "interface_py")
+                if not os.path.isdir(module_path):
+                    raise FileNotFoundError(
+                        f"Startouch Python module directory not found: {module_path}"
+                    )
+                if module_path not in sys.path:
+                    sys.path.insert(0, module_path)
                 from startouchclass import SingleArm
 
                 arm = SingleArm(

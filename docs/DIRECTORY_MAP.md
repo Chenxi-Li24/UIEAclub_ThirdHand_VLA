@@ -23,6 +23,7 @@
 | `configs/runtime` | 运行 profile | 端口、环境变量、启动顺序和启用状态 | 跟踪 |
 | `configs/assets` | 本地资产清单 | 哈希、大小、许可证和平台兼容性 | 模板/机器清单跟踪；local 清单忽略 |
 | `local/sdk/startouch` | Startouch SDK 完整载荷 | Robot Service 显式连接时导入 | 本地存在，Git 忽略 |
+| `local/generated/startouch-python` | 与项目 Python ABI 匹配的 Startouch 模块 | 由 `tools/assets/build_startouch_python.py` 生成 | 本地存在，Git 忽略 |
 | `local/runtimes` | Node/Python 环境 | 可复现项目运行时 | 本地存在，Git 忽略 |
 | `local/models` | ASR/VLA/ACT/DP 模型 | 后续服务使用 | 本地存在，Git 忽略 |
 | `runtime/run` | PID、ready、状态 | 当前一次运行的所有权证据 | Git 忽略 |

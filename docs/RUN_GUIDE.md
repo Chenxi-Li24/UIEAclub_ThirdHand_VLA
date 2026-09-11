@@ -91,7 +91,18 @@ sudo ip link set can0 down
 sudo ip link set can0 up type can bitrate 1000000
 ```
 
-### 4.2 启动
+### 4.2 准备 Startouch Python 模块
+
+SDK 内的二进制扩展必须匹配项目 Python 版本。首次导入 SDK、替换 Python 运行时或切换 Ubuntu 版本后执行：
+
+```bash
+/home/nieqingcao/miniconda3/bin/python tools/assets/build_startouch_python.py \
+  --python local/runtimes/python/bin/python
+```
+
+脚本在临时目录编译并进行导入测试，产物写入 `local/generated/startouch-python`；不会修改 `local/sdk/startouch`。执行脚本的 Python 需要提供 pybind11 2.10 或更高版本。
+
+### 4.3 启动
 
 ```bash
 ./thirdhand start --profile manual-control
@@ -106,7 +117,7 @@ sudo ip link set can0 up type can bitrate 1000000
 
 打开 `http://192.168.58.68:9983`，确认真机环境安全后再点击“连接”。点击连接后 Robot Service 才检查 CAN 反馈并构造 `SingleArm`，SDK 会使能电机，但不会自动发送回零、关节、笛卡尔或夹爪目标。
 
-### 4.3 停止
+### 4.4 停止
 
 先在页面停止运动并断开，再执行：
 

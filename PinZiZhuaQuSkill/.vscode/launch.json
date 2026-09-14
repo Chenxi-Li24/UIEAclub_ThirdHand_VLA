@@ -1,0 +1,335 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "type": "editor-browser",
+      "request": "launch",
+      "name": "Vision Preview: Open Window",
+      "url": "http://127.0.0.1:8765/stream.mjpg",
+      "preLaunchTask": "Vision Preview: Start Relay"
+    },
+    {
+      "type": "editor-browser",
+      "request": "launch",
+      "name": "Vision Preview: Open Running Debug Window",
+      "url": "http://127.0.0.1:8765/stream.mjpg"
+    },
+    {
+      "name": "Vision Preview: Debug Live Attach",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "apps.vision_preview.main",
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "justMyCode": true,
+      "env": {
+        "PYTHONUNBUFFERED": "1"
+      }
+    },
+    {
+      "name": "Vision Preview: Debug Replay",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "apps.vision_preview.main",
+      "args": [
+        "--replay-image",
+        "artifacts/vision/validation/spatial/three-left-2-overlay.jpg"
+      ],
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "justMyCode": true,
+      "env": {
+        "PYTHONUNBUFFERED": "1"
+      }
+    },
+    {
+      "name": "Vision Visualization: Debug Bundle",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/scripts/vision/debug_visualization.py",
+      "args": [
+        "artifacts/vision/validation/live-bundles/frame_000000",
+        "--output",
+        "artifacts/vision/debug/depth-fusion.jpg"
+      ],
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "justMyCode": true
+    },
+    {
+      "name": "Vision Monitor: Ubuntu Desktop Window",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "apps.vision_monitor.main",
+      "python": "/home/nieqingcao/miniconda3/envs/thirdhand-groundedsam2/bin/python",
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "justMyCode": true,
+      "env": {
+        "PYTHONUNBUFFERED": "1",
+        "DISPLAY": ":1",
+        "XAUTHORITY": "/run/user/1000/gdm/Xauthority",
+        "XDG_RUNTIME_DIR": "/run/user/1000"
+      }
+    },
+    {
+      "name": "Vision LAN: Debug Windows Viewer",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "apps.vision_lan.main",
+      "python": "/home/nieqingcao/miniconda3/envs/thirdhand-groundedsam2/bin/python",
+      "args": [
+        "--host",
+        "192.168.58.68",
+        "--allowed-network",
+        "192.168.58.0/24",
+        "--port",
+        "8770"
+      ],
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "justMyCode": true,
+      "env": {
+        "PYTHONUNBUFFERED": "1"
+      }
+    },
+    {
+      "name": "Vision: Debug Perception",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/scripts/vision/debug_perception.py",
+      "args": [
+        "artifacts/vision/debug-fixture/frame_000000"
+      ],
+      "python": "/home/nieqingcao/miniconda3/envs/thirdhand-groundedsam2/bin/python",
+      "cwd": "${workspaceFolder}",
+      "preLaunchTask": "Vision: Build Synthetic Debug Fixture",
+      "console": "integratedTerminal",
+      "justMyCode": true,
+      "env": {
+        "PYTHONPATH": "${workspaceFolder}/src",
+        "PYTHONUNBUFFERED": "1"
+      }
+    },
+    {
+      "name": "Vision: Debug Stable IDs",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/scripts/vision/debug_tracking.py",
+      "args": [
+        "--fixture",
+        "tests/fixtures/tracking/reorder.json"
+      ],
+      "python": "/home/nieqingcao/miniconda3/envs/thirdhand-groundedsam2/bin/python",
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "justMyCode": true,
+      "env": {
+        "PYTHONPATH": "${workspaceFolder}/src",
+        "PYTHONUNBUFFERED": "1"
+      }
+    },
+    {
+      "name": "Vision: Debug Geometry",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/scripts/vision/debug_geometry.py",
+      "args": [
+        "artifacts/vision/debug-fixture/frame_000000",
+        "artifacts/vision/debug-fixture/masks.npz",
+        "--mask-key",
+        "mask_2",
+        "--output-json",
+        "artifacts/vision/debug/geometry.json",
+        "--output-image",
+        "artifacts/vision/debug/geometry.jpg"
+      ],
+      "python": "/home/nieqingcao/miniconda3/envs/thirdhand-groundedsam2/bin/python",
+      "cwd": "${workspaceFolder}",
+      "preLaunchTask": "Vision: Build Synthetic Debug Fixture",
+      "console": "integratedTerminal",
+      "justMyCode": true,
+      "env": {
+        "PYTHONPATH": "${workspaceFolder}/src",
+        "PYTHONUNBUFFERED": "1"
+      }
+    },
+    {
+      "name": "Vision: Debug Pipeline",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/scripts/vision/debug_pipeline.py",
+      "args": [
+        "--target-id",
+        "2",
+        "--synthetic-masks",
+        "artifacts/vision/debug-fixture/masks.npz",
+        "artifacts/vision/debug-fixture/frame_000000",
+        "--repeat-last",
+        "6"
+      ],
+      "python": "/home/nieqingcao/miniconda3/envs/thirdhand-groundedsam2/bin/python",
+      "cwd": "${workspaceFolder}",
+      "preLaunchTask": "Vision: Build Synthetic Debug Fixture",
+      "console": "integratedTerminal",
+      "justMyCode": true,
+      "env": {
+        "PYTHONPATH": "${workspaceFolder}/src",
+        "PYTHONUNBUFFERED": "1"
+      }
+    },
+    {
+      "name": "Action: Debug Calibration",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/scripts/action/debug_calibration.py",
+      "args": [
+        "configs/calibration/lumos-handeye.pending.json"
+      ],
+      "python": "/home/nieqingcao/miniconda3/envs/thirdhand-groundedsam2/bin/python",
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "justMyCode": true,
+      "env": {
+        "PYTHONPATH": "${workspaceFolder}/src",
+        "PYTHONUNBUFFERED": "1"
+      }
+    },
+    {
+      "name": "Action: Debug Hand-Eye Clearance Plan (Offline)",
+      "type": "node",
+      "request": "launch",
+      "program": "${workspaceFolder}/scripts/action/debug_pregrasp_validation.js",
+      "args": [
+        "--fixture",
+        "tests/fixtures/action/handeye-clearance.json"
+      ],
+      "runtimeExecutable": "/usr/local/lib/nodejs/node-v24.18.0-linux-x64/bin/node",
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "skipFiles": ["<node_internals>/**"]
+    },
+    {
+      "name": "Action: Validate Hand-Eye High Clearance (Real, Select ID)",
+      "type": "node",
+      "request": "launch",
+      "program": "${workspaceFolder}/scripts/action/validate_handeye_pregrasp.js",
+      "args": [
+        "--target-id",
+        "${input:handeyeTargetId}",
+        "--allow-robot",
+        "--calibration",
+        "configs/calibration/lumos-handeye.pending.json"
+      ],
+      "runtimeExecutable": "/usr/local/lib/nodejs/node-v24.18.0-linux-x64/bin/node",
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "skipFiles": ["<node_internals>/**"],
+      "env": {
+        "THIRDHAND_LIVE_TEST": "1",
+        "THIRDHAND_ALLOW_ROBOT": "I_ACCEPT_SUPERVISED_ROBOT_MOTION",
+        "THIRDHAND_VA_ALLOW_CAMERA": "1"
+      }
+    },
+    {
+      "name": "Action: Debug Home Gate",
+      "type": "node",
+      "request": "launch",
+      "program": "${workspaceFolder}/scripts/action/debug_home.js",
+      "args": [
+        "--home",
+        "0,15,-30,5,0,0",
+        "--actual",
+        "0.2,14.7,-29.6,4.8,0.1,-0.2",
+        "--tolerance",
+        "0.5"
+      ],
+      "runtimeExecutable": "/usr/local/lib/nodejs/node-v24.18.0-linux-x64/bin/node",
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "skipFiles": ["<node_internals>/**"]
+    },
+    {
+      "name": "Action: Debug Alignment",
+      "type": "node",
+      "request": "launch",
+      "program": "${workspaceFolder}/scripts/action/debug_alignment.js",
+      "args": [
+        "--target-id",
+        "2",
+        "--fixture",
+        "tests/fixtures/action/alignment.json"
+      ],
+      "runtimeExecutable": "/usr/local/lib/nodejs/node-v24.18.0-linux-x64/bin/node",
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "skipFiles": ["<node_internals>/**"]
+    },
+    {
+      "name": "Action: Debug Grasp",
+      "type": "node",
+      "request": "launch",
+      "program": "${workspaceFolder}/scripts/action/debug_grasp.js",
+      "args": [
+        "--fixture",
+        "tests/fixtures/action/approved-plan.json"
+      ],
+      "runtimeExecutable": "/usr/local/lib/nodejs/node-v24.18.0-linux-x64/bin/node",
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "skipFiles": ["<node_internals>/**"]
+    },
+    {
+      "name": "Action: Debug Fixed Placement Plan",
+      "type": "node",
+      "request": "launch",
+      "program": "${workspaceFolder}/scripts/action/debug_execution_plan.js",
+      "args": [
+        "--fixture",
+        "tests/fixtures/integration/full-cycle.json"
+      ],
+      "runtimeExecutable": "/usr/local/lib/nodejs/node-v24.18.0-linux-x64/bin/node",
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "skipFiles": ["<node_internals>/**"]
+    },
+    {
+      "name": "Action: Debug Startouch Protocol (Simulated)",
+      "type": "node",
+      "request": "launch",
+      "program": "${workspaceFolder}/scripts/action/debug_startouch_protocol.js",
+      "args": ["--simulate"],
+      "runtimeExecutable": "/usr/local/lib/nodejs/node-v24.18.0-linux-x64/bin/node",
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "skipFiles": ["<node_internals>/**"],
+      "env": {
+        "THIRDHAND_VA_PYTHON": "/home/nieqingcao/miniconda3/envs/LumosTouch/bin/python"
+      }
+    },
+    {
+      "name": "VA: Debug Simulated Workflow",
+      "type": "node",
+      "request": "launch",
+      "program": "${workspaceFolder}/scripts/action/debug_workflow.js",
+      "args": [
+        "--target-id",
+        "2",
+        "--fixture",
+        "tests/fixtures/integration/full-cycle.json"
+      ],
+      "runtimeExecutable": "/usr/local/lib/nodejs/node-v24.18.0-linux-x64/bin/node",
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "skipFiles": ["<node_internals>/**"]
+    }
+  ],
+  "inputs": [
+    {
+      "id": "handeyeTargetId",
+      "type": "promptString",
+      "description": "输入相机画面中的瓶子稳定编号（1..5）",
+      "default": "1"
+    }
+  ]
+}

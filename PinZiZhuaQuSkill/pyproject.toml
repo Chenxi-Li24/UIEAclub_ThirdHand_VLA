@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "thirdhand-va"
+version = "0.1.0"
+description = "Stable-ID RGB-D vision and action skill for upright bottle pick-and-place"
+requires-python = ">=3.10"
+dependencies = [
+    "numpy==1.26.4",
+    "PyYAML==6.0.2",
+    "opencv-python==4.11.0.86",
+    "Pillow==12.2.0",
+]
+
+[project.optional-dependencies]
+learned = ["torch==2.7.0", "transformers==4.56.2"]
+tracking = ["norfair==2.3.0"]
+test = ["pytest==8.4.2"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.setuptools.package-data]
+"thirdhand_va.common.contracts" = ["*.json"]

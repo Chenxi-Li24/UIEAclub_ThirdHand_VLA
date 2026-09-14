@@ -1,0 +1,66 @@
+{
+  "assets": {
+    "gripper_permutation": {
+      "destination_relative_path": "param_csv_gripper/permutationMatrix.csv",
+      "sha256": "419271da42d8a00ae4b701d0e725b04c4ddb017b589372ef03d19510c58c844f",
+      "source_relative_path": "src/param_csv_gripper/permutationMatrix.csv"
+    },
+    "gripper_pi_b": {
+      "destination_relative_path": "param_csv_gripper/pi_b.csv",
+      "sha256": "6caada801a3a40229cc3b75ab5159f1659724e6c702736e43e033ad487f75005",
+      "source_relative_path": "src/param_csv_gripper/pi_b.csv"
+    },
+    "gripper_pi_fr": {
+      "destination_relative_path": "param_csv_gripper/pi_fr.csv",
+      "sha256": "3a34c2bf18e0333da0c32522c32b12ade409344d351b7113e898e774664c84f1",
+      "source_relative_path": "src/param_csv_gripper/pi_fr.csv"
+    },
+    "library": {
+      "destination_relative_path": "src/libstartouch.so",
+      "sha256": "8284d216ab4e7b0195ffaf8e7fc70ee160b834511b9c05e77c0ba33ad545e24b",
+      "source_relative_path": "src/libstartouch.so.20"
+    },
+    "python_binding": {
+      "destination_relative_path": "interface_py/startouch.cpython-310-x86_64-linux-gnu.so",
+      "sha256": "a681d5b4aefd063c6d2efe6454d914af92abeeab224af1722155c38e46bb055d",
+      "source_relative_path": "interface_py/startouch.cpython-310-x86_64-linux-gnu.so"
+    },
+    "python_wrapper": {
+      "destination_relative_path": "interface_py/startouchclass.py",
+      "sha256": "0f4b5f72241392f8a9faf20cc0e42917197a8d417e4db3de8380f0eb01b88be9",
+      "source_relative_path": "interface_py/startouchclass.py"
+    },
+    "source_config": {
+      "destination_relative_path": "src/config/robot_kinematics.yaml",
+      "sha256": "f84dd8da8206169bc97d72c35f6a9ec058e79cc5ccf68e14c3b0c102dc5cd9d1",
+      "source_relative_path": "src/config/robot_kinematics.yaml",
+      "transform": "thirdhand-conservative-safety-v1"
+    },
+    "urdf": {
+      "destination_relative_path": "src/config/FastTouchV2.SLDASM.urdf",
+      "sha256": "1b62917312850bdb390f5e51009d88ffe392ac2c9ff6115c2a29ad7aeb39d165",
+      "source_relative_path": "src/config/FastTouchV2.SLDASM.urdf"
+    }
+  },
+  "artifact_provenance": {
+    "api_review": "0.1.7-version-and-public-api-match-current-binding; import-strace-has-no-af-can-or-network-data-syscalls",
+    "binding_sha256": "a681d5b4aefd063c6d2efe6454d914af92abeeab224af1722155c38e46bb055d",
+    "build_record": "native/startouch/REPRODUCIBLE_BUILD.md",
+    "independent_clean_builds": 2,
+    "kind": "git-pinned-vendor-library-plus-reproducible-clean-binding-build",
+    "library_sha256": "8284d216ab4e7b0195ffaf8e7fc70ee160b834511b9c05e77c0ba33ad545e24b",
+    "python_abi": "cpython-310-x86_64-linux-gnu",
+    "repository_commit": "9f0bc8f324ccdf866e20c27bbc7ed5007869db46",
+    "reproducible_build_verified": true,
+    "status": "reviewed-clean-binding-build-and-commit-pinned-ubuntu20-vendor-library"
+  },
+  "license": "MIT",
+  "license_evidence": {
+    "declaration": "MIT",
+    "sha256": "f3cd28ab486ceed5b0c5f2e863640ac9b5b3d257da288a787dd44bcdff8905ed",
+    "source_relative_path": "pyproject.toml"
+  },
+  "schema": "thirdhand-startouch-source-v1",
+  "sdk_commit": "9f0bc8f324ccdf866e20c27bbc7ed5007869db46",
+  "sdk_version": "0.1.7"
+}

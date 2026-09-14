@@ -1,0 +1,37 @@
+{
+  "target_id": 1,
+  "now_ms": 1100,
+  "target": {
+    "stable_id": 1,
+    "selected": true,
+    "track_state": "confirmed",
+    "depth_valid": true,
+    "blockers": [],
+    "observed_at_ms": 1000,
+    "grasp_preview": {
+      "frame": "robot_base",
+      "calibration_id": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "preview_id": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "grasp_xyz_m": [0.499170805775, -0.087967224115, 0.105806855692],
+      "stable_samples": 5,
+      "width_m": 0.026,
+      "allowed": false,
+      "blockers": [
+        "handeye_physical_validation_pending",
+        "handeye_activation_locked"
+      ]
+    }
+  },
+  "robot": {
+    "connected": true,
+    "healthy": true,
+    "moving": false,
+    "stationary": true,
+    "stateFresh": true,
+    "poseFrame": "robot_flange",
+    "flangePositionM": [0.258982753021, 0.000729238894, 0.037],
+    "flangeEulerRad": [0.006439555855, 0.521633841907, 0.007008450157],
+    "jointsDeg": [-0.163927, -2.611904, -0.579209, 33.058620, 0.338783, 0.185784],
+    "gripperWidthM": 0.08
+  }
+}

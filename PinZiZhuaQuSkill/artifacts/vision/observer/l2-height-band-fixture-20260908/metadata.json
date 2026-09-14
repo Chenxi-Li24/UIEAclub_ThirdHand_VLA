@@ -1,0 +1,194 @@
+{
+  "schema": "thirdhand-l2-height-band-fixture-v1",
+  "camera_serial": "250801DR48FP25002738",
+  "registration_id": "xvisio-sdk:250801DR48FP25002738",
+  "frame_id": 28,
+  "captured_monotonic_ns": 11782870675244,
+  "observed_at_ms": 1788868534252,
+  "final_frame_age_ms": 213.566491,
+  "locked_detection_id": 0,
+  "requested_ordinal": 2,
+  "target_base_z_m": 0.12,
+  "half_band_m": 0.005,
+  "selected": {
+    "detection_id": 0,
+    "target_id": "detection:0",
+    "score": 0.8247444033622742,
+    "bbox": [
+      253.0,
+      97.0,
+      389.0,
+      317.0
+    ],
+    "pixel_uv": [
+      317.0,
+      208.0
+    ],
+    "camera_xyz_m": [
+      -0.003612667554989457,
+      -0.03487308323383331,
+      0.20838098227977753
+    ],
+    "width_m": 0.06336330189220982,
+    "width_method": "near_surface_transverse_q01_q99",
+    "width_is_gripper_command": false,
+    "grasp_height_base_m": 0.12,
+    "grasp_height_half_band_m": 0.005,
+    "height_band_body_points": 426,
+    "height_band_silhouette_points": 431,
+    "height_band_median_base_xyz_m": [
+      0.4187155230781724,
+      -0.013400639208952844,
+      0.11967902792168804
+    ],
+    "base_surface_xyz_m": [
+      0.41784940307788576,
+      -0.011180897882234772,
+      0.11984387119808568
+    ],
+    "mask_pixels": 13260,
+    "depth_points": 5640,
+    "depth_valid_ratio": 0.4765928680074362,
+    "frame_age_ms": 201.977367,
+    "camera_observation_valid": true,
+    "camera_reasons": [],
+    "geometry_valid": true,
+    "geometry_reasons": [],
+    "valid": true,
+    "reason": null,
+    "reasons": [],
+    "left_ordinal": 2,
+    "right_ordinal": 2
+  },
+  "pre_can": {
+    "start_monotonic_ns": 11782806068280,
+    "end_monotonic_ns": 11782866595814,
+    "start_wall_ms": 1788868534188,
+    "end_wall_ms": 1788868534249,
+    "joints_rad": [
+      -0.018120088502326936,
+      -0.2080949111161967,
+      -0.0024795910582131597,
+      0.579652094300755,
+      0.11921110856794037,
+      0.42668039978637573
+    ],
+    "T_base_sdk_tool": [
+      [
+        0.9280440590757002,
+        0.064692872614998,
+        0.3668092919312677,
+        0.2671061162423874
+      ],
+      [
+        0.102130397793112,
+        0.9028596964060842,
+        -0.41762872321253725,
+        0.01881119930993037
+      ],
+      [
+        -0.3581949277431481,
+        0.4250402343759153,
+        0.8312864686140079,
+        0.07615948758314457
+      ],
+      [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ]
+    ],
+    "max_abs_velocity_rad_s": 0.0073260073260073,
+    "motor_error_codes": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ]
+  },
+  "post_can": {
+    "start_monotonic_ns": 11783011640841,
+    "end_monotonic_ns": 11783072480330,
+    "start_wall_ms": 1788868534394,
+    "end_wall_ms": 1788868534454,
+    "joints_rad": [
+      -0.018120088502326936,
+      -0.2080949111161967,
+      -0.0024795910582131597,
+      0.579652094300755,
+      0.11921110856794037,
+      0.42668039978637573
+    ],
+    "T_base_sdk_tool": [
+      [
+        0.9280440590757002,
+        0.064692872614998,
+        0.3668092919312677,
+        0.2671061162423874
+      ],
+      [
+        0.102130397793112,
+        0.9028596964060842,
+        -0.41762872321253725,
+        0.01881119930993037
+      ],
+      [
+        -0.3581949277431481,
+        0.4250402343759153,
+        0.8312864686140079,
+        0.07615948758314457
+      ],
+      [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ]
+    ],
+    "max_abs_velocity_rad_s": 0.0073260073260073,
+    "motor_error_codes": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ]
+  },
+  "max_joint_delta_rad": 0.0,
+  "frame_bracketed_by_passive_can_queries": true,
+  "single_arm_constructed": false,
+  "robot_connected_or_enabled": false,
+  "handeye_effective_semantics": "T_sdk_tool_camera",
+  "handeye_physical_validation": "pending",
+  "T_base_camera": [
+    [
+      -0.07128874712935064,
+      -0.37989639462289476,
+      0.9222779645449923,
+      0.21215851375729897
+    ],
+    [
+      -0.8931058692172866,
+      0.43604417037361204,
+      0.11057751965396985,
+      -0.022243439995615597
+    ],
+    [
+      -0.44416193094677014,
+      -0.8158089303481026,
+      -0.3703727423311858,
+      0.16696812492668633
+    ],
+    [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ]
+  ],
+  "created_at": "2026-09-08T19:55:34.504306+08:00"
+}

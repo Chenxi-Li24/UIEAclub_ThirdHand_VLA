@@ -1,0 +1,68 @@
+{
+  "T_flange_camera": {
+    "matrix_4x4": [
+      [
+        0.0017241948148671304,
+        -0.01580860666017725,
+        0.9998735495589957,
+        -0.08771391598199128
+      ],
+      [
+        -0.9997478590074076,
+        0.022358499257804032,
+        0.0020774794931522345,
+        -0.002023972927677426
+      ],
+      [
+        -0.022388514071864984,
+        -0.9996250224291126,
+        -0.01576607025391441,
+        0.07247829689121331
+      ],
+      [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ]
+    ]
+  },
+  "activated_camera_mount_id": null,
+  "approved_for_bottle_grasp": false,
+  "camera": {
+    "camera_mount_id": "luming_eih_20260817_250801DR48FP25002738_85a58f8a28ac",
+    "camera_serial": "250801DR48FP25002738",
+    "registration_id": "xvisio-sdk:250801DR48FP25002738"
+  },
+  "camera_mount_id_activation": false,
+  "extrinsic_semantics": "T_flange_camera",
+  "numerical_validation": {
+    "gates": {
+      "held_out_rotation_rmse_deg_max": 1.0,
+      "held_out_translation_rmse_m_max": 0.005,
+      "overall_rectified_reprojection_rmse_px_strictly_below": 1.0
+    },
+    "held_out": {
+      "rotation_max_deg": 1.2963282847801032,
+      "rotation_p95_deg": 1.2707902597020948,
+      "rotation_rmse_deg": 0.9168517814216808,
+      "translation_max_m": 0.007541286048033062,
+      "translation_p95_m": 0.007129893598147917,
+      "translation_rmse_m": 0.004921698072453447
+    }
+  },
+  "numerically_validated": true,
+  "physical_validation": {
+    "measured_error_m": null,
+    "required_3d_point_or_grasp_error_m_max": 0.01,
+    "status": "pending"
+  },
+  "robot_state_semantics": "T_base_flange",
+  "schema": "thirdhand-handeye-calibration-v3",
+  "selected_method": "HORAUD",
+  "source": {
+    "filename": "luming_eye_in_hand_calibration.json",
+    "sha256": "sha256:05e5c8680193dad6bb72370e7ba29c8afafee885f4f139250ca1b9d76303be7c",
+    "source_content_id": "sha256:fde5164878fec338c64ee5a35d0d6b38c427448b3cb89fba1e760dcbf408a30f"
+  }
+}

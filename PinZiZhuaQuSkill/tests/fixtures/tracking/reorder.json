@@ -1,0 +1,25 @@
+{
+  "canvas": [160, 80],
+  "frames": [
+    [
+      {"physical_id": 0, "detection_id": 10, "center_x": 30},
+      {"physical_id": 1, "detection_id": 20, "center_x": 80},
+      {"physical_id": 2, "detection_id": 30, "center_x": 130}
+    ],
+    [
+      {"physical_id": 2, "detection_id": 301, "center_x": 129},
+      {"physical_id": 1, "detection_id": 201, "center_x": 81},
+      {"physical_id": 0, "detection_id": 101, "center_x": 31}
+    ],
+    [
+      {"physical_id": 0, "detection_id": 102, "center_x": 32},
+      {"physical_id": 1, "detection_id": 202, "center_x": 82},
+      {"physical_id": 2, "detection_id": 302, "center_x": 128}
+    ],
+    [
+      {"physical_id": 2, "detection_id": 303, "center_x": 127},
+      {"physical_id": 0, "detection_id": 103, "center_x": 33},
+      {"physical_id": 1, "detection_id": 203, "center_x": 83}
+    ]
+  ]
+}

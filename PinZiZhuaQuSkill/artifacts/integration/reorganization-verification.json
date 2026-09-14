@@ -1,0 +1,81 @@
+{
+  "schema": "thirdhand-va-reorganization-verification-v1",
+  "verified_at": "2026-08-21",
+  "target_layout": {
+    "passed": true,
+    "layout_tests": "3 passed",
+    "active_domains": [
+      "thirdhand_va.common",
+      "thirdhand_va.vision",
+      "thirdhand_va.action"
+    ],
+    "migration_only_paths_remaining": []
+  },
+  "python": {
+    "version": "3.14.6",
+    "pytest_version": "9.1.1",
+    "passed": 102,
+    "skipped": 1,
+    "failed": 0,
+    "skip_reason": "CUDA hardware required"
+  },
+  "node": {
+    "version": "24.18.0",
+    "test_file_count": 17,
+    "action_test_files": [
+      "tests/action/adapters/camera_bridge.test.js",
+      "tests/action/adapters/clients.test.js",
+      "tests/action/alignment/visual_align_controller.test.js",
+      "tests/action/grasp/grasp_controller.test.js",
+      "tests/action/grasp/workflow.test.js",
+      "tests/action/grasp/workflow_dependency.test.js",
+      "tests/action/observation/base_target_lock.test.js",
+      "tests/action/observation/depth_filter.test.js",
+      "tests/action/observation/target_memory.test.js",
+      "tests/action/observation/visual_target_lock.test.js",
+      "tests/action/operator/controller.test.js",
+      "tests/action/operator/debug_scripts.test.js",
+      "tests/action/safety/execution_gate.test.js",
+      "tests/action/safety/software_stop.test.js"
+    ],
+    "integration_test_files": [
+      "tests/integration/app_run.test.js",
+      "tests/integration/vision_selection_api.test.js",
+      "tests/integration/web_server.test.js"
+    ],
+    "failed_files": []
+  },
+  "static_checks": {
+    "python_compiled_files": 54,
+    "javascript_syntax_files": 20,
+    "shell_syntax_passed": true,
+    "public_readme_imports_passed": true,
+    "vision_to_action_imports": [],
+    "machine_specific_source_paths": []
+  },
+  "package": {
+    "editable_install_location_verified": true,
+    "vision_result_schema_package_data": true
+  },
+  "offline_spatial_validation": {
+    "passed": true,
+    "case_count": 10,
+    "camera_opened": false,
+    "robot_control_enabled": false,
+    "report": "artifacts/vision/validation/spatial/spatial-vision-offline.json"
+  },
+  "safety": {
+    "vision_imports_action": false,
+    "machine_specific_source_paths": false,
+    "robot_control_enabled": false,
+    "hardware_validation": "pending"
+  },
+  "hardware_tests": {
+    "camera_or_robot_opened": false,
+    "live_test_executed": false,
+    "default_suite_result": "1 skipped",
+    "notes": "Real camera, CUDA, live Web service, and robot tests require explicit operator opt-in."
+  },
+  "legacy_web_snapshot": "artifacts/integration/legacy-web-server.js",
+  "legacy_web_snapshot_active": false
+}

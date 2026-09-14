@@ -1,0 +1,10 @@
+--extra-index-url https://download.pytorch.org/whl/cu128
+numpy==1.26.4
+PyYAML==6.0.2
+opencv-python==4.11.0.86
+Pillow==12.2.0
+pytest==8.4.2
+torch==2.7.0+cu128
+transformers==4.56.2
+norfair==2.3.0
+-e .

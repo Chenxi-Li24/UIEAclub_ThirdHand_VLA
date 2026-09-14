@@ -1,0 +1,4 @@
+{
+  "workbench.browser.enableRemoteProxy": true,
+  "remote.restoreForwardedPorts": true
+}

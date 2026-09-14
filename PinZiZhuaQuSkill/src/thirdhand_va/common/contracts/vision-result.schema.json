@@ -1,0 +1,85 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://thirdhand.local/schemas/vision-result-v3.json",
+  "title": "ThirdHand Stable-ID Vision Decision",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "robot_control_enabled",
+    "status",
+    "frame_id",
+    "reasons",
+    "stable_hits",
+    "window_size",
+    "request_id",
+    "selected_stable_id",
+    "tracks",
+    "captured_monotonic_ns",
+    "camera_serial",
+    "registration_id",
+    "motion_epoch",
+    "evidence_id"
+  ],
+  "properties": {
+    "schema": {"const": "thirdhand-va-decision-v3"},
+    "robot_control_enabled": {"const": false},
+    "status": {
+      "enum": ["searching", "rejected", "uncertain", "unstable", "ready"]
+    },
+    "frame_id": {"type": "integer", "minimum": 0},
+    "reasons": {"type": "array", "items": {"type": "string"}},
+    "stable_hits": {"type": "integer", "minimum": 0},
+    "window_size": {"type": "integer", "minimum": 1},
+    "request_id": {"type": ["string", "null"], "minLength": 1},
+    "selected_stable_id": {
+      "type": ["integer", "null"],
+      "minimum": 1,
+      "maximum": 5
+    },
+    "tracks": {
+      "type": "array",
+      "maxItems": 5,
+      "items": {"$ref": "#/$defs/track"}
+    },
+    "captured_monotonic_ns": {"type": "integer", "minimum": 0},
+    "camera_serial": {"type": "string"},
+    "registration_id": {"type": "string"},
+    "motion_epoch": {"type": "integer", "minimum": 0},
+    "evidence_id": {"type": ["string", "null"], "minLength": 1},
+    "target": {"type": ["object", "null"]},
+    "pose": {"type": ["object", "null"]},
+    "selection": {"type": ["object", "null"]},
+    "spatial_ranks": {"type": "array"}
+  },
+  "$defs": {
+    "track": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "stable_id",
+        "backend_track_id",
+        "track_state",
+        "detection_id",
+        "selected",
+        "depth_valid",
+        "blockers"
+      ],
+      "properties": {
+        "stable_id": {
+          "type": ["integer", "null"],
+          "minimum": 1,
+          "maximum": 5
+        },
+        "backend_track_id": {"type": "integer", "minimum": 0},
+        "track_state": {
+          "enum": ["tentative", "confirmed", "occluded", "lost", "retired"]
+        },
+        "detection_id": {"type": "integer", "minimum": 0},
+        "selected": {"type": "boolean"},
+        "depth_valid": {"type": "boolean"},
+        "blockers": {"type": "array", "items": {"type": "string"}}
+      }
+    }
+  }
+}

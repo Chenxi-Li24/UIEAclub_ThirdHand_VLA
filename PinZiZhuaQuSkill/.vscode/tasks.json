@@ -1,0 +1,146 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Vision Preview: Start Relay",
+      "type": "shell",
+      "command": "python",
+      "args": ["-u", "-m", "apps.vision_preview.main"],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "isBackground": true,
+      "problemMatcher": {
+        "owner": "vision-preview",
+        "pattern": [
+          {
+            "regexp": "^(VISION_PREVIEW_TASK_ERROR): (.+)$",
+            "kind": "file",
+            "file": 1,
+            "message": 2
+          }
+        ],
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": "^.*$",
+          "endsPattern": "^\\{.*\"type\": \"preview_ready\".*\\}$"
+        }
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "focus": false,
+        "clear": false
+      }
+    },
+    {
+      "label": "Vision: Build Synthetic Debug Fixture",
+      "type": "process",
+      "command": "/home/nieqingcao/miniconda3/envs/thirdhand-groundedsam2/bin/python",
+      "args": [
+        "scripts/vision/build_debug_fixture.py",
+        "--output-root",
+        "artifacts/vision/debug-fixture"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}",
+        "env": {
+          "PYTHONPATH": "${workspaceFolder}/src"
+        }
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "VA: Offline Python Tests",
+      "type": "shell",
+      "command": "/home/nieqingcao/miniconda3/envs/thirdhand-groundedsam2/bin/python",
+      "args": [
+        "-m",
+        "pytest",
+        "tests/common",
+        "tests/vision",
+        "tests/action",
+        "tests/integration",
+        "-q"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}",
+        "env": {
+          "PYTHONPATH": "${workspaceFolder}/src"
+        }
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "VA: Offline JavaScript Tests",
+      "type": "shell",
+      "command": "/usr/local/lib/nodejs/node-v24.18.0-linux-x64/bin/npm",
+      "args": ["test"],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Action: Test Startouch Bridge (Offline)",
+      "type": "process",
+      "command": "/home/nieqingcao/miniconda3/envs/thirdhand-groundedsam2/bin/python",
+      "args": [
+        "-m",
+        "pytest",
+        "tests/action/adapters/test_startouch_protocol.py",
+        "-q"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}",
+        "env": {
+          "PYTHONPATH": "${workspaceFolder}:${workspaceFolder}/src"
+        }
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Action: Test Runtime and Placement (Offline)",
+      "type": "process",
+      "command": "/usr/local/lib/nodejs/node-v24.18.0-linux-x64/bin/node",
+      "args": [
+        "--test",
+        "tests/action/adapters/startouch_process_client.test.js",
+        "tests/action/adapters/robot_client_factory.test.js",
+        "tests/action/calibration/approve_handeye.test.js",
+        "tests/action/calibration/pregrasp_validation.test.js",
+        "tests/action/config.test.js",
+        "tests/action/grasp/execution_plan.test.js",
+        "tests/action/grasp/grasp_controller.test.js",
+        "tests/action/grasp/workflow.test.js",
+        "tests/action/operator/debug_scripts.test.js",
+        "tests/action/runtime/approved_runtime.test.js",
+        "tests/action/safety/execution_gate.test.js",
+        "tests/action/safety/home_gate.test.js",
+        "tests/action/safety/home_coordinator.test.js"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Action: Full Offline Regression",
+      "dependsOrder": "sequence",
+      "dependsOn": [
+        "Action: Test Startouch Bridge (Offline)",
+        "Action: Test Runtime and Placement (Offline)"
+      ],
+      "problemMatcher": []
+    },
+    {
+      "label": "VA: Full Offline Regression",
+      "dependsOrder": "sequence",
+      "dependsOn": [
+        "VA: Offline Python Tests",
+        "VA: Offline JavaScript Tests"
+      ],
+      "problemMatcher": []
+    }
+  ]
+}

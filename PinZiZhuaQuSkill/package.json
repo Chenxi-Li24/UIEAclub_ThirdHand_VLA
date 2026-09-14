@@ -1,0 +1,15 @@
+{
+  "name": "thirdhand-va-bottle-skill",
+  "version": "0.1.0",
+  "private": true,
+  "engines": {
+    "node": ">=24 <25"
+  },
+  "dependencies": {
+    "ws": "8.21.3",
+    "yaml": "2.9.0"
+  },
+  "scripts": {
+    "test": "find tests/action tests/integration -name '*.js' -type f -print0 | sort -z | xargs -0 -n1 node"
+  }
+}

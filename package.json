@@ -13,9 +13,14 @@
   ],
   "scripts": {
     "test:contracts": "node --test tests/node/contracts/*.test.js",
+    "test:authorization": "node --test tests/node/authorization/*.test.js",
+    "test:task-engine": "node --test tests/node/task_engine/*.test.js",
     "test:launcher": "node --test tests/node/launcher/*.test.js",
+    "test:orchestrator": "node --test tests/node/orchestrator/*.test.js",
     "test:skills": "node --test tests/node/skill_registry/*.test.js",
-    "test:lifecycle": "python -m pytest tests/integration/test_simulated_lifecycle.py -v"
+    "test:lifecycle": "python -m pytest tests/integration/test_simulated_lifecycle.py -v",
+    "test:node": "node --test tests/node/authorization/*.test.js tests/node/contracts/*.test.js tests/node/gripper_skill/*.test.js tests/node/integration/*.test.js tests/node/launcher/*.test.js tests/node/orchestrator/*.test.js tests/node/robot_service/*.test.js tests/node/skill_registry/*.test.js tests/node/task_engine/*.test.js tests/node/vision_service/*.test.js tests/node/web/*.test.js",
+    "test:python": "python -m pytest -q"
   },
   "devDependencies": {
     "ajv": "8.20.0",

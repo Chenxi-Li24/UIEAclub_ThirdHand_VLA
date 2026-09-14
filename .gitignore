@@ -47,10 +47,6 @@ node_modules/
 dist/
 .pio/
 
-# Standalone Startouch web control runtime
-web-control/.env
-web-control/server/web-control.log
-
 # Unified local delivery assets: present on Ubuntu, never tracked publicly
 /local/**
 !/local/README.md
@@ -63,27 +59,17 @@ web-control/server/web-control.log
 # Robot geometry is local runtime payload; Git stores its manifest and importer.
 /assets/robot/startouch-v3/
 
-# Archive may keep reviewed first-party source, but not copied runtime payloads
-/archive/**/node_modules/
-/archive/**/.venv/
-/archive/**/build/
-/archive/**/dist/
-/archive/**/models/
-/archive/**/logs/
-
-# Source snapshot payloads that must never enter Git if reintroduced later
-/migration/sources/**/.git/
-/migration/sources/**/.venv/
-/migration/sources/**/.conda-*/
-/migration/sources/**/node_modules/
-/migration/sources/**/runtime/
-/migration/sources/**/models/
-/migration/sources/**/artifacts/
-/migration/sources/**/logs/
-/migration/sources/**/build/
-/migration/sources/**/.mypy_cache/
-/migration/sources/**/.ruff_cache/
-/migration/sources/**/.superpowers/
-/archive/source-snapshots/**/.mypy_cache/
-/archive/source-snapshots/**/.ruff_cache/
-/archive/source-snapshots/**/.superpowers/
+# History preserves source only, never copied environments or runtime payloads.
+/History/**/.git/
+/History/**/.venv/
+/History/**/.conda-*/
+/History/**/node_modules/
+/History/**/runtime/
+/History/**/models/
+/History/**/artifacts/
+/History/**/logs/
+/History/**/build/
+/History/**/dist/
+/History/**/.mypy_cache/
+/History/**/.ruff_cache/
+/History/**/.superpowers/

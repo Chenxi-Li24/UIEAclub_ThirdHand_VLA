@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "thirdhand.execution-primitive.v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "primitiveId", "traceId", "taskId", "authorizationId", "planDigest", "operation", "parameters"],
+  "properties": {
+    "schema": {"const": "thirdhand.execution-primitive.v1"},
+    "primitiveId": {"type": "string", "minLength": 1},
+    "traceId": {"type": "string", "minLength": 1},
+    "taskId": {"type": "string", "minLength": 1},
+    "authorizationId": {"type": "string", "minLength": 1},
+    "planDigest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "operation": {"const": "gripper.set"},
+    "parameters": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["positionPercent", "tolerancePercent", "timeoutMs"],
+      "properties": {
+        "positionPercent": {"type": "number", "minimum": 0, "maximum": 100},
+        "tolerancePercent": {"type": "number", "exclusiveMinimum": 0, "maximum": 10},
+        "timeoutMs": {"type": "integer", "minimum": 100, "maximum": 30000}
+      }
+    }
+  }
+}

@@ -3,6 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
+const net = require('node:net');
 const { ServiceSupervisor } = require('../../../apps/launcher/src/service-supervisor');
 const { processStartMarker } = require('../../../apps/launcher/src/service-supervisor');
 const { readState, writeStateAtomic } = require('../../../apps/launcher/src/state-store');
@@ -101,4 +102,97 @@ test('identity mismatch is persisted as not_owned without signaling the PID', as
   assert.equal(state.authorizationState, 'revoked');
   assert.equal(state.services[0].status, 'not_owned');
   fs.rmSync(runtimeDir, { recursive: true, force: true });
+});
+
+test('external listening port blocks every spawn during preflight', async (t) => {
+  const runtimeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'thirdhand-external-'));
+  const listener = net.createServer();
+  await new Promise((resolve, reject) => {
+    listener.once('error', reject);
+    listener.listen(0, '127.0.0.1', resolve);
+  });
+  t.after(async () => {
+    await new Promise(resolve => listener.close(resolve));
+    fs.rmSync(runtimeDir, { recursive: true, force: true });
+  });
+  const supervisor = new ServiceSupervisor({
+    runtimeDir,
+    services: [
+      {
+        id: 'blocked',
+        command: process.execPath,
+        args: [path.resolve('tools/fixtures/fake_service.js')],
+        bind: '127.0.0.1',
+        port: listener.address().port,
+        shutdownOrder: 2,
+        enabled: true,
+      },
+      {
+        id: 'later',
+        command: process.execPath,
+        args: [path.resolve('tools/fixtures/fake_service.js')],
+        shutdownOrder: 1,
+        enabled: true,
+      },
+    ],
+  });
+
+  await assert.rejects(
+    supervisor.startAll(),
+    error => error.code === 'external_service_ownership'
+      && error.services[0].id === 'blocked'
+      && error.services[0].reason === 'external_port_in_use',
+  );
+  assert.equal(supervisor.children.size, 0);
+  const blocked = (await supervisor.status()).find(item => item.id === 'blocked');
+  assert.equal(blocked.state, 'not_owned');
+  assert.equal(blocked.reason, 'external_port_in_use');
+  assert.equal(blocked.port, listener.address().port);
+});
+
+test('matching launcher identity owns an occupied service port', async (t) => {
+  const runtimeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'thirdhand-owned-'));
+  const statePath = path.join(runtimeDir, 'run', 'state.json');
+  const listener = net.createServer();
+  await new Promise((resolve, reject) => {
+    listener.once('error', reject);
+    listener.listen(0, '127.0.0.1', resolve);
+  });
+  const service = {
+    id: 'owned',
+    command: process.execPath,
+    args: ['-e', 'setInterval(() => {}, 60000)'],
+    bind: '127.0.0.1',
+    port: listener.address().port,
+    shutdownOrder: 1,
+    enabled: true,
+  };
+  writeStateAtomic(statePath, {
+    schemaVersion: 1,
+    authorizationState: 'revoked',
+    services: [{
+      id: service.id,
+      pid: process.pid,
+      processStartMarker: processStartMarker(process.pid),
+      commandHash: require('../../../apps/launcher/src/service-supervisor').commandHash(service),
+      status: 'ready',
+    }],
+  });
+  const supervisor = new ServiceSupervisor({ runtimeDir, services: [service] });
+  t.after(async () => {
+    await new Promise(resolve => listener.close(resolve));
+    fs.rmSync(runtimeDir, { recursive: true, force: true });
+  });
+
+  const preflight = await supervisor.preflight();
+  assert.deepEqual(preflight, {
+    ok: true,
+    services: [{
+      id: 'owned',
+      state: 'owned_running',
+      reason: null,
+      bind: '127.0.0.1',
+      port: listener.address().port,
+    }],
+  });
 });

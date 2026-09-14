@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { STLLoader } from 'three/addons/loaders/STLLoader.js';
 import { ColladaLoader } from 'three/addons/loaders/ColladaLoader.js';
+import { PlanChannel } from './plan-channel.mjs';
 import { VoiceControl } from './voice-control.js?v=9';
 console.log('[main.js] Modules imported, THREE keys:', Object.keys(THREE).length);
 
@@ -256,9 +257,10 @@ class ArmModel {
 
 // === WSClient ===
 class WSClient {
-  constructor(pathname = "/ws", label = "WS") {
+  constructor(pathname = "/ws", label = "WS", protocol = null) {
     this.pathname = pathname;
     this.label = label;
+    this.protocol = protocol;
     this.ws = null;
     this.connected = false;
     this.listeners = {};
@@ -272,7 +274,7 @@ class WSClient {
     const url = `${proto}://${location.host}${this.pathname}`;
     console.log(`[${this.label}] connecting to ${url}...`);
 
-    this.ws = new WebSocket(url);
+    this.ws = this.protocol ? new WebSocket(url, this.protocol) : new WebSocket(url);
 
     this.ws.onopen = () => {
       this.connected = true;
@@ -1281,8 +1283,13 @@ function startApp() {
   console.log('[App] ThirdHand Web Control starting...');
 
   let ui = null;
+  const visionWs = new WSClient("/vision", "Vision WS");
+  const ws = new WSClient();
+  const planWs = new WSClient("/plan", "Plan WS", PlanChannel.protocol);
+  const planChannel = new PlanChannel(planWs);
   const voice = new VoiceControl({
     candidateSimulator: createLocalCandidateSimulator(() => ui),
+    planChannel,
     onPanelOpen: () => {
       if (ui) {
         ui.closeLog();
@@ -1306,8 +1313,6 @@ function startApp() {
     if (window.innerWidth <= 900) voice.closePanel();
   });
 
-  const visionWs = new WSClient("/vision", "Vision WS");
-  const ws = new WSClient();
   const viewport = document.getElementById('three-container');
   const scene = new SceneManager(viewport);
   const arm = new ArmModel(scene.scene);
@@ -1336,6 +1341,7 @@ function startApp() {
     ui.bindViewControls(scene);
     visionWs.connect();
     ws.connect();
+    planWs.connect();
     arm.setJointAngles([0, 0, 0, 0, 0, 0]);
     ui.setJointValues([0, 0, 0, 0, 0, 0]);
     console.log('[App] Ready.');

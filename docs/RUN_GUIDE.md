@@ -13,8 +13,10 @@
 - 关节、预设位、夹爪、状态读取和软件停止；
 - XVisio RGB-D 原始画面、深度画面、Grounded-SAM 检测框和稳定目标选择；
 - 正式 Ubuntu 本地语音服务，包含 Medium、Real-time、High 三个 ASR 模型；
-- 语音文字对话和候选动作预览，默认不向机械臂执行候选动作；
+- 语音文字对话、候选动作预览，以及经 `/plan`、精确一次性授权和真实反馈验证的夹爪打开/闭合；
 - 模拟模式的一键启动、状态检查和关闭。
+
+夹爪授权链已通过隔离模拟测试，但当前在线旧进程尚未切换到新的 Launcher profile，真机打开/闭合验收也尚未执行。除 `gripper.open` 和 `gripper.close` 外，语音产生的关节、Home、软件停止与物体夹取候选仍保持不可执行。
 
 尚不可运行：
 - 受监督视觉夹取的运动执行；
@@ -64,6 +66,16 @@ git status --short --branch
 
 ## 4. 真机模式
 
+浏览器授权链可在不占用现有 9983、也不访问 CAN 的情况下验收：
+
+```bash
+./thirdhand start --profile gripper-plan-simulation
+# 打开 http://192.168.58.68:19983
+./thirdhand stop --profile gripper-plan-simulation
+```
+
+该诊断 profile 只新建模拟 Robot 13000、Orchestrator 13200 和 Web 19983；它把当前 3004/3100 作为只读语音与视觉上游，不拥有也不停止这两个进程。页面必须先点击连接模拟机械臂，才能确认夹爪计划。
+
 ### 4.1 启动前检查
 
 必须满足：
@@ -79,7 +91,7 @@ git status --short --branch
 
 ```bash
 ip -details link show can0
-ss -ltnp | grep -E ':(3000|9983)\b' || true
+ss -ltnp | grep -E ':(3000|3004|3100|3200|9983)\b' || true
 ./thirdhand doctor --profile manual-control
 ```
 
@@ -114,10 +126,22 @@ SDK 内的二进制扩展必须匹配项目 Python 版本。首次导入 SDK、�
 - Robot Service 只监听 `127.0.0.1:3000`；
 - Speech Service 只监听 `127.0.0.1:3004`；
 - Vision Service 只监听 `127.0.0.1:3100`；
+- Orchestrator 只监听 `127.0.0.1:3200`；
 - Python 桥已就绪，但不会构造 `SingleArm`；
 - 电机不会被服务启动动作使能。
 
 打开 `http://192.168.58.68:9983`，确认真机环境安全后再点击“连接”。点击连接后 Robot Service 才检查 CAN 反馈并构造 `SingleArm`，SDK 会使能电机，但不会自动发送回零、关节、笛卡尔或夹爪目标。
+
+语音或文字“打开夹爪/关闭夹爪”的执行链为：
+
+```text
+Speech candidate -> Web /plan -> Orchestrator TaskPlan
+-> 页面显示目标与夹伤风险 -> 用户确认一次
+-> 一次性 Authorization -> gripper Skill -> Robot /execution
+-> Startouch 夹爪反馈与六关节偏移验证 -> SkillResult
+```
+
+页面刷新、重连、双击、过期计划或复制旧授权都不能再次执行。浏览器永远看不到 `robot-execution.token`，`/execution` 也不通过 9983 暴露。
 
 ### 4.4 停止
 
@@ -168,6 +192,8 @@ tail -n 100 runtime/logs/speech.stdout.log
 tail -n 100 runtime/logs/speech.stderr.log
 tail -n 100 runtime/logs/vision.stdout.log
 tail -n 100 runtime/logs/vision.stderr.log
+tail -n 100 runtime/logs/orchestrator.stdout.log
+tail -n 100 runtime/logs/orchestrator.stderr.log
 tail -n 100 runtime/logs/web.stdout.log
 tail -n 100 runtime/logs/web.stderr.log
 ```
@@ -202,6 +228,7 @@ npm test --workspace apps/web
 node --test tests/node/vision_service/*.test.js
 PYTHONPATH=src python3 -m pytest -q tests/python/speech_service tests/python/vision_service
 node --test tests/node/launcher/*.test.js
+python -m pytest tests/integration/test_authorized_gripper_chain.py -v
 PYTHONPATH=src python3 -m pytest -q tests/python/robot_service/test_bridge_simulation.py
 PYTHONPATH=src:. python3 -m pytest -q tests/unit/platform tests/integration/test_simulated_lifecycle.py
 PYTHONPATH=src:. python3 tools/diagnostics/audit_boundaries.py --root . --json
@@ -219,11 +246,18 @@ git diff --check
 | `127.0.0.1:13000` | Robot Service | 模拟 profile |
 | `127.0.0.1:3100` | Vision Service | XVisio 原始/识别/深度流和目标选择 |
 | `127.0.0.1:3004` | Speech Service | 正式本地 ASR、对话和候选动作 |
+| `127.0.0.1:3200` | Orchestrator | 计划、一次性授权与 Skill 调度；不拥有硬件 |
 
 本机已有另一个程序只在 Tailscale 地址 `100.85.63.78:9983` 监听；已验证它可与本项目绑定的 LAN 地址 `192.168.58.68:9983` 共存。
 
-## 10. 旧服务
+## 10. 切换当前在线服务
 
-旧 `node proxy.js` 已停止。不要同时运行旧服务与新 Robot Service，它们会竞争 `can0` 或 3000。旧目录只用于来源追溯和显式回退，不是新项目运行依赖。
+如果 `./thirdhand start --profile manual-control` 报告 `external_service_ownership`，不要直接杀进程。先确认机械臂静止、清空夹爪和工作区，并保持硬件急停可触达；然后在当前网页断开 SDK，记录目标端口的精确 PID。只有获得停止这些 PID 的单独批准后，才可停止并确认 3000、3004、3100、3200、9983 全部空闲，再启动统一 profile。
+
+当前任务未执行上述切换，因此本指南中的新 `/plan` 页面行为要等统一服务启动后才能在 9983 验收。
+
+## 11. 旧服务
+
+旧 `node proxy.js` 已停止。不要同时运行旧服务与新 Robot Service，它们会竞争 `can0` 或 3000。旧实现统一保存在 `History/`，只用于来源追溯，不是新项目运行依赖。
 
 软件停止不能替代独立硬件急停。

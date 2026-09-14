@@ -14,7 +14,7 @@ EXPECTED_RUNTIME_FILES = {
     "whisper_backend.py",
 }
 FORBIDDEN_REFERENCES = (
-    "migration/sources",
+    "History/",
     "/home/nieqingcao/Thirdhand_language",
     "/home/nieqingcao/th0814",
 )

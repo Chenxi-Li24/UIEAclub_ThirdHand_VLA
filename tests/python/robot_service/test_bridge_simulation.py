@@ -61,6 +61,25 @@ def test_bridge_simulation_requires_explicit_connect():
             lambda item: item["type"] == "connection" and item["connected"],
         )
         assert connected["simulated"] is True
+
+        process.stdin.write(
+            json.dumps({"cmd": "gripper", "position": 0.25, "request_id": "gripper-1"})
+            + "\n"
+        )
+        process.stdin.flush()
+        accepted = read_until(
+            process,
+            lambda item: item["type"] == "command_accepted"
+            and item.get("command") == "gripper",
+        )
+        assert accepted["request_id"] == "gripper-1"
+        completed = read_until(
+            process,
+            lambda item: item["type"] == "command_complete"
+            and item.get("command") == "gripper",
+        )
+        assert completed["request_id"] == "gripper-1"
+        assert completed["reached"] is True
     finally:
         if process.poll() is None:
             process.stdin.write(json.dumps({"cmd": "shutdown"}) + "\n")

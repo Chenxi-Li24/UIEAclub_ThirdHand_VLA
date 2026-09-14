@@ -6,6 +6,8 @@ const http = require('node:http');
 const path = require('node:path');
 const { WebSocket, WebSocketServer } = require('ws');
 const { loadConfig } = require('./config');
+const { ExecutionGateway } = require('./execution-gateway');
+const { loadExecutionToken, tokenMatches } = require('./execution-token');
 const { RobotController } = require('./robot-controller');
 
 function writeJson(response, status, payload) {
@@ -26,17 +28,27 @@ function createRobotService(options = {}) {
     robot: { ...defaults.robot, ...(options.robot || {}) },
   };
   const controller = new RobotController(config.robot);
+  const executionToken = loadExecutionToken({
+    token: options.executionToken,
+    tokenFile: config.executionTokenFile,
+  });
+  const executionGateway = new ExecutionGateway(controller);
   const sockets = new Set();
+  const executionSockets = new Set();
   let closing = false;
 
   const server = http.createServer((request, response) => {
     if (request.method === 'GET' && request.url === '/health') {
-      writeJson(response, 200, controller.health());
+      writeJson(response, 200, {
+        ...controller.health(),
+        execution: { available: executionToken.available, reason: executionToken.reason },
+      });
       return;
     }
     writeJson(response, 404, { error: 'not_found' });
   });
   const wss = new WebSocketServer({ noServer: true });
+  const executionWss = new WebSocketServer({ noServer: true });
 
   controller.on('message', message => {
     const payload = JSON.stringify(message);
@@ -46,7 +58,23 @@ function createRobotService(options = {}) {
   });
 
   server.on('upgrade', (request, socket, head) => {
-    if (request.url !== '/ws') {
+    const pathname = new URL(request.url, 'http://localhost').pathname;
+    if (pathname === '/execution') {
+      if (!executionToken.available
+        || !tokenMatches(executionToken.token, request.headers['x-thirdhand-execution-token'])) {
+        socket.write('HTTP/1.1 401 Unauthorized\r\nConnection: close\r\nContent-Length: 0\r\n\r\n');
+        socket.destroy();
+        return;
+      }
+      executionWss.handleUpgrade(
+        request,
+        socket,
+        head,
+        ws => executionWss.emit('connection', ws),
+      );
+      return;
+    }
+    if (pathname !== '/ws') {
       socket.destroy();
       return;
     }
@@ -74,6 +102,11 @@ function createRobotService(options = {}) {
     });
     socket.on('close', () => sockets.delete(socket));
   });
+  executionWss.on('connection', socket => {
+    executionSockets.add(socket);
+    executionGateway.attach(socket);
+    socket.on('close', () => executionSockets.delete(socket));
+  });
 
   return {
     controller,
@@ -95,7 +128,10 @@ function createRobotService(options = {}) {
       if (closing) return;
       closing = true;
       for (const socket of sockets) socket.terminate();
+      for (const socket of executionSockets) socket.terminate();
+      executionGateway.close();
       await new Promise(resolve => wss.close(resolve));
+      await new Promise(resolve => executionWss.close(resolve));
       await new Promise(resolve => server.listening ? server.close(resolve) : resolve());
       await controller.shutdown();
       try {

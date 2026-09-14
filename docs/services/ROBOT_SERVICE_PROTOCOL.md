@@ -7,6 +7,7 @@ Robot Service 是 Startouch 机械臂和夹爪的唯一正式所有者：
 - 默认真机地址：`ws://127.0.0.1:3000/ws`；
 - 模拟地址：`ws://127.0.0.1:13000/ws`；
 - 健康检查：`GET /health`；
+- 私有执行：`ws://127.0.0.1:3000/execution`，仅供 Orchestrator 使用；
 - 只绑定 loopback，不对局域网直接开放；
 - 只有该服务可以导入 Startouch SDK、构造 `SingleArm` 或访问 `can0`。
 
@@ -29,6 +30,12 @@ Robot Service 是 Startouch 机械臂和夹爪的唯一正式所有者：
 | `ping` | 无 | 返回 `pong` |
 
 未列出的命令返回 `unsupported_command`。Robot Service 不接受视觉、目标选择、VLA 或自动夹取命令。
+
+## Private Execution
+
+`/execution` 要求请求头 `x-thirdhand-execution-token`。令牌由 Launcher 写入 `runtime/run/robot-execution.token`，权限为 `0600`；浏览器和 Web Gateway 都不能读取或代理该路由。当前只接受通过 `thirdhand.execution-primitive.v1` 校验的 `gripper.set`，不接受关节或 Home 原语。
+
+每个 `primitiveId` 只允许使用一次。Robot Service 在发送夹爪命令前重新检查连接、500 ms 状态新鲜度和 `moving:false`，并用 `request_id` 关联完成事件。只有实际夹爪反馈在目标 2% 容差内、反馈时间晚于命令、且 J1-J6 最大变化不超过 0.5°时才返回 `completed`；超时为 `uncertain`，关节偏移为 `unexpected_arm_motion`，均不重试。
 
 ## Events
 

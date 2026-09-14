@@ -29,6 +29,19 @@ function overallFor(command, items) {
   return items.every(item => item.state === 'ready') ? 'ready' : 'degraded';
 }
 
+function resourcesForProfile(profile, statuses) {
+  const simulatedDevices = {
+    simulation: { startouch: 'ready', xvisio: 'ready' },
+    'manual-control-simulation': { startouch: 'ready' },
+    'gripper-plan-simulation': { startouch: 'ready' },
+  };
+  return {
+    services: Object.fromEntries(statuses.map(item => [item.id, item.state])),
+    devices: { ...(simulatedDevices[profile] || {}) },
+    models: {},
+  };
+}
+
 async function lifecycle(command, profile) {
   const profilePath = path.join(ROOT, 'configs', 'runtime', `${profile}.json`);
   if (!fs.existsSync(profilePath)) throw new Error(`unknown runtime profile: ${profile}`);
@@ -39,11 +52,7 @@ async function lifecycle(command, profile) {
   else if (command === 'stop') statuses = await supervisor.stopAll();
   else statuses = await supervisor.status();
 
-  const resources = {
-    services: Object.fromEntries(statuses.map(item => [item.id, item.state])),
-    devices: profile === 'simulation' ? { startouch: 'ready', xvisio: 'ready' } : {},
-    models: {},
-  };
+  const resources = resourcesForProfile(profile, statuses);
   const skills = await discoverSkills({ skillsRoot: path.join(ROOT, 'skills'), resources });
   return {
     overall: overallFor(command, statuses),
@@ -122,7 +131,11 @@ async function main() {
   process.exitCode = code;
 }
 
-main().catch(error => {
-  console.error(error.message);
-  process.exitCode = 1;
-});
+if (require.main === module) {
+  main().catch(error => {
+    console.error(error.message);
+    process.exitCode = 1;
+  });
+}
+
+module.exports = { resourcesForProfile };

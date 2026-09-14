@@ -30,3 +30,19 @@ test('discovery order is deterministic', async () => {
   });
   assert.deepEqual(skills.map(skill => skill.id), [...skills.map(skill => skill.id)].sort());
 });
+
+test('gripper control requires Robot and Startouch but no vision or model', async () => {
+  const unavailable = await discoverSkills({
+    skillsRoot: path.resolve('skills'),
+    resources: { services: {}, devices: {}, models: {} },
+  });
+  const missing = unavailable.find(skill => skill.id === 'manipulation.gripper-control');
+  assert.ok(missing);
+  assert.deepEqual(missing.unavailableReasons, ['device:startouch', 'service:robot']);
+
+  const available = await discoverSkills({
+    skillsRoot: path.resolve('skills'),
+    resources: { services: { robot: 'ready' }, devices: { startouch: 'ready' }, models: {} },
+  });
+  assert.equal(available.find(skill => skill.id === 'manipulation.gripper-control').status, 'ready');
+});

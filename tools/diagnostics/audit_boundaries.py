@@ -13,14 +13,9 @@ import subprocess
 
 FORMAL_ROOTS = ("apps", "platform", "services", "skills", "drivers", "tools")
 HOME_PATH = re.compile(r"/home/[A-Za-z_][A-Za-z0-9_-]*/")
-ARCHIVE_DIRECTORY = "archive" + "/"
-ARCHIVE_EXECUTABLE_REFERENCE = re.compile(
-    r"\b(import|from|require|spawn|exec|command)\b[^\n]*" + re.escape(ARCHIVE_DIRECTORY),
-    re.IGNORECASE,
-)
-MIGRATION_DIRECTORY = "migration/sources/"
-MIGRATION_EXECUTABLE_REFERENCE = re.compile(
-    r"\b(import|from|require|spawn|exec|command)\b[^\n]*" + re.escape(MIGRATION_DIRECTORY),
+HISTORY_DIRECTORY = "History/"
+HISTORY_EXECUTABLE_REFERENCE = re.compile(
+    r"\b(import|from|require|spawn|exec|command)\b[^\n]*" + re.escape(HISTORY_DIRECTORY),
     re.IGNORECASE,
 )
 
@@ -88,15 +83,9 @@ def audit_repository(root: Path) -> list[Violation]:
                     violations.append(
                         Violation("absolute_home_path", relative, line_number, line.strip())
                     )
-                if ARCHIVE_EXECUTABLE_REFERENCE.search(line):
+                if HISTORY_EXECUTABLE_REFERENCE.search(line):
                     violations.append(
-                        Violation("archive_runtime_dependency", relative, line_number, line.strip())
-                    )
-                if MIGRATION_EXECUTABLE_REFERENCE.search(line):
-                    violations.append(
-                        Violation(
-                            "migration_runtime_dependency", relative, line_number, line.strip()
-                        )
+                        Violation("history_runtime_dependency", relative, line_number, line.strip())
                     )
 
     for tracked in _tracked_files(root):

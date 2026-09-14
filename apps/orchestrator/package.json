@@ -1,0 +1,13 @@
+{
+  "name": "@thirdhand/orchestrator",
+  "version": "0.1.0",
+  "private": true,
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "test": "node --test ../../tests/node/orchestrator/*.test.js"
+  },
+  "dependencies": {
+    "ws": "8.21.3"
+  }
+}

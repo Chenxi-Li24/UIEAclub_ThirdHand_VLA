@@ -175,13 +175,11 @@ class XVisioStream:
         executable: str | Path,
         *,
         expected_serial: str,
-        read_timeout_s: float = 3.0,
     ) -> None:
         if not expected_serial:
             raise ValueError("expected_serial is required")
         self.executable = Path(executable).resolve()
         self.expected_serial = expected_serial
-        self.read_timeout_s = max(0.1, float(read_timeout_s))
         self._condition = threading.Condition()
         self._latest: XVisioFrame | None = None
         self._error: BaseException | None = None
@@ -198,7 +196,6 @@ class XVisioStream:
         if not self.executable.is_file():
             raise RuntimeError(f"XVisio executable not found: {self.executable}")
         parent, child = socket.socketpair(socket.AF_UNIX, socket.SOCK_STREAM)
-        parent.settimeout(self.read_timeout_s)
         try:
             self._process = subprocess.Popen(
                 [str(self.executable), str(child.fileno())],

@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["candidateId", "traceId", "intent", "source", "transcript"],
+  "properties": {
+    "candidateId": {"type": "string", "minLength": 1},
+    "traceId": {"type": "string", "minLength": 1},
+    "intent": {"enum": ["gripper.open", "gripper.close"]},
+    "source": {"enum": ["voice", "text", "model"]},
+    "transcript": {"type": "string", "minLength": 1}
+  }
+}

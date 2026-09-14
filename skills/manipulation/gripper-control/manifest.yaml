@@ -1,0 +1,18 @@
+schema: thirdhand.skill-manifest.v1
+id: manipulation.gripper-control
+version: 0.1.0
+summary: Execute one authorized Startouch gripper position command.
+risk: physical-motion
+lifecycle: worker
+runtime: node
+operations: [plan, execute, status, cancel]
+requires:
+  services: [robot]
+  devices: [startouch]
+  models: []
+schemas:
+  input: schemas/input.json
+  plan: schemas/plan.json
+  result: schemas/result.json
+entrypoint: src/worker.js
+healthcheck: status

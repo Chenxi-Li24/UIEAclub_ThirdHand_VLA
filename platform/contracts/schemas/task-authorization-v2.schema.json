@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "thirdhand.task-authorization.v2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "authorizationId", "taskId", "planId", "planRevision", "targetRef", "planDigest", "authorizedOperations", "issuedAt", "expiresAt"],
+  "properties": {
+    "schema": {"const": "thirdhand.task-authorization.v2"},
+    "authorizationId": {"type": "string", "minLength": 1},
+    "taskId": {"type": "string", "minLength": 1},
+    "planId": {"type": "string", "minLength": 1},
+    "planRevision": {"type": "integer", "minimum": 1},
+    "targetRef": {"type": "string", "minLength": 1},
+    "planDigest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "authorizedOperations": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+    "issuedAt": {"type": "string", "format": "date-time"},
+    "expiresAt": {"type": "string", "format": "date-time"}
+  }
+}

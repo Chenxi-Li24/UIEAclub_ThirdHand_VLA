@@ -1,0 +1,35 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install JavaScript dependencies
+        run: npm ci
+
+      - name: Install lightweight Python test dependencies
+        run: python -m pip install pytest numpy pyyaml
+
+      - name: Node tests
+        run: npm run test:node
+
+      - name: Python tests
+        run: npm run test:python
+
+      - name: Source boundary audit
+        run: python tools/diagnostics/audit_boundaries.py --root .

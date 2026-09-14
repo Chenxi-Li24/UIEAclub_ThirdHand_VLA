@@ -1,10 +1,10 @@
 # ThirdHand Skill 调用协议
 
-状态：Foundation v0.1
+状态：Foundation v0.2；夹爪授权执行已通过隔离模拟
 适用分支：`refactor/unified-platform-foundation`
 机器可读契约：`platform/contracts/schemas/`
 
-本文定义中央 LLM、Skill Registry、Task Engine、Skill worker 与基础服务之间的语义边界。它是实现约束，不代表当前七个 Skill 已经可以执行；当前 worker 尚未迁移，Registry 必须返回 `implementation_not_migrated`。
+本文定义中央 LLM、Skill Registry、Task Engine、Skill worker 与基础服务之间的语义边界。`manipulation.gripper-control` 已具备 Worker，但只在 Robot 私有执行端点、状态和授权同时就绪时可用；其余尚未迁移的 Worker 继续返回不可用。
 
 ## 1. 角色边界
 
@@ -105,13 +105,16 @@ plan -> 展示不可变计划与风险 -> 用户授权 -> execute -> supervise -
 
 `plan` 必须输出 `thirdhand.task-plan.v1`，包含 `taskId`、`planId`、`revision`、`targetRef`、步骤和非空风险列表。
 
-授权必须通过 `thirdhand.task-authorization.v1`，并绑定：
+物理执行授权必须通过 `thirdhand.task-authorization.v2`，并绑定：
 
 - taskId
 - planId 与 planRevision
 - targetRef
 - authorizedOperations
 - expiresAt
+- canonical `planDigest`
+
+授权在 Task Engine 中原子消费一次。旧 v1 可继续读取，但不能授权当前物理执行。
 
 以下任一变化立即使授权失效：计划修订、目标身份、目标位姿版本、动作范围、关键依赖重启、Supervisor 中断、超时或用户取消。授权失效后必须重新计划并再次由用户授权。
 
@@ -193,6 +196,7 @@ plan -> 展示不可变计划与风险 -> 用户授权 -> execute -> supervise -
 | `vision.detect-objects` | read-only | vision, xvisio | unavailable：worker 未迁移 |
 | `vision.supervise-execution` | read-only 配置 | vision, supervisor, xvisio | unavailable：worker 未迁移 |
 | `manipulation.pick-and-place` | physical-motion | robot, vision, supervisor, startouch, xvisio | unavailable：worker 未迁移 |
+| `manipulation.gripper-control` | physical-motion | robot, startouch | ready 取决于 Worker、私有执行令牌、Robot 新鲜且空闲；隔离模拟已通过 |
 | `policy.vla` | physical-motion | 上述服务与 policy.vla | unavailable：worker/权重缺失 |
 | `policy.act` | physical-motion | 上述服务与 policy.act | unavailable：worker/checkpoint 缺失 |
 | `policy.diffusion-policy` | physical-motion | 上述服务与 policy.dp | unavailable：worker/权重缺失 |

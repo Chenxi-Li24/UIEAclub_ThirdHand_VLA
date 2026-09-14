@@ -1,5 +1,3 @@
-"""Reusable camera perception, selection, geometry, and tracking modules."""
+"""Project-local perception modules used by the isolated Vision Service."""
 
-from .pipeline import VisionPipeline
-
-__all__ = ["VisionPipeline"]
+__all__: list[str] = []

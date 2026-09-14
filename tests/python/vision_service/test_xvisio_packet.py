@@ -61,3 +61,40 @@ def test_packet_parser_rejects_unbounded_dimensions() -> None:
     struct.pack_into("<II", packet, 16, 50000, 50000)
     with pytest.raises(module.StreamProtocolError):
         module.parse_header(bytes(packet))
+
+
+def test_stream_reader_socket_remains_blocking(monkeypatch) -> None:
+    module = load_module()
+    real_socketpair = module.socket.socketpair
+    sockets = []
+
+    def fake_socketpair(*args, **kwargs):
+        parent, child = real_socketpair(*args, **kwargs)
+        sockets.append(parent)
+        return parent, child
+
+    class FakeProcess:
+        stderr = None
+
+        @staticmethod
+        def poll():
+            return 0
+
+    class FakeThread:
+        def __init__(self, **_kwargs):
+            pass
+
+        def start(self):
+            pass
+
+        def join(self, timeout=None):
+            del timeout
+
+    monkeypatch.setattr(module.socket, "socketpair", fake_socketpair)
+    monkeypatch.setattr(module.subprocess, "Popen", lambda *_args, **_kwargs: FakeProcess())
+    monkeypatch.setattr(module.threading, "Thread", FakeThread)
+
+    stream = module.XVisioStream(
+        MODULE,
+        expected_serial="250801DR48FP25002738",
+    )

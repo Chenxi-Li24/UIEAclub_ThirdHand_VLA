@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "thirdhand.plan-proposal.v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "proposalId", "candidateId", "traceId", "planDigest", "expiresAt", "plan", "readiness", "risks"],
+  "properties": {
+    "schema": {"const": "thirdhand.plan-proposal.v1"},
+    "proposalId": {"type": "string", "minLength": 1},
+    "candidateId": {"type": "string", "minLength": 1},
+    "traceId": {"type": "string", "minLength": 1},
+    "planDigest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "expiresAt": {"type": "string", "format": "date-time"},
+    "plan": {"$ref": "thirdhand.task-plan.v1"},
+    "readiness": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["robot", "skill", "authorizationReady", "capturedAt"],
+      "properties": {
+        "robot": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["reachable", "connected", "stateReady", "moving", "fresh"],
+          "properties": {
+            "reachable": {"type": "boolean"},
+            "connected": {"type": "boolean"},
+            "stateReady": {"type": "boolean"},
+            "moving": {"type": "boolean"},
+            "fresh": {"type": "boolean"}
+          }
+        },
+        "skill": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["id", "available"],
+          "properties": {
+            "id": {"const": "manipulation.gripper-control"},
+            "available": {"type": "boolean"}
+          }
+        },
+        "authorizationReady": {"type": "boolean"},
+        "capturedAt": {"type": "string", "format": "date-time"}
+      }
+    },
+    "risks": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}}
+  }
+}

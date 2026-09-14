@@ -16,7 +16,8 @@
 |---|---|---|---|
 | `simulation` | 平台基础生命周期测试 | 否 | 五个 fake service |
 | `manual-control-simulation` | 网页和 Robot Service 集成测试 | 否 | Robot 13000 + Web 9983 |
-| `manual-control` | 人工监督的真机控制、语音和视觉 | Robot 仅在网页显式连接后访问 CAN；Vision 访问 XVisio | Robot 3000 + Speech 3004 + Vision 3100 + Web 9983 |
+| `gripper-plan-simulation` | 不替换当前服务的浏览器授权链验收 | 否；Robot 强制模拟 | Robot 13000 + Orchestrator 13200 + Web 19983；只读复用当前 3004/3100 |
+| `manual-control` | 人工监督的真机控制、语音和视觉 | Robot 仅在网页显式连接后访问 CAN；Vision 访问 XVisio | Robot 3000 + Speech 3004 + Vision 3100 + Orchestrator 3200 + Web 9983 |
 | `default` | 记录最终端口所有权 | 否，条目禁用 | 未选择正式验收 profile |
 
 `start` 只启动 profile 中 `enabled: true` 的服务。服务必须写入
@@ -39,7 +40,8 @@
 1. Robot Service 启动，但不连接 SDK；
 2. Speech Service 载入正式本地 ASR；
 3. Vision Service 启动 XVisio 采集，识别模型独立加载；
-4. Web Gateway 最后监听 LAN 9983。
+4. Orchestrator 在 `127.0.0.1:3200` 启动，只生成计划并调度受授权 Skill；
+5. Web Gateway 最后监听 LAN 9983。
 
 Robot Service 启动只产生空闲 Python 桥；浏览器连接 Web Gateway 也不会连接 SDK。只有浏览器显式发送 `{"cmd":"connect"}` 才允许 Robot Service 初始化硬件。
 
@@ -47,6 +49,7 @@ Robot Service 启动只产生空闲 Python 桥；浏览器连接 Web Gateway 也
 
 - `runtime/run/state.json`：服务所有权；
 - `runtime/run/*.ready`：启动就绪标记；
+- `runtime/run/robot-execution.token`：Launcher 管理的 32 字节私有执行令牌，权限 `0600`，完整停止后删除并在下次启动轮换；
 - `runtime/logs/*.stdout.log`：标准输出；
 - `runtime/logs/*.stderr.log`：错误输出。
 
@@ -61,6 +64,22 @@ Robot Service 启动只产生空闲 Python 桥；浏览器连接 Web Gateway 也
 - SDK 状态不足六关节、含非有限数或超过 500 ms：拒绝运动；
 - 运动中的第二条命令：拒绝；
 - 非显式 home 的全零目标：拒绝。
+- Orchestrator 不可达、Robot 状态超过 500 ms、计划过期或摘要变化：拒绝授权；
+- 重复确认、授权重放或执行原语重放：拒绝且不重试；
+- 夹爪反馈超时或任一机械臂关节变化超过 0.5°：不得报告成功。
+
+## Replacing External Services
+
+当前 3000、3004、3100 或 9983 由 Launcher 外部进程占用时，`thirdhand start` 会在启动任何子进程前失败。切换到统一 profile 必须人工完成：
+
+1. 确认机械臂静止、工作区清空，物理急停或断电可触达；
+2. 在当前页面断开 SDK，并确认 Robot health 为 `connected:false`；
+3. 用 `ss -ltnp` 识别 3000、3004、3100、9983 的精确 PID；
+4. 取得针对这些 PID 的明确停止授权后才停止；
+5. 确认 3000、3004、3100、3200、9983 全部空闲；
+6. 启动 `manual-control`，并核对 `runtime/run/state.json` 中所有 PID 均为 Launcher 所有。
+
+Launcher 不会自动执行第 2 至第 4 步，也不会停止身份不匹配的进程。
 
 ## Emergency Behavior
 

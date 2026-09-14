@@ -31,6 +31,15 @@ async function createVisionStub() {
       );
       return;
     }
+    if (request.url === '/camera/xvisio/vision') {
+      response.writeHead(200, {
+        'content-type': 'multipart/x-mixed-replace; boundary=frame',
+      });
+      response.write(
+        '--frame\r\nContent-Type: image/jpeg\r\nContent-Length: 4\r\n\r\njpeg\r\n',
+      );
+      return;
+    }
     response.writeHead(404);
     response.end();
   });
@@ -111,6 +120,27 @@ test('vision streams and events are proxied without robot access', async (t) => 
   await new Promise(resolve => setTimeout(resolve, 25));
   assert.deepEqual(vision.received, [{ type: 'select_target', stableId: 3 }]);
   browser.close();
+
+  let streamResponse;
+  const streamRequest = http.get(`${origin}/camera/xvisio/vision`);
+  await new Promise((resolve, reject) => {
+    streamRequest.once('response', response => {
+      streamResponse = response;
+      response.once('data', resolve);
+    });
+    streamRequest.once('error', reject);
+  });
+  const closePromise = gateway.close();
+  const closeResult = await Promise.race([
+    closePromise.then(() => 'closed'),
+    new Promise(resolve => setTimeout(() => resolve('timeout'), 500)),
+  ]);
+  if (closeResult === 'timeout') {
+    streamRequest.destroy();
+    streamResponse.destroy();
+    await closePromise;
+  }
+  assert.equal(closeResult, 'closed');
 });
 
 test('vision upstream failure remains structured', async (t) => {

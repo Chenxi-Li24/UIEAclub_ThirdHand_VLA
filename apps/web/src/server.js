@@ -12,6 +12,7 @@ const { serveStatic } = require('./static-server');
 const { VisionProxy } = require('./vision-proxy');
 const { WebSocketProxy } = require('./websocket-proxy');
 const VOICE_PROTOCOL = 'thirdhand.voice.v1';
+const PLAN_PROTOCOL = 'thirdhand.plan.v1';
 
 function writeJson(response, status, payload) {
   const body = JSON.stringify(payload);
@@ -30,6 +31,10 @@ function createWebGateway(options = {}) {
   const voiceProxy = new WebSocketProxy(config.voiceWsUrl, {
     subprotocol: VOICE_PROTOCOL,
   });
+  const planProxy = new WebSocketProxy(config.orchestratorWsUrl, {
+    subprotocol: PLAN_PROTOCOL,
+  });
+  const connections = new Set();
   let closing = false;
 
   const server = http.createServer((request, response) => {
@@ -37,6 +42,7 @@ function createWebGateway(options = {}) {
     if (request.method === 'GET' && pathname === '/api/runtime-config') {
       writeJson(response, 200, {
         voice: { endpoint: '/voice', protocol: VOICE_PROTOCOL },
+        plan: { endpoint: '/plan', protocol: PLAN_PROTOCOL },
         vision: { endpoint: '/vision' },
       });
       return;
@@ -49,6 +55,7 @@ function createWebGateway(options = {}) {
           robot: { url: config.robotWsUrl },
           vision: { url: config.visionHttpUrl },
           voice: { url: config.voiceWsUrl },
+          orchestrator: { url: config.orchestratorWsUrl },
         },
       });
       return;
@@ -71,6 +78,10 @@ function createWebGateway(options = {}) {
     if (serveStatic(request, response, config)) return;
     writeJson(response, 404, { error: 'not_found' });
   });
+  server.on('connection', socket => {
+    connections.add(socket);
+    socket.once('close', () => connections.delete(socket));
+  });
 
   const robotWss = new WebSocketServer({ noServer: true });
   const visionWss = new WebSocketServer({ noServer: true });
@@ -78,6 +89,12 @@ function createWebGateway(options = {}) {
     noServer: true,
     handleProtocols(protocols) {
       return protocols.has(VOICE_PROTOCOL) ? VOICE_PROTOCOL : false;
+    },
+  });
+  const planWss = new WebSocketServer({
+    noServer: true,
+    handleProtocols(protocols) {
+      return protocols.has(PLAN_PROTOCOL) ? PLAN_PROTOCOL : false;
     },
   });
   server.on('upgrade', (request, socket, head) => {
@@ -96,6 +113,23 @@ function createWebGateway(options = {}) {
         socket,
         head,
         ws => visionWss.emit('connection', ws),
+      );
+      return;
+    }
+    if (request.url === '/plan') {
+      const requestedProtocols = String(
+        request.headers['sec-websocket-protocol'] || '',
+      ).split(',').map(value => value.trim());
+      if (!requestedProtocols.includes(PLAN_PROTOCOL)) {
+        socket.write('HTTP/1.1 426 Upgrade Required\r\nConnection: close\r\n\r\n');
+        socket.destroy();
+        return;
+      }
+      planWss.handleUpgrade(
+        request,
+        socket,
+        head,
+        ws => planWss.emit('connection', ws),
       );
       return;
     }
@@ -121,6 +155,7 @@ function createWebGateway(options = {}) {
   robotWss.on('connection', socket => robotProxy.attach(socket));
   visionWss.on('connection', socket => visionProxy.attach(socket));
   voiceWss.on('connection', socket => voiceProxy.attach(socket));
+  planWss.on('connection', socket => planProxy.attach(socket));
 
   return {
     async start() {
@@ -142,9 +177,14 @@ function createWebGateway(options = {}) {
       robotProxy.close();
       visionProxy.close();
       voiceProxy.close();
+      planProxy.close();
+      // MJPEG responses are intentionally long-lived. Tear down every inbound
+      // transport so an active camera feed cannot block a supervised stop.
+      for (const socket of connections) socket.destroy();
       await new Promise(resolve => robotWss.close(resolve));
       await new Promise(resolve => visionWss.close(resolve));
       await new Promise(resolve => voiceWss.close(resolve));
+      await new Promise(resolve => planWss.close(resolve));
       await new Promise(resolve => server.listening ? server.close(resolve) : resolve());
       try {
         fs.unlinkSync(config.readyFile);

@@ -174,6 +174,7 @@ class RobotBridge:
         self.control_lock_file = None
         self.last_joint_log_monotonic = 0.0
         self.gripper_target: float | None = None
+        self.gripper_request_id: str | None = None
         self.gripper_start_position: float | None = None
         self.gripper_started_monotonic = 0.0
         self.gripper_stable_samples = 0
@@ -536,8 +537,10 @@ class RobotBridge:
             "reached": reached,
             "moved": moved,
             "elapsed_s": elapsed,
+            "request_id": self.gripper_request_id,
         }
         self.gripper_target = None
+        self.gripper_request_id = None
         self.gripper_start_position = None
         self.gripper_started_monotonic = 0.0
         self.gripper_stable_samples = 0
@@ -630,6 +633,7 @@ class RobotBridge:
                 self.last_valid_joints = list(snapshot["joints"])
                 self.expected_motion_target = None
                 self.gripper_target = None
+                self.gripper_request_id = None
                 self.gripper_start_position = None
                 self.stop_requested.clear()
                 self._record_can_rx(rx_after)
@@ -656,6 +660,7 @@ class RobotBridge:
                 self.last_valid_joints = None
                 self.expected_motion_target = None
                 self.gripper_target = None
+                self.gripper_request_id = None
                 self.gripper_start_position = None
                 self.can_rx_packets = None
                 self.last_can_rx_monotonic = 0.0
@@ -677,6 +682,7 @@ class RobotBridge:
             self.last_valid_joints = None
             self.expected_motion_target = None
             self.gripper_target = None
+            self.gripper_request_id = None
             self.gripper_start_position = None
             self.can_rx_packets = None
             self.last_can_rx_monotonic = 0.0
@@ -797,6 +803,7 @@ class RobotBridge:
         position: Any,
         kp: Any = None,
         kd: Any = None,
+        request_id: Any = None,
     ) -> None:
         if not self.connected or self.arm is None:
             emit("error", message="Startouch SDK is not connected")
@@ -833,6 +840,7 @@ class RobotBridge:
                 target_distance = value * GRIPPER_MAX_DISTANCE_M
                 self.arm.setGripperDistance(target_distance, kp_value, kd_value)
                 self.gripper_target = value
+                self.gripper_request_id = None if request_id is None else str(request_id)
                 self.gripper_start_position = before_position
                 self.gripper_started_monotonic = time.monotonic()
                 self.gripper_stable_samples = 0
@@ -848,9 +856,18 @@ class RobotBridge:
                     f"kp={kp_value:g}, kd={kd_value:g}"
                 ),
             )
-            emit("command_accepted", command="gripper", position=value)
+            emit(
+                "command_accepted",
+                command="gripper",
+                position=value,
+                request_id=self.gripper_request_id,
+            )
         except Exception as exc:
-            emit("error", message=f"gripper command failed: {exc}")
+            emit(
+                "error",
+                message=f"gripper command failed: {exc}",
+                request_id=None if request_id is None else str(request_id),
+            )
 
     def move_linear(self, command: dict[str, Any]) -> None:
         """Execute a Cartesian linear move (move_l)."""
@@ -1154,6 +1171,7 @@ def main() -> None:
                     command.get("position"),
                     command.get("kp"),
                     command.get("kd"),
+                    command.get("request_id"),
                 )
             elif name == "get_state":
                 if bridge.connected:

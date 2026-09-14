@@ -3,6 +3,7 @@
 const { EventEmitter } = require('node:events');
 const { randomUUID } = require('node:crypto');
 const { StartouchBridge } = require('./startouch-bridge');
+const { createContractValidator } = require('../../../platform/contracts/src/validator');
 const {
   DEFAULT_JOINT_LIMITS_DEG,
   DEFAULT_MAX_SPEEDS_DEG_S,
@@ -38,6 +39,10 @@ class RobotController extends EventEmitter {
     this.motionActive = false;
     this.connectPending = false;
     this.started = false;
+    this.contracts = createContractValidator();
+    this.latestGripperPosition = null;
+    this.pendingExecutions = new Map();
+    this.seenPrimitiveIds = new Set();
     this._bindBridge();
   }
 
@@ -191,6 +196,83 @@ class RobotController extends EventEmitter {
     }
   }
 
+  executePrimitive(primitive, reply) {
+    const validation = this.contracts.validate('thirdhand.execution-primitive.v1', primitive);
+    if (!validation.ok) {
+      reply({ type: 'execution.status', status: 'failed', code: 'primitive_invalid', errors: validation.errors });
+      return;
+    }
+    if (this.seenPrimitiveIds.has(primitive.primitiveId)) {
+      reply({ type: 'execution.status', status: 'failed', code: 'primitive_replayed', primitiveId: primitive.primitiveId });
+      return;
+    }
+    const readinessError = this._motionReadinessError();
+    if (readinessError) {
+      reply({
+        type: 'execution.status', status: 'failed', code: readinessError.code,
+        message: readinessError.msg, primitiveId: primitive.primitiveId,
+      });
+      return;
+    }
+    if (this.pendingExecutions.size > 0) {
+      reply({ type: 'execution.status', status: 'failed', code: 'motion_active', primitiveId: primitive.primitiveId });
+      return;
+    }
+
+    this.seenPrimitiveIds.add(primitive.primitiveId);
+    if (this.seenPrimitiveIds.size > 1024) {
+      this.seenPrimitiveIds.delete(this.seenPrimitiveIds.values().next().value);
+    }
+    const requestId = `execution:${primitive.primitiveId}`;
+    const pending = {
+      primitive,
+      reply,
+      requestId,
+      acceptedAt: Date.now(),
+      beforeJoints: [...this.latestJointsDeg],
+      timer: null,
+    };
+    pending.timer = setTimeout(() => {
+      if (!this.pendingExecutions.delete(requestId)) return;
+      this.bridge.softwareStop();
+      reply({
+        type: 'execution.status', status: 'uncertain', code: 'feedback_timeout',
+        primitiveId: primitive.primitiveId, taskId: primitive.taskId, traceId: primitive.traceId,
+      });
+    }, primitive.parameters.timeoutMs);
+    this.pendingExecutions.set(requestId, pending);
+    const sent = this.bridge.send({
+      cmd: 'gripper',
+      position: primitive.parameters.positionPercent / 100,
+      request_id: requestId,
+    });
+    if (!sent) {
+      clearTimeout(pending.timer);
+      this.pendingExecutions.delete(requestId);
+      reply({ type: 'execution.status', status: 'failed', code: 'bridge_unavailable', primitiveId: primitive.primitiveId });
+      return;
+    }
+    reply({
+      type: 'execution.status', status: 'accepted', primitiveId: primitive.primitiveId,
+      taskId: primitive.taskId, traceId: primitive.traceId,
+    });
+  }
+
+  interruptPrimitive(primitiveId, reason = 'execution_interrupted') {
+    for (const [requestId, pending] of this.pendingExecutions) {
+      if (pending.primitive.primitiveId !== primitiveId) continue;
+      clearTimeout(pending.timer);
+      this.pendingExecutions.delete(requestId);
+      this.bridge.softwareStop();
+      pending.reply({
+        type: 'execution.status', status: 'interrupted', code: reason,
+        primitiveId, taskId: pending.primitive.taskId, traceId: pending.primitive.traceId,
+      });
+      return true;
+    }
+    return false;
+  }
+
   _sendJointMotion(joints, source, reply) {
     const validation = validateJointTarget(joints);
     if (!validation.ok) {
@@ -278,6 +360,9 @@ class RobotController extends EventEmitter {
       this.stateReady = this.latestJointsDeg.length === 6
         && this.latestJointsDeg.every(Number.isFinite);
       this.motionActive = message.state === 'MOVING';
+      this.latestGripperPosition = Number.isFinite(message.gripper_position)
+        ? message.gripper_position
+        : null;
       this.emit('message', {
         type: 'robot_state',
         joints: this.latestJointsDeg,
@@ -305,10 +390,47 @@ class RobotController extends EventEmitter {
     }
     if (message.type === 'command_complete') {
       this.motionActive = false;
+      const pending = this.pendingExecutions.get(message.request_id);
+      if (pending) {
+        clearTimeout(pending.timer);
+        this.pendingExecutions.delete(message.request_id);
+        const actualPercent = Number(message.actual_position ?? this.latestGripperPosition) * 100;
+        const requestedPercent = pending.primitive.parameters.positionPercent;
+        const maxJointDeltaDeg = Math.max(...this.latestJointsDeg.map(
+          (joint, index) => Math.abs(joint - pending.beforeJoints[index]),
+        ));
+        const feedbackFresh = this.latestRobotStateAtMs >= pending.acceptedAt;
+        const targetReached = message.reached !== false
+          && Number.isFinite(actualPercent)
+          && Math.abs(actualPercent - requestedPercent) <= pending.primitive.parameters.tolerancePercent;
+        const safe = targetReached && feedbackFresh && maxJointDeltaDeg <= 0.5;
+        if (maxJointDeltaDeg > 0.5) this.bridge.softwareStop();
+        pending.reply({
+          type: 'execution.status',
+          status: safe ? 'completed' : 'failed',
+          code: safe ? 'target_reached' : (maxJointDeltaDeg > 0.5 ? 'unexpected_arm_motion' : 'feedback_invalid'),
+          primitiveId: pending.primitive.primitiveId,
+          taskId: pending.primitive.taskId,
+          traceId: pending.primitive.traceId,
+          requestedPercent,
+          actualPercent,
+          maxJointDeltaDeg,
+        });
+      }
       this.emit('message', { ...message, type: 'command_status', status: 'complete' });
       return;
     }
     if (message.type === 'error') {
+      const pending = this.pendingExecutions.get(message.request_id);
+      if (pending) {
+        clearTimeout(pending.timer);
+        this.pendingExecutions.delete(message.request_id);
+        pending.reply({
+          type: 'execution.status', status: 'failed', code: 'bridge_error',
+          message: message.message, primitiveId: pending.primitive.primitiveId,
+          taskId: pending.primitive.taskId, traceId: pending.primitive.traceId,
+        });
+      }
       this.emit('message', { ...message, type: 'error', msg: message.message });
       return;
     }
@@ -320,6 +442,8 @@ class RobotController extends EventEmitter {
   async shutdown() {
     if (!this.started) return;
     this.started = false;
+    for (const pending of this.pendingExecutions.values()) clearTimeout(pending.timer);
+    this.pendingExecutions.clear();
     this.bridge.shutdown();
     await new Promise(resolve => setTimeout(resolve, 450));
   }

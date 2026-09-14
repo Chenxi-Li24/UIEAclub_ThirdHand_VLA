@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>ThirdHand - Startouch 机械臂控制</title>
-  <link rel="stylesheet" href="css/style.css?v=4">
+  <link rel="stylesheet" href="css/style.css?v=5">
 </head>
 <body>
   <!-- 软件停止提示 -->
@@ -67,9 +67,9 @@
 
       <div class="voice-preview-indicator" id="voice-preview-indicator" hidden
            role="status" aria-live="polite">
-        <span>LOCAL PREVIEW</span>
-        <strong id="voice-preview-label">本地模拟</strong>
-        <small>不会发送到 LUMOS</small>
+        <span>CONFIRMATION PREVIEW</span>
+        <strong id="voice-preview-label">确认前 3D 预览</strong>
+        <small>确认前不会发送硬件命令</small>
       </div>
 
       <!-- 左上角视图工具浮动栏 -->
@@ -446,6 +446,6 @@
   }
   </script>
   <script src="js/runtime-endpoints.js?v=1"></script>
-  <script type="module" src="js/main.js?v=7"></script>
+  <script type="module" src="js/main.js?v=8"></script>
 </body>
 </html>

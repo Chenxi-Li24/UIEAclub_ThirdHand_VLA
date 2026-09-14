@@ -85,6 +85,9 @@
         "ROBOT_WS_URL": "ws://127.0.0.1:3000/ws",
         "ORCHESTRATOR_WS_URL": "ws://127.0.0.1:3200/plan",
         "VOICE_WS_URL": "ws://127.0.0.1:3004/v1/voice",
+        "LANGUAGE_REAL_CONTROL": "1",
+        "DIRECTIONAL_CONTROL_ENABLED": "1",
+        "DIRECTIONAL_REAL_CONTROL": "1",
         "VISION_HTTP_URL": "http://127.0.0.1:3100",
         "VISION_WS_URL": "ws://127.0.0.1:3100/ws"
       },

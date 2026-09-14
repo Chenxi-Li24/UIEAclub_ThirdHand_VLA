@@ -26,7 +26,7 @@ function writeJson(response, status, payload) {
 
 function createWebGateway(options = {}) {
   const config = { ...loadConfig(options.env), ...options };
-  const robotProxy = new RobotProxy(config.robotWsUrl);
+  const robotProxy = new RobotProxy(config.robotWsUrl, config.language);
   const visionProxy = new VisionProxy(config.visionWsUrl);
   const voiceProxy = new WebSocketProxy(config.voiceWsUrl, {
     subprotocol: VOICE_PROTOCOL,
@@ -44,6 +44,13 @@ function createWebGateway(options = {}) {
         voice: { endpoint: '/voice', protocol: VOICE_PROTOCOL },
         plan: { endpoint: '/plan', protocol: PLAN_PROTOCOL },
         vision: { endpoint: '/vision' },
+        language: {
+          executionBackend: 'formal-3000-upstream',
+          directional: {
+            enabled: config.language.directionalEnabled,
+            realControlEnabled: config.language.directionalRealControlEnabled,
+          },
+        },
       });
       return;
     }

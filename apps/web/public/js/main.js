@@ -3,9 +3,53 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { STLLoader } from 'three/addons/loaders/STLLoader.js';
 import { ColladaLoader } from 'three/addons/loaders/ColladaLoader.js';
-import { PlanChannel } from './plan-channel.mjs';
 import { VoiceControl } from './voice-control.js?v=9';
 console.log('[main.js] Modules imported, THREE keys:', Object.keys(THREE).length);
+
+const DIRECTIONAL_PREVIEW_MAPPING = Object.freeze({
+  'turn.left': [[0, 1]],
+  'turn.right': [[0, -1]],
+  'lift.up': [[1, 1], [2, -1]],
+  'lift.down': [[1, -1], [2, 1]],
+  'wrist.pitch.up': [[3, -1]],
+  'wrist.pitch.down': [[3, 1]],
+  'wrist.yaw.left': [[4, 1]],
+  'wrist.yaw.right': [[4, -1]],
+  'wrist.roll.clockwise': [[5, 1]],
+  'wrist.roll.counterclockwise': [[5, -1]],
+});
+const DIRECTIONAL_PREVIEW_FAMILIES = Object.freeze({
+  'turn.left': 'turn', 'turn.right': 'turn',
+  'lift.up': 'lift', 'lift.down': 'lift',
+  'wrist.pitch.up': 'wrist.pitch', 'wrist.pitch.down': 'wrist.pitch',
+  'wrist.yaw.left': 'wrist.yaw', 'wrist.yaw.right': 'wrist.yaw',
+  'wrist.roll.clockwise': 'wrist.roll',
+  'wrist.roll.counterclockwise': 'wrist.roll'
+});
+
+function directionalPreviewMoves(candidate) {
+  const params = candidate?.payload?.params;
+  if (!params || typeof params !== 'object' || Array.isArray(params)) return null;
+  if (Object.keys(params).sort().join(',') === 'action,deltaDeg') {
+    if (candidate.intent !== params.action || !DIRECTIONAL_PREVIEW_MAPPING[params.action] ||
+        !Number.isFinite(params.deltaDeg) || params.deltaDeg <= 0) return null;
+    return [{ action: params.action, deltaDeg: params.deltaDeg }];
+  }
+  if (candidate.intent !== 'directional.compound' ||
+      Object.keys(params).sort().join(',') !== 'moves' ||
+      !Array.isArray(params.moves) || params.moves.length < 2 || params.moves.length > 5) return null;
+  const families = new Set();
+  const moves = [];
+  for (const move of params.moves) {
+    const family = DIRECTIONAL_PREVIEW_FAMILIES[move?.action];
+    if (!family || families.has(family) ||
+        Object.keys(move || {}).sort().join(',') !== 'action,deltaDeg' ||
+        !Number.isFinite(move.deltaDeg) || move.deltaDeg <= 0) return null;
+    families.add(family);
+    moves.push({ action: move.action, deltaDeg: move.deltaDeg });
+  }
+  return moves;
+}
 
 // === SceneManager ===
 class SceneManager {
@@ -257,10 +301,9 @@ class ArmModel {
 
 // === WSClient ===
 class WSClient {
-  constructor(pathname = "/ws", label = "WS", protocol = null) {
+  constructor(pathname = "/ws", label = "WS") {
     this.pathname = pathname;
     this.label = label;
-    this.protocol = protocol;
     this.ws = null;
     this.connected = false;
     this.listeners = {};
@@ -274,7 +317,7 @@ class WSClient {
     const url = `${proto}://${location.host}${this.pathname}`;
     console.log(`[${this.label}] connecting to ${url}...`);
 
-    this.ws = this.protocol ? new WebSocket(url, this.protocol) : new WebSocket(url);
+    this.ws = new WebSocket(url);
 
     this.ws.onopen = () => {
       this.connected = true;
@@ -348,6 +391,7 @@ class UIControls {
     this._draggingSlider = false;
     this.presets = {};
     this.robotStateReady = false;
+    this.robotConnected = false;
     this.gripperTargetEdited = false;
     this.visionConfigExecutionEnabled = false;
     this.visionTargetExecutionEnabled = false;
@@ -362,7 +406,19 @@ class UIControls {
     this.lastRobotState = {
       joints: null,
       gripperPosition: null,
-      stateName: null
+      stateName: null,
+      observedAt: 0
+    };
+    this.languageBackend = 'local-bridge';
+    this.directionalRuntime = { enabled: false, realControlEnabled: false };
+    this.languageRobotState = {
+      connected: false,
+      stateFresh: false,
+      motionActive: false,
+      joints: null,
+      gripperPosition: null,
+      stateName: null,
+      observedAt: 0
     };
     this.localVoicePreview = {
       joints: false,
@@ -547,6 +603,7 @@ class UIControls {
 
     // WebSocket 事件监听
     this.ws.on('connection', (data) => {
+      this.robotConnected = data.connected === true;
       this.clearVoicePreview({ restore: false, reason: '连接状态变化' });
       if (data.connected) {
         this.gripperTargetEdited = false;
@@ -584,6 +641,7 @@ class UIControls {
       this.visionConfigExecutionEnabled = data.visionSafety?.robotExecutionEnabled === true;
       this._updateVisionControls();
       if (data.connection) {
+        this.robotConnected = data.connection.connected === true;
         this.robotStateReady = false;
         this._setMotionControlsEnabled(false);
         this._setConnStatus(
@@ -594,9 +652,31 @@ class UIControls {
         hb.textContent = data.connection.connected ? 'SDK:OK' : 'SDK:OFF';
         hb.className = `hb-label ${data.connection.connected ? 'ok' : 'lost'}`;
       }
+      if (data.language?.executionBackend) {
+        this.languageBackend = data.language.executionBackend;
+      }
+      if (data.language?.directional) {
+        this.directionalRuntime = { ...this.directionalRuntime, ...data.language.directional };
+      }
+    });
+
+    this.ws.on('language_backend', (data) => {
+      this.languageBackend = data.backend || this.languageBackend;
+      this.languageRobotState.connected = data.connected === true;
+      this.languageRobotState.stateFresh = data.stateFresh === true;
+      this.languageRobotState.motionActive = data.motionActive === true;
+      this.languageRobotState.stateName = data.stateName || null;
+      this.languageRobotState.observedAt = Date.now();
+      if (Array.isArray(data.joints) && data.joints.length === 6) {
+        this.languageRobotState.joints = data.joints.slice(0, 6).map(Number);
+      }
+      if (Number.isFinite(Number(data.gripperPosition))) {
+        this.languageRobotState.gripperPosition = Number(data.gripperPosition);
+      }
     });
 
     this.ws.on('robot_state', (data) => {
+      this.lastRobotState.observedAt = Date.now();
       if (data.joints && data.joints.length >= 6) {
         this.lastRobotState.joints = data.joints.slice(0, 6).map(Number);
       }
@@ -943,53 +1023,202 @@ class UIControls {
   }
 
   appendLocalLog(message) {
-    this._log(`[本地模拟 · 未发送至 LUMOS] ${message}`);
+    this._log(`[确认前 3D 预览 · 未发送硬件命令] ${message}`);
   }
 
   supportsVoiceCandidate(candidate) {
-    const intent = candidate?.intent;
-    const args = candidate?.args || {};
-    if (intent === 'robot.estop' || intent === 'robot.status') return true;
+    if (candidate?.skill === 'pick_and_place_bottle@1') {
+      const params = candidate?.payload?.params || {};
+      return Boolean(
+        candidate?.intent === 'pick_and_place_bottle' &&
+        params.object === 'coke_bottle' &&
+        params.destination?.id === 'drop_zone_b' &&
+        params.destination?.type === 'configured_drop_zone' &&
+        Object.keys(params.destination).length === 2 &&
+        Object.keys(params).length === 2
+      );
+    }
+    if (candidate?.skill === 'directional_joint_control@1') {
+      return Boolean(
+        this.arm.loaded &&
+        directionalPreviewMoves(candidate)
+      );
+    }
+    if (candidate?.skill !== 'manual_joint_control@1') return false;
+    const params = candidate?.payload?.params || {};
+    const intent = params.action || candidate?.intent;
+    if (intent === 'robot.status') return true;
     if (!this.arm.loaded) return false;
-    if (intent === 'robot.preset') return args.name === 'home';
-    if (['gripper.open', 'gripper.close', 'gripper.grip'].includes(intent)) return true;
-    return intent === 'gripper.set_position' &&
-      Number.isInteger(args.position) &&
-      args.position >= 0 &&
-      args.position <= 3800;
+    if (intent === 'robot.home') {
+      const home = this.presets?.home;
+      return Array.isArray(home) && home.length === 6 && home.every(Number.isFinite);
+    }
+    if (['gripper.open', 'gripper.close'].includes(intent)) return true;
+    if (!['joint.set', 'joint.step'].includes(intent)) return false;
+    if (!Number.isInteger(params.joint) || params.joint < 1 || params.joint > 6) return false;
+    return intent === 'joint.set'
+      ? Number.isFinite(params.targetDeg)
+      : Number.isFinite(params.deltaDeg);
+  }
+
+  languageControlReady() {
+    if (this.languageBackend === 'formal-3000-upstream') {
+      return Boolean(
+        this.languageRobotState.connected &&
+        this.languageRobotState.stateFresh &&
+        !this.languageRobotState.motionActive &&
+        this.languageRobotState.stateName === 'IDLE' &&
+        Date.now() - this.languageRobotState.observedAt <= 500
+      );
+    }
+    return Boolean(
+      this.robotConnected &&
+      this.robotStateReady &&
+      this.lastRobotState.stateName === 'IDLE' &&
+      Date.now() - this.lastRobotState.observedAt <= 500
+    );
+  }
+
+  _languageStateForPreview() {
+    if (this.languageBackend === 'formal-3000-upstream') {
+      return this.languageRobotState;
+    }
+    return this.lastRobotState;
   }
 
   simulateVoiceCandidate(candidate) {
     if (!this.supportsVoiceCandidate(candidate)) {
-      return { ok: false, message: '该动作不支持 LUMOS 本地模拟。' };
+      return { ok: false, message: '该动作不支持确认前 3D 预览。' };
     }
 
-    const intent = candidate.intent;
-    const args = candidate.args || {};
+    const params = candidate.payload?.params || {};
+    if (candidate.skill === 'pick_and_place_bottle@1') {
+      const message = 'Skill 预览：coke_bottle → drop_zone_b；Language 未生成关节、轨迹或抓取动作';
+      this.appendLocalLog(message);
+      return { ok: true, message };
+    }
+    if (candidate.skill === 'directional_joint_control@1') {
+      const previewState = this._languageStateForPreview();
+      const currentJoints = (previewState.joints || this.arm.getJointAngles()).slice(0, 6).map(Number);
+      if (currentJoints.length !== 6 || currentJoints.some(value => !Number.isFinite(value))) {
+        return { ok: false, message: '没有可用的六轴状态，无法生成方向动作预览。' };
+      }
+      const moves = directionalPreviewMoves(candidate);
+      if (!moves) {
+        return { ok: false, message: '方向动作或角度幅度无效，不能预览或确认。' };
+      }
+      const joints = currentJoints.slice();
+      const changedJointIndices = new Set();
+      for (const move of moves) {
+        for (const [index, sign] of DIRECTIONAL_PREVIEW_MAPPING[move.action]) {
+          joints[index] += sign * move.deltaDeg;
+          changedJointIndices.add(index);
+        }
+      }
+      for (const index of changedJointIndices) {
+        const limits = this.arm.jointLimits?.[index];
+        if (!Array.isArray(limits) || joints[index] < limits[0] || joints[index] > limits[1]) {
+          const range = Array.isArray(limits) ? ` ${limits[0]}° 到 ${limits[1]}°` : '';
+          return {
+            ok: false,
+            message: `J${index + 1} 目标 ${joints[index].toFixed(1)}° 超出机械关节限位${range}，不能预览或确认。`,
+          };
+        }
+      }
+      const liftMove = moves.find(move => move.action === 'lift.up' || move.action === 'lift.down');
+      if (liftMove) {
+        const liftOnlyJoints = currentJoints.slice();
+        for (const [index, sign] of DIRECTIONAL_PREVIEW_MAPPING[liftMove.action]) {
+          liftOnlyJoints[index] += sign * liftMove.deltaDeg;
+        }
+        const baseline = this.arm.getJointAngles();
+        this.arm.setJointAngles(currentJoints);
+        const start = this.arm.getEndEffectorBasePosition();
+        this.arm.setJointAngles(liftOnlyJoints);
+        const end = this.arm.getEndEffectorBasePosition();
+        this.arm.setJointAngles(baseline);
+        const dx = end.x - start.x;
+        const dy = end.y - start.y;
+        const dz = end.z - start.z;
+        const transverse = Math.hypot(dx, dy);
+        const signMatches = liftMove.action === 'lift.up' ? dz > 1e-6 : dz < -1e-6;
+        if (!signMatches || Math.abs(dz) + 1e-9 < transverse) {
+          return {
+            ok: false,
+            message: `整体${liftMove.action === 'lift.up' ? '抬高' : '降低'}未通过基坐标方向预览校验，不能确认。`,
+          };
+        }
+      }
+      const changes = [...changedJointIndices].sort((a, b) => a - b).map(index => {
+        const delta = joints[index] - currentJoints[index];
+        return `J${index + 1} ${currentJoints[index].toFixed(1)}° → ${joints[index].toFixed(1)}° (Δ${delta >= 0 ? '+' : ''}${delta.toFixed(1)}°)`;
+      }).join(' / ');
+      const mode = this.directionalRuntime.realControlEnabled
+        ? '确认后由正式 3000 执行'
+        : '9982 方向真机开关关闭 · 仅预览';
+      const atomic = moves.length > 1 ? ' · 一次同时发送' : '';
+      const label = `${changes} · 速度 0.05${atomic} · ${mode}`;
+      this._startVoicePreview({ joints }, label);
+      return { ok: true, message: label };
+    }
+    const intent = params.action || candidate.intent;
     if (intent === 'robot.status') {
-      const joints = this.lastRobotState.joints || this.arm.getJointAngles();
-      const state = this.lastRobotState.stateName || 'LOCAL';
-      const message = `本地状态 ${state}；关节 ${joints.map(value => `${Number(value).toFixed(1)}°`).join(' / ')}`;
+      const previewState = this._languageStateForPreview();
+      const joints = previewState.joints || this.arm.getJointAngles();
+      const state = previewState.stateName || 'LOCAL';
+      const message = `预览状态 ${state}；关节 ${joints.map(value => `${Number(value).toFixed(1)}°`).join(' / ')}`;
       this.appendLocalLog(message);
       return { ok: true, message };
     }
 
-    if (intent === 'robot.estop') {
-      const message = '已模拟“停止”意图；未触发软件停止，也未触发硬件急停。';
-      this.appendLocalLog(message);
-      return { ok: true, message };
+    if (intent === 'robot.home') {
+      const home = this.presets?.home;
+      if (!Array.isArray(home) || home.length !== 6 || !home.every(Number.isFinite)) {
+        return { ok: false, message: '右侧 Home 预设尚未就绪，不能预览或确认。' };
+      }
+      const outsideLimit = home.findIndex((value, index) => {
+        const limits = this.arm.jointLimits?.[index];
+        return !Array.isArray(limits) || value < limits[0] || value > limits[1];
+      });
+      if (outsideLimit !== -1) {
+        return { ok: false, message: `右侧 Home 预设的 J${outsideLimit + 1} 超出机械关节限位。` };
+      }
+      const label = `返回右侧 Home 预设 · ${home.map(value => `${value.toFixed(1)}°`).join(' / ')}`;
+      this._startVoicePreview({ joints: [...home] }, label);
+      return { ok: true, message: `${label}；确认后才会发送真机命令。` };
     }
 
-    if (intent === 'robot.preset' && args.name === 'home') {
-      const joints = new Array(this.arm.jointNames.length).fill(0);
-      this._startVoicePreview({ joints }, 'LUMOS 六轴零位预览');
-      return { ok: true, message: '正在本地预览 LUMOS 六轴零位，5 秒后恢复实时模型。' };
+    if (intent === 'joint.set' || intent === 'joint.step') {
+      const previewState = this._languageStateForPreview();
+      const currentJoints = (previewState.joints || this.arm.getJointAngles()).slice(0, 6).map(Number);
+      if (currentJoints.length !== 6 || currentJoints.some(value => !Number.isFinite(value))) {
+        return { ok: false, message: '没有可用的六轴状态，无法生成安全预览。' };
+      }
+      const index = params.joint - 1;
+      const current = currentJoints[index];
+      const target = intent === 'joint.set' ? Number(params.targetDeg) : current + Number(params.deltaDeg);
+      const delta = target - current;
+      if (!Number.isFinite(target)) {
+        return { ok: false, message: '目标角度无效，不能预览或确认。' };
+      }
+      const limits = this.arm.jointLimits?.[index];
+      if (!Array.isArray(limits) || target < limits[0] || target > limits[1]) {
+        const range = Array.isArray(limits) ? ` ${limits[0]}° 到 ${limits[1]}°` : '';
+        return {
+          ok: false,
+          message: `J${params.joint} 目标 ${target.toFixed(1)}° 超出机械关节限位${range}，不能预览或确认。`,
+        };
+      }
+      const joints = currentJoints.slice();
+      joints[index] = target;
+      const label = `J${params.joint}: ${current.toFixed(1)}° → ${target.toFixed(1)}° · Δ${delta >= 0 ? '+' : ''}${delta.toFixed(1)}° · 速度 0.05 · 单轴真机动作`;
+      this._startVoicePreview({ joints }, label);
+      return { ok: true, message: label };
     }
 
     let gripperPosition;
     if (intent === 'gripper.open') gripperPosition = 1;
-    if (intent === 'gripper.close' || intent === 'gripper.grip') gripperPosition = 0;
-    if (intent === 'gripper.set_position') gripperPosition = args.position / 3800;
+    if (intent === 'gripper.close') gripperPosition = 0;
 
     if (Number.isFinite(gripperPosition)) {
       this._startVoicePreview(
@@ -998,11 +1227,11 @@ class UIControls {
       );
       return {
         ok: true,
-        message: `正在本地预览夹爪 ${(gripperPosition * 100).toFixed(0)}%，5 秒后恢复实时模型。`
+        message: `确认前预览夹爪 ${(gripperPosition * 100).toFixed(0)}%；确认后才会发送硬件命令。`
       };
     }
 
-    return { ok: false, message: '该动作不支持 LUMOS 本地模拟。' };
+    return { ok: false, message: '该动作不支持确认前 3D 预览。' };
   }
 
   _startVoicePreview(preview, label) {
@@ -1028,10 +1257,10 @@ class UIControls {
       indicator.dataset.previewJoints = String(this.localVoicePreview.joints);
       indicator.dataset.previewGripper = String(this.localVoicePreview.gripper);
     }
-    this.appendLocalLog(`${label}；5 秒后恢复实时模型`);
+    this.appendLocalLog(`${label}；候选取消、完成或 120 秒过期后恢复实时模型`);
     this.localVoicePreview.timer = setTimeout(() => {
-      this.clearVoicePreview({ restore: true, reason: '本地模拟预览结束' });
-    }, 5000);
+      this.clearVoicePreview({ restore: true, reason: '候选预览已过期' });
+    }, 120000);
   }
 
   clearVoicePreview({ restore = true, reason = '' } = {}) {
@@ -1039,8 +1268,9 @@ class UIControls {
     clearTimeout(this.localVoicePreview.timer);
     this.localVoicePreview.timer = 0;
 
-    if (restore && this.localVoicePreview.joints && this.lastRobotState.joints) {
-      this.arm.setJointAngles(this.lastRobotState.joints);
+    const previewState = this._languageStateForPreview();
+    if (restore && this.localVoicePreview.joints && previewState.joints) {
+      this.arm.setJointAngles(previewState.joints);
       this._updateTCP();
     } else if (
       restore &&
@@ -1053,9 +1283,9 @@ class UIControls {
     if (
       restore &&
       this.localVoicePreview.gripper &&
-      Number.isFinite(this.lastRobotState.gripperPosition)
+      Number.isFinite(previewState.gripperPosition)
     ) {
-      this.arm.setGripperPosition(this.lastRobotState.gripperPosition);
+      this.arm.setGripperPosition(previewState.gripperPosition);
     } else if (
       restore &&
       this.localVoicePreview.gripper &&
@@ -1275,6 +1505,9 @@ function createLocalCandidateSimulator(getUi) {
       const ui = getUi();
       if (!ui) return { ok: false, message: 'LUMOS 本地模型尚未准备好。' };
       return ui.simulateVoiceCandidate(candidate);
+    },
+    clear(reason = 'Language 候选已结束') {
+      getUi()?.clearVoicePreview({ restore: true, reason });
     }
   });
 }
@@ -1283,13 +1516,16 @@ function startApp() {
   console.log('[App] ThirdHand Web Control starting...');
 
   let ui = null;
-  const visionWs = new WSClient("/vision", "Vision WS");
+  const visionWs = new WSClient('/vision', 'Vision WS');
   const ws = new WSClient();
-  const planWs = new WSClient("/plan", "Plan WS", PlanChannel.protocol);
-  const planChannel = new PlanChannel(planWs);
   const voice = new VoiceControl({
     candidateSimulator: createLocalCandidateSimulator(() => ui),
-    planChannel,
+    robotChannel: {
+      isReady: () => ws.connected,
+      canConfirm: () => Boolean(ui?.languageControlReady()),
+      send: message => ws.send(message)
+    },
+    onExecutionResult: () => ui?.clearVoicePreview({ restore: true, reason: '真实执行结果已返回' }),
     onPanelOpen: () => {
       if (ui) {
         ui.closeLog();
@@ -1302,6 +1538,8 @@ function startApp() {
     }
   });
   voice.init();
+  ws.on('message', message => voice.handleRobotMessage(message));
+  ws.on('ws_connection', state => voice.handleRobotMessage({ type: 'ws_connection', ...state }));
 
   document.getElementById('btn-log-toggle')?.addEventListener('click', () => {
     voice.closePanel();
@@ -1339,9 +1577,12 @@ function startApp() {
   arm.loadingPromise.then(() => {
     ui.build();
     ui.bindViewControls(scene);
+    ws.on('connection', () => voice.handleRobotMessage({ type: 'runtime-readiness' }));
+    ws.on('config', () => voice.handleRobotMessage({ type: 'runtime-readiness' }));
+    ws.on('robot_state', () => voice.handleRobotMessage({ type: 'runtime-readiness' }));
+    ws.on('language_backend', () => voice.handleRobotMessage({ type: 'runtime-readiness' }));
     visionWs.connect();
     ws.connect();
-    planWs.connect();
     arm.setJointAngles([0, 0, 0, 0, 0, 0]);
     ui.setJointValues([0, 0, 0, 0, 0, 0]);
     console.log('[App] Ready.');

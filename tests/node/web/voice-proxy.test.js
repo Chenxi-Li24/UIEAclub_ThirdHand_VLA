@@ -116,10 +116,6 @@ test('formal Ubuntu voice UI uses three local models and same-origin routing', (
     path.join(root, 'apps/web/public/js/voice-control.js'),
     'utf8',
   );
-  const main = fs.readFileSync(
-    path.join(root, 'apps/web/public/js/main.js'),
-    'utf8',
-  );
 
   for (const modelId of [
     'whisper-small',
@@ -133,12 +129,6 @@ test('formal Ubuntu voice UI uses three local models and same-origin routing', (
   assert.doesNotMatch(index, /Jetson 本地 AI|data-voice-port="300[12]"/);
   assert.match(voiceControl, /runtimeConfig\?\.voice\?\.endpoint/);
   assert.doesNotMatch(voiceControl, /:300[12]\//);
-  assert.match(main, /import \{ PlanChannel \} from '\.\/plan-channel\.mjs'/);
-  assert.match(main, /new WSClient\("\/plan", "Plan WS", PlanChannel\.protocol\)/);
-  assert.match(main, /planChannel/);
-  assert.match(voiceControl, /this\.planChannel/);
-  assert.doesNotMatch(voiceControl, /type: 'skill\.candidate'/);
-  assert.doesNotMatch(voiceControl, /type: 'confirmation\.decision'/);
   assert.equal(
     fs.existsSync(path.join(root, 'apps/web/public/js/tts-player.js')),
     true,

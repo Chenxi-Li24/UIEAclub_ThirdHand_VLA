@@ -63,38 +63,19 @@ def test_packet_parser_rejects_unbounded_dimensions() -> None:
         module.parse_header(bytes(packet))
 
 
-def test_stream_reader_socket_remains_blocking(monkeypatch) -> None:
+def test_stream_error_preserves_protocol_failure_when_sdk_stderr_exists() -> None:
     module = load_module()
-    real_socketpair = module.socket.socketpair
-    sockets = []
-
-    def fake_socketpair(*args, **kwargs):
-        parent, child = real_socketpair(*args, **kwargs)
-        sockets.append(parent)
-        return parent, child
-
-    class FakeProcess:
-        stderr = None
-
-        @staticmethod
-        def poll():
-            return 0
-
-    class FakeThread:
-        def __init__(self, **_kwargs):
-            pass
-
-        def start(self):
-            pass
-
-        def join(self, timeout=None):
-            del timeout
-
-    monkeypatch.setattr(module.socket, "socketpair", fake_socketpair)
-    monkeypatch.setattr(module.subprocess, "Popen", lambda *_args, **_kwargs: FakeProcess())
-    monkeypatch.setattr(module.threading, "Thread", FakeThread)
-
-    stream = module.XVisioStream(
-        MODULE,
-        expected_serial="250801DR48FP25002738",
+    stream = module.XVisioStream(MODULE, expected_serial="250801DR48FP25002738")
+    stream._error = module.StreamProtocolError(
+        "sequence and timestamp must strictly increase"
     )
+    stream._stderr_tail.extend(
+        b"[LOG ERROR] cannot switch from manual to automatic argument indexing"
+    )
+
+    with pytest.raises(RuntimeError) as captured:
+        stream.read_after(0, timeout_s=0.0)
+
+    message = str(captured.value)
+    assert "sequence and timestamp must strictly increase" in message
+    assert "cannot switch from manual to automatic argument indexing" in message

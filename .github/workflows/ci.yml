@@ -23,7 +23,7 @@ jobs:
         run: npm ci
 
       - name: Install lightweight Python test dependencies
-        run: python -m pip install pytest numpy pyyaml
+        run: python -m pip install pytest numpy pyyaml "websockets>=12,<16"
 
       - name: Node tests
         run: npm run test:node

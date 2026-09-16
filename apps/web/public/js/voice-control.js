@@ -52,6 +52,23 @@ function validDirectionalMoves(params) {
   });
 }
 
+function validManualJointMoves(params) {
+  if (params?.action !== 'joint.multi' ||
+      Object.keys(params).sort().join(',') !== 'action,moves' ||
+      !Array.isArray(params.moves) || params.moves.length < 2 || params.moves.length > 6) return false;
+  const seen = new Set();
+  return params.moves.every(move => {
+    const keys = Object.keys(move || {}).sort().join(',');
+    const field = keys === 'deltaDeg,joint' ? 'deltaDeg'
+      : keys === 'joint,targetDeg' ? 'targetDeg' : null;
+    if (!field || !Number.isInteger(move.joint) || move.joint < 1 || move.joint > 6 ||
+        seen.has(move.joint) || !Number.isFinite(move[field]) ||
+        (field === 'deltaDeg' && move.deltaDeg === 0)) return false;
+    seen.add(move.joint);
+    return true;
+  });
+}
+
 // Lazy-imported TTS player — loaded on demand so the panel opens fast.
 let _TTSPlayer = null;
 function _lazyTTSPlayer() {
@@ -68,6 +85,7 @@ const INTENT_VALIDATORS = {
   'joint.step': params =>
     Number.isInteger(params?.joint) && params.joint >= 1 && params.joint <= 6 &&
     Number.isFinite(params?.deltaDeg),
+  'joint.multi': validManualJointMoves,
   'robot.status': () => true,
   'robot.home': () => true,
   'gripper.open': () => true,
@@ -489,6 +507,7 @@ export class VoiceControl {
     this.directionalRuntime = { enabled: false, realControlEnabled: false };
     this.executionPending = false;
     this.candidatePreviewReady = false;
+    this.candidatePreviewError = null;
     this.ignoredResultCandidateIds = new Set();
     this.onPanelOpen = options.onPanelOpen;
     this.onPanelClose = options.onPanelClose;
@@ -1083,12 +1102,14 @@ export class VoiceControl {
         }
         this.pendingCandidate = candidate;
         this.candidatePreviewReady = false;
+        this.candidatePreviewError = null;
         try {
           const preview = this.candidateSimulator.simulate(candidate) || {};
           if (preview.ok === false) throw new Error(preview.message || '3D 预览失败');
           this.candidatePreviewReady = true;
         } catch (error) {
-          this._showNotice(error?.message || '本地 3D 预览失败，候选不可确认。', 'error');
+          this.candidatePreviewError = error?.message || '本地 3D 预览失败，候选不可确认。';
+          this._showNotice(this.candidatePreviewError, 'error');
         }
         this._renderCandidate(candidate);
         this._setSessionState('confirm', '已预览，等待确认');
@@ -1387,10 +1408,16 @@ export class VoiceControl {
       `来自：“${candidate.sourceText || this.finalTranscript || '—'}”`;
     document.getElementById('voice-intent-confidence').textContent =
       Number.isFinite(candidate.confidence) ? `${Math.round(candidate.confidence * 100)}%` : '--';
+    const warning = document.getElementById('voice-intent-warning');
+    if (warning) {
+      warning.textContent = this.candidatePreviewError || '';
+      warning.hidden = !this.candidatePreviewError;
+    }
     const confirmButton = document.getElementById('voice-intent-confirm');
     const ready = supported && this.robotChannel.isReady?.() && this.robotChannel.canConfirm?.();
     confirmButton.disabled = !ready;
-    confirmButton.textContent = ready ? '确认并执行真机' : '控制链路未就绪';
+    confirmButton.textContent = ready ? '确认并执行真机'
+      : this.candidatePreviewError ? '预览未通过，禁止执行' : '控制链路未就绪';
     card.hidden = false;
     this.panel.classList.add('has-candidate');
   }
@@ -1479,6 +1506,9 @@ export class VoiceControl {
   _resetCandidate() {
     this.pendingCandidate = null;
     this.candidatePreviewReady = false;
+    this.candidatePreviewError = null;
+    const warning = document.getElementById('voice-intent-warning');
+    if (warning) { warning.textContent = ''; warning.hidden = true; }
     document.getElementById('voice-intent-card').hidden = true;
     this.panel.classList.remove('has-candidate');
     const confirmButton = document.getElementById('voice-intent-confirm');
@@ -1555,6 +1585,12 @@ export class VoiceControl {
   }
 
   _intentLabel(intent, params = {}) {
+    if (intent === 'joint.multi' && validManualJointMoves(params)) {
+      return params.moves.map(move => 'targetDeg' in move
+        ? `J${move.joint} 到 ${move.targetDeg}°`
+        : `J${move.joint} ${move.deltaDeg >= 0 ? '+' : ''}${move.deltaDeg}°`
+      ).join(' + ');
+    }
     if (intent === 'directional.compound' && validDirectionalMoves(params)) {
       return params.moves.map(move => this._intentLabel(move.action, move)).join(' + ');
     }

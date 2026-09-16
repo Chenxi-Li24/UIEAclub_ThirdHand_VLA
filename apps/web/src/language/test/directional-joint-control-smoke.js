@@ -181,6 +181,18 @@ for (const [action, expected] of mappings) {
 
 {
   const result = computeDirectionalTarget({
+    currentJointsDeg: [170, -20, -100, 0, 0, 0],
+    action: 'turn.left',
+    deltaDeg: 20,
+    jointLimitsDeg: LIMITS,
+  });
+  assert.equal(result.ok, false);
+  assert.match(result.reason, /J1.*162/);
+  assert.match(result.reason, /J2.*-12/);
+}
+
+{
+  const result = computeDirectionalTarget({
     currentJointsDeg: [0, 100, -100, 0, 0, 0],
     action: 'lift.up',
     deltaDeg: 20,

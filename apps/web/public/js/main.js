@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { STLLoader } from 'three/addons/loaders/STLLoader.js';
 import { ColladaLoader } from 'three/addons/loaders/ColladaLoader.js';
-import { VoiceControl } from './voice-control.js?v=9';
+import { VoiceControl } from './voice-control.js?v=10';
 console.log('[main.js] Modules imported, THREE keys:', Object.keys(THREE).length);
 
 const DIRECTIONAL_PREVIEW_MAPPING = Object.freeze({
@@ -49,6 +49,41 @@ function directionalPreviewMoves(candidate) {
     moves.push({ action: move.action, deltaDeg: move.deltaDeg });
   }
   return moves;
+}
+
+function manualPreviewMoves(candidate) {
+  const params = candidate?.payload?.params;
+  if (candidate?.intent !== 'joint.multi' || params?.action !== 'joint.multi' ||
+      Object.keys(params || {}).sort().join(',') !== 'action,moves' ||
+      !Array.isArray(params.moves) || params.moves.length < 2 || params.moves.length > 6) return null;
+  const seen = new Set();
+  const moves = [];
+  for (const move of params.moves) {
+    const keys = Object.keys(move || {}).sort().join(',');
+    const field = keys === 'deltaDeg,joint' ? 'deltaDeg'
+      : keys === 'joint,targetDeg' ? 'targetDeg' : null;
+    if (!field || !Number.isInteger(move.joint) || move.joint < 1 || move.joint > 6 ||
+        seen.has(move.joint) || !Number.isFinite(move[field]) ||
+        (field === 'deltaDeg' && move.deltaDeg === 0)) return null;
+    seen.add(move.joint);
+    moves.push({ joint: move.joint, [field]: move[field] });
+  }
+  return moves;
+}
+
+function jointLimitWarnings(joints, jointLimits, indices) {
+  const warnings = [];
+  for (const index of indices) {
+    const target = joints[index];
+    const limits = jointLimits?.[index];
+    if (!Array.isArray(limits) || limits.length !== 2 ||
+        !limits.every(Number.isFinite) || !Number.isFinite(target)) {
+      warnings.push(`J${index + 1} 限位或目标数据无效`);
+    } else if (target < limits[0] || target > limits[1]) {
+      warnings.push(`J${index + 1} 目标 ${target.toFixed(1)}° 超出机械关节限位（允许 ${limits[0]}°～${limits[1]}°）`);
+    }
+  }
+  return warnings;
 }
 
 // === SceneManager ===
@@ -295,6 +330,15 @@ class ArmModel {
     const p = new THREE.Vector3();
     if (this.endEffector) this.endEffector.getWorldPosition(p);
     return { x: p.x, y: p.y, z: p.z };
+  }
+
+  getEndEffectorBasePosition() {
+    if (!this.robot || !this.endEffector) return { x: 0, y: 0, z: 0 };
+    this.robot.updateWorldMatrix(true, true);
+    const position = new THREE.Vector3();
+    this.endEffector.getWorldPosition(position);
+    this.robot.worldToLocal(position);
+    return { x: position.x, y: position.y, z: position.z };
   }
 }
 
@@ -1049,6 +1093,7 @@ class UIControls {
     const intent = params.action || candidate?.intent;
     if (intent === 'robot.status') return true;
     if (!this.arm.loaded) return false;
+    if (intent === 'joint.multi') return Boolean(manualPreviewMoves(candidate));
     if (intent === 'robot.home') {
       const home = this.presets?.home;
       return Array.isArray(home) && home.length === 6 && home.every(Number.isFinite);
@@ -1115,15 +1160,9 @@ class UIControls {
           changedJointIndices.add(index);
         }
       }
-      for (const index of changedJointIndices) {
-        const limits = this.arm.jointLimits?.[index];
-        if (!Array.isArray(limits) || joints[index] < limits[0] || joints[index] > limits[1]) {
-          const range = Array.isArray(limits) ? ` ${limits[0]}° 到 ${limits[1]}°` : '';
-          return {
-            ok: false,
-            message: `J${index + 1} 目标 ${joints[index].toFixed(1)}° 超出机械关节限位${range}，不能预览或确认。`,
-          };
-        }
+      const directionLimitWarnings = jointLimitWarnings(joints, this.arm.jointLimits, [0, 1, 2, 3, 4, 5]);
+      if (directionLimitWarnings.length) {
+        return { ok: false, message: `机械限位禁止执行：${directionLimitWarnings.join('；')}` };
       }
       const liftMove = moves.find(move => move.action === 'lift.up' || move.action === 'lift.down');
       if (liftMove) {
@@ -1176,16 +1215,40 @@ class UIControls {
       if (!Array.isArray(home) || home.length !== 6 || !home.every(Number.isFinite)) {
         return { ok: false, message: '右侧 Home 预设尚未就绪，不能预览或确认。' };
       }
-      const outsideLimit = home.findIndex((value, index) => {
-        const limits = this.arm.jointLimits?.[index];
-        return !Array.isArray(limits) || value < limits[0] || value > limits[1];
-      });
-      if (outsideLimit !== -1) {
-        return { ok: false, message: `右侧 Home 预设的 J${outsideLimit + 1} 超出机械关节限位。` };
+      const homeLimitWarnings = jointLimitWarnings(home, this.arm.jointLimits, [0, 1, 2, 3, 4, 5]);
+      if (homeLimitWarnings.length) {
+        return { ok: false, message: `Home 机械限位禁止执行：${homeLimitWarnings.join('；')}` };
       }
       const label = `返回右侧 Home 预设 · ${home.map(value => `${value.toFixed(1)}°`).join(' / ')}`;
       this._startVoicePreview({ joints: [...home] }, label);
       return { ok: true, message: `${label}；确认后才会发送真机命令。` };
+    }
+
+    if (intent === 'joint.multi') {
+      const previewState = this._languageStateForPreview();
+      const currentJoints = (previewState.joints || this.arm.getJointAngles()).slice(0, 6).map(Number);
+      if (currentJoints.length !== 6 || currentJoints.some(value => !Number.isFinite(value))) {
+        return { ok: false, message: '没有可用的六轴状态，无法生成多轴预览。' };
+      }
+      const moves = manualPreviewMoves(candidate);
+      if (!moves) return { ok: false, message: '多轴关节或角度参数无效，不能预览或确认。' };
+      const joints = currentJoints.slice();
+      for (const move of moves) {
+        const index = move.joint - 1;
+        joints[index] = 'targetDeg' in move ? move.targetDeg : currentJoints[index] + move.deltaDeg;
+      }
+      const warnings = jointLimitWarnings(joints, this.arm.jointLimits, [0, 1, 2, 3, 4, 5]);
+      if (warnings.length) {
+        return { ok: false, message: `机械限位禁止执行：${warnings.join('；')}` };
+      }
+      const changes = moves.map(move => {
+        const index = move.joint - 1;
+        const delta = joints[index] - currentJoints[index];
+        return `J${move.joint} ${currentJoints[index].toFixed(1)}° → ${joints[index].toFixed(1)}° (Δ${delta >= 0 ? '+' : ''}${delta.toFixed(1)}°)`;
+      }).join(' / ');
+      const label = `${changes} · 速度 0.05 · 一次同时发送 · 确认后由正式 3000 执行`;
+      this._startVoicePreview({ joints }, label);
+      return { ok: true, message: label };
     }
 
     if (intent === 'joint.set' || intent === 'joint.step') {
@@ -1201,13 +1264,12 @@ class UIControls {
       if (!Number.isFinite(target)) {
         return { ok: false, message: '目标角度无效，不能预览或确认。' };
       }
-      const limits = this.arm.jointLimits?.[index];
-      if (!Array.isArray(limits) || target < limits[0] || target > limits[1]) {
-        const range = Array.isArray(limits) ? ` ${limits[0]}° 到 ${limits[1]}°` : '';
-        return {
-          ok: false,
-          message: `J${params.joint} 目标 ${target.toFixed(1)}° 超出机械关节限位${range}，不能预览或确认。`,
-        };
+      const singleLimitWarnings = jointLimitWarnings(
+        currentJoints.map((value, jointIndex) => jointIndex === index ? target : value),
+        this.arm.jointLimits, [0, 1, 2, 3, 4, 5]
+      );
+      if (singleLimitWarnings.length) {
+        return { ok: false, message: `机械限位禁止执行：${singleLimitWarnings.join('；')}` };
       }
       const joints = currentJoints.slice();
       joints[index] = target;

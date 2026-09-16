@@ -12,6 +12,7 @@ function candidate(action, extra = {}) {
     traceId: extra.traceId || `trace-${action}`,
     sourceText: extra.sourceText || action,
     skill: extra.skill || 'manual_joint_control@1',
+    intent: action,
     createdAt: NOW,
     expiresAt: extra.expiresAt ?? NOW + 120_000,
     requiresConfirmation: extra.requiresConfirmation ?? action !== 'safety.stop.request',
@@ -118,6 +119,47 @@ function last(h) {
 
 {
   const h = harness();
+  const c = candidate('joint.multi', { params: { moves: [
+    { joint: 1, deltaDeg: 10 }, { joint: 2, deltaDeg: -10 }, { joint: 3, targetDeg: -20 },
+  ] } });
+  h.orchestrator.register('browser-a', c);
+  h.orchestrator.decide('browser-a', { candidateId: c.candidateId, traceId: c.traceId, decision: 'approve' });
+  assert.equal(h.commands.length, 1);
+  assert.equal(h.commands[0].cmd, 'move_joint');
+  assert.equal(h.commands[0].speed_scale, 0.05);
+  assert.deepStrictEqual(h.commands[0].manual_joint_authorization.moves, c.payload.params.moves);
+  const degrees = h.commands[0].joints_rad.map(value => value * 180 / Math.PI);
+  assert(degrees.every((value, index) => Math.abs(value - [10, -10, -20, 0, 0, 0][index]) < 1e-9));
+  h.orchestrator.handleBridgeEvent({ type: 'command_complete', request_id: 'wrong-request' });
+  assert.notEqual(last(h).type, 'skill.result');
+  h.orchestrator.handleBridgeEvent({ type: 'command_complete', request_id: h.commands[0].request_id });
+  h.orchestrator.handleBridgeEvent({ type: 'robot_state', ts: NOW, joints: [10, -10, -20, 0, 0, 0] });
+  assert.equal(last(h).type, 'skill.result');
+  assert.equal(last(h).success, true);
+}
+
+{
+  const h = harness();
+  const c = candidate('joint.multi', { params: { moves: [
+    { joint: 1, targetDeg: 163 }, { joint: 2, targetDeg: -13 },
+  ] } });
+  h.orchestrator.register('browser-a', c);
+  h.orchestrator.decide('browser-a', { candidateId: c.candidateId, traceId: c.traceId, decision: 'approve' });
+  assert.equal(h.commands.length, 0);
+  assert.equal(last(h).status, 'blocked');
+  assert.match(last(h).message, /J1.*162/);
+  assert.match(last(h).message, /J2.*-12/);
+}
+
+{
+  const c = candidate('joint.multi', { params: { moves: [
+    { joint: 1, deltaDeg: 10 }, { joint: 1, deltaDeg: -10 },
+  ] } });
+  assert.equal(validateCandidate(c, NOW).ok, false);
+}
+
+{
+  const h = harness();
   const c = candidate('joint.set', { params: { joint: 1, targetDeg: 163 } });
   h.orchestrator.register('browser-a', c);
   h.orchestrator.decide('browser-a', { candidateId: c.candidateId, traceId: c.traceId, decision: 'approve' });
@@ -198,7 +240,7 @@ function last(h) {
   });
   assert.equal(h.commands.length, 0);
   assert.equal(last(h).status, 'blocked');
-  assert.match(last(h).message, /J1.*关节限位/);
+  assert.match(last(h).message, /J1.*163.*-162.*162/);
 }
 
 {

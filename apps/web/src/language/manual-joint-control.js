@@ -7,6 +7,7 @@ const PICK_SKILL = 'pick_and_place_bottle@1';
 const ALLOWED_ACTIONS = new Set([
   'joint.set',
   'joint.step',
+  'joint.multi',
   'gripper.open',
   'gripper.close',
   'robot.status',
@@ -30,6 +31,32 @@ function parseExpiry(value) {
 
 function clone(value) {
   return JSON.parse(JSON.stringify(value));
+}
+
+function normalizeMultiJointMoves(moves) {
+  if (!Array.isArray(moves) || moves.length < 2 || moves.length > 6) {
+    return { ok: false, reason: '多轴指令必须包含 2–6 个关节' };
+  }
+  const seen = new Set();
+  const normalized = [];
+  for (const move of moves) {
+    if (!move || typeof move !== 'object' || Array.isArray(move)) {
+      return { ok: false, reason: '多轴关节项必须是对象' };
+    }
+    const keys = Object.keys(move).sort().join(',');
+    const field = keys === 'deltaDeg,joint' ? 'deltaDeg'
+      : keys === 'joint,targetDeg' ? 'targetDeg' : null;
+    if (!field || !Number.isInteger(move.joint) || move.joint < 1 || move.joint > 6 ||
+        !Number.isFinite(move[field]) || (field === 'deltaDeg' && move.deltaDeg === 0)) {
+      return { ok: false, reason: '每个关节必须给出有效的 joint 和 deltaDeg 或 targetDeg' };
+    }
+    if (seen.has(move.joint)) {
+      return { ok: false, reason: `J${move.joint} 在同一多轴指令中重复` };
+    }
+    seen.add(move.joint);
+    normalized.push({ joint: move.joint, [field]: move[field] });
+  }
+  return { ok: true, moves: normalized };
 }
 
 function validateCandidate(candidate, nowMs) {
@@ -82,6 +109,19 @@ function validateCandidate(candidate, nowMs) {
       return { ok: false, reason: params.action === 'joint.set' ? 'targetDeg 无效' : 'deltaDeg 无效' };
     }
   }
+  if (params.action === 'joint.multi') {
+    if (candidate.intent !== 'joint.multi' ||
+        Object.keys(params).sort().join(',') !== 'action,moves') {
+      return { ok: false, reason: '多轴 intent 或参数结构无效' };
+    }
+    const normalized = normalizeMultiJointMoves(params.moves);
+    if (!normalized.ok) return normalized;
+    return {
+      ok: true, expiresAtMs,
+      params: { action: 'joint.multi', moves: normalized.moves },
+      externalSkill: false,
+    };
+  }
   return { ok: true, expiresAtMs, params: clone(params), externalSkill: false };
 }
 
@@ -109,6 +149,7 @@ class ManualJointOrchestrator {
     this.gripperOpenTarget = Number(options.gripperOpenTarget ?? 1);
     this.gripperCloseTarget = Number(options.gripperCloseTarget ?? 0);
     this.maxJointTimeoutMs = Number(options.maxJointTimeoutMs ?? 10_000);
+    this.maxMultiTimeoutMs = Number(options.maxMultiTimeoutMs ?? 35_000);
     this.maxHomeTimeoutMs = Number(options.maxHomeTimeoutMs ?? 30_000);
     this.gripperTimeoutMs = Number(options.gripperTimeoutMs ?? 5_000);
     this.skillExecutors = options.skillExecutors || null;
@@ -286,16 +327,39 @@ class ManualJointOrchestrator {
         } else {
           this._finish(false, 'failed', `${active.label}未达到目标，夹爪反馈 reached:false`);
         }
-      } else if (active.kind === 'joint' || active.kind === 'home') {
+      } else if (active.kind === 'joint' || active.kind === 'multi' || active.kind === 'home') {
         active.completedAtMs = this.now();
       }
       return true;
     }
     if (message.type === 'robot_state' &&
-        (active.kind === 'joint' || active.kind === 'home') && active.completeReceived) {
+        (active.kind === 'joint' || active.kind === 'multi' || active.kind === 'home') && active.completeReceived) {
       const observedAtMs = finiteNumber(message.observedAtMs ?? message.ts ?? this.now());
       const joints = message.joints || message.jointsDeg;
       if (!Array.isArray(joints) || joints.length !== 6 || observedAtMs < active.completedAtMs) return false;
+      if (active.kind === 'multi') {
+        const errorsDeg = active.targetJointsDeg.map(
+          (target, index) => Math.abs(Number(joints[index]) - target)
+        );
+        if (!errorsDeg.every(Number.isFinite)) return false;
+        const missed = active.changedJointIndices.filter(
+          index => errorsDeg[index] > this.jointToleranceDeg
+        );
+        if (missed.length === 0 && errorsDeg.every(
+          errorDeg => errorDeg <= this.jointToleranceDeg
+        )) {
+          this._finish(
+            true, 'success',
+            `多轴运动完成，六轴最大目标误差 ${Math.max(...errorsDeg).toFixed(2)}°`
+          );
+        } else {
+          this._finish(
+            false, 'failed',
+            `多轴运动未到位：${missed.map(index => `J${index + 1} 误差 ${errorsDeg[index].toFixed(2)}°`).join('；') || '其他关节偏离目标'}`
+          );
+        }
+        return true;
+      }
       if (active.kind === 'home') {
         const errorsDeg = active.targetJointsDeg.map(
           (target, index) => Math.abs(Number(joints[index]) - target)
@@ -373,12 +437,16 @@ class ManualJointOrchestrator {
       if (!Array.isArray(target) || target.length !== 6 || !target.every(Number.isFinite)) {
         return this._blocked(session, candidate, '右侧 Home 预设尚未就绪');
       }
-      const outsideLimit = target.findIndex((value, index) => {
+      const outsideLimits = target.flatMap((value, index) => {
         const limits = this.jointLimitsDeg[index];
-        return !Array.isArray(limits) || value < limits[0] || value > limits[1];
+        if (Array.isArray(limits) && limits.length === 2 && limits.every(Number.isFinite) &&
+            value >= limits[0] && value <= limits[1]) return [];
+        const range = Array.isArray(limits) && limits.length === 2
+          ? `允许 ${limits[0]}°～${limits[1]}°` : '限位数据缺失';
+        return [`J${index + 1} 目标 ${value.toFixed(1)}° 超出机械关节限位（${range}）`];
       });
-      if (outsideLimit !== -1) {
-        return this._blocked(session, candidate, `右侧 Home 预设的 J${outsideLimit + 1} 超出机械关节限位`);
+      if (outsideLimits.length) {
+        return this._blocked(session, candidate, `Home 机械限位禁止执行：${outsideLimits.join('；')}`);
       }
       const requestId = this.makeRequestId();
       const timeSec = this.moveTimeFor(target);
@@ -406,6 +474,63 @@ class ManualJointOrchestrator {
       return sent;
     }
 
+    if (params.action === 'joint.multi') {
+      const current = state.jointsDeg;
+      if (!Array.isArray(current) || current.length !== 6 || !current.every(Number.isFinite)) {
+        return this._blocked(session, candidate, '缺少有效的六轴实时状态');
+      }
+      const target = [...current];
+      const changedJointIndices = [];
+      const violations = [];
+      for (const move of params.moves) {
+        const index = move.joint - 1;
+        target[index] = 'targetDeg' in move ? move.targetDeg : current[index] + move.deltaDeg;
+        const delta = target[index] - current[index];
+        if (Math.abs(delta) > 0.01) changedJointIndices.push(index);
+        if (this.maxDeltaDeg !== null && Math.abs(delta) > this.maxDeltaDeg + 1e-9) {
+          violations.push(`J${move.joint} 单次变化 ${Math.abs(delta).toFixed(2)}° 超过 ${this.maxDeltaDeg}°`);
+        }
+      }
+      for (let index = 0; index < 6; index += 1) {
+        const limits = this.jointLimitsDeg[index];
+        if (!Array.isArray(limits) || limits.length !== 2 || !limits.every(Number.isFinite) ||
+            !Number.isFinite(target[index]) || target[index] < limits[0] || target[index] > limits[1]) {
+          const range = Array.isArray(limits) && limits.length === 2
+            ? `允许 ${limits[0]}°～${limits[1]}°` : '限位数据缺失';
+          violations.push(`J${index + 1} 目标 ${target[index].toFixed(1)}° 超出机械关节限位（${range}）`);
+        }
+      }
+      if (violations.length) {
+        return this._blocked(session, candidate, `机械限位禁止执行：${violations.join('；')}`);
+      }
+      if (changedJointIndices.length === 0) {
+        return this._blocked(session, candidate, '多轴目标与当前姿态相同，未发送运动命令');
+      }
+      const requestId = this.makeRequestId();
+      const timeSec = this.moveTimeFor(target);
+      const timeoutMs = Math.min(
+        this.maxMultiTimeoutMs, Math.max(1000, (timeSec + 3) * 1000)
+      );
+      this._begin({
+        session, candidate, requestId, kind: 'multi',
+        targetJointsDeg: target, changedJointIndices,
+        label: '多轴运动', timeoutMs,
+      });
+      const sent = this.sendRobot({
+        cmd: 'move_joint',
+        joints_rad: target.map(value => value * Math.PI / 180),
+        time_sec: timeSec,
+        request_id: requestId,
+        source: `language:${candidate.traceId}`,
+        speed_scale: this.speedScale,
+        manual_joint_authorization: {
+          skill: MANUAL_SKILL, action: 'joint.multi', moves: params.moves,
+        },
+      });
+      if (!sent) this._finish(false, 'failed', 'Startouch bridge 拒绝接收多轴关节命令');
+      return sent;
+    }
+
     if (params.action === 'joint.set' || params.action === 'joint.step') {
       const current = state.jointsDeg;
       if (!Array.isArray(current) || current.length !== 6 || !current.every(Number.isFinite)) {
@@ -420,8 +545,12 @@ class ManualJointOrchestrator {
         return this._blocked(session, candidate, `单次关节变化 ${Math.abs(deltaDeg).toFixed(2)}° 超过 ${this.maxDeltaDeg}°`);
       }
       const limits = this.jointLimitsDeg[jointIndex];
-      if (!Array.isArray(limits) || targetDeg < limits[0] || targetDeg > limits[1]) {
-        return this._blocked(session, candidate, `J${params.joint} 目标超出关节限位`);
+      if (!Array.isArray(limits) || limits.length !== 2 || !limits.every(Number.isFinite) ||
+          targetDeg < limits[0] || targetDeg > limits[1]) {
+        const range = Array.isArray(limits) && limits.length === 2
+          ? `允许 ${limits[0]}°～${limits[1]}°` : '限位数据缺失';
+        return this._blocked(session, candidate,
+          `J${params.joint} 目标 ${targetDeg.toFixed(1)}° 超出机械关节限位（${range}）`);
       }
       const target = [...current];
       target[jointIndex] = targetDeg;
@@ -551,5 +680,6 @@ module.exports = {
   ALLOWED_ACTIONS,
   MANUAL_SKILL,
   ManualJointOrchestrator,
+  normalizeMultiJointMoves,
   validateCandidate,
 };

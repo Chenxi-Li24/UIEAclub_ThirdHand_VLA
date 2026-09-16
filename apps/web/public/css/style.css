@@ -1889,6 +1889,19 @@ html, body {
   font-size: 0.65rem;
 }
 
+.voice-intent-card > .voice-intent-warning {
+  padding: 8px;
+  border: 1px solid var(--danger);
+  border-radius: 6px;
+  color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
+  font-size: 0.72rem;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.voice-intent-card > .voice-intent-warning[hidden] { display: none; }
+
 .voice-intent-card > .voice-intent-boundary {
   padding-top: 7px;
   border-top: 1px solid color-mix(in srgb, var(--warning) 26%, transparent);

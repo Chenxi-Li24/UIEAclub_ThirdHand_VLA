@@ -1660,6 +1660,48 @@ class VoiceBridge:
                 "requiresConfirmation": True,
             }
 
+        if tool == "move_multiple_joints":
+            if set(args) != {"moves"} or not isinstance(args["moves"], list):
+                return None
+            raw_moves = args["moves"]
+            if not 2 <= len(raw_moves) <= 6:
+                return None
+            moves = []
+            seen_joints = set()
+            for raw_move in raw_moves:
+                if not isinstance(raw_move, dict):
+                    return None
+                keys = set(raw_move)
+                if keys not in ({"joint", "delta_deg"}, {"joint", "target_deg"}):
+                    return None
+                joint = raw_move["joint"]
+                if type(joint) is not int or not 1 <= joint <= 6 or joint in seen_joints:
+                    return None
+                key = "delta_deg" if "delta_deg" in raw_move else "target_deg"
+                value = raw_move[key]
+                if isinstance(value, bool) or not isinstance(value, (int, float)):
+                    return None
+                if not math.isfinite(value) or (key == "delta_deg" and value == 0):
+                    return None
+                seen_joints.add(joint)
+                normalized = float(value)
+                number = int(normalized) if normalized.is_integer() else normalized
+                moves.append({"joint": joint, "deltaDeg" if key == "delta_deg" else "targetDeg": number})
+            created_at = now_ms()
+            return {
+                "candidateId": str(uuid.uuid4()),
+                "traceId": str(uuid.uuid4()),
+                "createdAt": created_at,
+                "expiresAt": created_at + 120_000,
+                "skill": "manual_joint_control@1",
+                "intent": "joint.multi",
+                "tool": tool,
+                "args": args,
+                "payload": {"params": {"action": "joint.multi", "moves": moves}},
+                "sourceText": source_text,
+                "requiresConfirmation": True,
+            }
+
         mappings = {
             "set_joint_angle": ("joint.set", {
                 "joint": args.get("joint"), "targetDeg": args.get("target_deg")

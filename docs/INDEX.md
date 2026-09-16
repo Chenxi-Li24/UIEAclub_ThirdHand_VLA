@@ -39,7 +39,6 @@
 ## 按模块阅读
 
 - [`../apps/README.md`](../apps/README.md)：操作员应用和统一启动器。
-- [`../apps/orchestrator/README.md`](../apps/orchestrator/README.md)：规划中的 LLM 任务编排应用。
 - [`../services/README.md`](../services/README.md)：机器人、语音、视觉常驻服务。
 - [`../services/model/README.md`](../services/model/README.md)：规划中的 VLA、ACT、Diffusion Policy 推理服务。
 - [`../services/supervisor/README.md`](../services/supervisor/README.md)：规划中的只读执行监督服务。

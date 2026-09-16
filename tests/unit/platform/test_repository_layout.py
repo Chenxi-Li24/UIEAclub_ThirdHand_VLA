@@ -33,7 +33,6 @@ TOP_LEVEL_GUIDES = {
     "tools/README.md",
 }
 PLANNED_MODULE_GUIDES = {
-    "apps/orchestrator/README.md",
     "platform/authorization/README.md",
     "platform/task_engine/README.md",
     "services/model/README.md",

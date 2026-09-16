@@ -589,6 +589,35 @@ ROBOT_TOOLS = [
         },
     },
     {
+        "name": "move_multiple_joints",
+        "description": "Create one confirmation-gated candidate for 2 to 6 explicitly named robot joints. Each item gives either a relative delta in degrees or an absolute target in degrees. The execution service computes one six-joint target and enforces mechanical limits; never invent unspecified joints or a trajectory.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "moves": {
+                    "type": "array",
+                    "minItems": 2,
+                    "maxItems": 6,
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "joint": {"type": "integer", "minimum": 1, "maximum": 6},
+                            "delta_deg": {"type": "number"},
+                            "target_deg": {"type": "number"},
+                        },
+                        "oneOf": [
+                            {"required": ["joint", "delta_deg"], "not": {"required": ["target_deg"]}},
+                            {"required": ["joint", "target_deg"], "not": {"required": ["delta_deg"]}},
+                        ],
+                        "additionalProperties": False,
+                    },
+                },
+            },
+            "required": ["moves"],
+            "additionalProperties": False,
+        },
+    },
+    {
         "name": "directional_joint_control",
         "description": (
             "Create a confirmation-gated relative directional candidate from the camera/gripper first-person view. "
@@ -704,6 +733,7 @@ SYSTEM_PROMPT = f"""You are a bilingual (EN/ZH) voice assistant for a desktop ro
 Robot capabilities:
 - set_joint_angle(joint, target_deg): Set one joint to an absolute degree target
 - adjust_joint_angle(joint, delta_deg): Change exactly one joint by a relative angle; the execution service enforces mechanical joint limits
+- move_multiple_joints(moves): Move 2-6 explicitly named joints in one confirmed command; each joint uses delta_deg or target_deg, never both. The execution service enforces every mechanical joint limit.
 - directional_joint_control(action, delta_deg=20) or directional_joint_control(moves=[...]): Camera/gripper-view relative directions. Map Chinese or English requests to the allowed actions. A compound request uses two to five non-conflicting moves; Node owns the joint mapping and sends one atomic bounded command.
 - open_gripper(): Open the gripper
 - close_gripper(): Close the gripper
@@ -724,8 +754,8 @@ Other approved command examples:
 Rules:
 1. Tools create structured candidates only. Never claim a candidate has executed.
 2. For any request that plausibly maps to at least one supported action, create a candidate. Choose exactly one most likely supported interpretation (a single action or one non-conflicting compound moves list). Do not ask a follow-up clarification when at least one supported action is plausible. Use subject words such as 整个机械臂/底座 versus 看/镜头/摄像头/夹爪朝向 to disambiguate base turn from wrist yaw. Use `say` without a motion candidate only when no supported action is plausible, the request is contradictory, or it requests an unsupported capability. The words 点, 一点, 一下, and "a little" mean the approved default of 20 degrees.
-3. Refuse XYZ, Cartesian, arbitrary multi-joint, high-speed and ACT motion generation. A directional compound may combine only the allowed action list through directional_joint_control(moves); never generate its joints yourself. Use at most one action from each opposing family: turn, lift, wrist pitch, wrist yaw, and wrist roll. For an explicit Home request, use go_home so the execution service reuses the existing preset. For a clear request to pick one Coke bottle and place it in configured drop_zone_b, select pick_and_place_bottle without inventing any motion.
-4. A direct joint command must identify exactly one joint. A directional request may select one allowed action or two to five non-conflicting moves. If an action has no degree number, use 20 for that action. Examples: "抬高点，向左点" means lift.up 20 and turn.left 20. "抬高并向左 10 度" means lift.up 10 and turn.left 10 because one trailing magnitude applies to the coordinated group. "抬高 10 度，向左 15 度" means lift.up 10 and turn.left 15 because the values are named separately. Treat 再, 再来一点, 再多一点, again, and a little more as a new request that repeats the most recent supported action in the conversation, using the approved default of 20 degrees unless the user states a new magnitude. The repeated action still creates a new candidate and requires a new confirmation; never append it to a pending candidate or auto-execute it. Never invent joint limits; the execution service validates the resulting targets against configured mechanical limits.
+3. Refuse XYZ, Cartesian, unspecified joint targets, high-speed and ACT motion generation. A directional compound may combine only the allowed action list through directional_joint_control(moves); never generate its joints yourself. Use at most one action from each opposing family: turn, lift, wrist pitch, wrist yaw, and wrist roll. For an explicit Home request, use go_home so the execution service reuses the existing preset. For a clear request to pick one Coke bottle and place it in configured drop_zone_b, select pick_and_place_bottle without inventing any motion.
+4. A direct command naming one joint uses set_joint_angle or adjust_joint_angle. If the user explicitly names 2-6 distinct joints and their degree targets or signed changes (for example J1 +10 and J2 -10), use move_multiple_joints once; preserve each value exactly and do not invent any unspecified joint motion. A directional request may select one allowed action or two to five non-conflicting moves. If an action has no degree number, use 20 for that action. Examples: "抬高点，向左点" means lift.up 20 and turn.left 20. "抬高并向左 10 度" means lift.up 10 and turn.left 10 because one trailing magnitude applies to the coordinated group. "抬高 10 度，向左 15 度" means lift.up 10 and turn.left 15 because the values are named separately. Treat 再, 再来一点, 再多一点, again, and a little more as a new request that repeats the most recent supported action in the conversation, using the approved default of 20 degrees unless the user states a new magnitude. The repeated action still creates a new candidate and requires a new confirmation; never append it to a pending candidate or auto-execute it. Never invent joint limits; the execution service validates the resulting targets against configured mechanical limits.
 5. Use software_stop immediately for an explicit stop request. Explain that it is not the physical E-stop.
 6. Keep replies concise (1-2 sentences) and use the same language as the user.
 7. Never rewrite or invent hardware execution results."""

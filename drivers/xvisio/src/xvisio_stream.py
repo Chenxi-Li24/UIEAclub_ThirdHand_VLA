@@ -175,11 +175,13 @@ class XVisioStream:
         executable: str | Path,
         *,
         expected_serial: str,
+        read_timeout_s: float = 3.0,
     ) -> None:
         if not expected_serial:
             raise ValueError("expected_serial is required")
         self.executable = Path(executable).resolve()
         self.expected_serial = expected_serial
+        self.read_timeout_s = max(0.1, float(read_timeout_s))
         self._condition = threading.Condition()
         self._latest: XVisioFrame | None = None
         self._error: BaseException | None = None
@@ -196,6 +198,11 @@ class XVisioStream:
         if not self.executable.is_file():
             raise RuntimeError(f"XVisio executable not found: {self.executable}")
         parent, child = socket.socketpair(socket.AF_UNIX, socket.SOCK_STREAM)
+        # Keep packet reads blocking. A socket timeout can occur after only part
+        # of an RGB-D packet has been consumed, which permanently destroys the
+        # framing and used to stop the capture thread after a brief camera gap.
+        # Callers still have a bounded wait through read_after(timeout_s).
+        parent.settimeout(None)
         try:
             self._process = subprocess.Popen(
                 [str(self.executable), str(child.fileno())],
@@ -268,8 +275,11 @@ class XVisioStream:
                 return self._latest
             if self._error is not None:
                 detail = self._stderr_tail.decode("utf-8", errors="replace").strip()
+                failure = f"{type(self._error).__name__}: {self._error}"
+                if detail:
+                    failure += f"; SDK stderr: {detail}"
                 raise RuntimeError(
-                    f"XVisio native stream failed: {detail or self._error}"
+                    f"XVisio native stream failed: {failure}"
                 ) from self._error
             return None
 

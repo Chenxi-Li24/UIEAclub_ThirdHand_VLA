@@ -30,7 +30,6 @@ function loadConfig(env = process.env) {
     readyFile: env.THIRDHAND_READY_FILE || path.join(ROOT, 'runtime', 'run', 'web.ready'),
     robotWsUrl: env.ROBOT_WS_URL || 'ws://127.0.0.1:3000/ws',
     voiceWsUrl: env.VOICE_WS_URL || 'ws://127.0.0.1:3004/v1/voice',
-    orchestratorWsUrl: env.ORCHESTRATOR_WS_URL || 'ws://127.0.0.1:3200/plan',
     visionHttpUrl: env.VISION_HTTP_URL || 'http://127.0.0.1:3100',
     visionWsUrl: env.VISION_WS_URL || 'ws://127.0.0.1:3100/ws',
     language: {

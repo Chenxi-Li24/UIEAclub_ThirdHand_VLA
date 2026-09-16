@@ -41,6 +41,37 @@ class LanguageCandidateContractTests(unittest.TestCase):
                 self.assertTrue(candidate["requiresConfirmation"])
                 self.assertEqual(candidate["expiresAt"] - candidate["createdAt"], 120_000)
 
+    def test_explicit_multi_joint_candidate_preserves_all_angles(self):
+        candidate = VoiceBridge._candidate_from_action(
+            {"tool": "move_multiple_joints", "input": {"moves": [
+                {"joint": 1, "delta_deg": 10},
+                {"joint": 2, "delta_deg": -10},
+                {"joint": 3, "target_deg": -20},
+            ]}}, "J1 +10, J2 -10, J3 到 -20 度"
+        )
+        self.assertEqual(candidate["intent"], "joint.multi")
+        self.assertEqual(candidate["skill"], "manual_joint_control@1")
+        self.assertEqual(candidate["payload"]["params"], {"action": "joint.multi", "moves": [
+            {"joint": 1, "deltaDeg": 10},
+            {"joint": 2, "deltaDeg": -10},
+            {"joint": 3, "targetDeg": -20},
+        ]})
+        self.assertTrue(candidate["requiresConfirmation"])
+
+    def test_explicit_multi_joint_rejects_invalid_structure(self):
+        invalid = [
+            [{"joint": 1, "delta_deg": 10}],
+            [{"joint": 1, "delta_deg": 10}, {"joint": 1, "delta_deg": -10}],
+            [{"joint": 1, "delta_deg": 10, "target_deg": 20}, {"joint": 2, "delta_deg": 1}],
+            [{"joint": 1, "delta_deg": 0}, {"joint": 2, "delta_deg": 1}],
+            [{"joint": 7, "delta_deg": 1}, {"joint": 2, "delta_deg": 1}],
+        ]
+        for moves in invalid:
+            with self.subTest(moves=moves):
+                self.assertIsNone(VoiceBridge._candidate_from_action(
+                    {"tool": "move_multiple_joints", "input": {"moves": moves}}, "invalid"
+                ))
+
     def test_stop_is_immediate_and_old_tools_are_rejected(self):
         stop = VoiceBridge._candidate_from_action(
             {"tool": "software_stop", "input": {}}, "停止"

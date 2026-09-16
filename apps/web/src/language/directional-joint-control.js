@@ -146,13 +146,19 @@ function computeDirectionalTarget({
       changedJointIndices.add(index);
     }
   }
-  for (const index of changedJointIndices) {
+  const limitWarnings = [];
+  for (let index = 0; index < 6; index += 1) {
     const limits = jointLimitsDeg?.[index];
     const target = targetJointsDeg[index];
     if (!Array.isArray(limits) || limits.length !== 2 || !limits.every(Number.isFinite) ||
-        target < limits[0] || target > limits[1]) {
-      return { ok: false, reason: `J${index + 1} 目标 ${target.toFixed(1)}° 超出机械关节限位` };
+        !Number.isFinite(target) || target < limits[0] || target > limits[1]) {
+      const range = Array.isArray(limits) && limits.length === 2
+        ? `允许 ${limits[0]}°～${limits[1]}°` : '限位数据缺失';
+      limitWarnings.push(`J${index + 1} 目标 ${target.toFixed(1)}° 超出机械关节限位（${range}）`);
     }
+  }
+  if (limitWarnings.length) {
+    return { ok: false, reason: `机械限位禁止执行：${limitWarnings.join('；')}` };
   }
 
   let displacementM = null;

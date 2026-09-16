@@ -52,6 +52,23 @@ function validDirectionalMoves(params) {
   });
 }
 
+function validManualJointMoves(params) {
+  if (params?.action !== 'joint.multi' ||
+      Object.keys(params).sort().join(',') !== 'action,moves' ||
+      !Array.isArray(params.moves) || params.moves.length < 2 || params.moves.length > 6) return false;
+  const seen = new Set();
+  return params.moves.every(move => {
+    const keys = Object.keys(move || {}).sort().join(',');
+    const field = keys === 'deltaDeg,joint' ? 'deltaDeg'
+      : keys === 'joint,targetDeg' ? 'targetDeg' : null;
+    if (!field || !Number.isInteger(move.joint) || move.joint < 1 || move.joint > 6 ||
+        seen.has(move.joint) || !Number.isFinite(move[field]) ||
+        (field === 'deltaDeg' && move.deltaDeg === 0)) return false;
+    seen.add(move.joint);
+    return true;
+  });
+}
+
 // Lazy-imported TTS player — loaded on demand so the panel opens fast.
 let _TTSPlayer = null;
 function _lazyTTSPlayer() {
@@ -68,6 +85,7 @@ const INTENT_VALIDATORS = {
   'joint.step': params =>
     Number.isInteger(params?.joint) && params.joint >= 1 && params.joint <= 6 &&
     Number.isFinite(params?.deltaDeg),
+  'joint.multi': validManualJointMoves,
   'robot.status': () => true,
   'robot.home': () => true,
   'gripper.open': () => true,
@@ -479,19 +497,17 @@ export class VoiceControl {
       simulate: () => ({ ok: false, message: '本地模拟器尚未准备好。' }),
       clear: () => {}
     });
-    this.planChannel = options.planChannel || Object.freeze({
+    this.robotChannel = options.robotChannel || Object.freeze({
       isReady: () => false,
       canConfirm: () => false,
-      submitCandidate: () => false,
-      grantAuthorization: () => false,
-      cancelProposal: () => false,
-      on: () => {}
+      send: () => false
     });
     this.onExecutionResult = options.onExecutionResult;
     this.runtimeVoiceEndpoint = DEFAULT_ENDPOINT;
     this.directionalRuntime = { enabled: false, realControlEnabled: false };
     this.executionPending = false;
     this.candidatePreviewReady = false;
+    this.candidatePreviewError = null;
     this.ignoredResultCandidateIds = new Set();
     this.onPanelOpen = options.onPanelOpen;
     this.onPanelClose = options.onPanelClose;
@@ -505,7 +521,6 @@ export class VoiceControl {
     this.recordingLimitTimer = 0;
     this.sessionReadyTimer = 0;
     this.pendingCandidate = null;
-    this.pendingProposal = null;
     this.finalTranscript = '';
     this.lastSocketErrorAt = 0;
     this.textComposing = false;
@@ -513,12 +528,6 @@ export class VoiceControl {
     this.ttsPlayer = null;  // lazy-created on first assistant.audio
     this.ttsInitPromise = null;
     this.ttsPlaybackGeneration = 0;
-    this.planChannel.on?.('message', message => this.handlePlanMessage(message));
-    this.planChannel.on?.('channel.error', message => this.handlePlanMessage(message));
-    this.planChannel.on?.('ws_connection', message => this.handlePlanMessage({
-      type: 'ws_connection',
-      ...message
-    }));
     if (this.panel) this.panel.inert = true;
 
     this.microphone = new MicrophoneManager({
@@ -1076,29 +1085,34 @@ export class VoiceControl {
       case 'intent.candidate': {
         this._removeThinking();
         const candidate = message.payload;
-        if (candidate?.requiresConfirmation === false && candidate?.intent === 'safety.stop.request') {
-          this._showNotice('语音软件停止尚未迁移到受监督执行链路，请使用页面顶部“软件停止”按钮。', 'error');
-          this._setSessionState('error', '该语音动作尚未迁移');
+        if (!this.robotChannel.isReady?.() || !this.robotChannel.send?.({
+          type: 'skill.candidate',
+          candidate
+        })) {
+          this._showNotice('3000 控制通道未连接，候选未注册，不能执行。', 'error');
+          this._setSessionState('error', '控制通道未连接');
           break;
         }
-        const source = this.requestMode === 'text' ? 'text' : 'voice';
-        if (!this.planChannel.submitCandidate?.(candidate, source)) {
-          this._showNotice('3200 计划服务未连接，候选未注册，不能执行。', 'error');
-          this._setSessionState('error', '计划通道未连接');
+        if (candidate?.requiresConfirmation === false && candidate?.intent === 'safety.stop.request') {
+          this._createMessage('system', '已立即提交软件停止请求。', '软件停止不等于物理急停');
+          this.executionPending = true;
+          this._setSessionState('processing', '正在请求软件停止');
+          this._renderControls();
           break;
         }
         this.pendingCandidate = candidate;
-        this.pendingProposal = null;
         this.candidatePreviewReady = false;
+        this.candidatePreviewError = null;
         try {
           const preview = this.candidateSimulator.simulate(candidate) || {};
           if (preview.ok === false) throw new Error(preview.message || '3D 预览失败');
           this.candidatePreviewReady = true;
         } catch (error) {
-          this._showNotice(error?.message || '本地 3D 预览失败，候选不可确认。', 'error');
+          this.candidatePreviewError = error?.message || '本地 3D 预览失败，候选不可确认。';
+          this._showNotice(this.candidatePreviewError, 'error');
         }
         this._renderCandidate(candidate);
-        this._setSessionState('processing', '正在生成受监督计划');
+        this._setSessionState('confirm', '已预览，等待确认');
         break;
       }
 
@@ -1394,23 +1408,34 @@ export class VoiceControl {
       `来自：“${candidate.sourceText || this.finalTranscript || '—'}”`;
     document.getElementById('voice-intent-confidence').textContent =
       Number.isFinite(candidate.confidence) ? `${Math.round(candidate.confidence * 100)}%` : '--';
+    const warning = document.getElementById('voice-intent-warning');
+    if (warning) {
+      warning.textContent = this.candidatePreviewError || '';
+      warning.hidden = !this.candidatePreviewError;
+    }
     const confirmButton = document.getElementById('voice-intent-confirm');
-    const ready = supported && Boolean(this.pendingProposal) && this.planChannel.isReady?.() && this.planChannel.canConfirm?.();
+    const ready = supported && this.robotChannel.isReady?.() && this.robotChannel.canConfirm?.();
     confirmButton.disabled = !ready;
-    confirmButton.textContent = ready ? '确认并执行真机' : '控制链路未就绪';
+    confirmButton.textContent = ready ? '确认并执行真机'
+      : this.candidatePreviewError ? '预览未通过，禁止执行' : '控制链路未就绪';
     card.hidden = false;
     this.panel.classList.add('has-candidate');
   }
 
   _confirmCandidate() {
     if (!this.pendingCandidate || !this._isAllowedCandidate(this.pendingCandidate)) return;
-    if (!this.pendingProposal || !this.planChannel.isReady?.() || !this.planChannel.canConfirm?.()) {
-      this._showNotice('需要 /plan、SDK、IDLE 与 500ms 内新鲜状态全部就绪后才能确认。', 'error');
+    if (!this.robotChannel.isReady?.() || !this.robotChannel.canConfirm?.()) {
+      this._showNotice('需要 /ws、SDK、IDLE 与 500ms 内新鲜状态全部就绪后才能确认。', 'error');
       return;
     }
 
     const candidate = this.pendingCandidate;
-    const sent = this.planChannel.grantAuthorization?.(this.pendingProposal);
+    const sent = this.robotChannel.send?.({
+      type: 'confirmation.decision',
+      candidateId: candidate.candidateId,
+      traceId: candidate.traceId,
+      decision: 'approve'
+    });
     if (!sent) {
       this._showNotice('确认消息发送失败，未执行真机动作。', 'error');
       return;
@@ -1421,7 +1446,7 @@ export class VoiceControl {
     this._createMessage(
       'system',
       `已确认执行：${label}`,
-      '授权仅绑定当前计划摘要，等待真实夹爪反馈验证'
+      '等待真实 command_complete 与新鲜 robot_state 双重验证'
     );
     this._resetCandidate();
     this._setSessionState('processing', '真机执行验证中');
@@ -1431,7 +1456,12 @@ export class VoiceControl {
     if (!this.pendingCandidate) return;
     const candidate = this.pendingCandidate;
     this.ignoredResultCandidateIds.add(candidate.candidateId);
-    const sent = this.planChannel.cancelProposal?.('user_rejected');
+    const sent = this.robotChannel.send?.({
+      type: 'confirmation.decision',
+      candidateId: candidate.candidateId,
+      traceId: candidate.traceId,
+      decision: 'reject'
+    });
     this._sendCandidateAction('reject', candidate);
     this.candidateSimulator.clear?.('候选已取消');
     this._interruptTTSPlayback();
@@ -1445,7 +1475,12 @@ export class VoiceControl {
     if (!this.pendingCandidate) return;
     const candidate = this.pendingCandidate;
     this.ignoredResultCandidateIds.add(candidate.candidateId);
-    this.planChannel.cancelProposal?.('user_requested_guide');
+    this.robotChannel.send?.({
+      type: 'confirmation.decision',
+      candidateId: candidate.candidateId,
+      traceId: candidate.traceId,
+      decision: 'reject'
+    });
     this.candidateSimulator.clear?.('已切换为操作引导');
     if (!this._sendCandidateAction('guide', candidate)) return;
     this._interruptTTSPlayback();
@@ -1470,8 +1505,10 @@ export class VoiceControl {
 
   _resetCandidate() {
     this.pendingCandidate = null;
-    this.pendingProposal = null;
     this.candidatePreviewReady = false;
+    this.candidatePreviewError = null;
+    const warning = document.getElementById('voice-intent-warning');
+    if (warning) { warning.textContent = ''; warning.hidden = true; }
     document.getElementById('voice-intent-card').hidden = true;
     this.panel.classList.remove('has-candidate');
     const confirmButton = document.getElementById('voice-intent-confirm');
@@ -1548,6 +1585,12 @@ export class VoiceControl {
   }
 
   _intentLabel(intent, params = {}) {
+    if (intent === 'joint.multi' && validManualJointMoves(params)) {
+      return params.moves.map(move => 'targetDeg' in move
+        ? `J${move.joint} 到 ${move.targetDeg}°`
+        : `J${move.joint} ${move.deltaDeg >= 0 ? '+' : ''}${move.deltaDeg}°`
+      ).join(' + ');
+    }
     if (intent === 'directional.compound' && validDirectionalMoves(params)) {
       return params.moves.map(move => this._intentLabel(move.action, move)).join(' + ');
     }
@@ -1574,69 +1617,46 @@ export class VoiceControl {
     return labels[intent] || `不支持的动作：${intent || 'unknown'}`;
   }
 
-  handlePlanMessage(message) {
+  handleRobotMessage(message) {
     if (!message || typeof message.type !== 'string') return;
-    if (message.type === 'channel.error') {
-      this._showNotice(message.message || '计划通道返回了无法识别的消息。', 'error');
-      return;
-    }
     if (message.type === 'ws_connection') {
       if (!message.connected && this.executionPending) {
         this.executionPending = false;
-        this._showNotice('控制页面与 3200 计划服务断开；当前执行结果未知，请先检查机械臂状态。', 'error');
-        this._setSessionState('error', '计划通道断开');
+        this._showNotice('控制页面与 3000 断开；服务端将尝试软件停止，结果未知。', 'error');
+        this._setSessionState('error', '控制通道断开');
       }
-      if (!message.connected && this.pendingCandidate) {
-        this.candidateSimulator.clear?.('计划通道断开');
-        this._resetCandidate();
-      }
+      if (this.pendingCandidate) this._renderCandidate(this.pendingCandidate);
       this._renderControls();
       return;
     }
-    if (message.type === 'plan.proposed') {
-      if (!this.pendingCandidate || message.proposal?.candidateId !== this.pendingCandidate.candidateId) return;
-      this.pendingProposal = message.proposal;
-      const step = message.proposal.plan?.steps?.[0];
-      const target = step?.parameters?.positionPercent;
-      const risks = Array.isArray(message.proposal.risks) ? message.proposal.risks.join('；') : '物理运动风险';
-      this._createMessage(
-        'system',
-        `计划：夹爪移动到 ${Number.isFinite(target) ? `${target}%` : '指定位置'}。风险：${risks}`,
-        `计划 ${message.proposal.plan?.planId || '--'} · 版本 ${message.proposal.plan?.revision || '--'}`
-      );
+    if (message.type === 'runtime-readiness') {
       if (this.pendingCandidate) this._renderCandidate(this.pendingCandidate);
-      this._setSessionState('confirm', '计划已生成，等待确认');
       return;
     }
-    if (message.type === 'plan.rejected') {
-      this.executionPending = false;
-      this.candidateSimulator.clear?.('计划服务拒绝请求');
-      this._showNotice(message.message || message.code || '计划服务拒绝请求。', 'error');
+    if (message.type === 'skill.candidate.rejected') {
+      this.candidateSimulator.clear?.('候选被控制服务拒绝');
+      this._showNotice(message.message || message.reason || '候选被控制服务拒绝。', 'error');
       this._resetCandidate();
-      this._setSessionState('error', '计划不可执行');
+      this._setSessionState('error', '候选不可执行');
       return;
     }
-    if (message.type === 'authorization.granted' || message.type === 'execution.started') {
+    if (message.type === 'execution.request') {
       this.executionPending = true;
       this._setSessionState('processing', '真机执行验证中');
       this._renderControls();
       return;
     }
     if (message.type !== 'skill.result') return;
+    if (this.ignoredResultCandidateIds.delete(message.candidateId)) return;
 
     this.executionPending = false;
     this.candidateSimulator.clear?.('真实执行结果已返回');
-    const result = message.result || {};
-    const success = result.status === 'completed';
-    const actualPercent = result.output?.actualPercent;
-    const actual = Number.isFinite(actualPercent) ? `，实际 ${actualPercent.toFixed(1)}%` : '';
-    const resultText = result.message || (success
-      ? `夹爪动作已由新鲜反馈验证完成${actual}。`
-      : `夹爪动作未验证完成：${result.reason || result.code || result.status || '结果不确定'}。`);
+    const success = message.success === true;
+    const resultText = message.message || (success ? '真机动作已验证完成。' : '真机动作失败或结果不确定。');
     this._createMessage(success ? 'system' : 'error', resultText, success ? '真实硬件反馈已验证' : '未报告为成功');
     this._setSessionState(success ? 'ready' : 'error', success ? '执行完成' : '执行失败');
     this._renderControls();
-    this.onExecutionResult?.(result);
+    this.onExecutionResult?.(message);
     if (this.voiceSocket.isReady()) {
       this.voiceSocket.sendJson('tts.request', this.sessionId || createId(), { text: resultText });
     }

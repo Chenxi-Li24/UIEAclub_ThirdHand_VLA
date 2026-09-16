@@ -2,6 +2,7 @@
 
 const { EventEmitter } = require('events');
 const DefaultWebSocket = require('ws');
+const { MANUAL_SKILL, normalizeMultiJointMoves } = require('./manual-joint-control');
 const {
   DIRECTIONAL_MAPPING,
   DIRECTIONAL_SKILL,
@@ -54,6 +55,20 @@ function directionalAuthorizationMatches(authorization, currentDeg, targetDeg) {
     for (const [index, sign] of DIRECTIONAL_MAPPING[move.action]) {
       expected[index] += sign * move.deltaDeg;
     }
+  }
+  return expected.every((value, index) => Math.abs(value - targetDeg[index]) <= 0.01);
+}
+
+function manualJointAuthorizationMatches(authorization, currentDeg, targetDeg) {
+  if (!authorization || typeof authorization !== 'object' || Array.isArray(authorization)) return false;
+  if (Object.keys(authorization).sort().join(',') !== 'action,moves,skill' ||
+      authorization.skill !== MANUAL_SKILL || authorization.action !== 'joint.multi') return false;
+  const normalized = normalizeMultiJointMoves(authorization.moves);
+  if (!normalized.ok) return false;
+  const expected = [...currentDeg];
+  for (const move of normalized.moves) {
+    const index = move.joint - 1;
+    expected[index] = 'targetDeg' in move ? move.targetDeg : currentDeg[index] + move.deltaDeg;
   }
   return expected.every((value, index) => Math.abs(value - targetDeg[index]) <= 0.01);
 }
@@ -331,9 +346,15 @@ class LanguageUpstreamBridge extends EventEmitter {
     const targetDeg = targetRad.map(value => value * 180 / Math.PI);
     const deltas = targetDeg.map((value, index) => Math.abs(value - state.jointsDeg[index]));
     const changed = deltas.filter(delta => delta > 0.01);
-    const authorization = command.directional_authorization;
-    if (authorization) {
-      if (!directionalAuthorizationMatches(authorization, state.jointsDeg, targetDeg)) return false;
+    const directionalAuthorization = command.directional_authorization;
+    const manualAuthorization = command.manual_joint_authorization;
+    if (directionalAuthorization && manualAuthorization) return false;
+    if (directionalAuthorization) {
+      if (!directionalAuthorizationMatches(directionalAuthorization, state.jointsDeg, targetDeg)) return false;
+    } else if (manualAuthorization) {
+      if (changed.length === 0 || !manualJointAuthorizationMatches(
+        manualAuthorization, state.jointsDeg, targetDeg
+      )) return false;
     } else if (changed.length !== 1) {
       return false;
     }

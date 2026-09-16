@@ -1,3 +1,17 @@
-"""Project-local perception modules used by the isolated Vision Service."""
+"""Reusable camera perception, selection, geometry, and tracking modules."""
 
-__all__: list[str] = []
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .pipeline import VisionPipeline
+
+__all__ = ["VisionPipeline"]
+
+
+def __getattr__(name: str):
+    """Load the optional full pipeline only when callers explicitly request it."""
+    if name == "VisionPipeline":
+        from .pipeline import VisionPipeline
+
+        return VisionPipeline
+    raise AttributeError(name)

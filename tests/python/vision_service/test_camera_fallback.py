@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import importlib.util
+import os
 from pathlib import Path
+import subprocess
+import sys
 from types import SimpleNamespace
 import time
 
@@ -45,6 +48,30 @@ def test_capture_worker_keeps_publishing_after_model_load_failure() -> None:
         assert runtime.status()["camera"]["status"] == "ready"
     finally:
         runtime.close()
+
+
+def test_grounded_sam_import_does_not_require_undeployed_full_pipeline() -> None:
+    python_root = ROOT / "services/vision/python"
+    runtime_python = ROOT / "local/runtimes/python/bin/python"
+    environment = {
+        **os.environ,
+        "PYTHONPATH": str(python_root),
+    }
+    completed = subprocess.run(
+        [
+            str(runtime_python if runtime_python.is_file() else Path(sys.executable)),
+            "-c",
+            "from thirdhand_va.vision.perception.grounded_sam import GroundedSamBackend",
+        ],
+        cwd=ROOT,
+        env=environment,
+        text=True,
+        capture_output=True,
+        timeout=20,
+        check=False,
+    )
+
+    assert completed.returncode == 0, completed.stderr
 
 
 def test_overlay_uses_tracker_identity_instead_of_frame_order() -> None:

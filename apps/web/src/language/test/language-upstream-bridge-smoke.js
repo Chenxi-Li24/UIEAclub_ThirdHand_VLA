@@ -163,6 +163,43 @@ assert.throws(() => normalizeEndpoint('http://127.0.0.1:3000/ws'), /127\.0\.0\.1
 }
 
 {
+  const { bridge, socket } = makeBridge();
+  const targetDeg = [20, 10, -30, 0, 0, 0];
+  const base = {
+    cmd: 'move_joint', joints_rad: targetDeg.map(value => value * Math.PI / 180),
+    request_id: 'explicit-multi',
+  };
+  assert.strictEqual(bridge.send(base), false);
+  assert.strictEqual(bridge.send({ ...base, manual_joint_authorization: {
+    skill: 'manual_joint_control@1', action: 'joint.multi',
+    moves: [{ joint: 1, deltaDeg: 10 }, { joint: 2, deltaDeg: -10 }],
+  } }), true);
+  assert.strictEqual(socket.sent.at(-1).cmd, 'servo');
+  assert(socket.sent.at(-1).joints.every(
+    (value, index) => Math.abs(value - targetDeg[index]) < 1e-9
+  ));
+  bridge.shutdown();
+}
+
+{
+  const invalidManual = [
+    { moves: [{ joint: 1, deltaDeg: 10 }, { joint: 1, deltaDeg: -10 }], target: [20, 10, -30, 0, 0, 0] },
+    { moves: [{ joint: 1, deltaDeg: 10 }, { joint: 2, deltaDeg: -10 }], target: [20, 11, -30, 0, 0, 0] },
+  ];
+  for (const [index, item] of invalidManual.entries()) {
+    const { bridge } = makeBridge();
+    assert.strictEqual(bridge.send({
+      cmd: 'move_joint', joints_rad: item.target.map(value => value * Math.PI / 180),
+      request_id: `invalid-manual-${index}`,
+      manual_joint_authorization: {
+        skill: 'manual_joint_control@1', action: 'joint.multi', moves: item.moves,
+      },
+    }), false);
+    bridge.shutdown();
+  }
+}
+
+{
   const invalidAuthorizations = [
     {
       targetDeg: [30, 40, -50, 0, 0, 0],

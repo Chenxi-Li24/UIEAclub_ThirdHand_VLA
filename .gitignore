@@ -27,6 +27,7 @@ api_keys.yaml
 
 # Existing runtime output
 logs/**
+!logs/README.md
 !logs/.gitkeep
 *.pid
 data/calibration/*.npz

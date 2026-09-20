@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "thirdhand.skill.vision.inspect-scene.input.v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["question", "language"],
+  "properties": {
+    "question": {"type": "string", "minLength": 1, "maxLength": 2000},
+    "priorVisualSummary": {"type": ["string", "null"], "maxLength": 2000},
+    "language": {"enum": ["zh", "en"]}
+  }
+}

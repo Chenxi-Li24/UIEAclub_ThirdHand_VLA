@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "thirdhand.skill.vision.inspect-scene.result.v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["status", "summary", "frame", "model", "trace"],
+  "properties": {
+    "status": {"enum": ["completed", "failed"]},
+    "summary": {"type": "string"},
+    "frame": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "required": ["frameId", "sequence", "capturedAt", "frameAgeMs", "timestampSource"],
+      "properties": {
+        "frameId": {"type": "string"},
+        "sequence": {"type": "integer", "minimum": 1},
+        "capturedAt": {"type": "string", "format": "date-time"},
+        "frameAgeMs": {"type": "integer", "minimum": 0},
+        "timestampSource": {"enum": ["stream-header", "mjpeg-delivery"]},
+        "widthPx": {"type": ["integer", "null"], "minimum": 1},
+        "heightPx": {"type": ["integer", "null"], "minimum": 1}
+      }
+    },
+    "model": {"const": "deepseek-flash"},
+    "trace": {"type": "array", "items": {"type": "object"}}
+  }
+}

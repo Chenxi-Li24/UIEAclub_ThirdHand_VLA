@@ -1,0 +1,17 @@
+schema: thirdhand.skill-manifest.v1
+id: vision.inspect-scene
+version: 1.0.0
+summary: Describe one fresh RGB scene through a read-only vision model.
+risk: read-only
+lifecycle: request
+runtime: python
+operations: [invoke, status]
+requires:
+  services: [vision]
+  devices: [xvisio]
+  models: [deepseek-flash]
+schemas:
+  input: schemas/input.json
+  result: schemas/result.json
+entrypoint: src/worker.py
+healthcheck: status

@@ -265,7 +265,7 @@ class InspectSceneSkill:
         try:
             response = self.client.messages.create(
                 model=self.model,
-                max_tokens=512,
+                max_tokens=1024,
                 system=VISION_SYSTEM_PROMPT,
                 messages=messages,
             )
@@ -277,10 +277,15 @@ class InspectSceneSkill:
             if getattr(block, "type", None) == "text" and str(getattr(block, "text", "")).strip()
         ]
         if not parts:
+            exhausted = getattr(response, "stop_reason", None) == "max_tokens"
             raise InspectSceneError(
                 "vision_empty_response",
-                "视觉模型没有返回可用描述。",
-                retryable=False,
+                (
+                    "视觉模型推理达到输出上限，重试后仍未返回可用描述。"
+                    if exhausted
+                    else "视觉模型重试后仍未返回可用描述。"
+                ),
+                retryable=True,
             )
         return " ".join(parts)
 

@@ -171,7 +171,12 @@ class Messages:
         outcome = self.outcomes.pop(0)
         if isinstance(outcome, Exception):
             raise outcome
-        return SimpleNamespace(content=[SimpleNamespace(type="text", text=outcome)])
+        if hasattr(outcome, "content"):
+            return outcome
+        return SimpleNamespace(
+            content=[SimpleNamespace(type="text", text=outcome)],
+            stop_reason="end_turn",
+        )
 
 
 class Client:
@@ -216,7 +221,7 @@ def test_flash_request_contains_only_question_context_and_jpeg():
     assert retention.saved == [(captured(worker).jpeg, 21)]
     request = client.messages.calls[0]
     assert request["model"] == "deepseek-flash"
-    assert request["max_tokens"] == 512
+    assert request["max_tokens"] == 1024
     content = request["messages"][0]["content"]
     assert content[0]["type"] == "text"
     assert "前面有什么" in content[0]["text"]
@@ -224,6 +229,86 @@ def test_flash_request_contains_only_question_context_and_jpeg():
     assert content[1]["type"] == "image"
     assert content[1]["source"]["type"] == "base64"
     assert content[1]["source"]["media_type"] == "image/jpeg"
+
+
+def test_visual_request_allows_enough_output_budget_for_final_text():
+    worker = load_worker()
+
+    class BudgetSensitiveMessages:
+        def __init__(self):
+            self.calls = []
+
+        def create(self, **kwargs):
+            self.calls.append(kwargs)
+            if kwargs["max_tokens"] < 1024:
+                return SimpleNamespace(
+                    content=[SimpleNamespace(type="thinking", thinking="reasoning")],
+                    stop_reason="max_tokens",
+                )
+            return SimpleNamespace(
+                content=[SimpleNamespace(type="text", text="桌面上还有一块黄色物体。")],
+                stop_reason="end_turn",
+            )
+
+    client = SimpleNamespace(messages=BudgetSensitiveMessages())
+    skill = worker.InspectSceneSkill(
+        client=client,
+        frame_source=FrameSource(worker, [captured(worker, 60)]),
+        retention=Retention(),
+    )
+
+    result = skill.invoke("除了刚才说的，还有什么？", language="zh")
+
+    assert result["summary"] == "桌面上还有一块黄色物体。"
+    assert len(client.messages.calls) == 1
+
+
+def test_retries_empty_max_token_response_once_with_a_new_frame():
+    worker = load_worker()
+    empty = SimpleNamespace(
+        content=[SimpleNamespace(type="thinking", thinking="reasoning")],
+        stop_reason="max_tokens",
+    )
+    success = SimpleNamespace(
+        content=[SimpleNamespace(type="text", text="第二帧返回了描述。")],
+        stop_reason="end_turn",
+    )
+    source = FrameSource(worker, [captured(worker, 61), captured(worker, 62)])
+    client = Client([empty, success])
+    skill = worker.InspectSceneSkill(
+        client=client,
+        frame_source=source,
+        retention=Retention(),
+    )
+
+    result = skill.invoke("再看一下", language="zh")
+
+    assert result["summary"] == "第二帧返回了描述。"
+    assert result["frame"]["sequence"] == 62
+    assert result["trace"][-1]["retryCount"] == 1
+    assert len(client.messages.calls) == 2
+
+
+def test_two_empty_visual_responses_fail_after_one_retry():
+    worker = load_worker()
+    empty = SimpleNamespace(
+        content=[SimpleNamespace(type="thinking", thinking="reasoning")],
+        stop_reason="max_tokens",
+    )
+    source = FrameSource(worker, [captured(worker, 63), captured(worker, 64)])
+    client = Client([empty, empty])
+    skill = worker.InspectSceneSkill(
+        client=client,
+        frame_source=source,
+        retention=Retention(),
+    )
+
+    with pytest.raises(worker.InspectSceneError) as error:
+        skill.invoke("再看一次", language="zh")
+
+    assert error.value.code == "vision_empty_response"
+    assert len(client.messages.calls) == 2
+    assert len(source.calls) == 2
 
 
 def test_retries_one_transient_capture_failure_with_a_new_frame():

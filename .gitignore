@@ -74,3 +74,6 @@ dist/
 /History/**/.mypy_cache/
 /History/**/.ruff_cache/
 /History/**/.superpowers/
+
+# Agent implementation ledgers and review packages
+/.superpowers/

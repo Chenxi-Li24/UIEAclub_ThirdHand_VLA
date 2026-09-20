@@ -95,6 +95,7 @@ test('web gateway serves UI and proxies only robot commands', async (t) => {
     assetsDir,
     readyFile,
     robotWsUrl: robot.url,
+    visionHttpUrl: 'http://127.0.0.1:9',
   });
   t.after(async () => {
     await gateway.close();

@@ -56,7 +56,10 @@ async function createRobotStub() {
         interface: 'can0',
       },
       motion: { speedScale: 0.05 },
-      presets: { home: [0, 0, 0, 0, 0, 0] },
+      presets: {
+        zero: [0, 0, 0, 0, 0, 0],
+        home: [-0.163927, -2.611904, -4, 33.058620, 0.338783, 0.185784],
+      },
       jointLimits: [[-162, 162], [-12, 201], [-183, 0], [-98, 98], [-98, 98], [-164, 164]],
     }));
     sendState([10, 20, -30, 0, 0, 0]);

@@ -1,5 +1,6 @@
 const crypto = require('node:crypto');
 const fs = require('node:fs');
+const http = require('node:http');
 const path = require('node:path');
 const net = require('node:net');
 const { spawn } = require('node:child_process');
@@ -69,6 +70,73 @@ function probeHost(bind) {
   if (!bind || bind === '0.0.0.0') return '127.0.0.1';
   if (bind === '::') return '::1';
   return bind;
+}
+
+function probeHttpJson({ host, port, pathName = '/health', expect = {}, timeoutMs = 1000 }) {
+  return new Promise(resolve => {
+    let settled = false;
+    const finish = result => {
+      if (settled) return;
+      settled = true;
+      resolve(result);
+    };
+    const request = http.get({ host, port, path: pathName, timeout: timeoutMs }, response => {
+      let body = '';
+      response.setEncoding('utf8');
+      response.on('data', chunk => {
+        if (body.length <= 64 * 1024) body += chunk;
+      });
+      response.on('end', () => {
+        if (response.statusCode < 200 || response.statusCode >= 300) {
+          finish({ ready: false, reason: `health_http_${response.statusCode}` });
+          return;
+        }
+        try {
+          const payload = JSON.parse(body);
+          const mismatch = Object.entries(expect).find(([key, value]) => payload[key] !== value);
+          finish(mismatch
+            ? { ready: false, reason: `health_identity_mismatch:${mismatch[0]}` }
+            : { ready: true, reason: null });
+        } catch {
+          finish({ ready: false, reason: 'health_invalid_json' });
+        }
+      });
+    });
+    request.once('timeout', () => {
+      request.destroy();
+      finish({ ready: false, reason: 'health_timeout' });
+    });
+    request.once('error', error => finish({
+      ready: false,
+      reason: `health_probe_failed:${error.code || 'HTTP_ERROR'}`,
+    }));
+  });
+}
+
+async function probeConfiguredService(service) {
+  if (!Number.isInteger(service.port)) {
+    return { occupied: false, ready: false, reason: 'port_not_configured' };
+  }
+  const host = probeHost(service.bind);
+  const tcp = await probeTcpPort({ host, port: service.port });
+  if (tcp.errorCode) {
+    return { occupied: false, ready: false, blocked: true, reason: `port_probe_failed:${tcp.errorCode}` };
+  }
+  if (!tcp.occupied) return { occupied: false, ready: false, reason: 'port_not_listening' };
+
+  const probe = service.ensureProbe || { type: 'tcp' };
+  if (probe.type === 'tcp') return { occupied: true, ready: true, reason: null };
+  if (probe.type !== 'http-json') {
+    return { occupied: true, ready: false, blocked: true, reason: `unsupported_probe:${probe.type}` };
+  }
+  const health = await probeHttpJson({
+    host,
+    port: service.port,
+    pathName: probe.path || '/health',
+    expect: probe.expect || {},
+    timeoutMs: probe.timeoutMs || 1000,
+  });
+  return { occupied: true, blocked: !health.ready, ...health };
 }
 
 class ServiceSupervisor {
@@ -149,6 +217,18 @@ class ServiceSupervisor {
       await delay(25);
     }
     throw new Error('service readiness timeout');
+  }
+
+  async _waitListening(child, service, timeoutMs = this.startTimeoutMs) {
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+      if (child.launchError) throw child.launchError;
+      if (child.exitCode !== null) throw new Error(`service exited with code ${child.exitCode}`);
+      const probe = await probeConfiguredService(service);
+      if (probe.ready) return;
+      await delay(100);
+    }
+    throw new Error(`service port ${service.port} readiness timeout`);
   }
 
   async _terminateStartedChild(child) {
@@ -253,6 +333,121 @@ class ServiceSupervisor {
     return this.status();
   }
 
+  async ensureAll() {
+    fs.mkdirSync(path.join(this.runtimeDir, 'run'), { recursive: true });
+    fs.mkdirSync(path.join(this.runtimeDir, 'logs'), { recursive: true });
+    if (this.managesExecutionToken) prepareExecutionToken({ runtimeDir: this.runtimeDir });
+
+    const state = readState(this.statePath);
+    const records = new Map(state.services.map(record => [record.id, record]));
+    const results = [];
+
+    for (const service of this.services.filter(item => item.enabled)) {
+      const base = {
+        id: service.id,
+        bind: service.bind || '127.0.0.1',
+        port: Number.isInteger(service.port) ? service.port : null,
+      };
+      const existingProbe = await probeConfiguredService(service);
+      if (existingProbe.ready) {
+        const record = records.get(service.id);
+        results.push({
+          ...base,
+          pid: this._owned(record, service) ? record.pid : null,
+          state: 'ready',
+          action: 'kept',
+          source: this._owned(record, service) ? 'launcher' : 'existing',
+          reason: null,
+        });
+        continue;
+      }
+      if (existingProbe.occupied || existingProbe.blocked) {
+        results.push({
+          ...base,
+          pid: null,
+          state: 'blocked_external',
+          action: 'blocked',
+          source: 'existing',
+          reason: existingProbe.reason,
+        });
+        continue;
+      }
+
+      const readyFile = path.join(this.runtimeDir, 'run', `${service.id}.ready`);
+      const stdoutPath = path.join(this.runtimeDir, 'logs', `${service.id}.stdout.log`);
+      const stderrPath = path.join(this.runtimeDir, 'logs', `${service.id}.stderr.log`);
+      try { fs.unlinkSync(readyFile); } catch (error) { if (error.code !== 'ENOENT') throw error; }
+      const stdoutFd = fs.openSync(stdoutPath, 'a');
+      const stderrFd = fs.openSync(stderrPath, 'a');
+      const child = spawn(service.command, service.args || [], {
+        cwd: service.cwd || process.cwd(),
+        env: {
+          ...process.env,
+          ...(service.env || {}),
+          THIRDHAND_SERVICE_ID: service.id,
+          THIRDHAND_READY_FILE: readyFile,
+        },
+        detached: true,
+        stdio: ['ignore', stdoutFd, stderrFd],
+      });
+      fs.closeSync(stdoutFd);
+      fs.closeSync(stderrFd);
+      child.launchError = null;
+      child.once('error', error => { child.launchError = error; });
+      this.children.set(service.id, child);
+
+      try {
+        await this._waitListening(child, service, service.startTimeoutMs);
+        child.unref();
+        const record = {
+          id: service.id,
+          pid: child.pid,
+          processStartMarker: processStartMarker(child.pid),
+          commandHash: commandHash(service),
+          status: 'ready',
+          startedAt: new Date().toISOString(),
+          lastError: null,
+        };
+        records.set(service.id, record);
+        writeStateAtomic(this.statePath, { ...state, schemaVersion: 1, services: [...records.values()] });
+        this.onEvent({ type: 'started', serviceId: service.id, pid: child.pid });
+        results.push({
+          ...base,
+          pid: child.pid,
+          state: 'ready',
+          action: 'started',
+          source: 'launcher',
+          reason: null,
+        });
+      } catch (error) {
+        await this._terminateStartedChild(child);
+        try { fs.unlinkSync(readyFile); } catch (unlinkError) {
+          if (unlinkError.code !== 'ENOENT') throw unlinkError;
+        }
+        records.set(service.id, {
+          id: service.id,
+          pid: child.pid || null,
+          processStartMarker: child.pid ? processStartMarker(child.pid) : null,
+          commandHash: commandHash(service),
+          status: 'stopped',
+          startedAt: null,
+          lastError: `ensure_start_failed:${error.message}`,
+        });
+        writeStateAtomic(this.statePath, { ...state, schemaVersion: 1, services: [...records.values()] });
+        results.push({
+          ...base,
+          pid: child.pid || null,
+          state: 'failed',
+          action: 'start_failed',
+          source: 'launcher',
+          reason: error.message,
+          logs: { stdout: stdoutPath, stderr: stderrPath },
+        });
+      }
+    }
+    return results;
+  }
+
   async status() {
     const state = readState(this.statePath);
     const records = new Map(state.services.map(record => [record.id, record]));
@@ -319,5 +514,7 @@ module.exports = {
   commandHash,
   isAlive,
   probeTcpPort,
+  probeConfiguredService,
+  probeHttpJson,
   processStartMarker,
 };

@@ -22,7 +22,7 @@ The Vision Service owns the XVisio USB camera and listens only on
 - `POST /api/vision/release`
 - `WS /ws` for bounded status, selection, and detection events
 
-The process must use `local/runtimes/python/bin/python`; the base Conda runtime
+The process must use `local/runtimes/vision-python/bin/python`; the base Conda runtime
 has a different CUDA/PyTorch combination. Model files live under ignored
 `local/models/vision/huggingface` and are verified by the pinned hashes in
 `configs/vision.yaml`.

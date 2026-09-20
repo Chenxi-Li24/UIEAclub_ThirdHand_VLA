@@ -14,6 +14,7 @@ class FakeCamera {
   constructor() {
     this.started = false;
     this.clients = new Set();
+    this.commands = [];
   }
 
   start() {
@@ -25,6 +26,21 @@ class FakeCamera {
       camera: { status: this.started ? 'ready' : 'stopped', sequence: 1 },
       inference: { status: 'error', error: 'checkpoint missing' },
       selection: { stableId: null },
+    };
+  }
+
+  observation(stableId = null) {
+    const targets = [{ stableId: 2, label: 'bottle', depthM: 0.42 }];
+    const target = stableId === null
+      ? null : targets.find(item => item.stableId === stableId);
+    if (stableId !== null && !target) return null;
+    return {
+      schema: 'thirdhand.vision-observation.v1',
+      frameId: 7,
+      selectedStableId: 2,
+      target,
+      targets,
+      robotControlEnabled: false,
     };
   }
 
@@ -42,7 +58,8 @@ class FakeCamera {
     this.clients.delete(response);
   }
 
-  send() {
+  send(message) {
+    this.commands.push(message);
     return true;
   }
 
@@ -82,4 +99,23 @@ test('raw MJPEG stays available when inference reports model error', async (t) =
   const vision = await fetch(`${origin}/camera/xvisio/vision`);
   assert.equal(vision.status, 503);
   assert.equal((await vision.json()).code, 'inference_unavailable');
+
+  const observation = await fetch(`${origin}/api/vision/observation`)
+    .then(response => response.json());
+  assert.equal(observation.selectedStableId, 2);
+  assert.equal(observation.targets[0].depthM, 0.42);
+
+  const target = await fetch(`${origin}/api/vision/targets/2`)
+    .then(response => response.json());
+  assert.equal(target.target.stableId, 2);
+
+  const selected = await fetch(`${origin}/api/vision/select`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ stableId: 2, requestId: 'select-2' }),
+  }).then(response => response.json());
+  assert.equal(selected.requestId, 'select-2');
+  assert.deepEqual(camera.commands.at(-1), {
+    type: 'select_target', stableId: 2, requestId: 'select-2',
+  });
 });

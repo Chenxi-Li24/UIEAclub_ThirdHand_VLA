@@ -1,6 +1,12 @@
 {
   "profile": "manual-control",
   "description": "Unified Startouch control with formal local speech, XVisio vision, and the LAN web gateway.",
+  "can": {
+    "enabled": true,
+    "interface": "can0",
+    "bitrate": 1000000,
+    "restartMs": 100
+  },
   "services": [
     {
       "id": "robot",
@@ -17,6 +23,11 @@
       },
       "bind": "127.0.0.1",
       "port": 3000,
+      "ensureProbe": {
+        "type": "http-json",
+        "path": "/health",
+        "expect": { "serviceId": "robot" }
+      },
       "shutdownOrder": 10,
       "enabled": true
     },
@@ -35,6 +46,7 @@
       },
       "bind": "127.0.0.1",
       "port": 3004,
+      "ensureProbe": { "type": "tcp" },
       "startTimeoutMs": 180000,
       "shutdownOrder": 60,
       "enabled": true
@@ -47,14 +59,44 @@
       "env": {
         "VISION_HOST": "127.0.0.1",
         "VISION_PORT": "3100",
-        "VISION_PYTHON": "${ROOT}/local/runtimes/python/bin/python",
+        "VISION_PYTHON": "${ROOT}/local/runtimes/vision-python/bin/python",
         "VISION_CONFIG": "${ROOT}/configs/vision.yaml",
         "XVISIO_STREAM_EXECUTABLE": "${ROOT}/runtime/build/xvisio/xvisio_rgbd_stream"
       },
       "bind": "127.0.0.1",
       "port": 3100,
+      "ensureProbe": {
+        "type": "http-json",
+        "path": "/health",
+        "expect": { "serviceId": "vision" }
+      },
       "startTimeoutMs": 60000,
       "shutdownOrder": 70,
+      "enabled": true
+    },
+    {
+      "id": "bottle-pick",
+      "command": "${NODE}",
+      "args": ["${ROOT}/skills/manipulation/bottlegrasp/apps/bottle_pick/web_server.js"],
+      "cwd": "${ROOT}/skills/manipulation/bottlegrasp",
+      "env": {
+        "THIRDHAND_VA_HOST": "127.0.0.1",
+        "THIRDHAND_VA_PORT": "8766",
+        "THIRDHAND_VA_ACTION_CONFIG": "${ROOT}/skills/manipulation/bottlegrasp/configs/action.yaml",
+        "THIRDHAND_VA_ENABLE_CAMERA": "0",
+        "THIRDHAND_VA_ENABLE_ROBOT": "0",
+        "THIRDHAND_VISION_HTTP_URL": "http://127.0.0.1:3100",
+        "THIRDHAND_VA_VISION_WS_URL": "ws://127.0.0.1:3100/ws",
+        "THIRDHAND_ROBOT_WS_URL": "ws://127.0.0.1:3000/ws"
+      },
+      "bind": "127.0.0.1",
+      "port": 8766,
+      "ensureProbe": {
+        "type": "http-json",
+        "path": "/health",
+        "expect": { "status": "ok" }
+      },
+      "shutdownOrder": 80,
       "enabled": true
     },
     {
@@ -71,11 +113,17 @@
         "DIRECTIONAL_CONTROL_ENABLED": "1",
         "DIRECTIONAL_REAL_CONTROL": "1",
         "VISION_HTTP_URL": "http://127.0.0.1:3100",
-        "VISION_WS_URL": "ws://127.0.0.1:3100/ws"
+        "VISION_WS_URL": "ws://127.0.0.1:3100/ws",
+        "VA_HTTP_URL": "http://127.0.0.1:8766"
       },
       "bind": "192.168.58.68",
       "allowLan": true,
       "port": 9983,
+      "ensureProbe": {
+        "type": "http-json",
+        "path": "/health",
+        "expect": { "serviceId": "web" }
+      },
       "shutdownOrder": 100,
       "enabled": true
     }

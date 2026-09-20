@@ -1,0 +1,17 @@
+schema: thirdhand.skill-manifest.v1
+id: vision.detect-bottles
+version: 0.1.0
+summary: Read visible bottle targets from the XVisio RGB-D Vision Service.
+risk: read-only
+lifecycle: worker
+runtime: python
+operations: [invoke, status]
+requires:
+  services: [vision]
+  devices: [xvisio]
+  models: [grounding-dino-tiny, sam2.1-hiera-tiny, norfair]
+schemas:
+  input: schemas/input.json
+  result: schemas/result.json
+entrypoint: src/worker.py
+healthcheck: status

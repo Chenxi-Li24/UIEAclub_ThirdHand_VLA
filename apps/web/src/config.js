@@ -34,6 +34,8 @@ function loadConfig(env = process.env) {
     visionWsUrl: env.VISION_WS_URL || 'ws://127.0.0.1:3100/ws',
     language: {
       realControlEnabled: env.LANGUAGE_REAL_CONTROL === '1',
+      visionHttpUrl: env.VISION_HTTP_URL || 'http://127.0.0.1:3100',
+      vaHttpUrl: env.VA_HTTP_URL || 'http://127.0.0.1:8766',
       directionalEnabled: env.DIRECTIONAL_CONTROL_ENABLED === '1',
       directionalRealControlEnabled: env.DIRECTIONAL_REAL_CONTROL === '1',
       stateMaxAgeMs: 500,

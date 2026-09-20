@@ -85,10 +85,10 @@ class StartouchBridge extends EventEmitter {
     return true;
   }
 
-  softwareStop() {
+  softwareStop(requestId = null) {
     if (!this.child || !this.connected) return false;
     const child = this.child;
-    if (!this.send({ cmd: 'software_stop' })) return false;
+    if (!this.send({ cmd: 'software_stop', request_id: requestId })) return false;
 
     if (this.softwareStopTimer) clearTimeout(this.softwareStopTimer);
     this.softwareStopTimer = setTimeout(() => {
@@ -149,6 +149,11 @@ class StartouchBridge extends EventEmitter {
         this.softwareStopTimer = null;
         this.emit('software_stop_complete', message);
       }
+    }
+    if (message.type === 'error') {
+      this.emit('bridge_error', message);
+      this.emit('message', { ...message, type: 'bridge_error' });
+      return;
     }
     this.emit(message.type, message);
     this.emit('message', message);

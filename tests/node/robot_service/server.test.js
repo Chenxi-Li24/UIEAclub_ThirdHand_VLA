@@ -70,6 +70,25 @@ test('robot service stays disconnected until explicit connect', async (t) => {
 
   const config = await nextMessage(socket, message => message.type === 'config');
   assert.equal(config.connection.connected, false);
+  assert.deepEqual(config.presets, {
+    zero: [0, 0, 0, 0, 0, 0],
+    home: [-0.163927, -2.611904, -4, 33.058620, 0.338783, 0.185784],
+  });
+
+  const capabilityPromise = nextMessage(
+    socket,
+    message => message.type === 'capability_response',
+  );
+  socket.send(JSON.stringify({
+    type: 'capability_request',
+    schema: 'thirdhand-robot-capability-v1',
+    nonce: 'test-nonce',
+  }));
+  const capability = await capabilityPromise;
+  assert.equal(capability.nonce, 'test-nonce');
+  assert.equal(capability.protocol_version, 'thirdhand-robot-lowlevel-v1');
+  assert.equal(capability.pose_frame, 'robot_flange');
+  assert.ok(capability.commands.includes('move_l'));
 
   await new Promise(resolve => setTimeout(resolve, 80));
   const stillDisconnected = await fetch(

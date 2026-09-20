@@ -1,0 +1,148 @@
+robot:
+  ws_url: "ws://127.0.0.1:3000/ws"
+  health_url: "http://127.0.0.1:3000/health"
+  # Source: History/source-snapshots/startouch-web-vla/web-control/server/config.js
+  home_joints_deg: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+  go_home_on_start: true
+  go_home_on_lost: true
+  joint_limits_deg:
+    - [-162, 162]
+    - [-13, 201]
+    - [-183, 0]
+    - [-98, 98]
+    - [-98, 98]
+    - [-164, 164]
+  max_relative_move_deg: 5.0
+  min_command_interval_s: 0.04
+  follow_speed_percent: 0.50
+  servo_min_time_sec: 0.20
+  servo_max_speeds_deg_s: [300, 300, 300, 1000, 1000, 1000]
+motion:
+  hz: 8
+director:
+  hz: 12
+timing:
+  lost_hold_s: 1.0
+  search_s: 12.0
+  sleep_after_s: 300.0
+idle:
+  breath_deg: 0.08
+vision:
+  camera_index: 0
+  frame_w: 640
+  frame_h: 480
+  fourcc: "YU12"
+  mirror: false
+  hz: 15
+  deadzone_px: 30
+  filter_min_cutoff: 1.0
+  filter_beta: 0.04
+vision_service:
+  enabled: true
+  mjpeg_url: "http://127.0.0.1:3100/camera/xvisio/raw"
+  health_url: "http://127.0.0.1:3100/health"
+  allow_health_fallback: false
+  prefer_labels: ["person", "face", "human", "bottle"]
+  min_motion_area: 650
+  target_hold_s: 1.2
+  # A frozen MJPEG image must never be treated as a fresh control observation.
+  max_frame_age_s: 0.5
+  motion_requires_face_lock: true
+  motion_lock_radius_px: 95
+  wave_lock_enabled: true
+  wave_lock_frames: 2
+  wave_lock_min_score: 0.004
+  wave_lock_center_radius_px: 280
+  face_cascade_path: "/usr/share/opencv4/haarcascades/haarcascade_frontalface_default.xml"
+  mediapipe_face_enabled: true
+  mediapipe_face_model_path: "models/blaze_face_short_range.tflite"
+  mediapipe_face_min_score: 0.20
+  fisheye_center_crop: 1.00
+  face_scale_factor: 1.05
+  face_min_neighbors: 3
+  face_min_size_px: 28
+  face_min_score: 0.010
+  upperbody_cascade_path: "/usr/share/opencv4/haarcascades/haarcascade_upperbody.xml"
+  upperbody_lock_enabled: false
+  upperbody_scale_factor: 1.04
+  upperbody_min_neighbors: 3
+  upperbody_min_size_px: 55
+  person_confirm_frames: 2
+  person_center_radius_px: 310
+  person_min_score: 0.018
+  person_max_v_ratio: 0.72
+follow:
+  pan_joint_index: 0
+  tilt_joint_index: 3
+  roll_joint_index: 5
+  k_pan_deg_per_px: 0.045
+  k_tilt_deg_per_px: 0.070
+  k_roll_deg_per_px: 0.006
+  sign_pan: -1
+  sign_tilt: -1
+  sign_roll: -1
+  deadzone_px: 18
+  max_correction_deg: 22.0
+  max_pan_correction_deg: 55.0
+  max_tilt_correction_deg: 30.0
+  max_roll_deg: 2.5
+  max_step_deg: 4.50
+  max_roll_step_deg: 0.60
+  search_max_deg: 5.0
+  search_tilt_max_deg: 3.0
+  search_scale: 1.00
+wake_word:
+  phrase: "ThirdHand"
+  speech_ws_url: "ws://127.0.0.1:3004/v1/voice"
+  enable_stdin: true
+gestures:
+  idle_breathe:
+    keyframes:
+      - {t: 0.0, offset_deg: [0, 0, 0, 0, 0, 0]}
+      - {t: 1.2, offset_deg: [0, 0, 0, 0.05, 0.04, 0]}
+      - {t: 2.4, offset_deg: [0, 0, 0, 0, 0, 0]}
+  nod:
+    keyframes:
+      - {t: 0.0, offset_deg: [0, 0, 0, 0, 0, 0]}
+      - {t: 0.35, offset_deg: [0, 0, 0, -0.55, 0, 0], ease: ease_in_out}
+      - {t: 0.75, offset_deg: [0, 0, 0, 0.22, 0, 0], ease: ease_out_back}
+      - {t: 1.05, offset_deg: [0, 0, 0, 0, 0, 0]}
+  head_tilt:
+    keyframes:
+      - {t: 0.0, offset_deg: [0, 0, 0, 0, 0, 0]}
+      - {t: 0.8, offset_deg: [0, 0, 0, 0, 0.65, 0]}
+      - {t: 1.6, offset_deg: [0, 0, 0, 0, -0.65, 0]}
+      - {t: 2.2, offset_deg: [0, 0, 0, 0, 0, 0]}
+  droop:
+    keyframes:
+      - {t: 0.0, offset_deg: [0, 0, 0, 0, 0, 0]}
+      - {t: 1.8, offset_deg: [0, 0, 0, -0.8, -0.18, -0.15]}
+      - {t: 3.0, offset_deg: [0, 0, 0, -1.05, -0.25, -0.25]}
+  perk_up:
+    keyframes:
+      - {t: 0.0, offset_deg: [0, 0, 0, 0, 0, 0]}
+      - {t: 0.45, offset_deg: [0, 0, 0, 0.65, 0.22, 0.12], ease: ease_out_back}
+      - {t: 1.0, offset_deg: [0, 0, 0, 0, 0, 0]}
+  wiggle:
+    keyframes:
+      - {t: 0.0, offset_deg: [0, 0, 0, 0, 0, 0]}
+      - {t: 0.3, offset_deg: [0.35, 0, 0, 0, 0.18, 0]}
+      - {t: 0.6, offset_deg: [-0.35, 0, 0, 0, -0.18, 0]}
+      - {t: 0.9, offset_deg: [0.25, 0, 0, 0, 0.12, 0]}
+      - {t: 1.2, offset_deg: [0, 0, 0, 0, 0, 0]}
+  search:
+    keyframes:
+      - {t: 0.0, offset_deg: [0, 0, 0, 0, 0, 0]}
+      - {t: 0.9, offset_deg: [0.8, 0, 0, 0, 0, 0]}
+      - {t: 1.8, offset_deg: [-0.8, 0, 0, 0, 0, 0]}
+      - {t: 2.7, offset_deg: [0.5, 0, 0, 0, 0, 0]}
+      - {t: 3.2, offset_deg: [0, 0, 0, 0, 0, 0]}
+  sleep:
+    keyframes:
+      - {t: 0.0, offset_deg: [0, 0, 0, 0, 0, 0]}
+      - {t: 3.0, offset_deg: [0, 0, 0, -1.15, -0.20, -0.25]}
+  wake_up:
+    keyframes:
+      - {t: 0.0, offset_deg: [0, 0, 0, 0, 0, 0]}
+      - {t: 0.8, offset_deg: [0, 0, 0, 0.72, 0.20, 0.15], ease: ease_out_back}
+      - {t: 1.4, offset_deg: [0, 0, 0, 0, 0, 0]}

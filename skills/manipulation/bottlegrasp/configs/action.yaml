@@ -1,0 +1,62 @@
+schema: "thirdhand-action-config-v2"
+execution_enabled: false
+robot:
+  backend: "startouch_process"
+  python_executable: "python3"
+  bridge_path: "../native/startouch/startouch_bridge.py"
+  sdk_path: "../build/startouch_runtime/startouch_sdk"
+  runtime_root: "../build/startouch_runtime/startouch_sdk"
+  source_manifest: "../native/startouch/startouch_source.json"
+  safety_profile_id: "thirdhand-conservative-safety-v1"
+  safety_config_sha256: "4ca3953ea04c5558262bf16f6b659e84896d85ede7469165d4c428aae0b1ba20"
+  runtime_manifest_id: "sha256:2f5ea9ca5c69b85d9ca7c6448984244103d735565ed5c75d7f54b42c56c63a9a"
+  can_interface: "can0"
+  lock_file: "/tmp/startouch-web-can0.lock"
+  ws_url: "ws://127.0.0.1:3000/ws"
+  joint_limits_deg:
+    - [-162, 162]
+    - [-12, 201]
+    - [-183, 0]
+    - [-98, 98]
+    - [-98, 98]
+    - [-164, 164]
+  joint_max_speeds_deg_s: [300, 300, 300, 1000, 1000, 1000]
+  speed_scale: 0.05
+  home_tolerance_deg: 0.5
+  joint_limit_stop_margin_deg: 3.0
+  presets:
+    home: [-0.163927, -2.611904, -4.000000, 33.058620, 0.338783, 0.185784]
+workflow_timeout_ms: 240000
+home_timeout_ms: 45000
+workspace_m:
+  x: [0.15, 0.66]
+  y: [-0.65, 0.45]
+  z: [0.04, 0.65]
+status_file: "artifacts/action/operator/status.json"
+motion:
+  pregrasp_offset_m: 0.10
+  lift_height_m: 0.25
+  safe_transit_z_m: 0.306371896
+  max_refine_step_m: 0.005
+  linear_speed_m_s: 0.03
+  grasp_euler_rad: [0.052626251, -0.083733625, 0.492493650]
+gripper:
+  physical_max_width_m: 0.080
+  execution_max_width_m: 0.072
+  contact_min_width_m: 0.008
+  contact_max_width_m: 0.070
+  release_min_width_m: 0.074
+grasp:
+  flange_offset_base_m: [0.0475, 0.0100, 0.0]
+  offset_validated: false
+place:
+  strategy: "fixed_xy_keep_grasp_z"
+  validated: false
+  fixed_xy_m: [0.282831634, -0.591124195]
+  euler_rad: [0.001938936, -0.075722729, -1.123057982]
+  grasp_z_range_m: null
+  vertical_clearance_m: 0.25
+  source_observation_path_validation_id: "sha256:84dac966824f8e41ee8474534295576250618bc998dc61948a98705d7ec28572"
+  home_preset: "home"
+  path_validation_file: null
+  path_validation_sha256: null

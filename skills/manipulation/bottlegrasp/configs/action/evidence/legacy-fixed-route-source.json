@@ -1,0 +1,32 @@
+{
+  "schema": "thirdhand-legacy-fixed-route-evidence-v1",
+  "source_project": "$HOME/arm/UIEAclub_ThirdHand_VLA-fixed-pick-place",
+  "source_config": {
+    "path": "configs/tasks/fixed_pick_place.yaml",
+    "sha256": "sha256:2f912e1d6d3cc32852fd3e545e7afcf05e00a79ce50181d3b4b3816085812ea6"
+  },
+  "representative_real_log": {
+    "path": "logs/fixed_pick_place/run-20260730-024050.log",
+    "sha256": "sha256:e8861e52ed2c59460a20f3513b7093e0d84fc549f3e987e22d04d563403859eb",
+    "completed_bidirectional_cycles": 3,
+    "speed_scale": 0.15
+  },
+  "real_logs_with_complete_marker": 55,
+  "waypoints": {
+    "home_joints_deg": [-0.163927, -2.611904, -0.579209, 33.058620, 0.338783, 0.185784],
+    "pick_xyz_m": [0.564179753, 0.301489458, 0.056371896],
+    "pick_euler_rad": [0.052626251, -0.083733625, 0.492493650],
+    "pick_up_xyz_m": [0.564179753, 0.301489458, 0.306371896],
+    "place_xyz_m": [0.282831634, -0.591124195, 0.057153997],
+    "place_euler_rad": [0.001938936, -0.075722729, -1.123057982],
+    "place_up_xyz_m": [0.282831634, -0.591124195, 0.307153997]
+  },
+  "reuse_scope": [
+    "home_reference_basis_only",
+    "safe_transit_height",
+    "grasp_orientation",
+    "fixed_place_xy",
+    "place_orientation",
+    "vertical_lift_clearance"
+  ]
+}

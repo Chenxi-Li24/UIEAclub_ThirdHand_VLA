@@ -57,11 +57,13 @@ test('manual control starts internal services before the web gateway', () => {
   const services = load('manual-control').filter(item => item.enabled);
   assert.deepEqual(
     services.map(item => item.id),
-    ['robot', 'speech', 'vision', 'web'],
+    ['robot', 'speech', 'vision', 'bottle-pick', 'web'],
   );
 
+  const robot = services.find(item => item.id === 'robot');
   const speech = services.find(item => item.id === 'speech');
   const vision = services.find(item => item.id === 'vision');
+  const bottlePick = services.find(item => item.id === 'bottle-pick');
   const web = services.find(item => item.id === 'web');
   assert.equal(speech.port, 3004);
   assert.equal(speech.bind, '127.0.0.1');
@@ -76,12 +78,25 @@ test('manual control starts internal services before the web gateway', () => {
   assert.equal(vision.args[0], path.join(ROOT, 'services/vision/src/server.js'));
   assert.equal(
     vision.env.VISION_PYTHON,
-    path.join(ROOT, 'local/runtimes/python/bin/python'),
+    path.join(ROOT, 'local/runtimes/vision-python/bin/python'),
   );
   assert.ok(vision.startTimeoutMs >= 30000);
   assert.equal(web.env.VOICE_WS_URL, 'ws://127.0.0.1:3004/v1/voice');
   assert.equal(web.env.VISION_HTTP_URL, 'http://127.0.0.1:3100');
   assert.equal(web.env.VISION_WS_URL, 'ws://127.0.0.1:3100/ws');
+  assert.equal(web.env.VA_HTTP_URL, 'http://127.0.0.1:8766');
+  assert.equal(bottlePick.port, 8766);
+  assert.equal(bottlePick.bind, '127.0.0.1');
+  assert.equal(
+    bottlePick.env.THIRDHAND_VA_VISION_WS_URL,
+    'ws://127.0.0.1:3100/ws',
+  );
+  assert.ok(web.shutdownOrder > bottlePick.shutdownOrder);
   assert.ok(web.shutdownOrder > vision.shutdownOrder);
   assert.ok(vision.shutdownOrder > services[0].shutdownOrder);
+  assert.deepEqual(robot.ensureProbe.expect, { serviceId: 'robot' });
+  assert.equal(speech.ensureProbe.type, 'tcp');
+  assert.deepEqual(vision.ensureProbe.expect, { serviceId: 'vision' });
+  assert.deepEqual(bottlePick.ensureProbe.expect, { status: 'ok' });
+  assert.deepEqual(web.ensureProbe.expect, { serviceId: 'web' });
 });

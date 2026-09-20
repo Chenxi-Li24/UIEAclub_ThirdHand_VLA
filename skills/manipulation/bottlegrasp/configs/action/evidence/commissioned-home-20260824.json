@@ -1,0 +1,98 @@
+{
+  "schema": "thirdhand-home-commissioning-evidence-v1",
+  "commissioned_at": "2026-08-24T12:58:14+08:00",
+  "robot": {
+    "model": "Startouch FastTouchV3",
+    "can_interface": "can0",
+    "joint_limits_deg": [
+      [-162.0, 162.0],
+      [-12.0, 201.0],
+      [-183.0, 0.0],
+      [-98.0, 98.0],
+      [-98.0, 98.0],
+      [-164.0, 164.0]
+    ],
+    "required_stop_margin_deg": 3.0,
+    "home_tolerance_deg": 0.5
+  },
+  "source_home_joints_deg": [
+    -0.163927,
+    -2.611904,
+    -0.579209,
+    33.058620,
+    0.338783,
+    0.185784
+  ],
+  "commissioned_home_joints_deg": [
+    -0.163927,
+    -2.611904,
+    -4.000000,
+    33.058620,
+    0.338783,
+    0.185784
+  ],
+  "minimum_nominal_stop_margin_deg": 4.0,
+  "offline_kinematics": {
+    "source_tcp_xyz_m": [0.259013, 0.000435, 0.041158],
+    "commissioned_tcp_xyz_m": [0.261928, 0.000426, 0.071090],
+    "tcp_translation_from_source_m": 0.030074,
+    "tcp_rotation_from_source_deg": 3.420791
+  },
+  "real_validation": {
+    "speed_scale": 0.01,
+    "trajectory_duration_s": 3.0,
+    "stable_hold_duration_s": 2.0,
+    "target_error_deg_after_motion": [
+      0.109,
+      0.022,
+      0.405,
+      0.415,
+      0.240,
+      0.197
+    ],
+    "stable_hold_joints_deg": [
+      -0.273212,
+      -2.546333,
+      -3.617323,
+      33.495759,
+      0.579209,
+      0.382496
+    ],
+    "stable_hold_max_target_error_deg": 0.437139,
+    "home_tolerance_passed": true,
+    "joint_stop_margin_passed_while_enabled": true,
+    "can_error_counters_zero": true,
+    "hardware_emergency_stop_triggered": false,
+    "collision_or_can_fault_observed": false
+  },
+  "cleanup_observation": {
+    "motors_disabled_by_sdk_cleanup": true,
+    "independent_depower_proof": false,
+    "gravity_backdrive_observed_after_disable": true,
+    "interpretation": "The commissioned HOME is held and verified while the controller is active. After cleanup disables the motors, the arm backdrives under gravity and is not expected to remain at HOME."
+  },
+  "evidence_logs": [
+    {
+      "path": "$HOME/TH-Fanxy/logs/fixed_pick_place/run-20260824-125156.log",
+      "sha256": "sha256:952e6d37ac205c2d55e8192a40bd4516ce79a9bac84393977642a0e53de38d19",
+      "purpose": "read original current joint state without trajectory"
+    },
+    {
+      "path": "$HOME/TH-Fanxy/logs/fixed_pick_place/run-20260824-125405.log",
+      "sha256": "sha256:9320b388d48311de4d067868a479be79ebd421a348d3709367dcb449e3f8219f",
+      "purpose": "first low-speed candidate move with intentionally strict 0.4 degree diagnostic threshold"
+    },
+    {
+      "path": "$HOME/TH-Fanxy/logs/fixed_pick_place/run-20260824-125430.log",
+      "sha256": "sha256:7fe7b4b5c14cd18ba23c8b313b8abb04d89c9092b5fcf3d557c3215285f2df6f",
+      "purpose": "post-cleanup state read that exposed gravity backdrive"
+    },
+    {
+      "path": "$HOME/TH-Fanxy/logs/fixed_pick_place/run-20260824-125803.log",
+      "sha256": "sha256:685365bb9316014005e4866f89b2a31d9d2edd7602a86403b3bcad99ab665be5",
+      "purpose": "instrumented closed-loop hold validation"
+    }
+  ],
+  "scope": "HOME commissioning only",
+  "approved_for_full_pick_place_execution": false
+}

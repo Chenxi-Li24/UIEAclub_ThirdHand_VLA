@@ -1,6 +1,7 @@
-numpy
-opencv-python
+numpy==1.26.4
+opencv-python-headless==4.11.0.86
 PyYAML
 torch
 transformers
 Pillow
+norfair==2.3.0

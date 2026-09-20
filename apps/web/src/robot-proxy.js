@@ -1,13 +1,17 @@
 'use strict';
 
 const { WebSocket } = require('ws');
+const { BottlePickAdapter } = require('./language/bottle-pick-adapter');
 const { LanguageUpstreamBridge } = require('./language/language-upstream-bridge');
 const { ManualJointOrchestrator } = require('./language/manual-joint-control');
 const {
   DIRECTIONAL_SKILL,
   DirectionalJointOrchestrator,
 } = require('./language/directional-joint-control');
-const { SkillExecutorRegistry } = require('./language/skill-executor-registry');
+const {
+  PICK_SKILL,
+  SkillExecutorRegistry,
+} = require('./language/skill-executor-registry');
 
 const ROBOT_COMMANDS = new Set([
   'connect',
@@ -40,6 +44,10 @@ class RobotProxy {
     this.sessions = new Set();
     this.languageCandidateOwners = new Map();
     this.skillExecutors = new SkillExecutorRegistry();
+    this.skillExecutors.register(PICK_SKILL, new BottlePickAdapter({
+      visionBaseUrl: languageConfig.visionHttpUrl,
+      vaBaseUrl: languageConfig.vaHttpUrl,
+    }));
     this.languageUpstream = new LanguageUpstreamBridge({
       endpoint: robotWsUrl,
       stateMaxAgeMs: languageConfig.stateMaxAgeMs,

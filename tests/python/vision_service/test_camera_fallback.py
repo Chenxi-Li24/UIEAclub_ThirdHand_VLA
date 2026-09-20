@@ -22,6 +22,18 @@ def load_module():
     return module
 
 
+def test_stream_demand_is_disabled_by_default_and_validates_updates() -> None:
+    module = load_module()
+    demand = module.StreamDemand()
+
+    assert not demand.requested("raw")
+    assert not demand.requested("vision")
+    assert not demand.requested("depth")
+    demand.set_enabled("depth", True)
+    assert demand.requested("depth")
+    assert not demand.requested("raw")
+
+
 def test_capture_worker_keeps_publishing_after_model_load_failure() -> None:
     module = load_module()
 

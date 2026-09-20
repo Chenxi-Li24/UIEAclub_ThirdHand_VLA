@@ -765,13 +765,13 @@ class RobotBridge:
 
         source = str(command.get("source", "servo"))
         if (
-            source != "preset:home"
+            source != "preset:zero"
             and max(abs(value) for value in target) < math.radians(0.05)
             and max(abs(value) for value in start_joints) > math.radians(2.0)
         ):
             emit(
                 "error",
-                message="all-zero target rejected; use the explicit home control",
+                message="all-zero target rejected; use the explicit zero preset",
             )
             return
 

@@ -4,6 +4,7 @@ from io import BytesIO
 import importlib.util
 import os
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -135,3 +136,172 @@ def test_retention_keeps_twenty_recent_jpegs_and_expires_old_files(tmp_path: Pat
     assert len(files) == 20
     assert not old.exists()
     assert not any("000001" in path.name or "000002" in path.name for path in files)
+
+
+class FrameSource:
+    def __init__(self, worker, outcomes):
+        self.worker = worker
+        self.outcomes = list(outcomes)
+        self.calls = []
+
+    def next_frame(self, previous_sequence=None):
+        self.calls.append(previous_sequence)
+        outcome = self.outcomes.pop(0)
+        if isinstance(outcome, Exception):
+            raise outcome
+        return outcome
+
+
+class Retention:
+    def __init__(self):
+        self.saved = []
+
+    def save(self, jpeg, *, sequence):
+        self.saved.append((jpeg, sequence))
+        return Path(f"/tmp/frame-{sequence}.jpg")
+
+
+class Messages:
+    def __init__(self, outcomes):
+        self.outcomes = list(outcomes)
+        self.calls = []
+
+    def create(self, **kwargs):
+        self.calls.append(kwargs)
+        outcome = self.outcomes.pop(0)
+        if isinstance(outcome, Exception):
+            raise outcome
+        return SimpleNamespace(content=[SimpleNamespace(type="text", text=outcome)])
+
+
+class Client:
+    def __init__(self, outcomes):
+        self.messages = Messages(outcomes)
+
+
+def captured(worker, sequence=21, age_ms=20):
+    now = 50_000
+    return worker.CapturedFrame(
+        jpeg=b"\xff\xd8scene\xff\xd9",
+        sequence=sequence,
+        captured_at_ms=now - age_ms,
+        received_at_ms=now,
+        frame_age_ms=age_ms,
+        timestamp_source="stream-header",
+    )
+
+
+def test_flash_request_contains_only_question_context_and_jpeg():
+    worker = load_worker()
+    client = Client(["桌面上有一个红色饮料罐。"])
+    source = FrameSource(worker, [captured(worker)])
+    retention = Retention()
+    skill = worker.InspectSceneSkill(
+        client=client,
+        frame_source=source,
+        retention=retention,
+        model="deepseek-flash",
+    )
+
+    result = skill.invoke(
+        "前面有什么？",
+        prior_visual_summary="上一帧里有一个罐子。",
+        language="zh",
+    )
+
+    assert result["status"] == "completed"
+    assert result["summary"] == "桌面上有一个红色饮料罐。"
+    assert result["model"] == "deepseek-flash"
+    assert result["frame"]["sequence"] == 21
+    assert retention.saved == [(captured(worker).jpeg, 21)]
+    request = client.messages.calls[0]
+    assert request["model"] == "deepseek-flash"
+    assert request["max_tokens"] == 512
+    content = request["messages"][0]["content"]
+    assert content[0]["type"] == "text"
+    assert "前面有什么" in content[0]["text"]
+    assert "上一帧里有一个罐子" in content[0]["text"]
+    assert content[1]["type"] == "image"
+    assert content[1]["source"]["type"] == "base64"
+    assert content[1]["source"]["media_type"] == "image/jpeg"
+
+
+def test_retries_one_transient_capture_failure_with_a_new_frame():
+    worker = load_worker()
+    transient = worker.FrameCaptureError("stream_unavailable", "不可用", retryable=True)
+    source = FrameSource(worker, [transient, captured(worker, sequence=31)])
+    client = Client(["看到了桌面。"])
+    skill = worker.InspectSceneSkill(
+        client=client,
+        frame_source=source,
+        retention=Retention(),
+    )
+
+    result = skill.invoke("重新看一下", language="zh")
+
+    assert result["status"] == "completed"
+    assert len(source.calls) == 2
+    assert result["trace"][-1]["retryCount"] == 1
+
+
+def test_retries_one_transient_provider_failure_and_fetches_a_new_frame():
+    worker = load_worker()
+    source = FrameSource(worker, [captured(worker, 40), captured(worker, 41)])
+    client = Client([TimeoutError("secret transport detail"), "第二次成功。"])
+    skill = worker.InspectSceneSkill(
+        client=client,
+        frame_source=source,
+        retention=Retention(),
+    )
+
+    result = skill.invoke("看一下", language="zh")
+
+    assert result["summary"] == "第二次成功。"
+    assert len(client.messages.calls) == 2
+    assert result["frame"]["sequence"] == 41
+    assert "secret" not in str(result["trace"]).lower()
+
+
+def test_authentication_failure_does_not_retry_or_fall_back():
+    worker = load_worker()
+
+    class AuthenticationError(Exception):
+        status_code = 401
+
+    source = FrameSource(worker, [captured(worker)])
+    client = Client([AuthenticationError("api_key=never-log-this")])
+    skill = worker.InspectSceneSkill(
+        client=client,
+        frame_source=source,
+        retention=Retention(),
+    )
+
+    with pytest.raises(worker.InspectSceneError) as error:
+        skill.invoke("看一下", language="zh")
+
+    assert error.value.code == "vision_auth_failed"
+    assert error.value.retryable is False
+    assert len(client.messages.calls) == 1
+    assert "never-log" not in str(error.value)
+    assert all(call["model"] == "deepseek-flash" for call in client.messages.calls)
+
+
+def test_two_stale_frames_fail_explicitly_after_one_retry():
+    worker = load_worker()
+    source = FrameSource(
+        worker,
+        [captured(worker, 50, age_ms=2_001), captured(worker, 51, age_ms=3_000)],
+    )
+    skill = worker.InspectSceneSkill(
+        client=Client(["must not be called"]),
+        frame_source=source,
+        retention=Retention(),
+        max_frame_age_ms=2_000,
+    )
+
+    with pytest.raises(worker.InspectSceneError) as error:
+        skill.invoke("前面有什么", language="zh")
+
+    assert error.value.code == "stale_frame"
+    assert len(source.calls) == 2
+    assert skill.client.messages.calls == []

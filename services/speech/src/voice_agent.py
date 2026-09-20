@@ -926,13 +926,29 @@ class ThirdHandController:
     def _language(text: str) -> str:
         return "zh" if any("\u4e00" <= char <= "\u9fff" for char in text) else "en"
 
+    def _history_window(self, max_entries: int = 12) -> list[dict[str, Any]]:
+        """Trim only at a real user-turn boundary, never inside a tool pair."""
+        if len(self._history) <= max_entries:
+            return list(self._history)
+        target = len(self._history) - max_entries
+        starts = [
+            index
+            for index, message in enumerate(self._history)
+            if message.get("role") == "user"
+            and isinstance(message.get("content"), str)
+        ]
+        if not starts:
+            return list(self._history)
+        start = next((index for index in starts if index >= target), starts[-1])
+        return list(self._history[start:])
+
     def _create_message(self):
         return self._client.messages.create(
             model=self.model,
             max_tokens=1024,
             system=SYSTEM_PROMPT,
             tools=AGENT_TOOLS,
-            messages=self._history[-12:],
+            messages=self._history_window(),
         )
 
     @staticmethod
@@ -970,11 +986,15 @@ class ThirdHandController:
         self._history.append({"role": "user", "content": user_text})
         try:
             response = self._create_message()
-        except Exception as exc:
+        except Exception:
             return {
-                "text": f"LLM 服务暂时不可用: {exc}",
+                "text": "语言模型暂时不可用，请稍后重试。",
                 "actions": [],
-                "trace": [],
+                "trace": [{
+                    "stage": "controller.text",
+                    "status": "failed",
+                    "code": "llm_unavailable",
+                }],
             }
 
         trace: list[dict[str, Any]] = []
@@ -991,6 +1011,17 @@ class ThirdHandController:
                 if vision_used:
                     return {
                         "text": "本轮视觉检查次数已达到上限，请发起新的请求后再看。",
+                        "actions": [],
+                        "trace": trace,
+                    }
+                if len(tool_blocks) != 1:
+                    trace.append({
+                        "stage": "controller.policy",
+                        "status": "failed",
+                        "code": "vision_motion_separation",
+                    })
+                    return {
+                        "text": "视觉检查与机械臂动作需要分开请求；本轮不会生成动作候选。",
                         "actions": [],
                         "trace": trace,
                     }
@@ -1012,7 +1043,17 @@ class ThirdHandController:
                         "status": "failed",
                         "code": code,
                     })
-                    message = str(exc).strip() or "当前无法读取摄像头画面。"
+                    safe_codes = {
+                        "stream_unavailable", "invalid_stream", "invalid_frame",
+                        "frame_too_large", "frozen_frame", "stale_frame",
+                        "vision_auth_failed", "vision_model_unavailable",
+                        "vision_empty_response", "invalid_question",
+                    }
+                    message = (
+                        str(exc).strip()
+                        if code in safe_codes
+                        else "当前无法完成视觉检查。"
+                    )
                     return {"text": message, "actions": [], "trace": trace}
 
                 summary = str(result.get("summary", "")).strip()
@@ -1036,13 +1077,30 @@ class ThirdHandController:
                 })
                 try:
                     response = self._create_message()
-                except Exception as exc:
+                except Exception:
+                    trace.append({
+                        "stage": "controller.text",
+                        "status": "failed",
+                        "code": "llm_unavailable",
+                    })
                     return {
-                        "text": f"视觉结果已取得，但语言模型暂时无法继续回答: {exc}",
+                        "text": "视觉结果已取得，但语言模型暂时无法继续回答。",
                         "actions": [],
                         "trace": trace,
                     }
                 continue
+
+            if vision_used and tool_blocks:
+                trace.append({
+                    "stage": "controller.policy",
+                    "status": "failed",
+                    "code": "vision_motion_separation",
+                })
+                return {
+                    "text": "视觉检查仅用于描述；请在下一条指令中单独下达机械臂动作。",
+                    "actions": [],
+                    "trace": trace,
+                }
 
             actions = [
                 {

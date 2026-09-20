@@ -55,10 +55,12 @@ stream is unavailable, stale, or Flash rejects the request, the turn fails
 explicitly after at most one transient retry. It never falls back to Pro.
 
 Recent raw frames are retained under
-`skills/vision/inspect-scene/test_pics/` for debugging: at most 20 JPEG files
-and no longer than 24 hours. The files are ignored by Git. The 9983 assistant
-panel receives only the natural-language answer; the communication log may
-show the sanitized stage, model, frame ID/age, retry count, or error code.
+`skills/vision/inspect-scene/test_pics/` for debugging. Every successful save
+prunes the directory to 20 JPEG files and removes files older than 24 hours;
+there is no background deletion while the Skill is idle. The files are ignored
+by Git. The 9983 assistant panel receives only the natural-language answer; the
+communication log may show the sanitized stage, model, frame ID/age, retry
+count, or error code.
 
 For live acceptance, first confirm that the existing 3004, 3100, and 9983
 processes own their expected ports. Read a frame through the running 3100 HTTP

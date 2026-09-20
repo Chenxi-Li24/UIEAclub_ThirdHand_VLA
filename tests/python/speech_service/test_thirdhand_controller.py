@@ -164,6 +164,87 @@ def test_skill_failure_is_explicit_and_does_not_call_pro_again():
     assert len(client.messages.calls) == 1
 
 
+def test_visual_turn_cannot_emit_a_motion_candidate_after_observation():
+    agent, _client = controller([
+        [tool("vision_inspect_scene", {"question": "look ahead"})],
+        [tool("open_gripper", {}, "tool-motion")],
+    ])
+
+    result = agent.chat("look ahead and then open the gripper")
+
+    assert result["actions"] == []
+    assert "视觉检查仅用于描述" in result["text"]
+    assert result["trace"][-1] == {
+        "stage": "controller.policy",
+        "status": "failed",
+        "code": "vision_motion_separation",
+    }
+
+
+def test_visual_and_motion_tools_cannot_be_mixed_in_one_model_response():
+    skill = VisionSkill()
+    agent, client = controller([[tool(
+        "vision_inspect_scene",
+        {"question": "look ahead"},
+    ), tool("open_gripper", {}, "tool-motion")]], skill=skill)
+
+    result = agent.chat("look ahead and then open the gripper")
+
+    assert result["actions"] == []
+    assert "视觉检查与机械臂动作需要分开请求" in result["text"]
+    assert skill.calls == []
+    assert len(client.messages.calls) == 1
+
+
+def test_history_window_starts_at_a_complete_user_turn():
+    agent, _client = controller([[text("unused")]])
+    history = []
+    for index in range(6):
+        call = tool("open_gripper", {}, f"tool-{index}")
+        history.extend([
+            {"role": "user", "content": f"turn-{index}"},
+            {"role": "assistant", "content": [call]},
+            {"role": "user", "content": [{
+                "type": "tool_result",
+                "tool_use_id": call.id,
+                "content": "candidate",
+            }]},
+        ])
+    agent._history = history
+
+    window = agent._history_window(max_entries=8)
+
+    assert window[0]["role"] == "user"
+    assert isinstance(window[0]["content"], str)
+    seen_tool_ids = set()
+    for message in window:
+        content = message["content"]
+        if message["role"] == "assistant" and isinstance(content, list):
+            seen_tool_ids.update(block.id for block in content)
+        if message["role"] == "user" and isinstance(content, list):
+            for result in content:
+                assert result["tool_use_id"] in seen_tool_ids
+
+
+def test_raw_text_model_exception_is_not_returned_to_the_user():
+    class FailingMessages:
+        def create(self, **_kwargs):
+            raise RuntimeError("provider URL token=must-not-leak")
+
+    client = SimpleNamespace(messages=FailingMessages())
+    agent = voice_agent.ThirdHandController(client=client)
+
+    result = agent.chat("hello")
+
+    assert result["text"] == "语言模型暂时不可用，请稍后重试。"
+    assert "must-not-leak" not in json.dumps(result, ensure_ascii=False)
+    assert result["trace"] == [{
+        "stage": "controller.text",
+        "status": "failed",
+        "code": "llm_unavailable",
+    }]
+
+
 def test_controller_stops_a_second_visual_tool_call_in_the_same_turn():
     agent, client = controller([
         [tool("vision_inspect_scene", {"question": "看一下"})],

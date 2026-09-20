@@ -12,7 +12,7 @@ from thirdhand_va.vision.camera.recording import write_frame_bundle
 
 
 ROOT = Path(__file__).resolve().parents[2]
-PYTHON = "/home/nieqingcao/miniconda3/envs/thirdhand-groundedsam2/bin/python"
+PYTHON = sys.executable
 
 
 def load_script_module(relative_path: str, name: str):

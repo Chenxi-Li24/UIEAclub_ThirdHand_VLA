@@ -13,7 +13,7 @@ camera, network connection, model download, or robot command.
 | [Norfair](https://github.com/tryolabs/norfair) | 2.3.0 | BSD-3-Clause | Reuse multi-object association inside `NorfairTrackerAdapter`; keep user-facing stable IDs and reservation lifecycle in this project. Verify with replay sequences that detector IDs and left/right order may change without identity changes. |
 | [OpenCV](https://docs.opencv.org/4.x/d9/d0c/group__calib3d.html) | 4.11.0.86 | Apache-2.0 | Reuse `calibrateHandEye` and standard numerical primitives. Validate on synthetic known transforms and held-out physical samples. |
 | [MoveIt Task Constructor](https://moveit.picknik.ai/main/doc/tutorials/pick_and_place_with_moveit_task_constructor/pick_and_place_with_moveit_task_constructor.html) | design reference | BSD-3-Clause | Reuse the staged pick/place failure model concept, not the ROS dependency, because the existing Startouch stack already owns low-level motion. |
-| [UIEAclub ThirdHand / local TH-Fanxy](https://github.com/Oliveirah007/UIEAclub_ThirdHand_VLA) | local `/home/nieqingcao/TH-Fanxy`, `/home/nieqingcao/th0814/TH_MK_D/UIEAclub_ThirdHand_VLA-control-fixed-a-to-b`, and sibling `Reuse`, reviewed 2026-08-24 | MIT; attribution recorded in `native/startouch/NOTICE.md`; the pinned vendor SDK MIT declaration is hash-bound from `pyproject.toml` | Reuse the proven Startouch SDK call shapes and the conservative contained-runtime safety profile behind a strict JSON-lines subprocess. Reference trees are read-only and are not runtime import paths. The VA adapter adds exact request matching, content-bound handshake, flange semantics, single CAN ownership, passive non-loopback `0x11..0x17` feedback proof, a 3° joint stop margin, and truthful cleanup acknowledgement that never claims independent motor depower. |
+| [UIEAclub ThirdHand / local TH-Fanxy](https://github.com/Oliveirah007/UIEAclub_ThirdHand_VLA) | local `$HOME/TH-Fanxy`, `$HOME/th0814/TH_MK_D/UIEAclub_ThirdHand_VLA-control-fixed-a-to-b`, and sibling `Reuse`, reviewed 2026-08-24 | MIT; attribution recorded in `native/startouch/NOTICE.md`; the pinned vendor SDK MIT declaration is hash-bound from `pyproject.toml` | Reuse the proven Startouch SDK call shapes and the conservative contained-runtime safety profile behind a strict JSON-lines subprocess. Reference trees are read-only and are not runtime import paths. The VA adapter adds exact request matching, content-bound handshake, flange semantics, single CAN ownership, passive non-loopback `0x11..0x17` feedback proof, a 3° joint stop margin, and truthful cleanup acknowledgement that never claims independent motor depower. |
 | [NVIDIA Isaac ROS Manipulator](https://nvidia-isaac-ros.github.io/reference_workflows/isaac_manipulator/index.html) | design reference | NVIDIA component-specific terms | Reuse on-demand perception and stage-orchestration concepts only; do not add Isaac/ROS to this compact deployment. |
 | [VGN](https://github.com/ethz-asl/vgn) | design reference | MIT | Reuse candidate quality/orientation/width concepts. Do not add its TSDF and network runtime in the first upright-bottle version. |
 | [GPD](https://github.com/atenpas/gpd) | evaluated reference | BSD-2-Clause | Not adopted: its older PCL/C++ stack is disproportionate for separated upright bottles. |
@@ -41,10 +41,10 @@ Startouch SDK，并在 `configs/vision.yaml`、`configs/action.yaml` 更新路�
 ## Reproducibility checks
 
 ```bash
-/home/nieqingcao/miniconda3/envs/thirdhand-groundedsam2/bin/python -m pip install -r requirements/vision-cu128.txt
+$HOME/miniconda3/envs/thirdhand-groundedsam2/bin/python -m pip install -r requirements/vision-cu128.txt
 npm ci --ignore-scripts
 bash scripts/vision/build_native.sh
-/home/nieqingcao/miniconda3/envs/thirdhand-groundedsam2/bin/python scripts/runtime/preflight.py --json
+$HOME/miniconda3/envs/thirdhand-groundedsam2/bin/python scripts/runtime/preflight.py --json
 ```
 
 The preflight is read-only. Live camera and robot checks are separate commands

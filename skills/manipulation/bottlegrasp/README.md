@@ -50,13 +50,13 @@ V 不导入 A、不发送动作；A 不读取模型、掩膜或 tracker 内部�
 ## 安装与只读预检
 
 ```bash
-cd /home/nieqingcao/th0814/VA/bottlegrasp
-/home/nieqingcao/miniconda3/envs/thirdhand-groundedsam2/bin/python \
+cd $HOME/th0814/VA/bottlegrasp
+$HOME/miniconda3/envs/thirdhand-groundedsam2/bin/python \
   scripts/runtime/preflight.py --json
 npm ci --ignore-scripts
 
 # 只准备并校验项目内 Startouch 运行时；不访问硬件
-/home/nieqingcao/miniconda3/envs/thirdhand-groundedsam2/bin/python \
+$HOME/miniconda3/envs/thirdhand-groundedsam2/bin/python \
   scripts/action/prepare_startouch_runtime.py \
   --source-sdk build/startouch-repro-cpython310-a-20260824/source
 ```
@@ -114,7 +114,7 @@ node scripts/action/debug_workflow.js \
 node scripts/action/debug_execution_plan.js \
   --fixture tests/fixtures/integration/full-cycle.json
 
-THIRDHAND_VA_PYTHON=/home/nieqingcao/miniconda3/envs/LumosTouch/bin/python \
+THIRDHAND_VA_PYTHON=$HOME/miniconda3/envs/LumosTouch/bin/python \
   node scripts/action/debug_startouch_protocol.js --simulate
 ```
 
@@ -176,7 +176,7 @@ node apps/bottle_pick/run.js stop
 ## 离线测试
 
 ```bash
-/home/nieqingcao/miniconda3/envs/thirdhand-groundedsam2/bin/python -m pytest \
+$HOME/miniconda3/envs/thirdhand-groundedsam2/bin/python -m pytest \
   tests/common tests/vision tests/action tests/integration -q
 npm test
 ```

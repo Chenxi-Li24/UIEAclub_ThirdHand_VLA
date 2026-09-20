@@ -11,7 +11,8 @@ const {
 } = require('../../../src/thirdhand_va/action/adapters/startouch_process_client');
 
 const PROJECT_ROOT = path.resolve(__dirname, '../../..');
-const PYTHON = '/home/nieqingcao/miniconda3/envs/thirdhand-groundedsam2/bin/python';
+const PYTHON = process.env.THIRDHAND_VA_PYTHON || process.env.PYTHON ||
+  (process.platform === 'win32' ? 'python' : 'python3');
 const BRIDGE = path.join(PROJECT_ROOT, 'native/startouch/startouch_bridge.py');
 const RUNTIME_SETTINGS = Object.freeze({
   backend: 'simulate',

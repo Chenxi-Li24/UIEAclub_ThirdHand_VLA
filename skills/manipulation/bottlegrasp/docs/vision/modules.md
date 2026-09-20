@@ -18,7 +18,7 @@ V 的正式输入是 Lumos Ego STD/XVisio 同源注册 RGB-D，正式输出是
 ## 直接运行
 
 ```bash
-PY=/home/nieqingcao/miniconda3/envs/thirdhand-groundedsam2/bin/python
+PY=$HOME/miniconda3/envs/thirdhand-groundedsam2/bin/python
 
 $PY scripts/vision/debug_tracking.py \
   --fixture tests/fixtures/tracking/reorder.json

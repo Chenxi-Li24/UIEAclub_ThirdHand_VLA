@@ -151,10 +151,7 @@ class VisionServiceTracker:
         if hasattr(cv2, "data"):
             haar_dir = Path(getattr(cv2.data, "haarcascades", ""))
             candidates.extend([haar_dir / name for name in names])
-        for base in [
-            Path("/usr/share/opencv4/haarcascades"),
-            Path("/home/nieqingcao/ThirdHand/UIEAclub_ThirdHand_VLA/local/runtimes/vision-python/lib/python3.11/site-packages/cv2/data"),
-        ]:
+        for base in [Path("/usr/share/opencv4/haarcascades")]:
             candidates.extend([base / name for name in names])
         for path in candidates:
             if not path or not path.exists():

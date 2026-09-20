@@ -10,7 +10,7 @@
 
 ## Global Constraints
 
-- Work only in `/home/nieqingcao/th0814/VA/.worktrees/vision-core` on `feature/vision-core`.
+- Work only in `$HOME/th0814/VA/.worktrees/vision-core` on `feature/vision-core`.
 - Do not open the XVisio/USB camera, start a live camera bridge, start the 3100 server, or run live inference while the hand-eye-calibration teammate owns the camera.
 - Tests use synthetic RGB-D/XYZ, saved frame bundles, and in-memory/fake file descriptors only.
 - Output coordinates remain in `xvisio_color`; no base-frame transform, motion command, CAN, gripper, or robot-control action is produced.

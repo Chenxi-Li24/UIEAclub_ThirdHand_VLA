@@ -73,22 +73,22 @@
   },
   "evidence_logs": [
     {
-      "path": "/home/nieqingcao/TH-Fanxy/logs/fixed_pick_place/run-20260824-125156.log",
+      "path": "$HOME/TH-Fanxy/logs/fixed_pick_place/run-20260824-125156.log",
       "sha256": "sha256:952e6d37ac205c2d55e8192a40bd4516ce79a9bac84393977642a0e53de38d19",
       "purpose": "read original current joint state without trajectory"
     },
     {
-      "path": "/home/nieqingcao/TH-Fanxy/logs/fixed_pick_place/run-20260824-125405.log",
+      "path": "$HOME/TH-Fanxy/logs/fixed_pick_place/run-20260824-125405.log",
       "sha256": "sha256:9320b388d48311de4d067868a479be79ebd421a348d3709367dcb449e3f8219f",
       "purpose": "first low-speed candidate move with intentionally strict 0.4 degree diagnostic threshold"
     },
     {
-      "path": "/home/nieqingcao/TH-Fanxy/logs/fixed_pick_place/run-20260824-125430.log",
+      "path": "$HOME/TH-Fanxy/logs/fixed_pick_place/run-20260824-125430.log",
       "sha256": "sha256:7fe7b4b5c14cd18ba23c8b313b8abb04d89c9092b5fcf3d557c3215285f2df6f",
       "purpose": "post-cleanup state read that exposed gravity backdrive"
     },
     {
-      "path": "/home/nieqingcao/TH-Fanxy/logs/fixed_pick_place/run-20260824-125803.log",
+      "path": "$HOME/TH-Fanxy/logs/fixed_pick_place/run-20260824-125803.log",
       "sha256": "sha256:685365bb9316014005e4866f89b2a31d9d2edd7602a86403b3bcad99ab665be5",
       "purpose": "instrumented closed-loop hold validation"
     }

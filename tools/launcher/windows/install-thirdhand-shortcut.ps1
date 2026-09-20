@@ -1,11 +1,15 @@
 param(
     [string]$UbuntuHost = "192.168.58.68",
     [string]$UbuntuUser = "nieqingcao",
-    [string]$RemoteRoot = "/home/nieqingcao/ThirdHand/UIEAclub_ThirdHand_VLA",
+    [string]$RemoteRoot = "",
     [string]$WebUrl = "http://192.168.58.68:9983/"
 )
 
 $ErrorActionPreference = "Stop"
+
+if ([string]::IsNullOrWhiteSpace($RemoteRoot)) {
+    $RemoteRoot = "/home/$UbuntuUser/ThirdHand/UIEAclub_ThirdHand_VLA"
+}
 
 if (-not (Get-Command ssh.exe -ErrorAction SilentlyContinue)) {
     throw "Windows OpenSSH client (ssh.exe) is required."

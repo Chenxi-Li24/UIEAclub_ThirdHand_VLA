@@ -10,7 +10,7 @@
 
 ## Global Constraints
 
-- All created or modified project files live under `/home/nieqingcao/th0814/VA`.
+- All created or modified project files live under `$HOME/th0814/VA`.
 - Other ThirdHand directories are read-only references; copy only the minimum reusable source into `VA`.
 - Target is one fixed experimental Coca-Cola plastic bottle, upright on a table.
 - Pepsi bottles, water bottles, ordinary bottles, and cans are negative objects.

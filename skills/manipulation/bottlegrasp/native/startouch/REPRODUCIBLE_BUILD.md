@@ -5,7 +5,7 @@ This record covers an offline provenance and compatibility review performed on
 
 ## Inputs
 
-- SDK repository: `/home/nieqingcao/arm/startouch_sdk`
+- SDK repository: `$HOME/arm/startouch_sdk`
 - clean exported commit: `9f0bc8f324ccdf866e20c27bbc7ed5007869db46`
 - host: Ubuntu 20.04.6 LTS, x86-64
 - CMake 3.16.3: `/usr/bin/cmake`, SHA-256
@@ -14,7 +14,7 @@ This record covers an offline provenance and compatibility review performed on
   `0c0b987719385f8e242819dfef6a3e97b4b2540ce4035dbc11565df2966bd69e`
 - GNU ld 2.34: `/usr/bin/ld`, SHA-256
   `476b24d5cc1fef54f80412d06e7430b2dcf4e2b6f1525ee17e6eaaf16b28a00f`
-- Python 3.10.20: `/home/nieqingcao/miniconda3/envs/LumosTouch/bin/python`,
+- Python 3.10.20: `$HOME/miniconda3/envs/LumosTouch/bin/python`,
   SHA-256 `05756c2b5ee66b9d87e251c6a28c33af13165540ceab736c928bde63bb1039c0`
 - pybind11 3.0.4; installed `RECORD` SHA-256
   `3e06adb20a9f3f2507dd18d4beba28bf793d3b064aeb91cc18ce4376732e6132`
@@ -36,8 +36,8 @@ under this project's ignored `build/` tree. Each export was configured with:
 /usr/bin/cmake -S <clean-source> -B <independent-build> \
   -DCMAKE_BUILD_TYPE=Release \
   -DCMAKE_SKIP_RPATH=TRUE \
-  -Dpybind11_DIR=/home/nieqingcao/miniconda3/envs/LumosTouch/lib/python3.10/site-packages/pybind11/share/cmake/pybind11 \
-  -DPYTHON_EXECUTABLE=/home/nieqingcao/miniconda3/envs/LumosTouch/bin/python
+  -Dpybind11_DIR=$HOME/miniconda3/envs/LumosTouch/lib/python3.10/site-packages/pybind11/share/cmake/pybind11 \
+  -DPYTHON_EXECUTABLE=$HOME/miniconda3/envs/LumosTouch/bin/python
 /usr/bin/cmake --build <independent-build> --parallel 2
 ```
 

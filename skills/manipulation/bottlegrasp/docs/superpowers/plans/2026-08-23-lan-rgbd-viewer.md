@@ -88,7 +88,7 @@ def test_fused_source_marks_waiting_instead_of_reusing_wrong_depth() -> None:
 Run:
 
 ```bash
-/home/nieqingcao/miniconda3/envs/thirdhand-groundedsam2/bin/python -m pytest tests/vision/preview/test_fused_source.py -q
+$HOME/miniconda3/envs/thirdhand-groundedsam2/bin/python -m pytest tests/vision/preview/test_fused_source.py -q
 ```
 
 Expected: collection fails because `thirdhand_va.vision.preview.fused_source` and `SynchronizedCompositeSource` do not exist.
@@ -172,7 +172,7 @@ Implement `_compose()` with existing `compose_monitor_frame()` for equal-size ma
 Run:
 
 ```bash
-/home/nieqingcao/miniconda3/envs/thirdhand-groundedsam2/bin/python -m pytest tests/vision/preview/test_fused_source.py tests/vision/preview/test_synchronization.py tests/integration/test_vision_monitor_entrypoint.py tests/vision/visualization/test_monitor.py -q
+$HOME/miniconda3/envs/thirdhand-groundedsam2/bin/python -m pytest tests/vision/preview/test_fused_source.py tests/vision/preview/test_synchronization.py tests/integration/test_vision_monitor_entrypoint.py tests/vision/visualization/test_monitor.py -q
 ```
 
 Expected: all tests pass and the original native monitor behavior remains unchanged.
@@ -231,7 +231,7 @@ The LAN fixture binds to `127.0.0.1:0` with an allowed test network of `127.0.0.
 Run:
 
 ```bash
-/home/nieqingcao/miniconda3/envs/thirdhand-groundedsam2/bin/python -m pytest tests/vision/preview/test_server.py -q
+$HOME/miniconda3/envs/thirdhand-groundedsam2/bin/python -m pytest tests/vision/preview/test_server.py -q
 ```
 
 Expected: import or constructor failures because `PreviewAccessPolicy` and `access_policy` do not exist.
@@ -287,7 +287,7 @@ Parse the request with `urlsplit(self.path)` and `parse_qs(..., keep_blank_value
 Run:
 
 ```bash
-/home/nieqingcao/miniconda3/envs/thirdhand-groundedsam2/bin/python -m pytest tests/vision/preview/test_server.py tests/vision/preview/test_service.py tests/vision/preview/test_source.py -q
+$HOME/miniconda3/envs/thirdhand-groundedsam2/bin/python -m pytest tests/vision/preview/test_server.py tests/vision/preview/test_service.py tests/vision/preview/test_source.py -q
 ```
 
 Expected: all tests pass, including the original non-loopback rejection when no policy is supplied.
@@ -360,7 +360,7 @@ def test_lan_entrypoint_generates_token_and_closes_only_owned_resources(capsys) 
 Run:
 
 ```bash
-/home/nieqingcao/miniconda3/envs/thirdhand-groundedsam2/bin/python -m pytest tests/integration/test_vision_lan_entrypoint.py -q
+$HOME/miniconda3/envs/thirdhand-groundedsam2/bin/python -m pytest tests/integration/test_vision_lan_entrypoint.py -q
 ```
 
 Expected: collection fails because `apps.vision_lan.main` does not exist.
@@ -447,7 +447,7 @@ Install SIGINT/SIGTERM handlers exactly like `apps.vision_monitor.main`. Reject 
   "type": "debugpy",
   "request": "launch",
   "module": "apps.vision_lan.main",
-  "python": "/home/nieqingcao/miniconda3/envs/thirdhand-groundedsam2/bin/python",
+  "python": "$HOME/miniconda3/envs/thirdhand-groundedsam2/bin/python",
   "args": [
     "--host", "192.168.58.68",
     "--allowed-network", "192.168.58.0/24",
@@ -465,7 +465,7 @@ Install SIGINT/SIGTERM handlers exactly like `apps.vision_monitor.main`. Reject 
 Run:
 
 ```bash
-/home/nieqingcao/miniconda3/envs/thirdhand-groundedsam2/bin/python -m pytest tests/integration/test_vision_lan_entrypoint.py tests/vision/preview tests/vision/visualization/test_monitor.py tests/integration/test_vision_monitor_entrypoint.py -q
+$HOME/miniconda3/envs/thirdhand-groundedsam2/bin/python -m pytest tests/integration/test_vision_lan_entrypoint.py tests/vision/preview tests/vision/visualization/test_monitor.py tests/integration/test_vision_monitor_entrypoint.py -q
 ```
 
 Expected: all tests pass without opening a production listener.
@@ -509,7 +509,7 @@ def test_lan_viewer_documentation_has_safe_start_and_stop_contract() -> None:
 Run:
 
 ```bash
-/home/nieqingcao/miniconda3/envs/thirdhand-groundedsam2/bin/python -m pytest tests/integration/test_preview_debug_assets.py -q
+$HOME/miniconda3/envs/thirdhand-groundedsam2/bin/python -m pytest tests/integration/test_preview_debug_assets.py -q
 ```
 
 Expected: failure because the LAN viewer command and port are not documented.
@@ -519,8 +519,8 @@ Expected: failure because the LAN viewer command and port are not documented.
 Document this foreground command:
 
 ```bash
-cd /home/nieqingcao/th0814/VA/bottlegrasp
-/home/nieqingcao/miniconda3/envs/thirdhand-groundedsam2/bin/python -u -m apps.vision_lan.main \
+cd $HOME/th0814/VA/bottlegrasp
+$HOME/miniconda3/envs/thirdhand-groundedsam2/bin/python -u -m apps.vision_lan.main \
   --host 192.168.58.68 \
   --allowed-network 192.168.58.0/24 \
   --port 8770
@@ -538,8 +538,8 @@ curl --fail 'http://192.168.58.68:8770/health?token=TOKEN_FROM_STARTUP'
 Run:
 
 ```bash
-/home/nieqingcao/miniconda3/envs/thirdhand-groundedsam2/bin/python -m pytest -q tests/vision/preview tests/vision/visualization tests/integration/test_vision_lan_entrypoint.py tests/integration/test_vision_monitor_entrypoint.py tests/integration/test_preview_debug_assets.py
-/home/nieqingcao/miniconda3/envs/thirdhand-groundedsam2/bin/python -m pytest -q
+$HOME/miniconda3/envs/thirdhand-groundedsam2/bin/python -m pytest -q tests/vision/preview tests/vision/visualization tests/integration/test_vision_lan_entrypoint.py tests/integration/test_vision_monitor_entrypoint.py tests/integration/test_preview_debug_assets.py
+$HOME/miniconda3/envs/thirdhand-groundedsam2/bin/python -m pytest -q
 ```
 
 Expected: all tests pass; any pre-existing unrelated failure is recorded before proceeding to live verification.

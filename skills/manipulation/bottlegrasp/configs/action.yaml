@@ -2,9 +2,9 @@ schema: "thirdhand-action-config-v2"
 execution_enabled: false
 robot:
   backend: "startouch_process"
-  python_executable: "/home/nieqingcao/miniconda3/envs/LumosTouch/bin/python"
+  python_executable: "python3"
   bridge_path: "../native/startouch/startouch_bridge.py"
-  sdk_path: "/home/nieqingcao/arm/startouch_sdk"
+  sdk_path: "../build/startouch_runtime/startouch_sdk"
   runtime_root: "../build/startouch_runtime/startouch_sdk"
   source_manifest: "../native/startouch/startouch_source.json"
   safety_profile_id: "thirdhand-conservative-safety-v1"

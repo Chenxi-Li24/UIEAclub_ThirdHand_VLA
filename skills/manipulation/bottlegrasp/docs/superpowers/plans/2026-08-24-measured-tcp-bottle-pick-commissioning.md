@@ -130,7 +130,7 @@ Add rejection tests for wrong serial, wrong LUT hash, raw-fisheye role, wrong re
 Run:
 
 ```bash
-PYTHONPATH=src /home/nieqingcao/miniconda3/envs/thirdhand-groundedsam2/bin/python \
+PYTHONPATH=src $HOME/miniconda3/envs/thirdhand-groundedsam2/bin/python \
   -m pytest tests/vision/calibration/test_fiducial.py -q
 ```
 
@@ -214,10 +214,10 @@ Refine accepted ChArUco corners with `cv2.cornerSubPix`, solve the pose with the
 Run:
 
 ```bash
-PYTHONPATH=src /home/nieqingcao/miniconda3/envs/thirdhand-groundedsam2/bin/python \
+PYTHONPATH=src $HOME/miniconda3/envs/thirdhand-groundedsam2/bin/python \
   -m pytest tests/vision/calibration/test_fiducial.py \
   tests/common/test_repository_layout.py -q
-PYTHONPATH=src /home/nieqingcao/miniconda3/envs/thirdhand-groundedsam2/bin/python \
+PYTHONPATH=src $HOME/miniconda3/envs/thirdhand-groundedsam2/bin/python \
   scripts/vision/debug_fiducial.py \
   --fixture tests/fixtures/calibration/cc200-15-11.25/sample_0001
 ```
@@ -277,7 +277,7 @@ Add malformed-length, wrong magic/version, oversized payload, JPEG mismatch, non
 - [ ] **Step 2: Run the narrow test and confirm the import/protocol failure**
 
 ```bash
-PYTHONPATH=src /home/nieqingcao/miniconda3/envs/thirdhand-groundedsam2/bin/python \
+PYTHONPATH=src $HOME/miniconda3/envs/thirdhand-groundedsam2/bin/python \
   -m pytest tests/vision/calibration/test_calibration_stream.py -q
 ```
 
@@ -304,7 +304,7 @@ Name the packet magic `XVCALB1\0`, version `1`, and serialize fixed header, came
 
 ```bash
 bash scripts/vision/build_calibration_native.sh
-PYTHONPATH=src /home/nieqingcao/miniconda3/envs/thirdhand-groundedsam2/bin/python \
+PYTHONPATH=src $HOME/miniconda3/envs/thirdhand-groundedsam2/bin/python \
   -m pytest tests/vision/calibration/test_calibration_stream.py \
   tests/vision/calibration/test_fiducial.py -q
 ```
@@ -356,7 +356,7 @@ Require at least five accepted observations, at least three distinct rotation ax
 - [ ] **Step 2: Run the Python test and observe the missing module failure**
 
 ```bash
-PYTHONPATH=src /home/nieqingcao/miniconda3/envs/thirdhand-groundedsam2/bin/python \
+PYTHONPATH=src $HOME/miniconda3/envs/thirdhand-groundedsam2/bin/python \
   -m pytest tests/action/calibration/test_handeye_physical.py -q
 ```
 
@@ -397,12 +397,12 @@ The approved file retains the historical HORAUD numerical metrics and sets physi
 - [ ] **Step 6: Run module tests and replay debugger**
 
 ```bash
-PYTHONPATH=src /home/nieqingcao/miniconda3/envs/thirdhand-groundedsam2/bin/python \
+PYTHONPATH=src $HOME/miniconda3/envs/thirdhand-groundedsam2/bin/python \
   -m pytest tests/action/calibration/test_handeye_physical.py -q
 /usr/local/lib/nodejs/node-v24.18.0-linux-x64/bin/node --test \
   tests/action/calibration/capture_handeye_physical.test.js \
   tests/action/calibration/approve_handeye.test.js
-PYTHONPATH=src /home/nieqingcao/miniconda3/envs/thirdhand-groundedsam2/bin/python \
+PYTHONPATH=src $HOME/miniconda3/envs/thirdhand-groundedsam2/bin/python \
   scripts/action/debug_handeye_physical.py \
   tests/fixtures/calibration/handeye-physical-pass.json
 ```
@@ -448,7 +448,7 @@ Assert recovery of the known `t_flange_probe`, full-rank design matrix, orientat
 - [ ] **Step 2: Run the narrow test and confirm failure**
 
 ```bash
-PYTHONPATH=src /home/nieqingcao/miniconda3/envs/thirdhand-groundedsam2/bin/python \
+PYTHONPATH=src $HOME/miniconda3/envs/thirdhand-groundedsam2/bin/python \
   -m pytest tests/action/calibration/test_tool_tcp.py -q
 ```
 
@@ -487,11 +487,11 @@ No descent is allowed; both observations stay at the configured clearance height
 - [ ] **Step 6: Run module tests**
 
 ```bash
-PYTHONPATH=src /home/nieqingcao/miniconda3/envs/thirdhand-groundedsam2/bin/python \
+PYTHONPATH=src $HOME/miniconda3/envs/thirdhand-groundedsam2/bin/python \
   -m pytest tests/action/calibration/test_tool_tcp.py -q
 /usr/local/lib/nodejs/node-v24.18.0-linux-x64/bin/node --test \
   tests/action/calibration/commission_tool_tcp.test.js
-PYTHONPATH=src /home/nieqingcao/miniconda3/envs/thirdhand-groundedsam2/bin/python \
+PYTHONPATH=src $HOME/miniconda3/envs/thirdhand-groundedsam2/bin/python \
   scripts/action/debug_tool_tcp.py tests/fixtures/calibration/tool-tcp-pass.json
 ```
 
@@ -651,7 +651,7 @@ Test upright cylindrical and tapered opaque bottles, width `<= 0.072 m`, at leas
 - [ ] **Step 2: Run the narrow test and confirm failure**
 
 ```bash
-PYTHONPATH=src /home/nieqingcao/miniconda3/envs/thirdhand-groundedsam2/bin/python \
+PYTHONPATH=src $HOME/miniconda3/envs/thirdhand-groundedsam2/bin/python \
   -m pytest tests/vision/geometry/test_bottle_grasp_band.py -q
 ```
 
@@ -666,11 +666,11 @@ The pipeline emits a `T_base_tcp_desired` only after five stationary frames agre
 - [ ] **Step 5: Add and run the direct debugger**
 
 ```bash
-PYTHONPATH=src /home/nieqingcao/miniconda3/envs/thirdhand-groundedsam2/bin/python \
+PYTHONPATH=src $HOME/miniconda3/envs/thirdhand-groundedsam2/bin/python \
   scripts/vision/debug_bottle_grasp_band.py \
   --fixture tests/fixtures/geometry/bottle-grasp-band.npz \
   --output artifacts/vision/debug/bottle-grasp-band.jpg
-PYTHONPATH=src /home/nieqingcao/miniconda3/envs/thirdhand-groundedsam2/bin/python \
+PYTHONPATH=src $HOME/miniconda3/envs/thirdhand-groundedsam2/bin/python \
   -m pytest tests/vision/geometry/test_bottle_grasp_band.py \
   tests/vision/geometry/test_grasp_pose.py tests/vision/test_pipeline.py \
   tests/vision/visualization/test_visualization.py -q
@@ -1094,9 +1094,9 @@ Assert every new core module has a fixture debugger and every real launch has an
 - [ ] **Step 2: Run module suites separately**
 
 ```bash
-PYTHONPATH=src /home/nieqingcao/miniconda3/envs/thirdhand-groundedsam2/bin/python \
+PYTHONPATH=src $HOME/miniconda3/envs/thirdhand-groundedsam2/bin/python \
   -m pytest tests/vision/calibration tests/vision/geometry -q
-PYTHONPATH=src /home/nieqingcao/miniconda3/envs/thirdhand-groundedsam2/bin/python \
+PYTHONPATH=src $HOME/miniconda3/envs/thirdhand-groundedsam2/bin/python \
   -m pytest tests/action/calibration -q
 /usr/local/lib/nodejs/node-v24.18.0-linux-x64/bin/node --test \
   tests/action/geometry tests/action/safety tests/action/commissioning
@@ -1105,7 +1105,7 @@ PYTHONPATH=src /home/nieqingcao/miniconda3/envs/thirdhand-groundedsam2/bin/pytho
 - [ ] **Step 3: Run the full offline regression**
 
 ```bash
-PYTHONPATH=src /home/nieqingcao/miniconda3/envs/thirdhand-groundedsam2/bin/python \
+PYTHONPATH=src $HOME/miniconda3/envs/thirdhand-groundedsam2/bin/python \
   -m pytest tests/common tests/vision tests/action tests/integration -q
 /usr/local/lib/nodejs/node-v24.18.0-linux-x64/bin/npm test
 ```

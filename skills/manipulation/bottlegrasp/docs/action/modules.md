@@ -39,7 +39,7 @@ node scripts/action/debug_grasp.js \
 node scripts/action/debug_execution_plan.js \
   --fixture tests/fixtures/integration/full-cycle.json
 
-THIRDHAND_VA_PYTHON=/home/nieqingcao/miniconda3/envs/LumosTouch/bin/python \
+THIRDHAND_VA_PYTHON=$HOME/miniconda3/envs/LumosTouch/bin/python \
   node scripts/action/debug_startouch_protocol.js --simulate
 
 node scripts/action/debug_workflow.js \

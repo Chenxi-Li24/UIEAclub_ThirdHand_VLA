@@ -22,13 +22,13 @@
 ## 0. 离线门
 
 ```bash
-cd /home/nieqingcao/th0814/VA/bottlegrasp
-/home/nieqingcao/miniconda3/envs/thirdhand-groundedsam2/bin/python \
+cd $HOME/th0814/VA/bottlegrasp
+$HOME/miniconda3/envs/thirdhand-groundedsam2/bin/python \
   scripts/runtime/preflight.py --json
-/home/nieqingcao/miniconda3/envs/thirdhand-groundedsam2/bin/python -m pytest \
+$HOME/miniconda3/envs/thirdhand-groundedsam2/bin/python -m pytest \
   tests/common tests/vision tests/action tests/integration -q
 npm test
-/home/nieqingcao/miniconda3/envs/thirdhand-groundedsam2/bin/python -m pytest \
+$HOME/miniconda3/envs/thirdhand-groundedsam2/bin/python -m pytest \
   tests/hardware -q
 node scripts/action/validate_pick_place.js --trials 1
 ```
@@ -42,9 +42,9 @@ node scripts/action/validate_pick_place.js --trials 1
 
 ```bash
 bash scripts/vision/build_native.sh
-/home/nieqingcao/miniconda3/envs/thirdhand-groundedsam2/bin/python \
+$HOME/miniconda3/envs/thirdhand-groundedsam2/bin/python \
   scripts/vision/camera_smoke.py --frames 30 --allow-camera
-/home/nieqingcao/miniconda3/envs/thirdhand-groundedsam2/bin/python \
+$HOME/miniconda3/envs/thirdhand-groundedsam2/bin/python \
   scripts/vision/record_rgbd.py \
   --output artifacts/vision/recordings/generic-bottle --frames 30 --allow-camera
 ```
@@ -53,7 +53,7 @@ bash scripts/vision/build_native.sh
 RGB 与深度，而不是只看画面“像是重合”：
 
 ```bash
-/home/nieqingcao/miniconda3/envs/thirdhand-groundedsam2/bin/python \
+$HOME/miniconda3/envs/thirdhand-groundedsam2/bin/python \
   scripts/vision/validate_camera_alignment.py \
   --duration-s 60 \
   --output artifacts/validation/camera-alignment.json \
@@ -67,10 +67,10 @@ RGB 与深度，而不是只看画面“像是重合”：
 先用受监督姿态采样工具采集足够旋转轴多样性的样本，再离线求解：
 
 ```bash
-/home/nieqingcao/miniconda3/envs/thirdhand-groundedsam2/bin/python \
+$HOME/miniconda3/envs/thirdhand-groundedsam2/bin/python \
   scripts/action/calibrate_handeye.py artifacts/calibration/samples.json \
   --output artifacts/calibration/lumos-tool.json
-/home/nieqingcao/miniconda3/envs/thirdhand-groundedsam2/bin/python \
+$HOME/miniconda3/envs/thirdhand-groundedsam2/bin/python \
   scripts/action/debug_calibration.py artifacts/calibration/lumos-tool.json
 ```
 
@@ -107,7 +107,7 @@ OpenCV `calibrateHandEye` 的数值通过只代表求解自洽。还必须使用
 只有 1--3 全绿后，由现场运行者在受控终端设置：
 
 ```bash
-CAMERA_PYTHON=/home/nieqingcao/miniconda3/envs/thirdhand-groundedsam2/bin/python \
+CAMERA_PYTHON=$HOME/miniconda3/envs/thirdhand-groundedsam2/bin/python \
 THIRDHAND_VA_ENABLE_CAMERA=1 \
 THIRDHAND_VA_ALLOW_CAMERA=1 \
 THIRDHAND_VA_HANDEYE=/绝对路径/lumos-tool.json \
@@ -140,7 +140,7 @@ curl --fail http://127.0.0.1:8766/api/va/status
 ```bash
 THIRDHAND_LIVE_TEST=1 \
 THIRDHAND_ALLOW_ROBOT=I_ACCEPT_SUPERVISED_ROBOT_MOTION \
-/home/nieqingcao/miniconda3/envs/thirdhand-groundedsam2/bin/python -m pytest \
+$HOME/miniconda3/envs/thirdhand-groundedsam2/bin/python -m pytest \
   tests/hardware/test_live_va_skill.py -v
 ```
 

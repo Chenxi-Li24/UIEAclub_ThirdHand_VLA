@@ -16,14 +16,14 @@ For the real camera/person-follow demo, use the `vision-python` runtime. It
 contains the OpenCV cascade runtime used for face/upper-body locking.
 
 ```bash
-cd /home/nieqingcao/ThirdHand/UIEAclub_ThirdHand_VLA/apps/dummy
+cd $HOME/ThirdHand/UIEAclub_ThirdHand_VLA/apps/dummy
 ../../local/runtimes/vision-python/bin/python apps/run_person_follow.py --enable-motion
 ```
 
 To open only the color camera + algorithm overlay window on the Ubuntu desktop:
 
 ```bash
-cd /home/nieqingcao/ThirdHand/UIEAclub_ThirdHand_VLA/apps/dummy
+cd $HOME/ThirdHand/UIEAclub_ThirdHand_VLA/apps/dummy
 ../../local/runtimes/vision-python/bin/python apps/test_find_person_window.py
 ```
 
@@ -36,7 +36,7 @@ The generic personality loop is still available, but it uses the default
 runtime and startup gestures:
 
 ```bash
-cd /home/nieqingcao/ThirdHand/UIEAclub_ThirdHand_VLA/apps/dummy
+cd $HOME/ThirdHand/UIEAclub_ThirdHand_VLA/apps/dummy
 ../../local/runtimes/python/bin/python apps/run_dummy.py
 ```
 

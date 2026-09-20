@@ -657,7 +657,7 @@ Expected: all existing Python and Node tests pass.
 
 - [ ] **Step 7: Check scope**
 
-Run `git diff --check` and `git status --short` from `/home/nieqingcao/th0814/VA`.
+Run `git diff --check` and `git status --short` from `$HOME/th0814/VA`.
 
 Expected: no whitespace errors; changes stay within this plan and approved documents.
 

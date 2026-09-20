@@ -9,7 +9,7 @@ const { StartouchProcessClient } = require(
 
 const PROJECT_ROOT = path.resolve(__dirname, '../..');
 const PYTHON = process.env.THIRDHAND_VA_PYTHON ||
-  '/home/nieqingcao/miniconda3/envs/thirdhand-groundedsam2/bin/python';
+  process.env.PYTHON || 'python3';
 
 function onceMatching(emitter, eventName, predicate = () => true, timeoutMs = 3000) {
   return new Promise((resolve, reject) => {

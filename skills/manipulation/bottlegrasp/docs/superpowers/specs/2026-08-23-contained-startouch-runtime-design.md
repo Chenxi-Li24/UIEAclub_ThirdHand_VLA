@@ -24,8 +24,8 @@
 ### 2.1 文件边界
 
 - 所有由本次工作创建或维护的项目源码、配置、测试、调试脚本、许可证说明和标定派生件，必须位于：
-  `/home/nieqingcao/th0814/VA/bottlegrasp`
-- `/home/nieqingcao/TH-Fanxy` 和 `/home/nieqingcao/th0814/TH_MK_D/UIEAclub_ThirdHand_VLA-control-fixed-a-to-b` 仅用于阅读、评估和追溯成熟实现；不得被修改，也不得成为运行时 Python/Node 导入路径。
+  `$HOME/th0814/VA/bottlegrasp`
+- `$HOME/TH-Fanxy` 和 `$HOME/th0814/TH_MK_D/UIEAclub_ThirdHand_VLA-control-fixed-a-to-b` 仅用于阅读、评估和追溯成熟实现；不得被修改，也不得成为运行时 Python/Node 导入路径。
 - 不整份复制 `TH-Fanxy`。只把本 Skill 实际需要、许可证允许复用的最小机械臂桥接思想和代码片段适配到独立模块，保留来源及许可证说明。
 - Startouch 厂商 SDK 是硬件驱动依赖，不复制厂商二进制或整套 SDK进仓库。它通过配置项指向主机上已安装的 SDK；模拟、单元测试和接口测试不依赖该 SDK。
 - 手眼标定原始结果仍保留在原标定目录；运行所需的、带来源哈希的只读派生件复制到本 Skill 的 `configs/calibration/`，因此运行时不依赖原目录。
@@ -139,7 +139,7 @@ L 到 VA 的接口保持稳定；真实机械臂适配只发生在 `RobotClient`
 
 输入来源：
 
-`/home/nieqingcao/th0814/相机手眼标定/2026-08-17_250801DR48FP25002738_eye_in_hand/final/solution_85a58f8a28ac/derived/luming_eye_in_hand_calibration.json`
+`$HOME/th0814/相机手眼标定/2026-08-17_250801DR48FP25002738_eye_in_hand/final/solution_85a58f8a28ac/derived/luming_eye_in_hand_calibration.json`
 
 导入器必须：
 
@@ -357,6 +357,6 @@ VA 响应应包含稳定的执行 ID、阶段、是否接受、拒绝原因和�
 - Lumos Robotics `BestMan_Touch`（MIT）：
   https://github.com/Lumos-Robotics/BestMan_Touch
 - 本机成熟实现（只读参考）：
-  `/home/nieqingcao/TH-Fanxy/web-control/server`
+  `$HOME/TH-Fanxy/web-control/server`
 - 本机 MIT 基线（只读参考）：
-  `/home/nieqingcao/th0814/TH_MK_D/UIEAclub_ThirdHand_VLA-control-fixed-a-to-b`
+  `$HOME/th0814/TH_MK_D/UIEAclub_ThirdHand_VLA-control-fixed-a-to-b`

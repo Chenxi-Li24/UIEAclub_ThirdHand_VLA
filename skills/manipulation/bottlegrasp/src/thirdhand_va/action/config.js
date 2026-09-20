@@ -169,7 +169,7 @@ function loadPathValidation(configPath, place, grasp, motion, robot) {
   });
 }
 
-function loadActionConfig(filePath) {
+function loadActionConfig(filePath, { env = process.env } = {}) {
   const configBytes = fs.readFileSync(filePath);
   const raw = YAML.parse(configBytes.toString('utf8'));
   assertExactKeys(raw, ROOT_KEYS);
@@ -250,11 +250,13 @@ function loadActionConfig(filePath) {
     });
   }
   const configDirectory = path.dirname(path.resolve(filePath));
+  const pythonExecutable = env.THIRDHAND_VA_PYTHON || raw.robot.python_executable;
+  const sdkPath = env.STARTOUCH_SDK_PATH || raw.robot.sdk_path;
   const robot = {
     backend: raw.robot.backend,
-    python_executable: raw.robot.python_executable,
+    python_executable: pythonExecutable,
     bridge_path: path.resolve(configDirectory, raw.robot.bridge_path),
-    sdk_path: path.resolve(raw.robot.sdk_path),
+    sdk_path: path.resolve(configDirectory, sdkPath),
     runtime_root: path.resolve(configDirectory, raw.robot.runtime_root),
     source_manifest: path.resolve(configDirectory, raw.robot.source_manifest),
     safety_profile_id: raw.robot.safety_profile_id,

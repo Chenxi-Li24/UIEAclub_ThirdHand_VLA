@@ -8,7 +8,7 @@ const test = require('node:test');
 
 const { loadActionConfig } = require('../../src/thirdhand_va/action/config');
 
-test('real config uses commissioned home outside stop margin and remains inactive', () => {
+test('real config uses portable runtime defaults and remains inactive', () => {
   const config = loadActionConfig('configs/action.yaml');
 
   assert.equal(config.schema, 'thirdhand-action-config-v2');
@@ -18,7 +18,10 @@ test('real config uses commissioned home outside stop margin and remains inactiv
   assert.deepEqual(config.robot.presets.home, [
     -0.163927, -2.611904, -4.0, 33.058620, 0.338783, 0.185784,
   ]);
-  assert.equal(config.robot.sdk_path, '/home/nieqingcao/arm/startouch_sdk');
+  assert.equal(config.robot.python_executable, 'python3');
+  assert.equal(config.robot.sdk_path, path.resolve(
+    'build/startouch_runtime/startouch_sdk'
+  ));
   assert.equal(config.robot.runtime_root, path.resolve(
     'build/startouch_runtime/startouch_sdk'
   ));
@@ -54,6 +57,18 @@ test('real config uses commissioned home outside stop margin and remains inactiv
   assert.equal(config.gripper.execution_max_width_m, 0.072);
   assert.equal(Object.isFrozen(config), true);
   assert.equal(Object.isFrozen(config.motion), true);
+});
+
+test('runtime executable and SDK path can be supplied by the deployment environment', () => {
+  const config = loadActionConfig('configs/action.yaml', {
+    env: {
+      THIRDHAND_VA_PYTHON: 'deployment-python',
+      STARTOUCH_SDK_PATH: '../deployment-sdk',
+    },
+  });
+
+  assert.equal(config.robot.python_executable, 'deployment-python');
+  assert.equal(config.robot.sdk_path, path.resolve('deployment-sdk'));
 });
 
 test('strict loader rejects unknown keys and activation with an unvalidated grasp offset', t => {

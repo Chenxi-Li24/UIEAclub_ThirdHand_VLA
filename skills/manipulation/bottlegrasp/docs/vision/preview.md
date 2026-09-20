@@ -18,7 +18,7 @@
 
 ```bash
 DISPLAY=:1 XAUTHORITY=/run/user/1000/gdm/Xauthority \
-/home/nieqingcao/miniconda3/envs/thirdhand-groundedsam2/bin/python \
+$HOME/miniconda3/envs/thirdhand-groundedsam2/bin/python \
   -m apps.vision_monitor.main
 ```
 
@@ -45,7 +45,7 @@ VS Code Remote-SSH 中选择 `Vision Monitor: Ubuntu Desktop Window` 并按 `F5`
 
 ```bash
 DISPLAY=:1 XAUTHORITY=/run/user/1000/gdm/Xauthority \
-/home/nieqingcao/miniconda3/envs/thirdhand-groundedsam2/bin/python \
+$HOME/miniconda3/envs/thirdhand-groundedsam2/bin/python \
   -m apps.vision_monitor.main \
   --algorithm-image /path/to/algorithm.png \
   --depth-image /path/to/depth.png
@@ -63,8 +63,8 @@ Windows 和 Ubuntu 位于同一个 `192.168.58.0/24` 局域网时，可以只传
 在 Ubuntu 或 VS Code Remote-SSH 终端以前台方式启动：
 
 ```bash
-cd /home/nieqingcao/th0814/VA/bottlegrasp
-/home/nieqingcao/miniconda3/envs/thirdhand-groundedsam2/bin/python -u \
+cd $HOME/th0814/VA/bottlegrasp
+$HOME/miniconda3/envs/thirdhand-groundedsam2/bin/python -u \
   -m apps.vision_lan.main \
   --host 192.168.58.68 \
   --allowed-network 192.168.58.0/24 \

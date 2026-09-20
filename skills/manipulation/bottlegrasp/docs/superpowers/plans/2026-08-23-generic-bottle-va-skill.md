@@ -12,7 +12,7 @@
 
 ## Global Constraints
 
-- 正式源码和运行入口只位于 `/home/nieqingcao/th0814/VA/bottlegrasp`；其他 ThirdHand 目录只读参考或通过 adapter 调用。
+- 正式源码和运行入口只位于 `$HOME/th0814/VA/bottlegrasp`；其他 ThirdHand 目录只读参考或通过 adapter 调用。
 - 只使用序列号 `250801DR48FP25002738` 的单台 Lumos Ego STD RGB-D 末端相机；正式路径不得依赖 D435 或双相机变换。
 - 第一版只支持不透明、直立、彼此分开且轮廓清楚的普通瓶；同时最多五个。
 - 用户编号固定为 `1..5`；编号不随左右顺序变化；选中目标不得自动换成邻近瓶。
@@ -115,7 +115,7 @@ def test_project_declares_python_and_node_runtime_manifests():
 
 - [ ] **Step 2: 运行测试并确认 RED**
 
-Run: `/home/nieqingcao/miniconda3/envs/thirdhand-groundedsam2/bin/python -m pytest tests/integration/test_runtime_preflight.py tests/common/test_repository_layout.py -v`
+Run: `$HOME/miniconda3/envs/thirdhand-groundedsam2/bin/python -m pytest tests/integration/test_runtime_preflight.py tests/common/test_repository_layout.py -v`
 
 Expected: FAIL because `scripts/runtime/preflight.py`、`package.json` 和 requirements 文件尚不存在。
 
@@ -177,7 +177,7 @@ def collect_report(project_root: Path) -> dict[str, object]:
 
 - [ ] **Step 5: 运行模块测试和真实项目 preflight**
 
-Run: `/home/nieqingcao/miniconda3/envs/thirdhand-groundedsam2/bin/python -m pip install -r requirements/vision-cu128.txt`
+Run: `$HOME/miniconda3/envs/thirdhand-groundedsam2/bin/python -m pip install -r requirements/vision-cu128.txt`
 
 Run: `npm ci --ignore-scripts`
 
@@ -185,9 +185,9 @@ Run: `bash scripts/vision/build_native.sh`
 
 Expected: 安装固定依赖并生成规范路径 `build/vision/xvisio_rgbd_stream/xvisio_rgbd_stream`；编译不打开相机。
 
-Run: `/home/nieqingcao/miniconda3/envs/thirdhand-groundedsam2/bin/python -m pytest tests/integration/test_runtime_preflight.py tests/common/test_repository_layout.py -v`
+Run: `$HOME/miniconda3/envs/thirdhand-groundedsam2/bin/python -m pytest tests/integration/test_runtime_preflight.py tests/common/test_repository_layout.py -v`
 
-Run: `/home/nieqingcao/miniconda3/envs/thirdhand-groundedsam2/bin/python scripts/runtime/preflight.py --json`
+Run: `$HOME/miniconda3/envs/thirdhand-groundedsam2/bin/python scripts/runtime/preflight.py --json`
 
 Expected: 测试 PASS；真实报告可因规范二进制或 Norfair 尚未安装而返回退出码 2，但必须准确列出阻断且 `hardware_touched=false`。
 
@@ -239,7 +239,7 @@ def test_arm_state_preserves_observed_and_received_monotonic_time():
 
 - [ ] **Step 2: 运行测试并确认缺少新类型和字段**
 
-Run: `/home/nieqingcao/miniconda3/envs/thirdhand-groundedsam2/bin/python -m pytest tests/common/test_config.py tests/common/test_arm_state.py tests/common/test_contracts.py tests/common/test_public_contracts.py -v`
+Run: `$HOME/miniconda3/envs/thirdhand-groundedsam2/bin/python -m pytest tests/common/test_config.py tests/common/test_arm_state.py tests/common/test_contracts.py tests/common/test_public_contracts.py -v`
 
 Expected: FAIL importing `TrackedBottle` and accessing `observed_monotonic_ns`。
 
@@ -283,7 +283,7 @@ max_grasp_width_m: 0.072
 
 - [ ] **Step 5: 更新 v3 JSON Schema 并运行契约测试**
 
-Run: `/home/nieqingcao/miniconda3/envs/thirdhand-groundedsam2/bin/python -m pytest tests/common -v`
+Run: `$HOME/miniconda3/envs/thirdhand-groundedsam2/bin/python -m pytest tests/common -v`
 
 Expected: PASS；72 mm 以上配置被拒绝，ArmState 的观测时间晚于接收时间时被拒绝。
 
@@ -326,7 +326,7 @@ def test_filter_preserves_masked_appearance_descriptor(raw_bottle, rgb):
 
 - [ ] **Step 2: 运行感知测试并确认 RED**
 
-Run: `/home/nieqingcao/miniconda3/envs/thirdhand-groundedsam2/bin/python -m pytest tests/vision/perception/test_grounded_sam.py tests/vision/perception/test_bottle_candidates.py -v`
+Run: `$HOME/miniconda3/envs/thirdhand-groundedsam2/bin/python -m pytest tests/vision/perception/test_grounded_sam.py tests/vision/perception/test_bottle_candidates.py -v`
 
 Expected: FAIL because当前 backend 只在第一帧检测且 `MaskCandidate` 未接收 descriptor。
 
@@ -360,7 +360,7 @@ def model_provenance(self) -> dict[str, str]:
 
 - [ ] **Step 5: 运行感知回归**
 
-Run: `/home/nieqingcao/miniconda3/envs/thirdhand-groundedsam2/bin/python -m pytest tests/vision/perception -v`
+Run: `$HOME/miniconda3/envs/thirdhand-groundedsam2/bin/python -m pytest tests/vision/perception -v`
 
 Expected: PASS；测试 fake 不下载模型、不访问相机。
 
@@ -410,7 +410,7 @@ def test_reserved_id_is_not_recycled_until_request_finishes(manager):
 
 - [ ] **Step 2: 运行测试并确认模块尚不存在**
 
-Run: `/home/nieqingcao/miniconda3/envs/thirdhand-groundedsam2/bin/python -m pytest tests/vision/tracking/test_norfair_adapter.py tests/vision/tracking/test_stable_ids.py tests/vision/selection/test_stable_selector.py -v`
+Run: `$HOME/miniconda3/envs/thirdhand-groundedsam2/bin/python -m pytest tests/vision/tracking/test_norfair_adapter.py tests/vision/tracking/test_stable_ids.py tests/vision/selection/test_stable_selector.py -v`
 
 Expected: FAIL importing new modules。
 
@@ -477,13 +477,13 @@ class StableBottleSelector:
         return StableSelectionResult(matches[0], ())
 ```
 
-Run: `/home/nieqingcao/miniconda3/envs/thirdhand-groundedsam2/bin/python scripts/vision/debug_tracking.py --fixture tests/fixtures/tracking/reorder.json`
+Run: `$HOME/miniconda3/envs/thirdhand-groundedsam2/bin/python scripts/vision/debug_tracking.py --fixture tests/fixtures/tracking/reorder.json`
 
 Expected: JSON/可视化中同一物理瓶跨重排保持同一编号。
 
 - [ ] **Step 6: 运行跟踪和选择测试**
 
-Run: `/home/nieqingcao/miniconda3/envs/thirdhand-groundedsam2/bin/python -m pytest tests/vision/tracking tests/vision/selection -v`
+Run: `$HOME/miniconda3/envs/thirdhand-groundedsam2/bin/python -m pytest tests/vision/tracking tests/vision/selection -v`
 
 Expected: PASS；旧左右 selector 测试可以保留为 legacy 单元测试，但正式稳定 selector 不导入它。
 
@@ -532,7 +532,7 @@ def test_non_upright_axis_is_rejected(scene_tilted_25deg):
 
 - [ ] **Step 2: 运行几何测试并确认 RED**
 
-Run: `/home/nieqingcao/miniconda3/envs/thirdhand-groundedsam2/bin/python -m pytest tests/vision/geometry -v`
+Run: `$HOME/miniconda3/envs/thirdhand-groundedsam2/bin/python -m pytest tests/vision/geometry -v`
 
 Expected: FAIL because当前只产生一个 pose、未检查桌面法向和 72 mm blocker。
 
@@ -574,7 +574,7 @@ def estimate_grasp_candidates(frame, candidate, config):
 
 - [ ] **Step 6: 运行几何回归**
 
-Run: `/home/nieqingcao/miniconda3/envs/thirdhand-groundedsam2/bin/python -m pytest tests/vision/geometry -v`
+Run: `$HOME/miniconda3/envs/thirdhand-groundedsam2/bin/python -m pytest tests/vision/geometry -v`
 
 Expected: PASS；原有 mask XYZ、空洞和离群点测试继续通过。
 
@@ -627,7 +627,7 @@ def test_motion_epoch_discards_old_stability_hits(pipeline, stable_scene):
 
 - [ ] **Step 2: 运行 pipeline 测试并确认旧 ordinal API 失败**
 
-Run: `/home/nieqingcao/miniconda3/envs/thirdhand-groundedsam2/bin/python -m pytest tests/vision/test_pipeline.py tests/vision/tracking/test_stability.py -v`
+Run: `$HOME/miniconda3/envs/thirdhand-groundedsam2/bin/python -m pytest tests/vision/test_pipeline.py tests/vision/tracking/test_stability.py -v`
 
 Expected: FAIL because constructor仍要求 `SelectionRequest(side, ordinal)`。
 
@@ -681,13 +681,13 @@ def evidence_id(decision_fields) -> str:
 
 - [ ] **Step 5: 更新独立 pipeline 调试入口**
 
-Run: `/home/nieqingcao/miniconda3/envs/thirdhand-groundedsam2/bin/python scripts/vision/debug_pipeline.py --target-id 2 BUNDLE_DIR`
+Run: `$HOME/miniconda3/envs/thirdhand-groundedsam2/bin/python scripts/vision/debug_pipeline.py --target-id 2 BUNDLE_DIR`
 
 Expected: 终端逐帧输出所有 stable tracks、选中 ID、motion epoch、evidence ID 和状态。
 
 - [ ] **Step 6: 运行 Vision pipeline 回归**
 
-Run: `/home/nieqingcao/miniconda3/envs/thirdhand-groundedsam2/bin/python -m pytest tests/vision/test_pipeline.py tests/vision/tracking -v`
+Run: `$HOME/miniconda3/envs/thirdhand-groundedsam2/bin/python -m pytest tests/vision/test_pipeline.py tests/vision/tracking -v`
 
 Expected: PASS；不再存在“无深度候选被移除导致编号前移”的行为。
 
@@ -736,7 +736,7 @@ def test_overlay_marks_blocked_tracks_without_renumbering(
 
 - [ ] **Step 2: 运行事件、可视化和 bridge 测试并确认 RED**
 
-Run: `/home/nieqingcao/miniconda3/envs/thirdhand-groundedsam2/bin/python -m pytest tests/vision/adapters tests/vision/visualization tests/integration/test_camera_bridge_script.py -v`
+Run: `$HOME/miniconda3/envs/thirdhand-groundedsam2/bin/python -m pytest tests/vision/adapters tests/vision/visualization tests/integration/test_camera_bridge_script.py -v`
 
 Run: `node tests/action/adapters/clients.test.js && node tests/action/adapters/camera_bridge.test.js`
 
@@ -774,7 +774,7 @@ Python `consume_commands()` 调用 `pipeline.select(stable_id, request_id)`；�
 
 - [ ] **Step 6: 运行跨语言回归**
 
-Run: `/home/nieqingcao/miniconda3/envs/thirdhand-groundedsam2/bin/python -m pytest tests/vision/adapters tests/vision/visualization tests/integration/test_camera_bridge_script.py -v`
+Run: `$HOME/miniconda3/envs/thirdhand-groundedsam2/bin/python -m pytest tests/vision/adapters tests/vision/visualization tests/integration/test_camera_bridge_script.py -v`
 
 Run: `node tests/action/adapters/clients.test.js && node tests/action/adapters/camera_bridge.test.js`
 
@@ -820,7 +820,7 @@ def test_solver_requires_pose_diversity_and_held_out_validation(one_axis_manifes
 
 - [ ] **Step 2: 运行标定测试并确认 solver 缺失**
 
-Run: `/home/nieqingcao/miniconda3/envs/thirdhand-groundedsam2/bin/python -m pytest tests/action/calibration -v`
+Run: `$HOME/miniconda3/envs/thirdhand-groundedsam2/bin/python -m pytest tests/action/calibration -v`
 
 Expected: FAIL importing `solver`。
 
@@ -842,13 +842,13 @@ t_tool_camera = homogeneous(r_cam2tool, t_cam2tool)
 
 - [ ] **Step 5: 完成独立 CLI**
 
-Run: `/home/nieqingcao/miniconda3/envs/thirdhand-groundedsam2/bin/python scripts/action/calibrate_handeye.py samples.json --output calibration.json`
+Run: `$HOME/miniconda3/envs/thirdhand-groundedsam2/bin/python scripts/action/calibrate_handeye.py samples.json --output calibration.json`
 
 Expected: 对合成/录制清单输出内容哈希、样本数、旋转轴多样性、fit/validation 误差和 `approved_for_bottle_grasp=false`；该 CLI 不移动机器人。
 
 - [ ] **Step 6: 运行标定回归并提交**
 
-Run: `/home/nieqingcao/miniconda3/envs/thirdhand-groundedsam2/bin/python -m pytest tests/action/calibration -v`
+Run: `$HOME/miniconda3/envs/thirdhand-groundedsam2/bin/python -m pytest tests/action/calibration -v`
 
 Expected: PASS。
 
@@ -1249,7 +1249,7 @@ assert EXPECTED <= launch_names()
 
 - [ ] **Step 2: 运行文档/入口测试并确认缺少新入口**
 
-Run: `/home/nieqingcao/miniconda3/envs/thirdhand-groundedsam2/bin/python -m pytest tests/integration/test_debug_entrypoints.py tests/integration/test_preview_debug_assets.py tests/common/test_module_boundaries.py tests/common/test_repository_layout.py -v`
+Run: `$HOME/miniconda3/envs/thirdhand-groundedsam2/bin/python -m pytest tests/integration/test_debug_entrypoints.py tests/integration/test_preview_debug_assets.py tests/common/test_module_boundaries.py tests/common/test_repository_layout.py -v`
 
 Expected: FAIL because tracking/workflow launch config 和文档尚未登记。
 
@@ -1263,11 +1263,11 @@ Expected: FAIL because tracking/workflow launch config 和文档尚未登记。
 
 - [ ] **Step 5: 运行所有离线 Python/JS/语法测试**
 
-Run: `/home/nieqingcao/miniconda3/envs/thirdhand-groundedsam2/bin/python -m pytest tests/common tests/vision tests/action tests/integration -q`
+Run: `$HOME/miniconda3/envs/thirdhand-groundedsam2/bin/python -m pytest tests/common tests/vision tests/action tests/integration -q`
 
 Run: `npm test`
 
-Run: `find src apps scripts tests -name '*.py' -type f -print0 | sort -z | xargs -0 /home/nieqingcao/miniconda3/envs/thirdhand-groundedsam2/bin/python -m py_compile`
+Run: `find src apps scripts tests -name '*.py' -type f -print0 | sort -z | xargs -0 $HOME/miniconda3/envs/thirdhand-groundedsam2/bin/python -m py_compile`
 
 Run: `find src apps scripts tests -name '*.js' -type f -print0 | sort -z | xargs -0 -n1 node --check`
 
@@ -1322,7 +1322,7 @@ def test_live_va_skill_completes_one_requested_id(live_client):
 
 - [ ] **Step 2: 运行 hardware tests 并确认默认只跳过/拒绝**
 
-Run: `/home/nieqingcao/miniconda3/envs/thirdhand-groundedsam2/bin/python -m pytest tests/hardware -q`
+Run: `$HOME/miniconda3/envs/thirdhand-groundedsam2/bin/python -m pytest tests/hardware -q`
 
 Run: `node scripts/action/validate_pick_place.js --trials 1`
 
@@ -1360,7 +1360,7 @@ Expected acceptance:
 
 - [ ] **Step 6: 运行最终回归和工作区检查**
 
-Run: `/home/nieqingcao/miniconda3/envs/thirdhand-groundedsam2/bin/python -m pytest tests/common tests/vision tests/action tests/integration -q`
+Run: `$HOME/miniconda3/envs/thirdhand-groundedsam2/bin/python -m pytest tests/common tests/vision tests/action tests/integration -q`
 
 Run: `npm test`
 

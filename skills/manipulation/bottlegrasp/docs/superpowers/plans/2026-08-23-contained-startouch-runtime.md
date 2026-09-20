@@ -16,8 +16,8 @@
 
 ## Global Constraints
 
-- Every created or modified project source, config, test, debug script, derived calibration artifact, and attribution file lives under `/home/nieqingcao/th0814/VA/bottlegrasp`.
-- `/home/nieqingcao/TH-Fanxy` and `/home/nieqingcao/th0814/TH_MK_D/UIEAclub_ThirdHand_VLA-control-fixed-a-to-b` are read-only references and never runtime import paths.
+- Every created or modified project source, config, test, debug script, derived calibration artifact, and attribution file lives under `$HOME/th0814/VA/bottlegrasp`.
+- `$HOME/TH-Fanxy` and `$HOME/th0814/TH_MK_D/UIEAclub_ThirdHand_VLA-control-fixed-a-to-b` are read-only references and never runtime import paths.
 - Do not copy the complete `TH-Fanxy`; adapt only the minimum MIT-permitted bridge behavior and record its source in `native/startouch/NOTICE.md`.
 - The installed Startouch SDK remains an external hardware dependency selected by configuration; simulation and automated tests must not import it.
 - Automated tests must not connect to the Lumos camera, `can0`, or any real robot, and must not start, stop, or restart the existing port-3000 service.
@@ -128,7 +128,7 @@ Also test that missing/duplicate request IDs, NaN, wrong vector lengths, duratio
 Run:
 
 ```bash
-PYTHONPATH=src /home/nieqingcao/miniconda3/envs/thirdhand-groundedsam2/bin/python \
+PYTHONPATH=src $HOME/miniconda3/envs/thirdhand-groundedsam2/bin/python \
   -m pytest tests/action/adapters/test_startouch_protocol.py -q
 ```
 
@@ -171,7 +171,7 @@ python native/startouch/startouch_bridge.py --simulate
 Run:
 
 ```bash
-PYTHONPATH=src /home/nieqingcao/miniconda3/envs/thirdhand-groundedsam2/bin/python \
+PYTHONPATH=src $HOME/miniconda3/envs/thirdhand-groundedsam2/bin/python \
   -m pytest tests/action/adapters/test_startouch_protocol.py tests/action -q
 ```
 
@@ -261,7 +261,7 @@ Call `cleanup()` for `software_stop`. Only a successful call returns `stopped: t
 - [ ] **Step 6: Run focused tests and commit Task 2**
 
 ```bash
-PYTHONPATH=src /home/nieqingcao/miniconda3/envs/thirdhand-groundedsam2/bin/python \
+PYTHONPATH=src $HOME/miniconda3/envs/thirdhand-groundedsam2/bin/python \
   -m pytest tests/action/adapters/test_startouch_protocol.py -q
 git add native/startouch/backends.py native/startouch/startouch_bridge.py \
   native/startouch/NOTICE.md tests/action/adapters/test_startouch_protocol.py
@@ -393,7 +393,7 @@ Add a hand-checked matrix-chain test where flange translation, camera translatio
 - [ ] **Step 2: Run and verify RED**
 
 ```bash
-PYTHONPATH=src /home/nieqingcao/miniconda3/envs/thirdhand-groundedsam2/bin/python \
+PYTHONPATH=src $HOME/miniconda3/envs/thirdhand-groundedsam2/bin/python \
   -m pytest tests/common/test_arm_state.py tests/action/calibration/test_import_handeye.py \
   tests/action/calibration/test_handeye.py -q
 ```
@@ -433,9 +433,9 @@ t_base_camera = rpy_xyz_transform(
 Run the project-local importer against the named source and write only into the project:
 
 ```bash
-PYTHONPATH=src /home/nieqingcao/miniconda3/envs/thirdhand-groundedsam2/bin/python \
+PYTHONPATH=src $HOME/miniconda3/envs/thirdhand-groundedsam2/bin/python \
   -m thirdhand_va.action.calibration.import_handeye \
-  --source /home/nieqingcao/th0814/相机手眼标定/2026-08-17_250801DR48FP25002738_eye_in_hand/final/solution_85a58f8a28ac/derived/luming_eye_in_hand_calibration.json \
+  --source $HOME/th0814/相机手眼标定/2026-08-17_250801DR48FP25002738_eye_in_hand/final/solution_85a58f8a28ac/derived/luming_eye_in_hand_calibration.json \
   --expected-sha256 05e5c8680193dad6bb72370e7ba29c8afafee885f4f139250ca1b9d76303be7c \
   --output configs/calibration/lumos-handeye.pending.json
 ```
@@ -445,7 +445,7 @@ Run `debug_calibration.py` and verify it prints `T_base_flange`, `T_flange_camer
 - [ ] **Step 6: Run affected tests and commit Task 4**
 
 ```bash
-PYTHONPATH=src /home/nieqingcao/miniconda3/envs/thirdhand-groundedsam2/bin/python \
+PYTHONPATH=src $HOME/miniconda3/envs/thirdhand-groundedsam2/bin/python \
   -m pytest tests/common tests/action/calibration tests/integration/test_camera_bridge_script.py -q
 /usr/local/lib/nodejs/node-v24.18.0-linux-x64/bin/node \
   tests/action/adapters/camera_bridge.test.js
@@ -535,7 +535,7 @@ robot:
   backend: "startouch_process"
   python_executable: "python3"
   bridge_path: "../native/startouch/startouch_bridge.py"
-  sdk_path: "/home/nieqingcao/arm/startouch_sdk"
+  sdk_path: "$HOME/arm/startouch_sdk"
   can_interface: "can0"
   lock_file: "/tmp/startouch-web-can0.lock"
   ws_url: "ws://127.0.0.1:3000/ws"
@@ -729,7 +729,7 @@ Add an equivalent `debug_execution_plan.js --fixture tests/fixtures/integration/
 - [ ] **Step 2: Run and verify RED**
 
 ```bash
-PYTHONPATH=src /home/nieqingcao/miniconda3/envs/thirdhand-groundedsam2/bin/python \
+PYTHONPATH=src $HOME/miniconda3/envs/thirdhand-groundedsam2/bin/python \
   -m pytest tests/integration/test_debug_entrypoints.py -q
 ```
 
@@ -759,7 +759,7 @@ Document:
 - [ ] **Step 5: Run all module and integration tests**
 
 ```bash
-PYTHONPATH=src /home/nieqingcao/miniconda3/envs/thirdhand-groundedsam2/bin/python \
+PYTHONPATH=src $HOME/miniconda3/envs/thirdhand-groundedsam2/bin/python \
   -m pytest tests/common tests/vision tests/action tests/integration -q
 /usr/local/lib/nodejs/node-v24.18.0-linux-x64/bin/npm test
 ```
@@ -771,7 +771,7 @@ Expected: all offline tests pass; hardware tests are not selected.
 ```bash
 /usr/local/lib/nodejs/node-v24.18.0-linux-x64/bin/node \
   scripts/action/debug_startouch_protocol.js --simulate
-PYTHONPATH=src /home/nieqingcao/miniconda3/envs/thirdhand-groundedsam2/bin/python \
+PYTHONPATH=src $HOME/miniconda3/envs/thirdhand-groundedsam2/bin/python \
   scripts/action/debug_calibration.py configs/calibration/lumos-handeye.pending.json
 /usr/local/lib/nodejs/node-v24.18.0-linux-x64/bin/node \
   scripts/action/debug_execution_plan.js \

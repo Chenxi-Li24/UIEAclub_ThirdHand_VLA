@@ -533,10 +533,8 @@ def main() -> int:
         "effective_matrix_semantics": (
             None if args.handeye_parent_frame is None else "T_sdk_tool_camera"
         ),
-        "semantic_correction_evidence": (
-            "/home/nieqingcao/arm/UIEAclub_ThirdHand_VLA/"
-            "artifacts/test1-coordinate-frame-evidence-20260908.md"
-        ),
+        "semantic_correction_evidence":
+            "artifacts/test1-coordinate-frame-evidence-20260908.md",
         "numerically_validated": calibration.numerically_validated,
         "physically_validated": calibration.physically_validated,
         "approved_for_bottle_grasp": calibration.approved_for_bottle_grasp,

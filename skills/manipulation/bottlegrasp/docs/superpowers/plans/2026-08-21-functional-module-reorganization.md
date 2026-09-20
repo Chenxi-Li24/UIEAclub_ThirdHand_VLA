@@ -19,7 +19,7 @@
 - Existing offline behavior and public decision/status semantics must remain unchanged.
 - Real-camera and robot tests remain opt-in and are not run during this reorganization.
 - No repository-external absolute path may remain as a library default.
-- This directory is an untracked subtree inside the parent `/home/nieqingcao/th0814/VA` Git repository on `main`; the user explicitly requested in-place organization of this folder. Use recorded test checkpoints and do not commit or modify files outside `bottlegrasp`.
+- This directory is an untracked subtree inside the parent `$HOME/th0814/VA` Git repository on `main`; the user explicitly requested in-place organization of this folder. Use recorded test checkpoints and do not commit or modify files outside `bottlegrasp`.
 - Baseline limitations are preserved as evidence: the active Python environment initially lacks pytest, and stale duplicate tests under `tests/js/` fail while their current counterparts under `tests/node/` pass.
 
 ---
@@ -504,7 +504,7 @@ Expected: Report has `passed=true`, `camera_opened=false`, and `robot_control_en
 
 Run: `if rg -n 'thirdhand_va\.action' src/thirdhand_va/vision; then exit 1; fi`
 
-Run: `rg -n '/home/nieqingcao|TH-Fanxy' src scripts apps configs`
+Run: `rg -n '/home/[^/]+|TH-Fanxy' src scripts apps configs`
 
 Expected: First command finds nothing; second finds no library/default dependency paths. Documentation may mention migration history separately.
 

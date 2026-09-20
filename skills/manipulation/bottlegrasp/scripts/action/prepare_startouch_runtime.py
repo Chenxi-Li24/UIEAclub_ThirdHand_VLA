@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 from pathlib import Path
 import sys
 
@@ -23,7 +24,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--source-sdk",
         type=Path,
-        default=Path("/home/nieqingcao/arm/startouch_sdk"),
+        default=Path(os.environ.get("STARTOUCH_SDK_PATH", Path.home() / "arm/startouch_sdk")),
     )
     parser.add_argument(
         "--destination",

@@ -257,7 +257,7 @@ async function main(argv = process.argv.slice(2), dependencies = {}) {
 
   const cameraBridge = dependencies.cameraBridge || new CameraBridge({
     projectRoot,
-    python: '/home/nieqingcao/miniconda3/envs/thirdhand-groundedsam2/bin/python',
+    python: config.robot.python_executable,
     onlineEnabled: true,
     calibrationFile: calibrationPath,
   });

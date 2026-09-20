@@ -1,6 +1,6 @@
 {
   "schema": "thirdhand-legacy-fixed-route-evidence-v1",
-  "source_project": "/home/nieqingcao/arm/UIEAclub_ThirdHand_VLA-fixed-pick-place",
+  "source_project": "$HOME/arm/UIEAclub_ThirdHand_VLA-fixed-pick-place",
   "source_config": {
     "path": "configs/tasks/fixed_pick_place.yaml",
     "sha256": "sha256:2f912e1d6d3cc32852fd3e545e7afcf05e00a79ce50181d3b4b3816085812ea6"

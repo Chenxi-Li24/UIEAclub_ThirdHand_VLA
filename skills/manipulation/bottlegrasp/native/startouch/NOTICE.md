@@ -4,10 +4,10 @@ The contained bridge was written for `bottlegrasp`. Its process boundary,
 nonblocking CAN ownership lock, measured-pose completion checks, gripper feedback,
 and SDK cleanup lifecycle were adapted from these read-only local references:
 
-- `/home/nieqingcao/TH-Fanxy/web-control/server/startouch_bridge.py`
-- `/home/nieqingcao/th0814/TH_MK_D/UIEAclub_ThirdHand_VLA-control-fixed-a-to-b/web-control/server/startouch_bridge.py`
-- `/home/nieqingcao/th0814/VA/Reuse/src/bottle_pick/robot/vendor_runtime.py`
-- `/home/nieqingcao/th0814/VA/Reuse/native/startouch_bridge.py`
+- `$HOME/TH-Fanxy/web-control/server/startouch_bridge.py`
+- `$HOME/th0814/TH_MK_D/UIEAclub_ThirdHand_VLA-control-fixed-a-to-b/web-control/server/startouch_bridge.py`
+- `$HOME/th0814/VA/Reuse/src/bottle_pick/robot/vendor_runtime.py`
+- `$HOME/th0814/VA/Reuse/native/startouch_bridge.py`
 
 The referenced baseline is distributed under the following license:
 

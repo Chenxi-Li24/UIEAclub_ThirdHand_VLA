@@ -181,6 +181,19 @@ def test_visual_turn_cannot_emit_a_motion_candidate_after_observation():
     }
 
 
+def test_visual_turn_may_convert_say_tool_to_natural_language_only():
+    agent, _client = controller([
+        [tool("vision_inspect_scene", {"question": "look ahead"})],
+        [tool("say", {"text": "前面有一个红色罐子。"}, "tool-say")],
+    ])
+
+    result = agent.chat("look ahead")
+
+    assert result["text"] == "前面有一个红色罐子。"
+    assert result["actions"] == []
+    assert result["trace"][0]["stage"] == "vision.inspect_scene"
+
+
 def test_visual_and_motion_tools_cannot_be_mixed_in_one_model_response():
     skill = VisionSkill()
     agent, client = controller([[tool(

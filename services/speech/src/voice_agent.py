@@ -1091,6 +1091,25 @@ class ThirdHandController:
                 continue
 
             if vision_used and tool_blocks:
+                if all(getattr(block, "name", "") == "say" for block in tool_blocks):
+                    say_actions = [{
+                        "tool": "say",
+                        "input": getattr(block, "input", {}) or {},
+                    } for block in tool_blocks]
+                    reply = " ".join(reply_parts).strip() or self._candidate_reply(say_actions)
+                    self._history.append({
+                        "role": "assistant",
+                        "content": list(getattr(response, "content", [])),
+                    })
+                    self._history.append({
+                        "role": "user",
+                        "content": [{
+                            "type": "tool_result",
+                            "tool_use_id": getattr(block, "id", "say"),
+                            "content": "Natural-language response accepted.",
+                        } for block in tool_blocks],
+                    })
+                    return {"text": reply, "actions": [], "trace": trace}
                 trace.append({
                     "stage": "controller.policy",
                     "status": "failed",

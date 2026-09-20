@@ -23,11 +23,25 @@ Robot Service 是 Startouch 机械臂和夹爪的唯一正式所有者：
 | `disconnect` | 无 | 销毁 SDK 对象并失能电机 |
 | `status` | 无 | 返回当前反馈；未连接时返回错误 |
 | `servo` | `joints: number[6]`，单位度 | 经安全策略后发送关节运动 |
-| `preset` | `name: "home"` | 唯一允许发送全零目标的入口 |
+| `preset` | `name: "zero"` 或 `name: "home"` | 发送明确命名的零位或安全 Home 预设 |
 | `gripper` | `position: 0..1` | 控制约 0..80 mm 夹爪行程 |
 | `software_stop` | 无 | 请求 SDK 清理与失能 |
 | `estop` | 无 | 兼容别名，语义仍是软件停止 |
 | `ping` | 无 | 返回 `pong` |
+
+### Preset definitions
+
+| 名称 | J1-J6（度） | 用途 |
+|---|---|---|
+| `zero` | `[0, 0, 0, 0, 0, 0]` | 旧 Home；仅作为明确请求的零位/参考姿态，不再代表安全 Home |
+| `home` | `[-0.163927, -2.611904, -4.000000, 33.058620, 0.338783, 0.185784]` | 经过 Home commissioning 的安全 Home，供网页、语音和 Bottle-pick 统一引用 |
+
+9983 的“预设位置”区域同时显示两个按钮，并在按钮内显示角度说明：
+
+- `zero`：`[0, 0, 0, 0, 0, 0]°`
+- `home`：`[-0.164, -2.612, -4.000, 33.059, 0.339, 0.186]°`
+
+`STARTOUCH_ZERO_DEG` 和 `STARTOUCH_HOME_DEG` 可以分别覆盖两个预设；每个变量都必须提供六个逗号分隔的有限数字。
 
 未列出的命令返回 `unsupported_command`。Robot Service 不接受视觉、目标选择、VLA 或自动夹取命令。
 
@@ -61,7 +75,7 @@ Robot Service 是 Startouch 机械臂和夹爪的唯一正式所有者：
 4. 当前没有另一条运动；
 5. 目标通过关节限位；
 6. 计算时长不超过关节最大速度；
-7. 非 `preset:home` 的意外全零目标被拒绝。
+7. 非 `preset:zero` 的意外全零目标被拒绝。
 
 当前关节范围为 J1 ±162°、J2 -12°..201°、J3 -183°..0°、J4/J5 ±98°、J6 ±164°。最大速度为 J1-J3 300°/s、J4-J6 1000°/s；运行时默认再乘保守的 `STARTOUCH_SPEED_SCALE=0.05`。
 

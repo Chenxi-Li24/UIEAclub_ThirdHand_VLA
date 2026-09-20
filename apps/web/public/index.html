@@ -143,9 +143,6 @@
         </div>
         <div class="sec-body">
           <button class="action-btn action-primary" id="btn-send">发送到机械臂</button>
-          <div class="action-row">
-            <button class="action-btn action-secondary" id="btn-home">六轴 0° 姿态</button>
-          </div>
         </div>
       </div>
 
@@ -158,9 +155,14 @@
         <div class="sec-body">
           <div class="joint-label">
             <span class="joint-name">目标开度</span>
-            <span class="joint-value" id="gripper-value">100%</span>
+            <div class="joint-number-wrap">
+              <input type="number" class="joint-number-input" id="gripper-input"
+                     min="0" max="100" step="0.1" value="100.0" aria-label="夹爪目标开度">
+              <span class="joint-number-unit">%</span>
+            </div>
           </div>
           <input type="range" class="joint-slider" id="gripper-slider" min="0" max="1" step="0.01" value="1">
+          <div class="control-validation" id="gripper-error" role="alert"></div>
           <div class="joint-label">
             <span class="joint-name">实时反馈</span>
             <span class="joint-value" id="gripper-actual">--</span>
@@ -195,10 +197,10 @@
         </div>
       </div>
 
-      <!-- 末端位置 -->
+      <!-- SDK 夹爪工具中心点 -->
       <div class="drawer-section" id="sec-tcp">
         <div class="sec-header">
-          <span>末端位置 (mm)</span>
+          <span>夹爪工具中心 (TCP, mm)</span>
           <button class="sec-toggle">▾</button>
         </div>
         <div class="sec-body">
@@ -209,6 +211,11 @@
             <span class="tcp-label">Rx</span><span class="tcp-val" id="tcp-rx">0.0</span>
             <span class="tcp-label">Ry</span><span class="tcp-val" id="tcp-ry">0.0</span>
             <span class="tcp-label">Rz</span><span class="tcp-val" id="tcp-rz">0.0</span>
+          </div>
+          <div class="tcp-axis-legend" aria-label="基础坐标系方向">
+            <span class="axis-x">X 前</span>
+            <span class="axis-y">Y 左</span>
+            <span class="axis-z">Z 上</span>
           </div>
         </div>
       </div>
@@ -223,11 +230,13 @@
             <span class="cam-dot" id="cam-dot"></span>
             <span class="cam-label" id="cam-label">XVisio: 连接中</span>
           </div>
-          <div class="vision-segment" role="group" aria-label="视频显示模式">
+          <div class="vision-segment vision-stream-segment" role="group" aria-label="视频显示模式">
             <button type="button" class="vision-segment-btn active" data-xvision-stream="vision"
                     aria-pressed="true">识别</button>
             <button type="button" class="vision-segment-btn" data-xvision-stream="raw"
                     aria-pressed="false">原始</button>
+            <button type="button" class="vision-segment-btn" data-xvision-stream="depth"
+                    aria-pressed="false">深度</button>
           </div>
           <div class="camera-feed-container">
             <img id="xvision-feed" alt="XVisio 识别画面" />

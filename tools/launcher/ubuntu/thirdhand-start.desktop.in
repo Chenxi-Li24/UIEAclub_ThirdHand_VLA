@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=Start ThirdHand
+Comment=Check and start missing ThirdHand services
+Exec=@START_SCRIPT@
+Terminal=true
+Categories=Development;

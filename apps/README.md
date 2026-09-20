@@ -6,6 +6,7 @@
 |---|---|---|
 | `launcher/` | 按 profile 启停服务、记录 PID/ready/log、检查进程所有权 | `./thirdhand`、`apps/launcher/src/cli.js` |
 | `web/` | 9983 局域网页面、Three.js/URDF 展示及 Robot/Speech/Vision 代理 | `apps/web/src/server.js` |
+| `dummy/` | Dum-E 个性状态机、人物跟随与手势实验应用；当前仅手动启动 | `apps/dummy/apps/run_dummy.py`、`apps/dummy/apps/run_person_follow.py` |
 
 边界：`apps/web` 不直接加载 Startouch SDK，也不直接访问 `can0`。机器人命令必须经过 Robot Service；未来 LLM 动作还必须经过计划、授权和执行层。
 

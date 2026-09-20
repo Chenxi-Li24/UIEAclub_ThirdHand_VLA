@@ -45,7 +45,7 @@ function validateJointTarget(joints, limits = DEFAULT_JOINT_LIMITS_DEG) {
 }
 
 function isAccidentalZeroTarget(target, current, source = 'servo') {
-  if (source === 'preset:home') return false;
+  if (source === 'preset:zero') return false;
   if (!Array.isArray(target) || target.length !== 6) return false;
   if (!Array.isArray(current) || current.length !== 6) return false;
   if (![...target, ...current].every(value => Number.isFinite(Number(value)))) return false;

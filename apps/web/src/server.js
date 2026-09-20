@@ -57,12 +57,14 @@ function createWebGateway(options = {}) {
           robot: { url: config.robotWsUrl },
           vision: { url: config.visionHttpUrl },
           voice: { url: config.voiceWsUrl },
+          bottlePick: { url: config.language.vaHttpUrl },
         },
       });
       return;
     }
     const visionGetRoutes = new Set([
       '/api/vision/status',
+      '/api/vision/observation',
       '/camera/xvisio/raw',
       '/camera/xvisio/vision',
       '/camera/xvisio/depth',
@@ -71,7 +73,9 @@ function createWebGateway(options = {}) {
       '/api/vision/select',
       '/api/vision/release',
     ]);
-    if ((request.method === 'GET' && visionGetRoutes.has(pathname)) ||
+    const isVisionTargetRoute = pathname.startsWith('/api/vision/targets/')
+      && /^[1-5]$/.test(pathname.slice('/api/vision/targets/'.length));
+    if ((request.method === 'GET' && (visionGetRoutes.has(pathname) || isVisionTargetRoute)) ||
         (request.method === 'POST' && visionPostRoutes.has(pathname))) {
       proxyHttpRequest(request, response, config.visionHttpUrl, pathname);
       return;

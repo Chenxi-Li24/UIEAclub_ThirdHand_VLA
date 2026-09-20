@@ -3,7 +3,7 @@ const path = require('node:path');
 
 const LOOPBACK_ONLY_PORTS = new Set([3000, 3004, 3100]);
 
-function loadServiceConfig(configPath, options = {}) {
+function loadRuntimeConfig(configPath, options = {}) {
   const root = options.root || path.resolve(configPath, '..', '..', '..');
   const nodePath = options.nodePath || process.execPath;
   const expand = value => typeof value === 'string'
@@ -14,8 +14,28 @@ function loadServiceConfig(configPath, options = {}) {
   const document = JSON.parse(fs.readFileSync(configPath, 'utf8'));
   if (!Array.isArray(document.services)) throw new Error('services must be an array');
 
+  let can = null;
+  if (document.can) {
+    const interfaceName = document.can.interface;
+    if (typeof interfaceName !== 'string' || !/^[A-Za-z0-9_.:-]+$/.test(interfaceName)) {
+      throw new Error('can.interface is invalid');
+    }
+    if (!Number.isInteger(document.can.bitrate) || document.can.bitrate <= 0) {
+      throw new Error('can.bitrate must be a positive integer');
+    }
+    if (!Number.isInteger(document.can.restartMs) || document.can.restartMs < 0) {
+      throw new Error('can.restartMs must be a non-negative integer');
+    }
+    can = {
+      enabled: document.can.enabled !== false,
+      interface: interfaceName,
+      bitrate: document.can.bitrate,
+      restartMs: document.can.restartMs,
+    };
+  }
+
   const seen = new Set();
-  return document.services.map(raw => {
+  const services = document.services.map(raw => {
     if (!raw.id || seen.has(raw.id)) throw new Error(`duplicate or missing service id: ${raw.id}`);
     seen.add(raw.id);
     if (!Array.isArray(raw.args)) throw new Error(`service ${raw.id} args must be an array`);
@@ -39,6 +59,11 @@ function loadServiceConfig(configPath, options = {}) {
       bind,
     };
   });
+  return { profile: document.profile, description: document.description, can, services };
 }
 
-module.exports = { loadServiceConfig };
+function loadServiceConfig(configPath, options = {}) {
+  return loadRuntimeConfig(configPath, options).services;
+}
+
+module.exports = { loadRuntimeConfig, loadServiceConfig };

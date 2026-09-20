@@ -86,6 +86,27 @@ function jointLimitWarnings(joints, jointLimits, indices) {
   return warnings;
 }
 
+function boundedNumberValidation(rawValue, min, max, label) {
+  const text = typeof rawValue === 'string' ? rawValue.trim() : rawValue;
+  const value = text === '' ? NaN : Number(text);
+  if (!Number.isFinite(value)) {
+    return { valid: false, value: NaN, message: `${label}必须是有效数字` };
+  }
+  if (!Number.isFinite(min) || !Number.isFinite(max) || min > max) {
+    return { valid: false, value, message: `${label}限位配置无效` };
+  }
+  if (value < min || value > max) {
+    return { valid: false, value, message: `${label}超出限位（${min}～${max}）` };
+  }
+  return { valid: true, value, message: '' };
+}
+
+const BASE_TO_THREE_DIRECTIONS = Object.freeze({
+  x: [1, 0, 0],
+  y: [0, 0, -1],
+  z: [0, 1, 0],
+});
+
 // === SceneManager ===
 class SceneManager {
   constructor(container) {
@@ -149,7 +170,26 @@ class SceneManager {
     this.grid = new THREE.GridHelper(1200, 24, 0x2d3a5c, 0x1a2340);
     this.scene.add(this.grid);
 
-    this.axes = new THREE.AxesHelper(250);
+    this.axes = new THREE.Group();
+    this.axes.name = 'startouch-base-coordinate-axes';
+    const baseAxisLength = 250;
+    const baseAxisHeadLength = 24;
+    const baseAxisHeadWidth = 12;
+    [
+      ['x', 0xff4545],
+      ['y', 0x45d483],
+      ['z', 0x438cff],
+    ].forEach(([axis, color]) => {
+      const direction = BASE_TO_THREE_DIRECTIONS[axis];
+      this.axes.add(new THREE.ArrowHelper(
+        new THREE.Vector3(...direction),
+        new THREE.Vector3(0, 0, 0),
+        baseAxisLength,
+        color,
+        baseAxisHeadLength,
+        baseAxisHeadWidth,
+      ));
+    });
     this.scene.add(this.axes);
 
     window.addEventListener('resize', () => this._onResize());
@@ -230,6 +270,7 @@ class ArmModel {
     this.robot = null;
     this.jointAngles = [0, 0, 0, 0, 0, 0];
     this.gripperPosition = 1;
+    this.tcpOffsetMeters = 0.17334;
     this.jointNames = ['joint1', 'joint2', 'joint3', 'joint4', 'joint5', 'joint6'];
     this.loaded = false;
     this.installMode = 'floor';
@@ -265,7 +306,11 @@ class ArmModel {
     this.setJointLimits(this.jointLimits);
 
     this.endEffector = new THREE.Group();
-    this.endEffector.position.set(0.15584, 0, 0);
+    this.endEffector.name = 'type-lj-tcp';
+    this.endEffector.position.set(this.tcpOffsetMeters, 0, 0);
+    this.tcpAxes = new THREE.AxesHelper(0.08);
+    this.tcpAxes.name = 'type-lj-tcp-axes';
+    this.endEffector.add(this.tcpAxes);
     robot.links.gripper_base.add(this.endEffector);
     this.loaded = true;
     console.log('[ArmModel] Startouch FastTouchV3 URDF model ready');
@@ -338,7 +383,30 @@ class ArmModel {
     const position = new THREE.Vector3();
     this.endEffector.getWorldPosition(position);
     this.robot.worldToLocal(position);
-    return { x: position.x, y: position.y, z: position.z };
+    return { x: position.x * 1000, y: position.y * 1000, z: position.z * 1000 };
+  }
+
+  getEndEffectorBaseEuler() {
+    if (!this.robot || !this.endEffector) return { rx: 0, ry: 0, rz: 0 };
+    this.robot.updateWorldMatrix(true, true);
+    const robotQuaternion = new THREE.Quaternion();
+    const tcpQuaternion = new THREE.Quaternion();
+    this.robot.getWorldQuaternion(robotQuaternion);
+    this.endEffector.getWorldQuaternion(tcpQuaternion);
+    const relativeQuaternion = robotQuaternion.invert().multiply(tcpQuaternion);
+    const euler = new THREE.Euler().setFromQuaternion(relativeQuaternion, 'XYZ');
+    return {
+      rx: THREE.MathUtils.radToDeg(euler.x),
+      ry: THREE.MathUtils.radToDeg(euler.y),
+      rz: THREE.MathUtils.radToDeg(euler.z),
+    };
+  }
+
+  getEndEffectorBasePose() {
+    return {
+      positionMm: this.getEndEffectorBasePosition(),
+      eulerDeg: this.getEndEffectorBaseEuler(),
+    };
   }
 }
 
@@ -431,6 +499,7 @@ class UIControls {
     this.arm = armModel;
     this.sliders = [];
     this.inputs = [];
+    this.inputErrors = [];
     this.syncMode = true;
     this._draggingSlider = false;
     this.presets = {};
@@ -447,10 +516,14 @@ class UIControls {
     this.logPanel = null;
     this.logButton = null;
     this.gripperSlider = null;
+    this.gripperInput = null;
+    this._motionWasActive = false;
     this.lastRobotState = {
       joints: null,
       gripperPosition: null,
       stateName: null,
+      tcpPos: null,
+      tcpEuler: null,
       observedAt: 0
     };
     this.languageBackend = 'local-bridge';
@@ -491,11 +564,22 @@ class UIControls {
       const name = document.createElement('span');
       name.className = 'joint-name';
       name.textContent = jointNames[i];
-      const valEl = document.createElement('span');
-      valEl.className = 'joint-value';
-      valEl.id = `jval-${i}`;
-      valEl.textContent = '0.0°';
-      label.append(name, valEl);
+      const editor = document.createElement('div');
+      editor.className = 'joint-number-wrap';
+      const input = document.createElement('input');
+      input.type = 'number';
+      input.className = 'joint-number-input';
+      input.id = `jinput-${i}`;
+      input.min = String(sliderMin);
+      input.max = String(sliderMax);
+      input.step = '0.1';
+      input.value = '0.0';
+      input.setAttribute('aria-label', `${jointNames[i]}目标角度`);
+      const unit = document.createElement('span');
+      unit.className = 'joint-number-unit';
+      unit.textContent = '°';
+      editor.append(input, unit);
+      label.append(name, editor);
 
       const slider = document.createElement('input');
       slider.type = 'range';
@@ -505,22 +589,57 @@ class UIControls {
       slider.max = sliderMax;
       slider.step = '0.1';
       slider.value = '0';
-      row.append(label, slider);
+      const error = document.createElement('div');
+      error.className = 'control-validation';
+      error.id = `jerror-${i}`;
+      row.append(label, slider, error);
       body.appendChild(row);
 
       this.sliders.push(slider);
+      this.inputs.push(input);
+      this.inputErrors.push(error);
       const defaultVal = 0;
       slider.value = defaultVal;
-      valEl.textContent = defaultVal.toFixed(1) + '°';
+      input.value = defaultVal.toFixed(1);
+
+      const applyJointValue = (rawValue, { report = false } = {}) => {
+        const validation = boundedNumberValidation(
+          rawValue,
+          Number(input.min),
+          Number(input.max),
+          `J${i + 1}`,
+        );
+        input.setCustomValidity(validation.message);
+        row.classList.toggle('control-invalid', !validation.valid);
+        error.textContent = validation.message;
+        if (!validation.valid) {
+          if (report) input.reportValidity();
+          return false;
+        }
+        slider.value = String(validation.value);
+        this._updateArm(i, validation.value);
+        return true;
+      };
 
       slider.addEventListener('pointerdown', () => { this._draggingSlider = true; });
       slider.addEventListener('pointerup', () => { this._draggingSlider = false; });
       slider.addEventListener('pointerleave', () => { this._draggingSlider = false; });
       slider.addEventListener('input', () => {
         this.clearVoicePreview({ restore: true, reason: '手动关节调整' });
+        this._setRealtimeSync(false);
         const val = parseFloat(slider.value);
-        valEl.textContent = val.toFixed(1) + '°';
-        this._updateArm(i, val);
+        input.value = val.toFixed(1);
+        applyJointValue(val);
+      });
+      input.addEventListener('input', () => {
+        this.clearVoicePreview({ restore: true, reason: '手动关节数值调整' });
+        this._setRealtimeSync(false);
+        applyJointValue(input.value);
+      });
+      input.addEventListener('change', () => {
+        if (applyJointValue(input.value, { report: true })) {
+          input.value = Number(input.value).toFixed(1);
+        }
       });
     }
 
@@ -558,43 +677,71 @@ class UIControls {
       this._log('→ 软件停止并断开 SDK');
     });
 
-    // Move to the all-zero joint pose; this does not redefine robot calibration.
-    document.getElementById('btn-home').addEventListener('click', () => {
-      this.clearVoicePreview({ restore: true, reason: '手动回零' });
-      this.arm.goHome();
-      const zeros = new Array(this.arm.jointNames.length).fill(0);
-      this.setJointValues(zeros);
-      this.ws.send({ cmd: 'preset', name: 'home' });
-      this._log('→ Startouch 六轴 0° 姿态');
-    });
-
     // 同步 3D 模型
     document.getElementById('chk-sync').addEventListener('change', (e) => {
-      this.syncMode = e.target.checked;
+      this._setRealtimeSync(e.target.checked, { applyLatest: e.target.checked });
     });
 
     this.gripperSlider = document.getElementById('gripper-slider');
+    this.gripperInput = document.getElementById('gripper-input');
+    const gripperError = document.getElementById('gripper-error');
+    const applyGripperPercent = (rawValue, { report = false } = {}) => {
+      const validation = boundedNumberValidation(rawValue, 0, 100, '夹爪开度');
+      this.gripperInput.setCustomValidity(validation.message);
+      this.gripperInput.closest('.sec-body')?.classList.toggle('control-invalid', !validation.valid);
+      if (gripperError) gripperError.textContent = validation.message;
+      if (!validation.valid) {
+        if (report) this.gripperInput.reportValidity();
+        return null;
+      }
+      const position = validation.value / 100;
+      this._setGripperTargetValue(position);
+      this.arm.setGripperPosition(position);
+      return position;
+    };
     const sendGripperValue = value => {
       this.clearVoicePreview({ restore: true, reason: '手动夹爪控制' });
-      const position = Math.max(0, Math.min(1, Number(value)));
+      this._setRealtimeSync(false);
+      const validation = boundedNumberValidation(value, 0, 1, '夹爪开度');
+      if (!validation.valid) {
+        if (gripperError) gripperError.textContent = validation.message;
+        this._log(`[拒绝] ${validation.message}`);
+        return;
+      }
+      const position = validation.value;
       this._setGripperTargetValue(position);
+      this.arm.setGripperPosition(position);
       this.gripperTargetEdited = true;
       this.ws.send({ cmd: 'gripper', position });
       this._log(`→ 夹爪 ${(position * 100).toFixed(0)}%`);
     };
     this.gripperSlider.addEventListener('input', () => {
       this.clearVoicePreview({ restore: true, reason: '手动夹爪调整' });
+      this._setRealtimeSync(false);
       this.gripperTargetEdited = true;
-      this._setGripperTargetValue(Number(this.gripperSlider.value));
+      applyGripperPercent(Number(this.gripperSlider.value) * 100);
+    });
+    this.gripperInput.addEventListener('input', () => {
+      this.clearVoicePreview({ restore: true, reason: '手动夹爪数值调整' });
+      this._setRealtimeSync(false);
+      this.gripperTargetEdited = true;
+      applyGripperPercent(this.gripperInput.value);
+    });
+    this.gripperInput.addEventListener('change', () => {
+      const position = applyGripperPercent(this.gripperInput.value, { report: true });
+      if (position !== null) this.gripperInput.value = (position * 100).toFixed(1);
     });
     document.getElementById('btn-gripper-close').addEventListener('click', () => {
+      this._setGripperTargetValue(0);
       sendGripperValue(0);
     });
     document.getElementById('btn-gripper-open').addEventListener('click', () => {
+      this._setGripperTargetValue(1);
       sendGripperValue(1);
     });
     document.getElementById('btn-gripper-send').addEventListener('click', () => {
-      sendGripperValue(this.gripperSlider.value);
+      const position = applyGripperPercent(this.gripperInput.value, { report: true });
+      if (position !== null) sendGripperValue(position);
     });
 
     // 抽屉收起/展开
@@ -623,7 +770,6 @@ class UIControls {
 
     // 抽屉内视图按钮（暂时禁止冒泡，防止触发视口交互）
     document.getElementById('btn-send').addEventListener('click', e => e.stopPropagation());
-    document.getElementById('btn-home').addEventListener('click', e => e.stopPropagation());
     document.querySelectorAll('.sec-header').forEach(h => {
       h.addEventListener('click', e => e.stopPropagation());
     });
@@ -730,6 +876,20 @@ class UIControls {
       if (data.stateName) {
         this.lastRobotState.stateName = data.stateName;
       }
+      if (Array.isArray(data.tcpPos) && data.tcpPos.length >= 3) {
+        this.lastRobotState.tcpPos = data.tcpPos.slice(0, 3).map(Number);
+      }
+      if (Array.isArray(data.tcpEuler) && data.tcpEuler.length >= 3) {
+        this.lastRobotState.tcpEuler = data.tcpEuler.slice(0, 3).map(Number);
+      }
+
+      if (data.stateName) {
+        const motionActive = data.stateName === 'MOVING';
+        if (motionActive && !this._motionWasActive) {
+          this._setRealtimeSync(true, { applyLatest: true });
+        }
+        this._motionWasActive = motionActive;
+      }
 
       // 更新实时角度
       if (data.joints && data.joints.length >= 6) {
@@ -747,7 +907,7 @@ class UIControls {
       if (data.stateName) {
         this._updateStateBadge(data.stateName);
       }
-      if (Array.isArray(data.tcpPos) && Array.isArray(data.tcpEuler)) {
+      if (this.syncMode && Array.isArray(data.tcpPos) && Array.isArray(data.tcpEuler)) {
         this._updateTCP(data.tcpPos, data.tcpEuler);
       }
       if (Number.isFinite(data.gripperPosition)) {
@@ -771,8 +931,14 @@ class UIControls {
       if (data.stateName) {
         this._updateStateBadge(data.stateName);
         if (data.stateName === 'MOVING') {
+          if (!this._motionWasActive) {
+            this._setRealtimeSync(true, { applyLatest: true });
+          }
+          this._motionWasActive = true;
           this.robotStateReady = false;
           this._setMotionControlsEnabled(false);
+        } else {
+          this._motionWasActive = false;
         }
       }
     });
@@ -816,6 +982,15 @@ class UIControls {
     let xvisionStream = 'vision';
     let xvisionRetryTimer = null;
     let xvisionRetryCount = 0;
+    const xvisionStreamLabels = {
+      vision: '识别画面',
+      raw: '原始画面',
+      depth: '深度画面',
+    };
+
+    const describeXVisionStream = () => (
+      xvisionStreamLabels[xvisionStream] || '视频画面'
+    );
 
     const reloadXVisionFeed = (resetBackoff = false) => {
       if (!xvisionFeed) return;
@@ -833,7 +1008,8 @@ class UIControls {
         const dot = document.getElementById('cam-dot');
         const label = document.getElementById('cam-label');
         if (dot) dot.className = 'cam-dot connected';
-        if (label) label.textContent = `XVisio: ${xvisionStream === 'vision' ? '识别画面' : '原始画面'}`;
+        if (label) label.textContent = `XVisio: ${describeXVisionStream()}`;
+        xvisionFeed.alt = `XVisio ${describeXVisionStream()}`;
       });
       xvisionFeed.addEventListener('error', () => {
         const dot = document.getElementById('cam-dot');
@@ -859,6 +1035,7 @@ class UIControls {
           candidate.classList.toggle('active', active);
           candidate.setAttribute('aria-pressed', String(active));
         });
+        xvisionFeed.alt = `XVisio ${describeXVisionStream()}`;
         reloadXVisionFeed(true);
       });
     });
@@ -869,14 +1046,24 @@ class UIControls {
       list.replaceChildren();
       const objects = (data.targets || data.objects || []).map(obj => {
         if (!data.targets) return obj;
+        const stableId = obj.stableId ?? obj.stable_id;
+        const cameraPosition = obj.cameraPositionM ?? obj.camera_xyz_m ?? null;
+        const basePosition = obj.position_m ?? obj.base_xyz_m ?? null;
         return {
           ...obj,
-          id: obj.stableId,
-          spatialLabel: `#${obj.stableId}`,
+          stableId,
+          id: stableId,
+          spatialLabel: stableId == null ? '#?' : `#${stableId}`,
           conf: obj.score,
-          leftOrdinal: obj.stableId,
-          actionable: false,
-          blockers: ["grasp_execution_not_migrated"],
+          leftOrdinal: stableId,
+          position_m: basePosition,
+          cameraPositionM: cameraPosition,
+          depth_m: obj.depth_m ?? cameraPosition?.[2] ?? null,
+          actionable: obj.actionable === true,
+          blockers: [
+            ...(obj.blockers || []),
+            ...(basePosition ? [] : ['handeye_not_approved']),
+          ],
         };
       });
       for (const obj of objects) {
@@ -892,7 +1079,9 @@ class UIControls {
         coordinates.className = 'det-coords';
         coordinates.textContent = Array.isArray(obj.position_m)
           ? `base (${obj.position_m.map(value => Number(value).toFixed(3)).join(', ')})m`
-          : 'base position unavailable';
+          : Array.isArray(obj.cameraPositionM)
+            ? `camera (${obj.cameraPositionM.map(value => Number(value).toFixed(3)).join(', ')})m`
+            : 'position unavailable';
         const depth = document.createElement('div');
         depth.className = 'det-depth';
         depth.textContent = obj.depth_m !== null && obj.depth_m !== undefined &&
@@ -951,7 +1140,7 @@ class UIControls {
         data.lumos_ready === true || data.camera_ready === true;
       if (dot) dot.className = `cam-dot ${ready ? 'connected' : ''}`;
       if (label) label.textContent = ready
-        ? `XVisio: ${xvisionStream === 'vision' ? '识别画面' : '原始画面'}`
+        ? `XVisio: ${describeXVisionStream()}`
         : `XVisio: ${data.error || '连接中'}`;
     };
 
@@ -1373,14 +1562,38 @@ class UIControls {
     const slider = this.gripperSlider || document.getElementById('gripper-slider');
     const normalized = Math.max(0, Math.min(1, Number(value)));
     if (slider) slider.value = normalized;
-    const label = document.getElementById('gripper-value');
-    if (label) label.textContent = `${Math.round(normalized * 100)}%`;
+    const input = this.gripperInput || document.getElementById('gripper-input');
+    if (input) {
+      input.value = (normalized * 100).toFixed(1);
+      input.setCustomValidity('');
+    }
+    const error = document.getElementById('gripper-error');
+    if (error) error.textContent = '';
+    input?.closest('.sec-body')?.classList.remove('control-invalid');
+  }
+
+  _setRealtimeSync(enabled, { applyLatest = false } = {}) {
+    this.syncMode = Boolean(enabled);
+    const checkbox = document.getElementById('chk-sync');
+    if (checkbox) checkbox.checked = this.syncMode;
+    if (!this.syncMode || !applyLatest) return;
+
+    if (Array.isArray(this.lastRobotState.joints) && this.lastRobotState.joints.length >= 6) {
+      this.setJointValues(this.lastRobotState.joints);
+    }
+    if (Number.isFinite(this.lastRobotState.gripperPosition)) {
+      this.arm.setGripperPosition(this.lastRobotState.gripperPosition);
+    }
+    if (Array.isArray(this.lastRobotState.tcpPos) && Array.isArray(this.lastRobotState.tcpEuler)) {
+      this._updateTCP(this.lastRobotState.tcpPos, this.lastRobotState.tcpEuler);
+    } else {
+      this._updateTCP();
+    }
   }
 
   _setMotionControlsEnabled(enabled) {
     [
       'btn-send',
-      'btn-home',
       'btn-gripper-send',
       'btn-gripper-close',
       'btn-gripper-open',
@@ -1438,13 +1651,20 @@ class UIControls {
       const sj = document.getElementById(`sj${i + 1}`);
       if (sj) sj.textContent = `J${i + 1}:${joints[i].toFixed(1)}°`;
     }
-    this._updateTCP();
   }
 
   _updateTCP(tcpPos, tcpEuler) {
-    const modelPosition = this.arm.getEndEffectorPosition();
-    const pos = tcpPos || [modelPosition.x, modelPosition.y, modelPosition.z];
-    const euler = tcpEuler || [0, 0, 0];
+    const modelPose = this.arm.getEndEffectorBasePose();
+    const pos = tcpPos || [
+      modelPose.positionMm.x,
+      modelPose.positionMm.y,
+      modelPose.positionMm.z,
+    ];
+    const euler = tcpEuler || [
+      modelPose.eulerDeg.rx,
+      modelPose.eulerDeg.ry,
+      modelPose.eulerDeg.rz,
+    ];
     const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v.toFixed(1); };
     set('tcp-x', Number(pos[0] ?? pos.x)); set('tcp-y', Number(pos[1] ?? pos.y)); set('tcp-z', Number(pos[2] ?? pos.z));
     set('tcp-rx', Number(euler[0])); set('tcp-ry', Number(euler[1])); set('tcp-rz', Number(euler[2]));
@@ -1464,7 +1684,26 @@ class UIControls {
 
   _sendServo() {
     this.clearVoicePreview({ restore: true, reason: '发送手动关节目标' });
-    const joints = this.arm.getJointAngles();
+    const joints = [];
+    for (let index = 0; index < this.inputs.length; index++) {
+      const input = this.inputs[index];
+      const validation = boundedNumberValidation(
+        input.value,
+        Number(input.min),
+        Number(input.max),
+        `J${index + 1}`,
+      );
+      input.setCustomValidity(validation.message);
+      this.inputErrors[index].textContent = validation.message;
+      input.closest('.joint-row')?.classList.toggle('control-invalid', !validation.valid);
+      if (!validation.valid) {
+        input.reportValidity();
+        this._log(`[拒绝] ${validation.message}`);
+        return;
+      }
+      joints.push(validation.value);
+    }
+    this.arm.setJointAngles(joints);
     this.ws.send({ cmd: 'servo', joints: joints });
     this._log(`→ servo ${joints.map(j => j.toFixed(1)).join(' ')}`);
   }
@@ -1472,8 +1711,12 @@ class UIControls {
   setJointValues(angles) {
     for (let i = 0; i < 6; i++) {
       if (this.sliders[i]) this.sliders[i].value = angles[i];
-      const valEl = document.getElementById(`jval-${i}`);
-      if (valEl) valEl.textContent = angles[i].toFixed(1) + '°';
+      if (this.inputs[i]) {
+        this.inputs[i].value = Number(angles[i]).toFixed(1);
+        this.inputs[i].setCustomValidity('');
+        this.inputs[i].closest('.joint-row')?.classList.remove('control-invalid');
+      }
+      if (this.inputErrors[i]) this.inputErrors[i].textContent = '';
     }
     this.arm.setJointAngles(angles);
     this._updateTCP();
@@ -1483,9 +1726,14 @@ class UIControls {
     this.arm.setJointLimits(limits);
     limits.forEach((limit, index) => {
       const slider = this.sliders[index];
-      if (!slider) return;
-      slider.min = Math.ceil(Number(limit[0]) * 10) / 10;
-      slider.max = Math.floor(Number(limit[1]) * 10) / 10;
+      const input = this.inputs[index];
+      if (!slider || !input) return;
+      const min = Math.ceil(Number(limit[0]) * 10) / 10;
+      const max = Math.floor(Number(limit[1]) * 10) / 10;
+      slider.min = min;
+      slider.max = max;
+      input.min = min;
+      input.max = max;
     });
     this.setJointValues(this.arm.getJointAngles());
   }
@@ -1496,16 +1744,26 @@ class UIControls {
     if (!grid) return;
     grid.innerHTML = '';
     for (const [name, joints] of Object.entries(presets)) {
+      if (!Array.isArray(joints) || joints.length !== 6 || !joints.every(Number.isFinite)) continue;
       const btn = document.createElement('button');
       btn.className = 'preset-btn';
-      btn.textContent = name;
-      btn.title = joints.map(j => j.toFixed(1)).join(', ');
+      const formattedJoints = `[${joints.map(value => (
+        Math.abs(value) < 0.0005 ? '0' : value.toFixed(3)
+      )).join(', ')}]°`;
+      const presetName = document.createElement('span');
+      presetName.className = 'preset-name';
+      presetName.textContent = name;
+      const presetJoints = document.createElement('span');
+      presetJoints.className = 'preset-joints';
+      presetJoints.textContent = formattedJoints;
+      btn.append(presetName, presetJoints);
+      btn.title = `${name}: ${formattedJoints}`;
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
         this.clearVoicePreview({ restore: true, reason: '手动预设控制' });
         this.setJointValues(joints);
         this.ws.send({ cmd: 'preset', name: name });
-        this._log(`→ ${name}`);
+        this._log(`→ ${name} ${formattedJoints}`);
       });
       grid.appendChild(btn);
     }

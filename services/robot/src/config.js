@@ -16,6 +16,16 @@ function boolFrom(env, name, fallback) {
   return env[name] === '1';
 }
 
+function vectorFrom(env, name, fallback, length) {
+  const raw = env[name];
+  if (raw === undefined) return [...fallback];
+  const values = raw.split(',').map(Number);
+  if (values.length !== length || !values.every(Number.isFinite)) {
+    throw new Error(`${name} must contain ${length} comma-separated numbers`);
+  }
+  return values;
+}
+
 function loadConfig(env = process.env) {
   const localPython = path.join(ROOT, 'local', 'runtimes', 'python', 'bin', 'python');
   const sdkPath = env.STARTOUCH_SDK_PATH
@@ -50,6 +60,14 @@ function loadConfig(env = process.env) {
       speedScale: numberFrom(env, 'STARTOUCH_SPEED_SCALE', 0.05, 0.01, 1),
       minMoveTimeSec: numberFrom(env, 'STARTOUCH_MIN_MOVE_TIME_SEC', 0.5, 0.05, 30),
       maxMoveTimeSec: numberFrom(env, 'STARTOUCH_MAX_MOVE_TIME_SEC', 30, 0.1, 120),
+      homePresetDeg: vectorFrom(
+        env, 'STARTOUCH_HOME_DEG',
+        [-0.163927, -2.611904, -4, 33.058620, 0.338783, 0.185784], 6,
+      ),
+      zeroPresetDeg: vectorFrom(
+        env, 'STARTOUCH_ZERO_DEG',
+        [0, 0, 0, 0, 0, 0], 6,
+      ),
     },
   };
 }

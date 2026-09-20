@@ -48,6 +48,7 @@ thirdhand
 | `apps/web/src/http-proxy.js` | Vision HTTP 白名单和流式代理 |
 | `apps/web/src/vision-proxy.js` | Vision WebSocket 事件与目标选择代理 |
 | `apps/web/src/websocket-proxy.js` | Speech/Vision 通用有界 WebSocket 代理 |
+| `apps/dummy` | Dum-E 个性状态机、人物跟随和手势实验；手动启动，尚未接入授权执行链 |
 
 ## 服务与驱动层
 

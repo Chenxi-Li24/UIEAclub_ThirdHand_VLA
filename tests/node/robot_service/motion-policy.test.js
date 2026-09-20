@@ -29,10 +29,11 @@ test('validates joint count, finite values, and every configured limit', () => {
   );
 });
 
-test('rejects accidental zero except explicit home preset', () => {
+test('rejects accidental zero except the explicit zero preset', () => {
   const current = [20, 10, -30, 5, 0, 0];
   assert.equal(isAccidentalZeroTarget([0, 0, 0, 0, 0, 0], current, 'servo'), true);
-  assert.equal(isAccidentalZeroTarget([0, 0, 0, 0, 0, 0], current, 'preset:home'), false);
+  assert.equal(isAccidentalZeroTarget([0, 0, 0, 0, 0, 0], current, 'preset:home'), true);
+  assert.equal(isAccidentalZeroTarget([0, 0, 0, 0, 0, 0], current, 'preset:zero'), false);
   assert.equal(isAccidentalZeroTarget([0, 0, 0, 0, 0, 0], null, 'servo'), false);
   assert.equal(isAccidentalZeroTarget([0, 0, -1, 0, 0, 0], current, 'servo'), false);
 });

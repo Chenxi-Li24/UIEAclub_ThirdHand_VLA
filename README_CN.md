@@ -34,4 +34,14 @@ cd /home/nieqingcao/ThirdHand/UIEAclub_ThirdHand_VLA
 ./thirdhand stop --profile manual-control
 ```
 
+开发时需要保留已运行服务、只补齐缺失端口，使用：
+
+```bash
+./thirdhand ensure --profile manual-control
+```
+
+该命令只执行一次检查后退出，不会重启健康服务、后台监控、开机自启或自动连接
+机械臂。Windows 与 Ubuntu 桌面快捷方式的安装和反馈规则见
+[`docs/ONE_CLICK_START_CN.md`](docs/ONE_CLICK_START_CN.md)。
+
 浏览器访问 `http://192.168.58.68:9983`。服务启动后仍需操作员在页面中显式连接机械臂；启动器不会自动使能或移动机械臂。软件停止不能替代独立硬件急停或物理断电。

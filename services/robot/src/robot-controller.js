@@ -16,7 +16,10 @@ const ALLOWED_COMMANDS = new Set([
   'connect',
   'disconnect',
   'status',
+  'get_state',
   'servo',
+  'move_joint',
+  'move_l',
   'preset',
   'gripper',
   'software_stop',
@@ -24,8 +27,27 @@ const ALLOWED_COMMANDS = new Set([
   'ping',
 ]);
 
+const DEFAULT_HOME_PRESET_DEG = Object.freeze([
+  -0.163927, -2.611904, -4, 33.058620, 0.338783, 0.185784,
+]);
+const DEFAULT_ZERO_PRESET_DEG = Object.freeze([
+  0, 0, 0, 0, 0, 0,
+]);
 function degrees(values) {
   return values.map(value => Number(value) * 180 / Math.PI);
+}
+
+function finiteVector(value, length) {
+  return Array.isArray(value) && value.length === length
+    && value.every(Number.isFinite);
+}
+
+function linearTargetAllowed(position) {
+  if (!finiteVector(position, 3)) return false;
+  const limits = [[0.15, 0.66], [-0.65, 0.45], [0.04, 0.65]];
+  return position.every(
+    (value, index) => value >= limits[index][0] && value <= limits[index][1],
+  );
 }
 
 class RobotController extends EventEmitter {
@@ -43,6 +65,10 @@ class RobotController extends EventEmitter {
     this.latestGripperPosition = null;
     this.pendingExecutions = new Map();
     this.seenPrimitiveIds = new Set();
+    this.pendingLowLevel = new Map();
+    this.stateSequence = 0;
+    this.latestProducerMonotonicNs = Number(process.hrtime.bigint());
+    this.pendingStopRequestId = null;
     this._bindBridge();
   }
 
@@ -56,6 +82,18 @@ class RobotController extends EventEmitter {
       });
     });
     this.bridge.on('software_stop_complete', message => {
+      const requestId = this.pendingStopRequestId;
+      this.pendingStopRequestId = null;
+      if (requestId) {
+        this.pendingLowLevel.delete(requestId);
+        this.emit('message', {
+          type: 'command_status', status: 'complete', command: 'software_stop',
+          request_id: requestId, stopped: true,
+          applied_state_sequence: this.stateSequence,
+          applied_producer_monotonic_ns: this.latestProducerMonotonicNs,
+          robot_healthy: false,
+        });
+      }
       this.emit('message', {
         type: 'software_stop',
         complete: true,
@@ -65,6 +103,7 @@ class RobotController extends EventEmitter {
       });
     });
     this.bridge.on('software_stop_timeout', message => {
+      this.pendingStopRequestId = null;
       this.emit('message', {
         type: 'software_stop',
         complete: false,
@@ -106,7 +145,10 @@ class RobotController extends EventEmitter {
   configMessage() {
     return {
       type: 'config',
-      presets: { home: [0, 0, 0, 0, 0, 0] },
+      presets: {
+        zero: [...(this.config.zeroPresetDeg || DEFAULT_ZERO_PRESET_DEG)],
+        home: [...(this.config.homePresetDeg || DEFAULT_HOME_PRESET_DEG)],
+      },
       jointLimits: DEFAULT_JOINT_LIMITS_DEG,
       model: {
         name: 'Startouch FastTouchV3',
@@ -128,6 +170,30 @@ class RobotController extends EventEmitter {
         activeViewExecutionRequested: false,
         activeViewExecutionEnabled: false,
       },
+    };
+  }
+
+  capabilityResponse(nonce) {
+    return {
+      type: 'capability_response',
+      schema: 'thirdhand-robot-capability-v1',
+      nonce,
+      protocol_version: 'thirdhand-robot-lowlevel-v1',
+      pose_frame: 'robot_flange',
+      commands: ['move_l', 'move_joint', 'gripper', 'preset', 'software_stop', 'get_state'],
+      correlated_completions: true,
+      software_stop_ack: true,
+      software_stop_state_boundary: true,
+      state_units: {
+        position: 'm', orientation: 'rad', joints: 'deg',
+        joint_velocity: 'deg/s', gripper: 'm',
+      },
+      state_stream: {
+        sequence: 'uint53', producer_monotonic_ns: 'uint53',
+        strictly_increasing: true,
+      },
+      state_sequence: this.stateSequence,
+      producer_monotonic_ns: this.latestProducerMonotonicNs,
     };
   }
 
@@ -170,26 +236,54 @@ class RobotController extends EventEmitter {
         this.bridge.send({ cmd: 'disconnect', reason: 'browser_request' });
         return;
       case 'status':
+      case 'get_state':
         this.bridge.send({ cmd: 'get_state' });
         return;
       case 'software_stop':
-      case 'estop':
-        if (!this.bridge.softwareStop()) {
+      case 'estop': {
+        const requestId = typeof message.request_id === 'string' && message.request_id
+          ? message.request_id : randomUUID();
+        this.pendingStopRequestId = requestId;
+        this.pendingLowLevel.set(requestId, 'software_stop');
+        if (!this.bridge.softwareStop(requestId)) {
+          this.pendingStopRequestId = null;
+          this.pendingLowLevel.delete(requestId);
           reply({ type: 'error', code: 'robot_not_connected', msg: 'Startouch SDK is not connected' });
         }
         return;
-      case 'preset':
-        if (message.name !== 'home') {
+      }
+      case 'preset': {
+        const presets = {
+          zero: this.config.zeroPresetDeg || DEFAULT_ZERO_PRESET_DEG,
+          home: this.config.homePresetDeg || DEFAULT_HOME_PRESET_DEG,
+        };
+        const target = presets[message.name];
+        if (!target) {
           reply({ type: 'error', code: 'unknown_preset', msg: 'Unknown preset' });
           return;
         }
-        this._sendJointMotion([0, 0, 0, 0, 0, 0], 'preset:home', reply);
+        this._sendJointMotion(
+          target, `preset:${message.name}`, reply,
+          message.request_id, 'preset',
+        );
         return;
+      }
       case 'servo':
-        this._sendJointMotion(message.joints, 'servo', reply);
+        this._sendJointMotion(
+          message.joints, 'servo', reply, message.request_id, 'move_joint',
+        );
+        return;
+      case 'move_joint':
+        this._sendJointMotion(
+          message.joints_deg, message.source || 'move_joint', reply,
+          message.request_id, 'move_joint', message.time_sec,
+        );
+        return;
+      case 'move_l':
+        this._sendLinearMotion(message, reply);
         return;
       case 'gripper':
-        this._sendGripper(message.position, reply);
+        this._sendGripper(message.position, reply, message.request_id);
         return;
       default:
         reply({ type: 'error', code: 'unsupported_command', msg: 'Unsupported robot command' });
@@ -273,7 +367,10 @@ class RobotController extends EventEmitter {
     return false;
   }
 
-  _sendJointMotion(joints, source, reply) {
+  _sendJointMotion(
+    joints, source, reply, suppliedRequestId = null,
+    command = 'move_joint', suppliedTimeSec = null,
+  ) {
     const validation = validateJointTarget(joints);
     if (!validation.ok) {
       reply({ type: 'error', code: validation.code, msg: validation.message });
@@ -293,22 +390,75 @@ class RobotController extends EventEmitter {
       return;
     }
 
-    const timeSec = moveTimeFor(
-      validation.joints,
-      this.latestJointsDeg,
-      DEFAULT_MAX_SPEEDS_DEG_S,
-      this.config,
-    );
-    this.bridge.send({
+    const requestId = typeof suppliedRequestId === 'string' && suppliedRequestId
+      ? suppliedRequestId : randomUUID();
+    const timeSec = Number.isFinite(suppliedTimeSec)
+      ? Math.max(0.2, Math.min(this.config.maxMoveTimeSec, suppliedTimeSec))
+      : moveTimeFor(
+        validation.joints,
+        this.latestJointsDeg,
+        DEFAULT_MAX_SPEEDS_DEG_S,
+        this.config,
+      );
+    this.pendingLowLevel.set(requestId, command);
+    const sent = this.bridge.send({
       cmd: 'move_joint',
       joints_rad: validation.joints.map(value => value * Math.PI / 180),
       time_sec: timeSec,
-      request_id: randomUUID(),
+      request_id: requestId,
       source,
     });
+    if (!sent) {
+      this.pendingLowLevel.delete(requestId);
+      reply({
+        type: 'error', code: 'bridge_unavailable',
+        msg: 'Robot bridge is unavailable',
+      });
+    }
   }
 
-  _sendGripper(position, reply) {
+  _sendLinearMotion(message, reply) {
+    if (!linearTargetAllowed(message.position) || !finiteVector(message.euler, 3)) {
+      reply({
+        type: 'error', code: 'linear_target_invalid',
+        msg: 'Cartesian target is outside the approved workspace',
+      });
+      return;
+    }
+    const timeSec = Number(message.time_sec);
+    if (!Number.isFinite(timeSec) || timeSec < 0.2
+        || timeSec > this.config.maxMoveTimeSec) {
+      reply({
+        type: 'error', code: 'move_time_invalid', msg: 'move_l time is invalid',
+      });
+      return;
+    }
+    const readinessError = this._motionReadinessError();
+    if (readinessError) {
+      reply(readinessError);
+      return;
+    }
+    const requestId = typeof message.request_id === 'string' && message.request_id
+      ? message.request_id : randomUUID();
+    this.pendingLowLevel.set(requestId, 'move_l');
+    const sent = this.bridge.send({
+      cmd: 'move_l',
+      position: [...message.position],
+      euler: [...message.euler],
+      time_sec: timeSec,
+      request_id: requestId,
+      source: message.source || 'robot-service',
+    });
+    if (!sent) {
+      this.pendingLowLevel.delete(requestId);
+      reply({
+        type: 'error', code: 'bridge_unavailable',
+        msg: 'Robot bridge is unavailable',
+      });
+    }
+  }
+
+  _sendGripper(position, reply, suppliedRequestId = null) {
     const normalized = Number(position);
     if (!Number.isFinite(normalized) || normalized < 0 || normalized > 1) {
       reply({
@@ -323,7 +473,19 @@ class RobotController extends EventEmitter {
       reply(readinessError);
       return;
     }
-    this.bridge.send({ cmd: 'gripper', position: normalized, request_id: randomUUID() });
+    const requestId = typeof suppliedRequestId === 'string' && suppliedRequestId
+      ? suppliedRequestId : randomUUID();
+    this.pendingLowLevel.set(requestId, 'gripper');
+    const sent = this.bridge.send({
+      cmd: 'gripper', position: normalized, request_id: requestId,
+    });
+    if (!sent) {
+      this.pendingLowLevel.delete(requestId);
+      reply({
+        type: 'error', code: 'bridge_unavailable',
+        msg: 'Robot bridge is unavailable',
+      });
+    }
   }
 
   _motionReadinessError() {
@@ -363,12 +525,32 @@ class RobotController extends EventEmitter {
       this.latestGripperPosition = Number.isFinite(message.gripper_position)
         ? message.gripper_position
         : null;
+      this.stateSequence += 1;
+      this.latestProducerMonotonicNs = Math.max(
+        this.latestProducerMonotonicNs + 1,
+        Number(process.hrtime.bigint()),
+      );
+      const velocitiesDegS = degrees(message.velocities_rad_s || []);
+      const flangePositionM = [...(message.tcp_position_m || [])];
+      const flangeEulerRad = [...(message.tcp_euler_rad || [])];
       this.emit('message', {
         type: 'robot_state',
+        connected: this.bridge.connected,
+        healthy: this.stateReady,
+        moving: this.motionActive,
+        state_sequence: this.stateSequence,
+        producer_monotonic_ns: this.latestProducerMonotonicNs,
+        pose_frame: 'robot_flange',
+        flange_position_m: flangePositionM,
+        flange_euler_rad: flangeEulerRad,
+        joints_deg: [...this.latestJointsDeg],
+        velocities_deg_s: velocitiesDegS,
+        gripper_width_m: message.gripper_distance_m,
+        gripper_position: message.gripper_position,
         joints: this.latestJointsDeg,
-        velocities: degrees(message.velocities_rad_s || []),
+        velocities: velocitiesDegS,
         torques: message.torques_nm || [],
-        tcpPos: (message.tcp_position_m || []).map(value => Number(value) * 1000),
+        tcpPos: flangePositionM.map(value => Number(value) * 1000),
         tcpEuler: degrees(message.tcp_euler_rad || []),
         gripperPosition: message.gripper_position,
         gripperDistanceMm: Number.isFinite(message.gripper_distance_m)
@@ -385,7 +567,10 @@ class RobotController extends EventEmitter {
       return;
     }
     if (message.type === 'command_accepted') {
-      this.emit('message', { ...message, type: 'command_status', status: 'accepted' });
+      const command = this.pendingLowLevel.get(message.request_id) || message.command;
+      this.emit('message', {
+        ...message, command, type: 'command_status', status: 'accepted',
+      });
       return;
     }
     if (message.type === 'command_complete') {
@@ -417,7 +602,16 @@ class RobotController extends EventEmitter {
           maxJointDeltaDeg,
         });
       }
-      this.emit('message', { ...message, type: 'command_status', status: 'complete' });
+      const command = this.pendingLowLevel.get(message.request_id) || message.command;
+      this.pendingLowLevel.delete(message.request_id);
+      this.emit('message', {
+        ...message, command, type: 'command_status', status: 'complete',
+        reached: message.reached !== false,
+        actual_joints_deg: [...(this.latestJointsDeg || [])],
+        actual_width_m: Number.isFinite(message.actual_position)
+          ? message.actual_position * 0.080 : undefined,
+        robot_healthy: this.stateReady,
+      });
       return;
     }
     if (message.type === 'error') {
@@ -431,7 +625,13 @@ class RobotController extends EventEmitter {
           taskId: pending.primitive.taskId, traceId: pending.primitive.traceId,
         });
       }
-      this.emit('message', { ...message, type: 'error', msg: message.message });
+      const command = this.pendingLowLevel.get(message.request_id)
+        || message.command || null;
+      this.pendingLowLevel.delete(message.request_id);
+      this.emit('message', {
+        ...message, type: 'error', command,
+        reason: message.message, msg: message.message,
+      });
       return;
     }
     if (message.type === 'log') {
@@ -444,6 +644,8 @@ class RobotController extends EventEmitter {
     this.started = false;
     for (const pending of this.pendingExecutions.values()) clearTimeout(pending.timer);
     this.pendingExecutions.clear();
+    this.pendingLowLevel.clear();
+    this.pendingStopRequestId = null;
     this.bridge.shutdown();
     await new Promise(resolve => setTimeout(resolve, 450));
   }

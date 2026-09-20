@@ -1,0 +1,17 @@
+schema: thirdhand.skill-manifest.v1
+id: vision.select-target
+version: 0.1.0
+summary: Select or release a stable bottle target in the Vision Service without robot motion.
+risk: read-only
+lifecycle: worker
+runtime: python
+operations: [invoke, status]
+requires:
+  services: [vision]
+  devices: [xvisio]
+  models: [grounding-dino-tiny, sam2.1-hiera-tiny, norfair]
+schemas:
+  input: schemas/input.json
+  result: schemas/result.json
+entrypoint: src/worker.py
+healthcheck: status

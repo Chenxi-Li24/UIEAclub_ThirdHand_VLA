@@ -56,7 +56,10 @@ function makeBridge() {
     type: 'config',
     connection: { connected: true, simulated: false },
     motion: { speedScale: 0.05 },
-    presets: { home: [0, 0, 0, 0, 0, 0] },
+    presets: {
+      zero: [0, 0, 0, 0, 0, 0],
+      home: [-0.163927, -2.611904, -4, 33.058620, 0.338783, 0.185784],
+    },
   });
   socket.receive({
     type: 'robot_state',
@@ -283,7 +286,10 @@ assert.throws(() => normalizeEndpoint('http://127.0.0.1:3000/ws'), /127\.0\.0\.1
   const { bridge, socket, advance } = makeBridge();
   const events = [];
   bridge.on('message', message => events.push(message));
-  assert.deepStrictEqual(bridge.getPreset('home'), [0, 0, 0, 0, 0, 0]);
+  const safeHome = [
+    -0.163927, -2.611904, -4, 33.058620, 0.338783, 0.185784,
+  ];
+  assert.deepStrictEqual(bridge.getPreset('home'), safeHome);
   assert.strictEqual(bridge.send({
     cmd: 'preset_home', name: 'home', request_id: 'local-home-1',
   }), true);
@@ -297,7 +303,7 @@ assert.throws(() => normalizeEndpoint('http://127.0.0.1:3000/ws'), /127\.0\.0\.1
   });
   socket.receive({ type: 'motion_state', stateName: 'IDLE' });
   advance(10);
-  socket.receive({ type: 'robot_state', joints: [0, 0, 0, 0, 0, 0], stateName: 'IDLE' });
+  socket.receive({ type: 'robot_state', joints: safeHome, stateName: 'IDLE' });
   assert(events.some(event => event.type === 'command_complete' && event.request_id === 'local-home-1'));
   assert.strictEqual(bridge.inFlight, null);
   bridge.shutdown();

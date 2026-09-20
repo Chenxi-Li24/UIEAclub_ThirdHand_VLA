@@ -32,4 +32,8 @@ Requires Robot, Vision and Supervisor services plus Startouch and XVisio devices
 
 ## Current Status
 
-Contract placeholder only. Worker and schemas are not migrated; Registry must report `implementation_not_migrated`.
+The web, Vision Service and Robot Service adapters are migrated. The supervised
+bottle workflow lives in `skills/manipulation/bottlegrasp` and is exposed
+through the loopback bottle-pick runtime on port 8766. Physical execution remains
+locked until the approved calibration, v3 depth evidence, validated placement
+path and explicit supervised-motion authorization are all present.

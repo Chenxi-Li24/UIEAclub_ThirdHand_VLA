@@ -5,6 +5,7 @@
 ```bash
 ./thirdhand doctor --profile PROFILE
 ./thirdhand start --profile PROFILE
+./thirdhand ensure --profile PROFILE
 ./thirdhand status --profile PROFILE
 ./thirdhand stop --profile PROFILE
 ./thirdhand verify-assets
@@ -17,11 +18,16 @@
 | `simulation` | 平台基础生命周期测试 | 否 | 五个 fake service |
 | `manual-control-simulation` | 网页和 Robot Service 集成测试 | 否 | Robot 13000 + Web 9983 |
 | `gripper-plan-simulation` | 不替换当前服务的浏览器授权链验收 | 否；Robot 强制模拟 | Robot 13000 + Orchestrator 13200 + Web 19983；只读复用当前 3004/3100 |
-| `manual-control` | 人工监督的真机控制、语音和视觉 | Robot 仅在网页显式连接后访问 CAN；Vision 访问 XVisio | Robot 3000 + Speech 3004 + Vision 3100 + Orchestrator 3200 + Web 9983 |
+| `manual-control` | 人工监督的真机控制、语音和视觉 | Robot 仅在网页显式连接后访问 CAN；Vision 访问 XVisio | Robot 3000 + Speech 3004 + Vision 3100 + Bottle-pick 8766 + Web 9983 |
 | `default` | 记录最终端口所有权 | 否，条目禁用 | 未选择正式验收 profile |
 
 `start` 只启动 profile 中 `enabled: true` 的服务。服务必须写入
 `runtime/run/<service>.ready` 后才算启动成功。重复执行不会创建第二套已归属服务。
+
+`ensure` 是开发者手动触发的一次性“检查并补齐”：按 profile 顺序保留已监听的
+预期服务，只启动端口缺失的服务，并在输出结果后退出。它不在后台运行、不做开机
+自启、不自动恢复后来停止的服务，也不连接 Robot SDK。单项启动失败不会回滚其他
+已成功服务；只清理由本次 `ensure` 创建但未能监听端口的进程。
 
 ## Process Ownership
 
@@ -40,7 +46,7 @@
 1. Robot Service 启动，但不连接 SDK；
 2. Speech Service 载入正式本地 ASR；
 3. Vision Service 启动 XVisio 采集，识别模型独立加载；
-4. Orchestrator 在 `127.0.0.1:3200` 启动，只生成计划并调度受授权 Skill；
+4. Bottle-pick runtime 在 `127.0.0.1:8766` 启动；实机执行安全锁保持独立；
 5. Web Gateway 最后监听 LAN 9983。
 
 Robot Service 启动只产生空闲 Python 桥；浏览器连接 Web Gateway 也不会连接 SDK。只有浏览器显式发送 `{"cmd":"connect"}` 才允许 Robot Service 初始化硬件。
@@ -63,20 +69,22 @@ Robot Service 启动只产生空闲 Python 桥；浏览器连接 Web Gateway 也
 - CAN 无反馈或反馈过期：拒绝构造机械臂或拒绝运动；
 - SDK 状态不足六关节、含非有限数或超过 500 ms：拒绝运动；
 - 运动中的第二条命令：拒绝；
-- 非显式 home 的全零目标：拒绝。
-- Orchestrator 不可达、Robot 状态超过 500 ms、计划过期或摘要变化：拒绝授权；
+- 非显式 `zero` 预设的全零目标：拒绝；安全 `home` 是经过 commissioning 的非零姿态。
+- Bottle-pick runtime 不可达、Robot 状态过期或目标证据无效：拒绝生成抓取任务；
 - 重复确认、授权重放或执行原语重放：拒绝且不重试；
 - 夹爪反馈超时或任一机械臂关节变化超过 0.5°：不得报告成功。
 
 ## Replacing External Services
 
-当前 3000、3004、3100 或 9983 由 Launcher 外部进程占用时，`thirdhand start` 会在启动任何子进程前失败。切换到统一 profile 必须人工完成：
+当前 3000、3004、3100、8766 或 9983 由 Launcher 外部进程占用时，严格模式的
+`thirdhand start` 会在启动任何子进程前失败。日常开发使用 `thirdhand ensure` 可保留
+身份探测通过的已有服务，并只补齐缺失端口。切换整套进程所有权时仍必须人工完成：
 
 1. 确认机械臂静止、工作区清空，物理急停或断电可触达；
 2. 在当前页面断开 SDK，并确认 Robot health 为 `connected:false`；
 3. 用 `ss -ltnp` 识别 3000、3004、3100、9983 的精确 PID；
 4. 取得针对这些 PID 的明确停止授权后才停止；
-5. 确认 3000、3004、3100、3200、9983 全部空闲；
+5. 确认 3000、3004、3100、8766、9983 全部空闲；
 6. 启动 `manual-control`，并核对 `runtime/run/state.json` 中所有 PID 均为 Launcher 所有。
 
 Launcher 不会自动执行第 2 至第 4 步，也不会停止身份不匹配的进程。

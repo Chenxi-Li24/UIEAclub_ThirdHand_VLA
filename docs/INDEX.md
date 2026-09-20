@@ -22,6 +22,7 @@
 |---|---|
 | Web Gateway、9983 和后端代理 | [`apps/WEB_GATEWAY.md`](apps/WEB_GATEWAY.md) |
 | Robot Service、3000 和运动安全 | [`services/ROBOT_SERVICE_PROTOCOL.md`](services/ROBOT_SERVICE_PROTOCOL.md) |
+| 视觉、Robot 与网页 Skill adapter 完整链路 | [`services/UNIFIED_ADAPTER_CHAIN.md`](services/UNIFIED_ADAPTER_CHAIN.md) |
 | Skill manifest、授权与结果协议 | [`SKILL_PROTOCOL.md`](SKILL_PROTOCOL.md) |
 | 资产来源、哈希和准备方式 | [`assets/ASSET_PROVENANCE.md`](assets/ASSET_PROVENANCE.md) |
 

@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 'use strict';
 
+const { randomUUID } = require('node:crypto');
 const fs = require('node:fs');
 const http = require('node:http');
 const path = require('node:path');
@@ -86,6 +87,27 @@ function createVisionService(options = {}) {
       return;
     }
 
+    if (request.method === 'GET' && pathname === '/api/vision/observation') {
+      const observation = camera.observation?.() || null;
+      writeJson(response, observation ? 200 : 503, observation || {
+        code: 'observation_unavailable',
+        robotControlEnabled: false,
+      });
+      return;
+    }
+
+    const targetMatch = pathname.match(/^\/api\/vision\/targets\/([1-5])$/);
+    if (request.method === 'GET' && targetMatch) {
+      const stableId = Number(targetMatch[1]);
+      const observation = camera.observation?.(stableId) || null;
+      writeJson(response, observation ? 200 : 404, observation || {
+        code: 'target_not_observed',
+        stableId,
+        robotControlEnabled: false,
+      });
+      return;
+    }
+
     if (request.method === 'GET' && STREAMS.has(pathname)) {
       const kind = STREAMS.get(pathname);
       const unavailable = streamUnavailable(camera.status(), kind);
@@ -117,13 +139,19 @@ function createVisionService(options = {}) {
           });
           return;
         }
+        const requestId = (
+          typeof body.requestId === 'string' && body.requestId.length > 0
+            && body.requestId.length <= 128
+        ) ? body.requestId : randomUUID();
         const accepted = camera.send({
           type: 'select_target',
           stableId: body.stableId,
+          requestId,
         });
         writeJson(response, accepted ? 202 : 503, {
           accepted,
           stableId: body.stableId,
+          requestId,
           robotControlEnabled: false,
         });
       } catch (error) {
@@ -182,12 +210,20 @@ function createVisionService(options = {}) {
       if (message?.type === 'select_target' &&
           Number.isSafeInteger(message.stableId) &&
           message.stableId >= 1 && message.stableId <= 5) {
+        const requestId = (
+          typeof message.requestId === 'string' && message.requestId.length > 0
+            && message.requestId.length <= 128
+        ) ? message.requestId : randomUUID();
         accepted = camera.send({
           type: 'select_target',
           stableId: message.stableId,
+          requestId,
         });
       } else if (message?.type === 'release_target') {
-        accepted = camera.send({ type: 'release_target' });
+        accepted = camera.send({
+          type: 'release_target',
+          requestId: message.requestId,
+        });
       }
       if (!accepted && socket.readyState === WebSocket.OPEN) {
         socket.send(JSON.stringify({

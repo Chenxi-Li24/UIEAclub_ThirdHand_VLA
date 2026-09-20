@@ -79,6 +79,18 @@ cd /home/nieqingcao/ThirdHand/UIEAclub_ThirdHand_VLA
 ./thirdhand stop --profile manual-control-simulation
 ```
 
+日常开发的一键“检查并补齐”模式：
+
+```bash
+./thirdhand ensure --profile manual-control
+```
+
+`ensure` 只保留已监听的预期服务并按 profile 顺序启动缺失端口；它不会重启
+`3000/3100` 等现有服务，不会常驻监控、开机自启或自动连接机械臂。Windows
+桌面入口在全部五项服务就绪后打开 `http://192.168.58.68:9983/`；Ubuntu 桌面
+入口只启动服务。安装方法见 [`docs/ONE_CLICK_START.md`](docs/ONE_CLICK_START.md)
+或[中文说明](docs/ONE_CLICK_START_CN.md)。
+
 真机模式仅在机械臂周围安全、独立硬件急停可触达、`can0` 正常时使用：
 
 ```bash

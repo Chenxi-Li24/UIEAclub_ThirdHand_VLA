@@ -96,6 +96,19 @@ function createRobotService(options = {}) {
         }));
         return;
       }
+      if (message?.type === 'capability_request') {
+        if (message.schema !== 'thirdhand-robot-capability-v1'
+            || typeof message.nonce !== 'string' || !message.nonce) {
+          socket.send(JSON.stringify({
+            type: 'error',
+            code: 'capability_request_invalid',
+            msg: 'Invalid capability request',
+          }));
+          return;
+        }
+        socket.send(JSON.stringify(controller.capabilityResponse(message.nonce)));
+        return;
+      }
       controller.handleCommand(message, reply => {
         if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify(reply));
       });

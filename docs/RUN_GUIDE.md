@@ -91,7 +91,7 @@ git status --short --branch
 
 ```bash
 ip -details link show can0
-ss -ltnp | grep -E ':(3000|3004|3100|3200|9983)\b' || true
+ss -ltnp | grep -E ':(3000|3004|3100|8766|9983)\b' || true
 ./thirdhand doctor --profile manual-control
 ```
 
@@ -126,7 +126,7 @@ SDK 内的二进制扩展必须匹配项目 Python 版本。首次导入 SDK、�
 - Robot Service 只监听 `127.0.0.1:3000`；
 - Speech Service 只监听 `127.0.0.1:3004`；
 - Vision Service 只监听 `127.0.0.1:3100`；
-- Orchestrator 只监听 `127.0.0.1:3200`；
+- Bottle-pick runtime 只监听 `127.0.0.1:8766`；
 - Python 桥已就绪，但不会构造 `SingleArm`；
 - 电机不会被服务启动动作使能。
 
@@ -135,7 +135,7 @@ SDK 内的二进制扩展必须匹配项目 Python 版本。首次导入 SDK、�
 语音或文字“打开夹爪/关闭夹爪”的执行链为：
 
 ```text
-Speech candidate -> Web /plan -> Orchestrator TaskPlan
+Speech candidate -> Web adapter -> Bottle-pick request
 -> 页面显示目标与夹伤风险 -> 用户确认一次
 -> 一次性 Authorization -> gripper Skill -> Robot /execution
 -> Startouch 夹爪反馈与六关节偏移验证 -> SkillResult
@@ -177,7 +177,8 @@ pgrep -af 'services/robot/src/server.js|apps/web/src/server.js|startouch_bridge.
 - 最近 500 ms 内有合法六关节反馈；
 - 前一个运动已结束；
 - 所有目标为有限数值且在限位内；
-- 全零目标只能通过显式 `preset: home` 发送；
+- 全零目标只能通过显式 `preset: zero` 发送；
+- `preset: home` 指向经过 commissioning 的非零安全 Home；
 - 网页连接本身不会产生运动命令。
 
 夹爪输入为 `0.0..1.0`，SDK 映射为约 0..80 mm 行程；当前 DM4310 机构按约 90° 电机总转角由 SDK 完成映射。
@@ -246,13 +247,13 @@ git diff --check
 | `127.0.0.1:13000` | Robot Service | 模拟 profile |
 | `127.0.0.1:3100` | Vision Service | XVisio 原始/识别/深度流和目标选择 |
 | `127.0.0.1:3004` | Speech Service | 正式本地 ASR、对话和候选动作 |
-| `127.0.0.1:3200` | Orchestrator | 计划、一次性授权与 Skill 调度；不拥有硬件 |
+| `127.0.0.1:8766` | Bottle-pick runtime | 接收视觉目标并生成抓取任务；实机执行仍由独立安全锁控制 |
 
 本机已有另一个程序只在 Tailscale 地址 `100.85.63.78:9983` 监听；已验证它可与本项目绑定的 LAN 地址 `192.168.58.68:9983` 共存。
 
 ## 10. 切换当前在线服务
 
-如果 `./thirdhand start --profile manual-control` 报告 `external_service_ownership`，不要直接杀进程。先确认机械臂静止、清空夹爪和工作区，并保持硬件急停可触达；然后在当前网页断开 SDK，记录目标端口的精确 PID。只有获得停止这些 PID 的单独批准后，才可停止并确认 3000、3004、3100、3200、9983 全部空闲，再启动统一 profile。
+如果 `./thirdhand start --profile manual-control` 报告 `external_service_ownership`，不要直接杀进程。先确认机械臂静止、清空夹爪和工作区，并保持硬件急停可触达；然后在当前网页断开 SDK，记录目标端口的精确 PID。只有获得停止这些 PID 的单独批准后，才可停止并确认 3000、3004、3100、8766、9983 全部空闲，再启动统一 profile。日常开发的一次性缺失补齐使用 `./thirdhand ensure --profile manual-control`，它不会停止已监听的服务。
 
 当前任务未执行上述切换，因此本指南中的新 `/plan` 页面行为要等统一服务启动后才能在 9983 验收。
 

@@ -15,6 +15,20 @@ function load(profile) {
   );
 }
 
+test('speech profiles configure separate text and vision models', () => {
+  for (const profile of ['default', 'manual-control']) {
+    const speech = load(profile).find(item => item.id === 'speech');
+    assert.equal(speech.env.TEXT_LLM_MODEL, 'deepseek-v4-pro', profile);
+    assert.equal(speech.env.VISION_LLM_MODEL, 'deepseek-flash', profile);
+    assert.equal(
+      speech.env.VISION_STREAM_URL,
+      'http://127.0.0.1:3100/camera/xvisio/raw',
+      profile,
+    );
+    assert.equal(speech.env.VISION_QA_MAX_FRAME_AGE_MS, '2000', profile);
+  }
+});
+
 test('manual simulation profile launches migrated robot and web services', () => {
   const services = load('manual-control-simulation');
   assert.deepEqual(services.map(item => item.id), ['robot', 'web']);

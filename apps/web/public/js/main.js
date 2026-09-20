@@ -6,6 +6,19 @@ import { ColladaLoader } from 'three/addons/loaders/ColladaLoader.js';
 import { VoiceControl } from './voice-control.js?v=10';
 console.log('[main.js] Modules imported, THREE keys:', Object.keys(THREE).length);
 
+function formatAgentTrace(payload) {
+  const parts = [
+    payload?.stage || 'agent',
+    payload?.status || 'unknown',
+  ];
+  if (payload?.model) parts.push(payload.model);
+  if (payload?.frameId) parts.push(`frame=${payload.frameId}`);
+  if (Number.isFinite(payload?.frameAgeMs)) parts.push(`age=${payload.frameAgeMs}ms`);
+  if (Number.isFinite(payload?.retryCount)) parts.push(`retry=${payload.retryCount}`);
+  if (payload?.code) parts.push(`code=${payload.code}`);
+  return `[Agent] ${parts.join(' · ')}`;
+}
+
 const DIRECTIONAL_PREVIEW_MAPPING = Object.freeze({
   'turn.left': [[0, 1]],
   'turn.right': [[0, -1]],
@@ -1588,6 +1601,7 @@ function startApp() {
       send: message => ws.send(message)
     },
     onExecutionResult: () => ui?.clearVoicePreview({ restore: true, reason: '真实执行结果已返回' }),
+    onAgentTrace: payload => ui?._log(formatAgentTrace(payload)),
     onPanelOpen: () => {
       if (ui) {
         ui.closeLog();

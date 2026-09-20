@@ -104,6 +104,39 @@ ASR_V2_MODEL_IDS = frozenset(model["modelId"] for model in ASR_V2_MODELS)
 
 LOG = logging.getLogger("thirdhand.voice_bridge")
 
+AGENT_TRACE_STRING_FIELDS = frozenset({
+    "stage", "status", "model", "frameId", "code",
+})
+AGENT_TRACE_NUMBER_FIELDS = frozenset({"frameAgeMs", "retryCount"})
+
+
+def sanitize_agent_trace(value: Any) -> Optional[dict[str, Any]]:
+    """Return the small public trace subset that is safe for the 9983 log."""
+    if not isinstance(value, dict):
+        return None
+
+    safe: dict[str, Any] = {}
+    for key in AGENT_TRACE_STRING_FIELDS:
+        item = value.get(key)
+        if isinstance(item, str):
+            item = item.strip()
+            if item:
+                safe[key] = item[:96]
+
+    for key in AGENT_TRACE_NUMBER_FIELDS:
+        item = value.get(key)
+        if (
+            isinstance(item, (int, float))
+            and not isinstance(item, bool)
+            and math.isfinite(item)
+            and 0 <= item <= 600_000
+        ):
+            safe[key] = item
+
+    if "stage" not in safe or "status" not in safe:
+        return None
+    return safe
+
 
 class ProtocolError(Exception):
     def __init__(
@@ -729,6 +762,13 @@ class VoiceBridge:
                 llm_available = True
                 reply_text = str(llm_result.get("text") or "").strip()
                 actions = llm_result.get("actions") or []
+                await self._send_agent_traces(
+                    context,
+                    session_id,
+                    llm_result.get("trace"),
+                    input_mode="text",
+                    reply_to=reply_to,
+                )
                 await self._maybe_speak(
                     context, session_id, reply_text, actions,
                     reply_to=reply_to,
@@ -1013,6 +1053,12 @@ class VoiceBridge:
                     llm_available = True
                     reply_text = str(llm_result.get("text") or "").strip()
                     actions = llm_result.get("actions") or []
+                    await self._send_agent_traces(
+                        context,
+                        session.session_id,
+                        llm_result.get("trace"),
+                        input_mode="audio",
+                    )
                     await self._maybe_speak(
                         context, session.session_id, reply_text, actions,
                     )
@@ -1736,6 +1782,29 @@ class VoiceBridge:
             "sourceText": source_text,
             "requiresConfirmation": intent != "safety.stop.request",
         }
+
+    async def _send_agent_traces(
+        self,
+        context: ConnectionContext,
+        session_id: str,
+        traces: Any,
+        *,
+        input_mode: str,
+        reply_to: Optional[str] = None,
+    ) -> None:
+        if not isinstance(traces, list):
+            return
+        for value in traces[:8]:
+            safe = sanitize_agent_trace(value)
+            if safe is None:
+                continue
+            await self._send(
+                context,
+                "agent.trace",
+                session_id,
+                {"inputMode": input_mode, **safe},
+                reply_to=reply_to,
+            )
 
     async def _send(
         self,

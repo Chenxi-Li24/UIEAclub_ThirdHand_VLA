@@ -20,9 +20,11 @@ import queue
 import threading
 import argparse
 import warnings
+import importlib.util
 from collections import deque
 from dataclasses import dataclass, field
-from typing import Optional, List, Dict, Callable
+from pathlib import Path
+from typing import Any, Optional, List, Dict, Callable
 
 import numpy as np
 
@@ -728,6 +730,28 @@ ROBOT_TOOLS = [
     },
 ]
 
+VISION_INSPECT_TOOL = {
+    "name": "vision_inspect_scene",
+    "description": (
+        "Read one fresh frame from the existing XVisio stream and return a read-only "
+        "scene observation. Use this when the answer depends on what the camera can see. "
+        "This tool cannot move the robot or select a grasp target."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "question": {
+                "type": "string",
+                "description": "The current visual question to answer from a fresh frame.",
+            },
+        },
+        "required": ["question"],
+        "additionalProperties": False,
+    },
+}
+
+AGENT_TOOLS = [*ROBOT_TOOLS, VISION_INSPECT_TOOL]
+
 SYSTEM_PROMPT = f"""You are a bilingual (EN/ZH) voice assistant for a desktop robot arm. The user speaks English or Chinese; you understand both and reply in the same language they used.
 
 Robot capabilities:
@@ -741,6 +765,7 @@ Robot capabilities:
 - go_home(): Select the existing right-side Home preset; never generate or modify its six joint targets
 - software_stop(): Immediately request SDK cleanup and motor disable; not a physical E-stop
 - pick_and_place_bottle(): Select the predefined Coke bottle pipeline; an external adapter owns all motion
+- vision_inspect_scene(question): Inspect one fresh camera frame without moving the robot
 - say(text): Speak a response to the user
 
 Approved Directional vocabulary examples. Match meaning and ordinary paraphrases, not only exact strings:
@@ -758,10 +783,12 @@ Rules:
 4. A direct command naming one joint uses set_joint_angle or adjust_joint_angle. If the user explicitly names 2-6 distinct joints and their degree targets or signed changes (for example J1 +10 and J2 -10), use move_multiple_joints once; preserve each value exactly and do not invent any unspecified joint motion. A directional request may select one allowed action or two to five non-conflicting moves. If an action has no degree number, use 20 for that action. Examples: "抬高点，向左点" means lift.up 20 and turn.left 20. "抬高并向左 10 度" means lift.up 10 and turn.left 10 because one trailing magnitude applies to the coordinated group. "抬高 10 度，向左 15 度" means lift.up 10 and turn.left 15 because the values are named separately. Treat 再, 再来一点, 再多一点, again, and a little more as a new request that repeats the most recent supported action in the conversation, using the approved default of 20 degrees unless the user states a new magnitude. The repeated action still creates a new candidate and requires a new confirmation; never append it to a pending candidate or auto-execute it. Never invent joint limits; the execution service validates the resulting targets against configured mechanical limits.
 5. Use software_stop immediately for an explicit stop request. Explain that it is not the physical E-stop.
 6. Keep replies concise (1-2 sentences) and use the same language as the user.
-7. Never rewrite or invent hardware execution results."""
+7. When the answer depends on the current camera view, call vision_inspect_scene. Decide semantically rather than by a fixed keyword list. Explicit requests such as "重新看一下" or "use the camera" require a fresh visual call. If the user explicitly says not to use the camera or to answer only from the previous result, do not call it and make clear that prior context may not describe the current scene.
+8. A visual observation is evidence only. Never turn it into coordinates, a grasp target, a trajectory, or an executed action. Preserve uncertainty from the visual result.
+9. Never rewrite or invent hardware execution results."""
 
 
-class ClaudeAgent:
+class ThirdHandController:
     """Natural language → robot actions via Anthropic API (with optional CC-Switch proxy).
 
     Supports:
@@ -775,25 +802,36 @@ class ClaudeAgent:
     )
     CC_SWITCH_PROXY = "http://127.0.0.1:15721"
 
-    def __init__(self, api_key: str = None, model: str = "auto", provider: str = "auto"):
+    def __init__(
+        self,
+        api_key: str = None,
+        model: str = "auto",
+        provider: str = "auto",
+        *,
+        client=None,
+        vision_skill=None,
+    ):
         self.provider = provider
         self._api_key = api_key or os.environ.get("ANTHROPIC_API_KEY")
         self._base_url = None
 
-        # Try CC-Switch proxy first (sets self._api_key if configured)
-        self._try_ccswitch()
+        if client is None:
+            self._try_ccswitch()
 
         has_ccswitch = bool(self._base_url)
-        if not self._api_key and not has_ccswitch:
+        if client is None and not self._api_key and not has_ccswitch:
             print("[llm] WARNING: No API key. Set ANTHROPIC_API_KEY or configure CC-Switch.")
 
         self.provider = "anthropic"
         if model == "auto":
-            model = "claude-sonnet-5"
+            model = os.environ.get("TEXT_LLM_MODEL", "deepseek-v4-pro")
         self.model = model
+        self.vision_model = os.environ.get("VISION_LLM_MODEL", "deepseek-flash")
 
-        self._client = None
+        self._client = client
+        self._vision_skill = vision_skill
         self._history = []
+        self._visual_summary: str | None = None
         info = f"provider={self.provider}, model={self.model}"
         if self._base_url:
             info += f", base_url={self._base_url}"
@@ -848,7 +886,191 @@ class ClaudeAgent:
             kwargs["base_url"] = self._base_url
         self._client = anthropic.Anthropic(**kwargs)
 
+    def _get_vision_skill(self):
+        if self._vision_skill is not None:
+            return self._vision_skill
+        self._init_client()
+        worker_path = (
+            Path(__file__).resolve().parents[3]
+            / "skills" / "vision" / "inspect-scene" / "src" / "worker.py"
+        )
+        if not worker_path.is_file():
+            raise RuntimeError("视觉 Skill 尚未安装。")
+        spec = importlib.util.spec_from_file_location("thirdhand_inspect_scene", worker_path)
+        if spec is None or spec.loader is None:
+            raise RuntimeError("视觉 Skill 无法加载。")
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        stream_url = os.environ.get(
+            "VISION_STREAM_URL",
+            "http://127.0.0.1:3100/camera/xvisio/raw",
+        )
+        try:
+            max_age_ms = int(os.environ.get("VISION_QA_MAX_FRAME_AGE_MS", "2000"))
+        except ValueError:
+            max_age_ms = 2000
+        skill_root = worker_path.parents[1]
+        self._vision_skill = module.InspectSceneSkill(
+            client=self._client,
+            frame_source=module.MjpegFrameSource(
+                stream_url,
+                timeout_seconds=max(0.1, max_age_ms / 1000),
+            ),
+            retention=module.ImageRetention(skill_root / "test_pics"),
+            model=self.vision_model,
+            max_frame_age_ms=max_age_ms,
+        )
+        return self._vision_skill
+
+    @staticmethod
+    def _language(text: str) -> str:
+        return "zh" if any("\u4e00" <= char <= "\u9fff" for char in text) else "en"
+
+    def _create_message(self):
+        return self._client.messages.create(
+            model=self.model,
+            max_tokens=1024,
+            system=SYSTEM_PROMPT,
+            tools=AGENT_TOOLS,
+            messages=self._history[-12:],
+        )
+
+    @staticmethod
+    def _parts(response) -> tuple[list[str], list[Any]]:
+        text_parts = []
+        tools = []
+        for block in getattr(response, "content", []):
+            if getattr(block, "type", None) == "text":
+                value = str(getattr(block, "text", "")).strip()
+                if value:
+                    text_parts.append(value)
+            elif getattr(block, "type", None) == "tool_use":
+                tools.append(block)
+        return text_parts, tools
+
+    @staticmethod
+    def _candidate_reply(actions: list[dict[str, Any]]) -> str:
+        for action in actions:
+            if action.get("tool") == "say":
+                value = str(action.get("input", {}).get("text", "")).strip()
+                if value:
+                    return value
+        return f"已生成 {len(actions)} 个待确认操作，请在页面确认后再执行。"
+
     def chat(self, user_text: str) -> Dict:
+        """Run one controller turn, including at most one visual Skill call."""
+        self._init_client()
+        if self._client is None:
+            return {
+                "text": f"[LLM not available] 收到: {user_text}",
+                "actions": [],
+                "trace": [],
+            }
+
+        self._history.append({"role": "user", "content": user_text})
+        try:
+            response = self._create_message()
+        except Exception as exc:
+            return {
+                "text": f"LLM 服务暂时不可用: {exc}",
+                "actions": [],
+                "trace": [],
+            }
+
+        trace: list[dict[str, Any]] = []
+        vision_used = False
+
+        while True:
+            reply_parts, tool_blocks = self._parts(response)
+            vision_blocks = [
+                block for block in tool_blocks
+                if getattr(block, "name", "") == "vision_inspect_scene"
+            ]
+
+            if vision_blocks:
+                if vision_used:
+                    return {
+                        "text": "本轮视觉检查次数已达到上限，请发起新的请求后再看。",
+                        "actions": [],
+                        "trace": trace,
+                    }
+                vision_used = True
+                block = vision_blocks[0]
+                payload = getattr(block, "input", {}) or {}
+                question = str(payload.get("question") or user_text).strip()
+
+                try:
+                    result = self._get_vision_skill().invoke(
+                        question,
+                        prior_visual_summary=self._visual_summary,
+                        language=self._language(user_text),
+                    )
+                except Exception as exc:
+                    code = str(getattr(exc, "code", "vision_failed"))
+                    trace.append({
+                        "stage": "vision.inspect_scene",
+                        "status": "failed",
+                        "code": code,
+                    })
+                    message = str(exc).strip() or "当前无法读取摄像头画面。"
+                    return {"text": message, "actions": [], "trace": trace}
+
+                summary = str(result.get("summary", "")).strip()
+                if summary:
+                    self._visual_summary = summary
+                for item in result.get("trace", []):
+                    if isinstance(item, dict):
+                        trace.append(item)
+
+                self._history.append({
+                    "role": "assistant",
+                    "content": list(getattr(response, "content", [])),
+                })
+                self._history.append({
+                    "role": "user",
+                    "content": [{
+                        "type": "tool_result",
+                        "tool_use_id": getattr(block, "id", "vision-inspect-scene"),
+                        "content": json.dumps(result, ensure_ascii=False),
+                    }],
+                })
+                try:
+                    response = self._create_message()
+                except Exception as exc:
+                    return {
+                        "text": f"视觉结果已取得，但语言模型暂时无法继续回答: {exc}",
+                        "actions": [],
+                        "trace": trace,
+                    }
+                continue
+
+            actions = [
+                {
+                    "tool": str(getattr(block, "name", "")),
+                    "input": getattr(block, "input", {}) or {},
+                }
+                for block in tool_blocks
+            ]
+            reply = " ".join(reply_parts).strip()
+            if not reply and actions:
+                reply = self._candidate_reply(actions)
+
+            self._history.append({
+                "role": "assistant",
+                "content": list(getattr(response, "content", [])) if tool_blocks else reply,
+            })
+            if tool_blocks:
+                self._history.append({
+                    "role": "user",
+                    "content": [{
+                        "type": "tool_result",
+                        "tool_use_id": getattr(block, "id", "robot-candidate"),
+                        "content": f"候选操作已生成，等待用户确认: {getattr(block, 'name', '')}",
+                    } for block in tool_blocks],
+                })
+            return {"text": reply, "actions": actions, "trace": trace}
+
+    def _legacy_chat(self, user_text: str) -> Dict:
         """Send user text → Anthropic (via CC-Switch) → execute tool calls."""
         self._init_client()
         if self._client is None:
@@ -902,6 +1124,9 @@ class ClaudeAgent:
 # ═══════════════════════════════════════════════════════════════════
 # Robot command executor (bridge to ThirdHand)
 # ═══════════════════════════════════════════════════════════════════
+
+ClaudeAgent = ThirdHandController
+
 
 class RobotExecutor:
     """
@@ -1010,7 +1235,7 @@ class VoiceAgent:
         self,
         device: str = "auto",
         whisper_model: str = "small",
-        claude_model: str = "claude-sonnet-5",
+        claude_model: str = "auto",
         mode: str = "full",
         proxy_url: str = "ws://localhost:3000/ws",
         tts_voice: str = None,  # None = auto-detect EN/ZH
@@ -1185,7 +1410,7 @@ if __name__ == "__main__":
     parser.add_argument('--whisper-model', default='small',
                         choices=['tiny', 'base', 'small', 'medium'],
                         help='Whisper model size')
-    parser.add_argument('--claude-model', default='claude-sonnet-5',
+    parser.add_argument('--claude-model', default='auto',
                         help='Claude model ID')
     parser.add_argument('--mode', default='full',
                         choices=['full', 'asr-only', 'llm-only'],

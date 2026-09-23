@@ -2,7 +2,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { planWristStep } = require('../../../apps/web/src/active-depth/candidate');
+const { planAlignmentStep, planWristStep } = require('../../../apps/web/src/active-depth/candidate');
 
 const identity4 = [[1,0,0,0],[0,1,0,0],[0,0,1,0],[0,0,0,1]];
 const limits = {
@@ -63,4 +63,55 @@ test('out-of-limit current joint state is not repaired by a proposal', () => {
   assert.deepEqual(plan(joints => ({ positionM: [0,0,0], rotation: yRotation(joints[4]) }),
     { jointsDeg: [0,0,0,0,101,0], startJointsDeg: [0,0,0,0,101,0] }),
     { ok: false, reason: 'joint_state_out_of_limits' });
+});
+
+function align(poseForJoints, extras = {}) {
+  return planAlignmentStep({
+    targetPixel: [562,327], jointsDeg, startJointsDeg: jointsDeg,
+    tFlangeCamera: identity4, poseForJoints,
+    limits: { ...limits, maxArmStepDeg: 1, maxArmCumulativeJointDeg: 5 },
+    completedSteps: 0, elapsedMs: 0, ...extras,
+  });
+}
+
+test('alignment hierarchy always chooses an improving wrist candidate before arm', () => {
+  const result = align(joints => ({
+    positionM: [0,0,0], rotation: yRotation(joints[0]*4+joints[4]),
+  }));
+  assert.equal(result.ok, true, result.reason);
+  assert.equal(result.tier, 'wrist');
+  assert.equal(result.wristExhausted, false);
+  assert.deepEqual(result.targetJointsDeg.slice(0,3), jointsDeg.slice(0,3));
+});
+
+test('arm fallback is used only after all wrist candidates are exhausted', () => {
+  const result = align(joints => ({
+    positionM: [0,0,0], rotation: yRotation(joints[0]*4),
+  }));
+  assert.equal(result.ok, true, result.reason);
+  assert.equal(result.tier, 'arm_fallback');
+  assert.equal(result.wristExhausted, true);
+  assert.deepEqual(result.targetJointsDeg.slice(3), jointsDeg.slice(3));
+  assert.ok(Math.abs(result.jointDeltasDeg[0]) <= 1);
+});
+
+test('measured wrist stagnation can explicitly force arm fallback', () => {
+  const result = align(joints => ({
+    positionM: [0,0,0], rotation: yRotation(joints[0]*4+joints[4]),
+  }), { forceArmFallback: true });
+  assert.equal(result.ok, true, result.reason);
+  assert.equal(result.tier, 'arm_fallback');
+  assert.equal(result.wristExhausted, true);
+  assert.deepEqual(result.targetJointsDeg.slice(3), jointsDeg.slice(3));
+});
+
+test('alignment hierarchy fails closed at session and camera bounds', () => {
+  const pose = joints => ({ positionM: [0,0,0], rotation: yRotation(joints[4]) });
+  assert.deepEqual(align(pose, { completedSteps: 20 }), { ok: false, reason: 'step_limit' });
+  assert.deepEqual(align(pose, { elapsedMs: 90000 }), { ok: false, reason: 'time_limit' });
+  const shifting = joints => ({
+    positionM: joints.some(Boolean) ? [0.021,0,0] : [0,0,0],
+    rotation: yRotation(joints[0]+joints[4]),
+  });
+  assert.equal(align(shifting).ok, false);
 });

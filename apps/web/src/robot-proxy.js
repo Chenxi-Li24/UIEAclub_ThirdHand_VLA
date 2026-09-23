@@ -130,6 +130,10 @@ class RobotProxy {
     for (const session of this.sessions) sendJson(session.browser, message);
   }
 
+  getRobotState() {
+    return this.languageUpstream.getRobotState();
+  }
+
   attach(browser) {
     const upstream = new WebSocket(this.robotWsUrl);
     const session = { browser, upstream, queue: [] };

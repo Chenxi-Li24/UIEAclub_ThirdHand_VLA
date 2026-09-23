@@ -26,7 +26,35 @@ checked-in mount is physically unverified and therefore adds
 `mount_unverified`. Exit code 2 means at least one blocker or invalid CLI
 input; no result is executable even when there are no blockers.
 
-Live aiming requires a separately reviewed authenticated joint-motion
-primitive, a verified mount, fresh stationary robot state, collision
-clearance, and operator confirmation. The existing manual WebSocket path is
-not a substitute.
+## Web-triggered alignment
+
+The reviewed online path is available in the XVisio drawer as **开始深度对准**.
+Selecting a target never starts motion: the operator must select stable target
+1–5 and press the button separately. Service startup also never starts a
+session. `robotControlEnabled:false` in Vision is expected because Vision owns
+evidence, not robot execution; it is not the alignment gate.
+
+The Web Gateway reads fresh Vision evidence and stationary Robot state, plans
+J4–J6 first, and uses J1–J3 only after the wrist tier has no valid improving
+candidate. Every step goes through authenticated loopback `/execution`; the
+manual `/ws` route is never a fallback. Limits are 2° per wrist step and 10°
+cumulative per wrist joint, 1° per arm step and 5° cumulative per arm joint,
+5 mm camera displacement per step, 20 mm camera displacement per session,
+20 completed steps, and 90 seconds. Three increasing depth-valid frames are
+required for `depth_acquired`.
+
+Status phases are `idle`, `observing`, `moving`, `depth_acquired`, `failed`,
+`stopped`, and `uncertain`. Stop uses the protected execution channel. An
+`uncertain` result requires physical inspection; the software does not retry,
+reverse, grasp, descend, or place automatically.
+
+Start the normal hardware profile from the repository root:
+
+```sh
+./thirdhand start --profile manual-control
+```
+
+The launcher supplies Robot and Web with the same owner-only
+`runtime/run/robot-execution.token`. Before the first live session, keep the
+physical E-stop reachable, clear the entire swept workspace, place the target
+near the depth ROI, and observe the first wrist and fallback steps separately.

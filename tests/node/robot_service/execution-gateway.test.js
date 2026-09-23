@@ -191,7 +191,11 @@ test('closing an in-flight private execution socket requests software stop', asy
   await state;
   let stopCalls = 0;
   service.controller.bridge.send = message => message.cmd === 'gripper';
-  service.controller.bridge.softwareStop = () => { stopCalls += 1; return true; };
+  service.controller.bridge.softwareStop = () => {
+    stopCalls += 1;
+    setTimeout(() => service.controller.bridge.emit('software_stop_complete', { ts: Date.now() }), 30);
+    return true;
+  };
 
   const execution = await openSocket(`ws://127.0.0.1:${address.port}/execution`, {
     headers: { 'x-thirdhand-execution-token': 'a'.repeat(64) },
@@ -209,4 +213,142 @@ test('closing an in-flight private execution socket requests software stop', asy
   assert.equal(stopCalls, 1);
   assert.equal(service.controller.pendingExecutions.size, 0);
   manual.close();
+});
+
+function alignmentPrimitive(startJointsDeg, changes = {}) {
+  const parameters = {
+    sessionId: 'session-1', stableId: 2, frameId: 41,
+    evidenceId: `sha256:${'b'.repeat(64)}`, motionEpoch: 3,
+    tier: 'wrist', wristExhausted: false,
+    startJointsDeg: [...startJointsDeg],
+    targetJointsDeg: startJointsDeg.map((value, index) => index === 4 ? value + 1 : value),
+    timeoutMs: 3000,
+    ...(changes.parameters || {}),
+  };
+  return {
+    schema: 'thirdhand.execution-primitive.v1', primitiveId: changes.primitiveId || 'align-1',
+    traceId: 'trace-1', taskId: 'active-depth:session-1',
+    authorizationId: 'active-depth:session-1', planDigest: `sha256:${'a'.repeat(64)}`,
+    operation: 'vision.align.step', parameters,
+  };
+}
+
+async function connectedExecutionService(t, name) {
+  const runtime = fs.mkdtempSync(path.join(os.tmpdir(), `thirdhand-${name}-`));
+  const service = createRobotService(robotOptions(runtime));
+  t.after(async () => { await service.close(); fs.rmSync(runtime, { recursive: true, force: true }); });
+  const address = await service.start();
+  const manual = await openSocket(`ws://127.0.0.1:${address.port}/ws`);
+  t.after(() => manual.close());
+  const connected = nextMessage(manual, message => message.type === 'connection' && message.connected);
+  manual.send(JSON.stringify({ cmd: 'connect' }));
+  await connected;
+  const statePromise = nextMessage(manual, message => message.type === 'robot_state');
+  manual.send(JSON.stringify({ cmd: 'status' }));
+  const state = await statePromise;
+  const execution = await openSocket(`ws://127.0.0.1:${address.port}/execution`, {
+    headers: { 'x-thirdhand-execution-token': 'a'.repeat(64) },
+  });
+  t.after(() => execution.close());
+  return { service, execution, joints: state.joints_deg };
+}
+
+test('bounded wrist and exhausted-arm alignment primitives execute one joint command', async (t) => {
+  const { service, execution, joints } = await connectedExecutionService(t, 'alignment-valid');
+  const sent = [];
+  const originalSend = service.controller.bridge.send.bind(service.controller.bridge);
+  service.controller.bridge.send = message => {
+    if (message.cmd === 'move_joint') sent.push(message);
+    return originalSend(message);
+  };
+
+  const wrist = alignmentPrimitive(joints);
+  const wristDone = nextMessage(execution, message => message.type === 'execution.status'
+    && (message.primitiveId === wrist.primitiveId || message.code === 'primitive_invalid')
+    && message.status !== 'accepted');
+  execution.send(JSON.stringify(wrist));
+  const wristResult = await wristDone;
+  assert.equal(wristResult.code, 'target_reached', JSON.stringify(wristResult));
+
+  const fresh = [...service.controller.latestJointsDeg];
+  const arm = alignmentPrimitive(fresh, {
+    primitiveId: 'align-2',
+    parameters: {
+      tier: 'arm_fallback', wristExhausted: true,
+      targetJointsDeg: fresh.map((value, index) => index === 0 ? value + 0.5 : value),
+      motionEpoch: 4, frameId: 42,
+    },
+  });
+  const armDone = nextMessage(execution, message => message.primitiveId === arm.primitiveId && message.status === 'completed');
+  execution.send(JSON.stringify(arm));
+  assert.equal((await armDone).code, 'target_reached');
+  assert.equal(sent.length, 2);
+  assert.ok(sent.every(message => message.cmd === 'move_joint'));
+});
+
+test('Robot Service rejects stale, mixed-tier, oversized, and unexhausted fallback alignment', async (t) => {
+  const { service, execution, joints } = await connectedExecutionService(t, 'alignment-invalid');
+  let moveCalls = 0;
+  const originalSend = service.controller.bridge.send.bind(service.controller.bridge);
+  service.controller.bridge.send = message => {
+    if (message.cmd === 'move_joint') moveCalls += 1;
+    return originalSend(message);
+  };
+  const cases = [
+    ['stale_start_joints', { startJointsDeg: joints.map((value, index) => index === 0 ? value + 1 : value) }],
+    ['mixed_joint_tiers', { targetJointsDeg: joints.map((value, index) => [0, 4].includes(index) ? value + 0.5 : value) }],
+    ['joint_step_exceeded', { targetJointsDeg: joints.map((value, index) => index === 4 ? value + 4.1 : value) }],
+    ['wrist_not_exhausted', { tier: 'arm_fallback', wristExhausted: false,
+      targetJointsDeg: joints.map((value, index) => index === 0 ? value + 0.5 : value) }],
+  ];
+  for (const [code, parameters] of cases) {
+    const primitive = alignmentPrimitive(joints, { primitiveId: `bad-${code}`, parameters });
+    const failed = nextMessage(execution, message => message.status === 'failed'
+      && (message.primitiveId === primitive.primitiveId || message.code === 'primitive_invalid'));
+    execution.send(JSON.stringify(primitive));
+    assert.equal((await failed).code, code);
+  }
+  assert.equal(moveCalls, 0);
+});
+
+test('exact session stop interrupts alignment and malformed control cannot move', async (t) => {
+  const { service, execution, joints } = await connectedExecutionService(t, 'alignment-stop');
+  let stopCalls = 0;
+  service.controller.bridge.send = message => message.cmd === 'move_joint';
+  service.controller.bridge.softwareStop = () => {
+    stopCalls += 1;
+    setTimeout(() => service.controller.bridge.emit('software_stop_complete', { ts: Date.now() }), 30);
+    return true;
+  };
+  const primitive = alignmentPrimitive(joints);
+  const accepted = nextMessage(execution, message => message.type === 'execution.status'
+    && (message.primitiveId === primitive.primitiveId || message.code === 'primitive_invalid'));
+  execution.send(JSON.stringify(primitive));
+  assert.equal((await accepted).status, 'accepted');
+  const interrupted = nextMessage(execution, message => message.primitiveId === primitive.primitiveId && message.status === 'interrupted');
+  const stopStartedAt = Date.now();
+  execution.send(JSON.stringify({
+    schema: 'thirdhand.execution-control.v1', type: 'execution.stop',
+    sessionId: 'session-1', reason: 'operator_stop',
+  }));
+  setTimeout(() => {
+    service.controller.bridge.emit('message', {
+      type: 'command_complete', request_id: `execution:${primitive.primitiveId}`, reached: true,
+    });
+    service.controller.bridge.emit('message', {
+      type: 'robot_state', state: 'IDLE', ts: Date.now(),
+      joints_rad: primitive.parameters.targetJointsDeg.map(value => value * Math.PI / 180),
+      velocities_rad_s: [0,0,0,0,0,0], tcp_position_m: [0,0,0], tcp_euler_rad: [0,0,0],
+    });
+  }, 10);
+  assert.equal((await interrupted).code, 'operator_stop');
+  assert.ok(Date.now() - stopStartedAt >= 20, 'terminal status waits for software-stop acknowledgement');
+  assert.equal(stopCalls, 1);
+
+  const invalid = nextMessage(execution, message => message.code === 'invalid_execution_control');
+  execution.send(JSON.stringify({
+    schema: 'thirdhand.execution-control.v1', type: 'execution.stop',
+    sessionId: 'session-1', reason: 'operator_stop', extra: true,
+  }));
+  assert.equal((await invalid).status, 'failed');
 });

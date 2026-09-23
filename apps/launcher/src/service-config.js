@@ -48,14 +48,25 @@ function loadRuntimeConfig(configPath, options = {}) {
     }
     const command = expand(raw.command);
     if (!path.isAbsolute(command)) throw new Error(`service ${raw.id} command must be absolute`);
+    const env = Object.fromEntries(
+      Object.entries(raw.env || {}).map(([name, value]) => [name, expand(value)]),
+    );
+    if (raw.id === 'robot' || raw.id === 'web') {
+      env.ROBOT_EXECUTION_TOKEN_FILE ||= path.join(root, 'runtime', 'run', 'robot-execution.token');
+    }
+    if (raw.id === 'web') {
+      env.ROBOT_EXECUTION_WS_URL ||= 'ws://127.0.0.1:3000/execution';
+      env.ACTIVE_DEPTH_MOUNT_FILE ||= path.join(
+        root, 'skills', 'manipulation', 'bottlegrasp', 'configs', 'calibration',
+        'lumos-handeye.pending.json',
+      );
+    }
     return {
       ...raw,
       command,
       args: raw.args.map(expand),
       cwd: expand(raw.cwd || '${ROOT}'),
-      env: Object.fromEntries(
-        Object.entries(raw.env || {}).map(([name, value]) => [name, expand(value)]),
-      ),
+      env,
       bind,
     };
   });

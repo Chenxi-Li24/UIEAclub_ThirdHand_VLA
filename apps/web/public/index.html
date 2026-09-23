@@ -247,6 +247,24 @@
           <div class="vision-lock" id="vision-lock-reason" role="status">
             夹取锁定：等待标定和硬件验证
           </div>
+          <section class="active-depth-panel" aria-labelledby="active-depth-title">
+            <div class="active-depth-heading">
+              <strong id="active-depth-title">深度对准</strong>
+              <span id="active-depth-phase" data-phase="idle">待机</span>
+            </div>
+            <div class="active-depth-status" aria-live="polite">
+              <span>目标 <b id="active-depth-target">--</b></span>
+              <span>有效深度 <b id="active-depth-depth">0 / 3</b></span>
+              <span>像素 <b id="active-depth-pixel">--</b></span>
+              <span>运动 <b id="active-depth-motion">--</b></span>
+              <span>步数 <b id="active-depth-steps">0 / 20</b></span>
+              <span>状态 <b id="active-depth-reason">等待选择目标</b></span>
+            </div>
+            <div class="active-depth-actions">
+              <button class="action-btn action-primary" id="btn-active-depth-start" disabled>开始深度对准</button>
+              <button class="action-btn" id="btn-active-depth-stop" disabled>停止对准</button>
+            </div>
+          </section>
           <div class="vision-segment" role="group" aria-label="夹取执行模式">
             <button type="button" class="vision-segment-btn active" data-grasp-mode="step"
                     aria-pressed="true">分步</button>

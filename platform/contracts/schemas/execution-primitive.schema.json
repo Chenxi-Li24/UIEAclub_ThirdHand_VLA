@@ -11,16 +11,46 @@
     "taskId": {"type": "string", "minLength": 1},
     "authorizationId": {"type": "string", "minLength": 1},
     "planDigest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
-    "operation": {"const": "gripper.set"},
-    "parameters": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["positionPercent", "tolerancePercent", "timeoutMs"],
+    "operation": {"enum": ["gripper.set", "vision.align.step"]},
+    "parameters": {"type": "object"}
+  },
+  "oneOf": [
+    {
       "properties": {
-        "positionPercent": {"type": "number", "minimum": 0, "maximum": 100},
-        "tolerancePercent": {"type": "number", "exclusiveMinimum": 0, "maximum": 10},
-        "timeoutMs": {"type": "integer", "minimum": 100, "maximum": 30000}
+        "operation": {"const": "gripper.set"},
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["positionPercent", "tolerancePercent", "timeoutMs"],
+          "properties": {
+            "positionPercent": {"type": "number", "minimum": 0, "maximum": 100},
+            "tolerancePercent": {"type": "number", "exclusiveMinimum": 0, "maximum": 10},
+            "timeoutMs": {"type": "integer", "minimum": 100, "maximum": 30000}
+          }
+        }
+      }
+    },
+    {
+      "properties": {
+        "operation": {"const": "vision.align.step"},
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["sessionId", "stableId", "frameId", "evidenceId", "motionEpoch", "tier", "wristExhausted", "startJointsDeg", "targetJointsDeg", "timeoutMs"],
+          "properties": {
+            "sessionId": {"type": "string", "minLength": 1},
+            "stableId": {"type": "integer", "minimum": 1, "maximum": 5},
+            "frameId": {"type": "integer", "minimum": 0},
+            "evidenceId": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+            "motionEpoch": {"type": "integer", "minimum": 0},
+            "tier": {"enum": ["wrist", "arm_fallback"]},
+            "wristExhausted": {"type": "boolean"},
+            "startJointsDeg": {"type": "array", "minItems": 6, "maxItems": 6, "items": {"type": "number"}},
+            "targetJointsDeg": {"type": "array", "minItems": 6, "maxItems": 6, "items": {"type": "number"}},
+            "timeoutMs": {"type": "integer", "minimum": 100, "maximum": 30000}
+          }
+        }
       }
     }
-  }
+  ]
 }

@@ -15,6 +15,7 @@ class FakeCamera {
     this.started = false;
     this.clients = new Set();
     this.commands = [];
+    this.selection = { stableId: null, requestId: null };
   }
 
   start() {
@@ -25,7 +26,7 @@ class FakeCamera {
     return {
       camera: { status: this.started ? 'ready' : 'stopped', sequence: 1 },
       inference: { status: 'error', error: 'checkpoint missing' },
-      selection: { stableId: null },
+      selection: { ...this.selection },
     };
   }
 
@@ -118,4 +119,17 @@ test('raw MJPEG stays available when inference reports model error', async (t) =
   assert.deepEqual(camera.commands.at(-1), {
     type: 'select_target', stableId: 2, requestId: 'select-2',
   });
+
+  camera.commands.length = 0;
+  camera.selection = { stableId: 1, requestId: 'select-1' };
+  const switched = await fetch(`${origin}/api/vision/select`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ stableId: 2, requestId: 'select-2b' }),
+  }).then(response => response.json());
+  assert.equal(switched.accepted, true);
+  assert.deepEqual(camera.commands, [
+    { type: 'release_target', requestId: 'select-1' },
+    { type: 'select_target', stableId: 2, requestId: 'select-2b' },
+  ]);
 });

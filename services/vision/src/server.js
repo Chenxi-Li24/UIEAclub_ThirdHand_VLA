@@ -53,6 +53,19 @@ function readJson(request, maxBytes = 16 * 1024) {
   });
 }
 
+function sendTargetSelection(camera, stableId, requestId) {
+  const current = camera.status()?.selection || {};
+  if (current.stableId === stableId) return true;
+  if (Number.isSafeInteger(current.stableId)) {
+    const released = camera.send({
+      type: 'release_target',
+      requestId: current.requestId,
+    });
+    if (!released) return false;
+  }
+  return camera.send({ type: 'select_target', stableId, requestId });
+}
+
 function streamUnavailable(status, kind) {
   if (status.camera.status !== 'ready') {
     return {
@@ -143,11 +156,7 @@ function createVisionService(options = {}) {
           typeof body.requestId === 'string' && body.requestId.length > 0
             && body.requestId.length <= 128
         ) ? body.requestId : randomUUID();
-        const accepted = camera.send({
-          type: 'select_target',
-          stableId: body.stableId,
-          requestId,
-        });
+        const accepted = sendTargetSelection(camera, body.stableId, requestId);
         writeJson(response, accepted ? 202 : 503, {
           accepted,
           stableId: body.stableId,
@@ -214,11 +223,7 @@ function createVisionService(options = {}) {
           typeof message.requestId === 'string' && message.requestId.length > 0
             && message.requestId.length <= 128
         ) ? message.requestId : randomUUID();
-        accepted = camera.send({
-          type: 'select_target',
-          stableId: message.stableId,
-          requestId,
-        });
+        accepted = sendTargetSelection(camera, message.stableId, requestId);
       } else if (message?.type === 'release_target') {
         accepted = camera.send({
           type: 'release_target',

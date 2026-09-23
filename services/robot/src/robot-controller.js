@@ -50,6 +50,30 @@ function linearTargetAllowed(position) {
   );
 }
 
+function validateAlignmentStep(parameters, latestJointsDeg) {
+  if (!finiteVector(latestJointsDeg, 6)) return { ok: false, code: 'robot_state_stale' };
+  if (parameters.startJointsDeg.some(
+    (value, index) => Math.abs(value - latestJointsDeg[index]) > 0.2,
+  )) return { ok: false, code: 'stale_start_joints' };
+  const target = validateJointTarget(parameters.targetJointsDeg);
+  if (!target.ok) return { ok: false, code: target.code };
+  const deltas = target.joints.map((value, index) => value - parameters.startJointsDeg[index]);
+  const unchanged = indices => indices.every(index => Math.abs(deltas[index]) <= 1e-6);
+  if (parameters.tier === 'wrist') {
+    if (!unchanged([0, 1, 2])) return { ok: false, code: 'mixed_joint_tiers' };
+    if (deltas.slice(3).some(delta => Math.abs(delta) > 4 + 1e-9)) {
+      return { ok: false, code: 'joint_step_exceeded' };
+    }
+  } else {
+    if (parameters.wristExhausted !== true) return { ok: false, code: 'wrist_not_exhausted' };
+    if (!unchanged([3, 4, 5])) return { ok: false, code: 'mixed_joint_tiers' };
+    if (deltas.slice(0, 3).some(delta => Math.abs(delta) > 2 + 1e-9)) {
+      return { ok: false, code: 'joint_step_exceeded' };
+    }
+  }
+  return { ok: true, joints: target.joints };
+}
+
 class RobotController extends EventEmitter {
   constructor(config) {
     super();
@@ -82,6 +106,7 @@ class RobotController extends EventEmitter {
       });
     });
     this.bridge.on('software_stop_complete', message => {
+      this._finalizeInterruptedExecutions('interrupted', null);
       const requestId = this.pendingStopRequestId;
       this.pendingStopRequestId = null;
       if (requestId) {
@@ -103,6 +128,7 @@ class RobotController extends EventEmitter {
       });
     });
     this.bridge.on('software_stop_timeout', message => {
+      this._finalizeInterruptedExecutions('uncertain', 'stop_feedback_timeout');
       this.pendingStopRequestId = null;
       this.emit('message', {
         type: 'software_stop',
@@ -317,11 +343,25 @@ class RobotController extends EventEmitter {
     if (this.seenPrimitiveIds.size > 1024) {
       this.seenPrimitiveIds.delete(this.seenPrimitiveIds.values().next().value);
     }
+    if (primitive.operation === 'vision.align.step') {
+      const alignment = validateAlignmentStep(primitive.parameters, this.latestJointsDeg);
+      if (!alignment.ok) {
+        reply({
+          type: 'execution.status', status: 'failed', code: alignment.code,
+          primitiveId: primitive.primitiveId, taskId: primitive.taskId, traceId: primitive.traceId,
+        });
+        return;
+      }
+      this._executeAlignmentPrimitive(primitive, alignment, reply);
+      return;
+    }
+    this._executeGripperPrimitive(primitive, reply);
+  }
+
+  _beginExecution(primitive, reply, kind) {
     const requestId = `execution:${primitive.primitiveId}`;
     const pending = {
-      primitive,
-      reply,
-      requestId,
+      primitive, reply, requestId, kind,
       acceptedAt: Date.now(),
       beforeJoints: [...this.latestJointsDeg],
       timer: null,
@@ -335,36 +375,103 @@ class RobotController extends EventEmitter {
       });
     }, primitive.parameters.timeoutMs);
     this.pendingExecutions.set(requestId, pending);
-    const sent = this.bridge.send({
-      cmd: 'gripper',
-      position: primitive.parameters.positionPercent / 100,
-      request_id: requestId,
-    });
-    if (!sent) {
-      clearTimeout(pending.timer);
-      this.pendingExecutions.delete(requestId);
-      reply({ type: 'execution.status', status: 'failed', code: 'bridge_unavailable', primitiveId: primitive.primitiveId });
-      return;
-    }
+    return pending;
+  }
+
+  _acceptExecution(pending) {
+    const { primitive, reply } = pending;
     reply({
       type: 'execution.status', status: 'accepted', primitiveId: primitive.primitiveId,
       taskId: primitive.taskId, traceId: primitive.traceId,
     });
   }
 
+  _failExecutionSend(pending) {
+    clearTimeout(pending.timer);
+    this.pendingExecutions.delete(pending.requestId);
+    pending.reply({
+      type: 'execution.status', status: 'failed', code: 'bridge_unavailable',
+      primitiveId: pending.primitive.primitiveId,
+    });
+  }
+
+  _executeGripperPrimitive(primitive, reply) {
+    const pending = this._beginExecution(primitive, reply, 'gripper');
+    const sent = this.bridge.send({
+      cmd: 'gripper',
+      position: primitive.parameters.positionPercent / 100,
+      request_id: pending.requestId,
+    });
+    if (!sent) {
+      this._failExecutionSend(pending);
+      return;
+    }
+    this._acceptExecution(pending);
+  }
+
+  _executeAlignmentPrimitive(primitive, alignment, reply) {
+    const pending = this._beginExecution(primitive, reply, 'alignment');
+    const timeSec = moveTimeFor(
+      alignment.joints, this.latestJointsDeg,
+      DEFAULT_MAX_SPEEDS_DEG_S, this.config,
+    );
+    this.pendingLowLevel.set(pending.requestId, 'move_joint');
+    const sent = this.bridge.send({
+      cmd: 'move_joint',
+      joints_rad: alignment.joints.map(value => value * Math.PI / 180),
+      time_sec: timeSec,
+      request_id: pending.requestId,
+      source: `vision-align:${primitive.parameters.tier}`,
+    });
+    if (!sent) {
+      this.pendingLowLevel.delete(pending.requestId);
+      this._failExecutionSend(pending);
+      return;
+    }
+    this._acceptExecution(pending);
+  }
+
   interruptPrimitive(primitiveId, reason = 'execution_interrupted') {
     for (const [requestId, pending] of this.pendingExecutions) {
       if (pending.primitive.primitiveId !== primitiveId) continue;
-      clearTimeout(pending.timer);
-      this.pendingExecutions.delete(requestId);
-      this.bridge.softwareStop();
-      pending.reply({
-        type: 'execution.status', status: 'interrupted', code: reason,
-        primitiveId, taskId: pending.primitive.taskId, traceId: pending.primitive.traceId,
-      });
+      if (pending.stopRequested) return true;
+      pending.stopRequested = true;
+      pending.stopReason = reason;
+      if (!this.bridge.softwareStop()) {
+        clearTimeout(pending.timer);
+        this.pendingExecutions.delete(requestId);
+        pending.reply({
+          type: 'execution.status', status: 'uncertain', code: 'stop_request_failed',
+          primitiveId, taskId: pending.primitive.taskId, traceId: pending.primitive.traceId,
+        });
+      }
       return true;
     }
     return false;
+  }
+
+  _finalizeInterruptedExecutions(status, fallbackCode) {
+    for (const [requestId, pending] of [...this.pendingExecutions]) {
+      if (!pending.stopRequested) continue;
+      clearTimeout(pending.timer);
+      this.pendingExecutions.delete(requestId);
+      pending.reply({
+        type: 'execution.status', status,
+        code: fallbackCode || pending.stopReason || 'execution_interrupted',
+        primitiveId: pending.primitive.primitiveId,
+        taskId: pending.primitive.taskId, traceId: pending.primitive.traceId,
+        sessionId: pending.primitive.parameters?.sessionId,
+      });
+    }
+  }
+
+  interruptSession(sessionId, reason = 'execution_interrupted') {
+    let interrupted = false;
+    for (const pending of [...this.pendingExecutions.values()]) {
+      if (pending.primitive.parameters?.sessionId !== sessionId) continue;
+      interrupted = this.interruptPrimitive(pending.primitive.primitiveId, reason) || interrupted;
+    }
+    return interrupted;
   }
 
   _sendJointMotion(
@@ -502,6 +609,28 @@ class RobotController extends EventEmitter {
     return null;
   }
 
+  _completeAlignmentIfReady(pending) {
+    if (pending.stopRequested || !pending.commandComplete || this.motionActive || !this.stateReady
+        || this.latestRobotStateAtMs < pending.acceptedAt) return false;
+    const target = pending.primitive.parameters.targetJointsDeg;
+    const maxTargetErrorDeg = Math.max(...this.latestJointsDeg.map(
+      (joint, index) => Math.abs(joint - target[index]),
+    ));
+    const safe = pending.commandReached && maxTargetErrorDeg <= 0.5;
+    clearTimeout(pending.timer);
+    this.pendingExecutions.delete(pending.requestId);
+    pending.reply({
+      type: 'execution.status', status: safe ? 'completed' : 'failed',
+      code: safe ? 'target_reached' : 'feedback_invalid',
+      primitiveId: pending.primitive.primitiveId,
+      taskId: pending.primitive.taskId, traceId: pending.primitive.traceId,
+      sessionId: pending.primitive.parameters.sessionId,
+      motionEpoch: pending.primitive.parameters.motionEpoch,
+      actualJointsDeg: [...this.latestJointsDeg], maxTargetErrorDeg,
+    });
+    return true;
+  }
+
   _handleBridgeMessage(message) {
     if (message.type === 'connection') {
       this.connectPending = false;
@@ -559,6 +688,9 @@ class RobotController extends EventEmitter {
         stateName: message.state,
         ts: message.ts,
       });
+      for (const pending of this.pendingExecutions.values()) {
+        if (pending.kind === 'alignment') this._completeAlignmentIfReady(pending);
+      }
       return;
     }
     if (message.type === 'motion_state') {
@@ -577,30 +709,32 @@ class RobotController extends EventEmitter {
       this.motionActive = false;
       const pending = this.pendingExecutions.get(message.request_id);
       if (pending) {
-        clearTimeout(pending.timer);
-        this.pendingExecutions.delete(message.request_id);
-        const actualPercent = Number(message.actual_position ?? this.latestGripperPosition) * 100;
-        const requestedPercent = pending.primitive.parameters.positionPercent;
-        const maxJointDeltaDeg = Math.max(...this.latestJointsDeg.map(
-          (joint, index) => Math.abs(joint - pending.beforeJoints[index]),
-        ));
-        const feedbackFresh = this.latestRobotStateAtMs >= pending.acceptedAt;
-        const targetReached = message.reached !== false
-          && Number.isFinite(actualPercent)
-          && Math.abs(actualPercent - requestedPercent) <= pending.primitive.parameters.tolerancePercent;
-        const safe = targetReached && feedbackFresh && maxJointDeltaDeg <= 0.5;
-        if (maxJointDeltaDeg > 0.5) this.bridge.softwareStop();
-        pending.reply({
-          type: 'execution.status',
-          status: safe ? 'completed' : 'failed',
-          code: safe ? 'target_reached' : (maxJointDeltaDeg > 0.5 ? 'unexpected_arm_motion' : 'feedback_invalid'),
-          primitiveId: pending.primitive.primitiveId,
-          taskId: pending.primitive.taskId,
-          traceId: pending.primitive.traceId,
-          requestedPercent,
-          actualPercent,
-          maxJointDeltaDeg,
-        });
+        if (pending.kind === 'alignment') {
+          pending.commandComplete = true;
+          pending.commandReached = message.reached !== false;
+          this._completeAlignmentIfReady(pending);
+        } else {
+          clearTimeout(pending.timer);
+          this.pendingExecutions.delete(message.request_id);
+          const actualPercent = Number(message.actual_position ?? this.latestGripperPosition) * 100;
+          const requestedPercent = pending.primitive.parameters.positionPercent;
+          const maxJointDeltaDeg = Math.max(...this.latestJointsDeg.map(
+            (joint, index) => Math.abs(joint - pending.beforeJoints[index]),
+          ));
+          const feedbackFresh = this.latestRobotStateAtMs >= pending.acceptedAt;
+          const targetReached = message.reached !== false
+            && Number.isFinite(actualPercent)
+            && Math.abs(actualPercent - requestedPercent) <= pending.primitive.parameters.tolerancePercent;
+          const safe = targetReached && feedbackFresh && maxJointDeltaDeg <= 0.5;
+          if (maxJointDeltaDeg > 0.5) this.bridge.softwareStop();
+          pending.reply({
+            type: 'execution.status', status: safe ? 'completed' : 'failed',
+            code: safe ? 'target_reached' : (maxJointDeltaDeg > 0.5 ? 'unexpected_arm_motion' : 'feedback_invalid'),
+            primitiveId: pending.primitive.primitiveId,
+            taskId: pending.primitive.taskId, traceId: pending.primitive.traceId,
+            requestedPercent, actualPercent, maxJointDeltaDeg,
+          });
+        }
       }
       const command = this.pendingLowLevel.get(message.request_id) || message.command;
       this.pendingLowLevel.delete(message.request_id);
@@ -651,4 +785,4 @@ class RobotController extends EventEmitter {
   }
 }
 
-module.exports = { ALLOWED_COMMANDS, RobotController };
+module.exports = { ALLOWED_COMMANDS, RobotController, validateAlignmentStep };

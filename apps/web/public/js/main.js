@@ -509,8 +509,10 @@ class UIControls {
     this.visionConfigExecutionEnabled = false;
     this.visionTargetExecutionEnabled = false;
     this.selectedVisionTarget = null;
+    this.pendingVisionSelection = null;
     this.graspMode = 'step';
     this.graspPhase = 'idle';
+    this.activeDepthStatus = { phase: 'idle', active: false, sessionId: null };
     this._drawerCollapsed = false;
     this.drawer = null;
     this.logPanel = null;
@@ -1099,16 +1101,27 @@ class UIControls {
           if (!Number.isInteger(ordinal)) continue;
           const btn = document.createElement('button');
           btn.className = 'det-grasp-btn';
-          btn.textContent = `${obj.selected ? '已选 ' : '选择 '}${prefix}${ordinal}`;
+          const pending = this.pendingVisionSelection?.stableId === obj.stableId;
+          btn.textContent = `${pending ? '切换中 ' : obj.selected ? '已选 ' : '选择 '}${prefix}${ordinal}`;
+          btn.disabled = pending || obj.selected === true;
           btn.addEventListener('click', () => {
-            this.visionWs.send({ type: "select_target", stableId: obj.stableId });
-            this._log(`→ 选择视觉目标 ${prefix}${ordinal}`);
+            const requestId = typeof globalThis.crypto?.randomUUID === 'function'
+              ? globalThis.crypto.randomUUID()
+              : `web-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+            this.pendingVisionSelection = { stableId: obj.stableId, requestId, label: `${prefix}${ordinal}` };
+            btn.textContent = `切换中 ${prefix}${ordinal}`;
+            btn.disabled = true;
+            this.visionWs.send({ type: "select_target", stableId: obj.stableId, requestId });
+            this._log(`→ 切换视觉目标 ${prefix}${ordinal}`);
           });
           actions.appendChild(btn);
         }
         const blockers = [...(obj.blockers || []), ...(obj.reasons || [])];
         if (obj.selected === true) {
           this.selectedVisionTarget = { ...obj, actionable };
+          if (this.pendingVisionSelection?.stableId === obj.stableId) {
+            this.pendingVisionSelection = null;
+          }
           const lock = document.getElementById('vision-lock-reason');
           if (lock) {
             lock.textContent = actionable
@@ -1131,6 +1144,17 @@ class UIControls {
       }
       this.visionTargetExecutionEnabled = data.robotExecutionEnabled === true;
       this._updateVisionControls();
+    });
+
+    this.visionWs.on("selection_result", data => {
+      const pending = this.pendingVisionSelection;
+      if (!pending || data.requestId !== pending.requestId) return;
+      if (data.accepted === true) {
+        this._log(`✓ 视觉目标切换已发送 ${pending.label}`);
+      } else {
+        this._log(`⚠ 视觉目标切换失败 ${pending.label}: ${data.reason || 'target_not_confirmed'}`);
+        this.pendingVisionSelection = null;
+      }
     });
 
     const applyXVisionStatus = (data) => {
@@ -1184,6 +1208,34 @@ class UIControls {
       reloadXVisionFeed(true);
     });
 
+    // === Active Depth Controls ===
+    document.getElementById('btn-active-depth-start')?.addEventListener('click', () => {
+      const stableId = Number(this.selectedVisionTarget?.stableId);
+      if (!Number.isInteger(stableId)) return;
+      this._requestActiveDepth('/api/active-depth/start', { stableId });
+    });
+    document.getElementById('btn-active-depth-stop')?.addEventListener('click', () => {
+      const sessionId = this.activeDepthStatus?.sessionId;
+      if (!sessionId) return;
+      this._requestActiveDepth('/api/active-depth/stop', { sessionId });
+    });
+    this.ws.on('active_depth.status', status => {
+      this.activeDepthStatus = status;
+      this._renderActiveDepthStatus();
+    });
+    this.ws.on('ws_connection', state => {
+      if (state.connected) this._refreshActiveDepthStatus();
+    });
+    window.addEventListener('pagehide', () => {
+      if (!this.activeDepthStatus?.active || !this.activeDepthStatus.sessionId) return;
+      navigator.sendBeacon('/api/active-depth/stop', new Blob([
+        JSON.stringify({ sessionId: this.activeDepthStatus.sessionId }),
+      ], { type: 'application/json' }));
+    });
+    this._refreshActiveDepthStatus();
+    this._renderActiveDepthStatus();
+    // === End Active Depth Controls ===
+
     document.querySelectorAll('[data-grasp-mode]').forEach(button => {
       button.addEventListener('click', () => {
         this.graspMode = button.dataset.graspMode;
@@ -1229,6 +1281,81 @@ class UIControls {
       next.disabled = this.graspMode !== 'step' || this.graspPhase !== 'preview_ready';
     }
     if (cancel) cancel.disabled = !active;
+    this._renderActiveDepthStatus();
+  }
+
+  async _requestActiveDepth(path, body) {
+    try {
+      const response = await fetch(path, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const status = await response.json();
+      if (!response.ok) throw new Error(status.error || `HTTP ${response.status}`);
+      this.activeDepthStatus = status;
+      this._renderActiveDepthStatus();
+    } catch (error) {
+      this._log(`⚠ 深度对准请求失败: ${error.message}`);
+    }
+  }
+
+  async _refreshActiveDepthStatus() {
+    try {
+      const response = await fetch('/api/active-depth/status', { cache: 'no-store' });
+      if (!response.ok) return;
+      this.activeDepthStatus = await response.json();
+      this._renderActiveDepthStatus();
+    } catch (error) {
+      this._log(`⚠ 深度对准状态不可用: ${error.message}`);
+    }
+  }
+
+  _renderActiveDepthStatus() {
+    const status = this.activeDepthStatus || {};
+    const active = status.active === true;
+    const phaseLabels = {
+      idle: '待机', observing: '观察中', moving: '校正中',
+      depth_acquired: '深度已获取', failed: '已停止', stopped: '已停止',
+      uncertain: '状态不确定', unavailable: '不可用',
+    };
+    const reasonLabels = {
+      depth_valid_three_frames: '深度已连续有效', operator_stop: '操作员已停止',
+      stop_uncertain: '状态不确定，请检查机械臂', execution_uncertain: '状态不确定，请检查机械臂',
+      target_switched: '目标已切换', no_progress: '校正没有改善',
+      step_limit: '已达到 20 步上限', time_limit: '已达到 90 秒上限',
+      camera_evidence_mismatch: '相机标定证据不匹配',
+    };
+    const setText = (id, value) => {
+      const element = document.getElementById(id);
+      if (element) element.textContent = value;
+    };
+    const phase = status.phase || 'idle';
+    const phaseElement = document.getElementById('active-depth-phase');
+    if (phaseElement) {
+      phaseElement.textContent = phaseLabels[phase] || phase;
+      phaseElement.dataset.phase = phase;
+    }
+    setText('active-depth-target', status.stableId ? `#${status.stableId}` : '--');
+    setText('active-depth-depth', `${status.depthValidFrames || 0} / 3`);
+    const current = Array.isArray(status.targetPixel)
+      ? status.targetPixel.map(value => Number(value).toFixed(0)).join(',') : '--';
+    const predicted = Array.isArray(status.predictedPixel)
+      ? status.predictedPixel.map(value => Number(value).toFixed(0)).join(',') : '--';
+    setText('active-depth-pixel', `${current} → ${predicted}`);
+    const delta = Array.isArray(status.jointDeltasDeg)
+      ? status.jointDeltasDeg.map((value, index) => Math.abs(value) > 1e-4
+        ? `J${index + 1} ${value >= 0 ? '+' : ''}${Number(value).toFixed(2)}°` : null).filter(Boolean).join(' ')
+      : '--';
+    const shift = Number.isFinite(status.cameraShiftM)
+      ? ` / ${(status.cameraShiftM * 1000).toFixed(1)}mm` : '';
+    setText('active-depth-motion', `${delta || '--'}${shift}`);
+    setText('active-depth-steps', `${status.completedSteps || 0} / 20`);
+    setText('active-depth-reason', reasonLabels[status.reason] || status.reason || '等待选择目标');
+    const start = document.getElementById('btn-active-depth-start');
+    const stop = document.getElementById('btn-active-depth-stop');
+    if (start) start.disabled = active || !Number.isInteger(Number(this.selectedVisionTarget?.stableId));
+    if (stop) stop.disabled = !active || !status.sessionId;
   }
 
   collapseDrawer() {

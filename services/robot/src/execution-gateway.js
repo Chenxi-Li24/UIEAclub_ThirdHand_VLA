@@ -6,6 +6,15 @@ function sendJson(socket, payload) {
   if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify(payload));
 }
 
+function validStopControl(message) {
+  return message && typeof message === 'object' && !Array.isArray(message)
+    && Object.keys(message).length === 4
+    && message.schema === 'thirdhand.execution-control.v1'
+    && message.type === 'execution.stop'
+    && typeof message.sessionId === 'string' && message.sessionId.length > 0
+    && message.reason === 'operator_stop';
+}
+
 class ExecutionGateway {
   constructor(controller) {
     this.controller = controller;
@@ -21,6 +30,16 @@ class ExecutionGateway {
         primitive = JSON.parse(data.toString('utf8'));
       } catch {
         sendJson(socket, { type: 'execution.status', status: 'failed', code: 'invalid_json', message: 'Invalid JSON message' });
+        return;
+      }
+      if (primitive?.schema === 'thirdhand.execution-control.v1') {
+        if (!validStopControl(primitive)) {
+          sendJson(socket, {
+            type: 'execution.status', status: 'failed', code: 'invalid_execution_control',
+          });
+          return;
+        }
+        this.controller.interruptSession(primitive.sessionId, primitive.reason);
         return;
       }
       if (typeof primitive?.primitiveId === 'string') primitiveIds.add(primitive.primitiveId);
@@ -46,4 +65,4 @@ class ExecutionGateway {
   }
 }
 
-module.exports = { ExecutionGateway, sendJson };
+module.exports = { ExecutionGateway, sendJson, validStopControl };

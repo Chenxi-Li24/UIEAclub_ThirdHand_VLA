@@ -29,6 +29,12 @@ function loadConfig(env = process.env) {
     assetsDir: env.ROBOT_ASSETS_DIR || path.join(ROOT, 'assets', 'robot'),
     readyFile: env.THIRDHAND_READY_FILE || path.join(ROOT, 'runtime', 'run', 'web.ready'),
     robotWsUrl: env.ROBOT_WS_URL || 'ws://127.0.0.1:3000/ws',
+    robotExecutionWsUrl: env.ROBOT_EXECUTION_WS_URL || 'ws://127.0.0.1:3000/execution',
+    robotExecutionTokenFile: env.ROBOT_EXECUTION_TOKEN_FILE || path.join(ROOT, 'runtime', 'run', 'robot-execution.token'),
+    activeDepthMountFile: env.ACTIVE_DEPTH_MOUNT_FILE || path.join(
+      ROOT, 'skills', 'manipulation', 'bottlegrasp', 'configs', 'calibration',
+      'lumos-handeye.pending.json',
+    ),
     voiceWsUrl: env.VOICE_WS_URL || 'ws://127.0.0.1:3004/v1/voice',
     visionHttpUrl: env.VISION_HTTP_URL || 'http://127.0.0.1:3100',
     visionWsUrl: env.VISION_WS_URL || 'ws://127.0.0.1:3100/ws',

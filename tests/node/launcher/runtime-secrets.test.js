@@ -11,6 +11,7 @@ const {
   removeExecutionToken,
 } = require('../../../apps/launcher/src/runtime-secrets');
 const { ServiceSupervisor, processStartMarker } = require('../../../apps/launcher/src/service-supervisor');
+const { loadRuntimeConfig } = require('../../../apps/launcher/src/service-config');
 
 function tokenService(runtimeDir, id = 'robot', args = null) {
   return {
@@ -89,4 +90,24 @@ test('failed group startup stops earlier owned children and removes its new toke
   assert.equal(processStartMarker(robotChild.pid), null);
   assert.equal(fs.existsSync(path.join(runtimeDir, 'run', 'robot-execution.token')), false);
   fs.rmSync(runtimeDir, { recursive: true, force: true });
+});
+
+test('runtime config gives Robot and Web the identical managed token path', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'thirdhand-runtime-config-'));
+  const configPath = path.join(root, 'profile.json');
+  fs.writeFileSync(configPath, JSON.stringify({
+    profile: 'test', services: [
+      { id: 'robot', command: process.execPath, args: [], port: 3000 },
+      { id: 'web', command: process.execPath, args: [], port: 9983, allowLan: true },
+    ],
+  }));
+  try {
+    const config = loadRuntimeConfig(configPath, { root });
+    const expected = path.join(root, 'runtime', 'run', 'robot-execution.token');
+    assert.equal(config.services[0].env.ROBOT_EXECUTION_TOKEN_FILE, expected);
+    assert.equal(config.services[1].env.ROBOT_EXECUTION_TOKEN_FILE, expected);
+    assert.equal(config.services[1].env.ROBOT_EXECUTION_WS_URL, 'ws://127.0.0.1:3000/execution');
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
 });

@@ -16,5 +16,5 @@ class ReIdAdapter:
 
     def embed(self, frame, tracks):
         if self.backend is None:
-            return {track.track_id: np.array([1.0, float(track.track_id) * 1e-6]) for track in tracks}
+            raise RuntimeError("MODEL_UNAVAILABLE")
         return self.backend(frame, tracks)

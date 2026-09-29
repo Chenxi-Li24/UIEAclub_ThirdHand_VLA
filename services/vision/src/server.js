@@ -90,7 +90,8 @@ function createVisionService(options = {}) {
   const server = http.createServer(async (request, response) => {
     const pathname = new URL(request.url, 'http://localhost').pathname;
     if (request.method === 'GET' &&
-        (pathname === '/health' || pathname === '/api/vision/status')) {
+        (pathname === '/health' || pathname === '/api/vision/status' ||
+         pathname === '/api/vision/person-follow/status')) {
       writeJson(response, 200, {
         status: 'ready',
         serviceId: 'vision',
@@ -100,12 +101,14 @@ function createVisionService(options = {}) {
       return;
     }
 
-    if (request.method === 'GET' && pathname === '/api/vision/observation') {
+    if (request.method === 'GET' &&
+        (pathname === '/api/vision/observation' ||
+         pathname === '/api/vision/person-follow/observation')) {
       const observation = camera.observation?.() || null;
-      writeJson(response, observation ? 200 : 503, observation || {
-        code: 'observation_unavailable',
+      writeJson(response, observation ? 200 : 503, observation ? {
+        ...observation,
         robotControlEnabled: false,
-      });
+      } : { code: 'observation_unavailable', robotControlEnabled: false });
       return;
     }
 

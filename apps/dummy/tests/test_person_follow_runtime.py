@@ -7,6 +7,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from dummy.gateway.robot_3000 import Robot3000Adapter
+from dummy.gateway.ownership import LeaseRegistry
 from dummy.person_follow.calibration import CalibrationReport
 from dummy.person_follow.gateway_client import GatewayClient
 from dummy.person_follow.runtime import PersonFollowRuntime
@@ -36,6 +37,17 @@ def test_robot_adapter_requires_local_3000_websocket():
     assert Robot3000Adapter("ws://127.0.0.1:3000/ws").url.endswith("3000/ws")
     with pytest.raises(ValueError):
         Robot3000Adapter("ws://10.0.0.2:3000/ws")
+
+
+def test_lease_heartbeat_extends_only_matching_owner_and_release_revokes():
+    registry = LeaseRegistry(ttl_s=1.0)
+    lease = registry.acquire("s1", now=1.0)
+    renewed = registry.heartbeat(lease.lease_id, "s1", now=1.5)
+    assert renewed.expires_at == 2.5
+    with pytest.raises(RuntimeError):
+        registry.heartbeat("wrong", "s1", now=1.6)
+    assert registry.release(lease.lease_id, "s1")
+    assert not registry.valid(lease.lease_id, "s1", now=1.7)
 
 
 def test_runtime_holds_when_observation_is_stale():

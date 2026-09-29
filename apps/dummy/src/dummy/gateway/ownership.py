@@ -24,3 +24,15 @@ class LeaseRegistry:
 
     def valid(self, lease_id: str, session_id: str, now: float):
         return bool(self.active and self.active.lease_id == lease_id and self.active.session_id == session_id and now <= self.active.expires_at)
+
+    def heartbeat(self, lease_id: str, session_id: str, now: float):
+        if not self.valid(lease_id, session_id, now):
+            raise RuntimeError("lease is missing, expired, or owned by another session")
+        self.active = Lease(lease_id, session_id, now + self.ttl_s)
+        return self.active
+
+    def release(self, lease_id: str, session_id: str):
+        if not self.active or self.active.lease_id != lease_id or self.active.session_id != session_id:
+            return False
+        self.active = None
+        return True

@@ -133,3 +133,24 @@ test('raw MJPEG stays available when inference reports model error', async (t) =
     { type: 'select_target', stableId: 2, requestId: 'select-2b' },
   ]);
 });
+
+test('person-follow aliases expose read-only status and observation', async (t) => {
+  const runtime = fs.mkdtempSync(path.join(os.tmpdir(), 'thirdhand-follow-'));
+  const camera = new FakeCamera();
+  const service = createVisionService({
+    host: '127.0.0.1', port: 0,
+    readyFile: path.join(runtime, 'vision.ready'), camera,
+  });
+  t.after(async () => {
+    await service.close();
+    fs.rmSync(runtime, { recursive: true, force: true });
+  });
+  const address = await service.start();
+  const origin = `http://127.0.0.1:${address.port}`;
+  const status = await fetch(`${origin}/api/vision/person-follow/status`).then(r => r.json());
+  assert.equal(status.robotControlEnabled, false);
+  assert.equal(status.serviceId, 'vision');
+  const observation = await fetch(`${origin}/api/vision/person-follow/observation`).then(r => r.json());
+  assert.equal(observation.robotControlEnabled, false);
+  assert.equal(observation.selectedStableId, 2);
+});

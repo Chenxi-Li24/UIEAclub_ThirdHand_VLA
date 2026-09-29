@@ -39,6 +39,7 @@ class GatewayServer:
                     response = await self.robot.send(decision.message) if decision.ok and raw.get("cmd") != "ping" else {"ok": decision.ok, "reason_code": decision.reason_code}
                 else:
                     request = validate_request(raw)
+                    self.current_joints = await self.robot.get_joints()
                     decision = self.policy.authorize(request, self.leases, self.current_joints, time.time())
                     response = await self.robot.send(decision.message) if decision.ok else {"ok": False, "reason_code": decision.reason_code}
                 if self.audit:

@@ -6,7 +6,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from dummy.gateway.robot_3000 import Robot3000Adapter
+from dummy.gateway.robot_3000 import Robot3000Adapter, extract_joints
 from dummy.gateway.ownership import LeaseRegistry
 from dummy.person_follow.calibration import CalibrationReport
 from dummy.person_follow.gateway_client import GatewayClient
@@ -37,6 +37,12 @@ def test_robot_adapter_requires_local_3000_websocket():
     assert Robot3000Adapter("ws://127.0.0.1:3000/ws").url.endswith("3000/ws")
     with pytest.raises(ValueError):
         Robot3000Adapter("ws://10.0.0.2:3000/ws")
+
+
+def test_robot_adapter_extracts_only_finite_robot_state_joints():
+    assert extract_joints({"type": "runtime_status", "joints": [1, 2]}) is None
+    assert extract_joints({"type": "robot_state", "joints_deg": [0, 1, 2, 3, 4, 5]}) == (0, 1, 2, 3, 4, 5)
+    assert extract_joints({"type": "robot_state", "joints": [0, 1, 2, 3, 4, float("nan")]}) is None
 
 
 def test_lease_heartbeat_extends_only_matching_owner_and_release_revokes():

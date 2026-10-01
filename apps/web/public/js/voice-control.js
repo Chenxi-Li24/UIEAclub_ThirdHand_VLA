@@ -503,6 +503,7 @@ export class VoiceControl {
       send: () => false
     });
     this.onExecutionResult = options.onExecutionResult;
+    this.onAgentTrace = options.onAgentTrace;
     this.runtimeVoiceEndpoint = DEFAULT_ENDPOINT;
     this.directionalRuntime = { enabled: false, realControlEnabled: false };
     this.executionPending = false;
@@ -1054,6 +1055,10 @@ export class VoiceControl {
       case 'transcript.final':
         this.finalTranscript = message.payload?.text || '';
         this._renderFinalTranscript(this.finalTranscript, message.payload?.confidence);
+        break;
+
+      case 'agent.trace':
+        this.onAgentTrace?.(message.payload || {});
         break;
 
       case 'assistant.response':

@@ -45,13 +45,15 @@ UIEAclub_ThirdHand_VLA/
 
 - `apps/web`：9983 局域网页面及机器人、语音、视觉代理；
 - `services/robot`：3000 Startouch SDK、CAN、关节和夹爪控制；
-- `services/speech`：3004 Ubuntu 本地三档 ASR、对话和候选动作；
+- `services/speech`：3004 Ubuntu 本地三档 ASR、LLM Controller、对话和候选动作；
 - `services/vision` 与 `drivers/xvisio`：3100 XVisio RGB-D、检测画面和目标选择；
+- `skills/vision/inspect-scene`：复用 3100 原始视频流的只读视觉问答；
+- `skills/manipulation/bottlegrasp`：8766 取放适配入口，已接入正式 `manual-control` profile；
 - `apps/launcher`：服务生命周期、PID 所有权、日志和运行 profile；
 - `platform/contracts` 与 `platform/skill_registry`：Skill 协议和可用性发现；
 - 项目本地 SDK、模型、运行时清单，以及 Startouch URDF/STL 资产准备工具。
 
-尚未完成：监督执行服务、LLM 编排器、VLA/ACT/DP Worker、主动视角和自动夹取闭环。`skills/` 中对应 manifest 表示协议已定义，不代表执行 Worker 已可用。
+尚未完成：通用监督执行闭环、VLA/ACT/DP Worker、主动视角和自主夹取闭环。文本 Controller 与只读视觉问答已经接入，但这不等于 LLM 拥有机器人执行权限；其他 `skills/` manifest 也不代表执行 Worker 已可用。
 
 ## 运行架构
 
@@ -62,11 +64,16 @@ Windows browser
     v
 apps/web (Web Gateway)
     |-- ws://127.0.0.1:3000/ws --> services/robot --> Startouch SDK --> can0
-    |-- http/ws://127.0.0.1:3004 --> services/speech
-    `-- http/ws://127.0.0.1:3100 --> services/vision --> drivers/xvisio
+    |-- http/ws://127.0.0.1:3004 --> services/speech (ASR + LLM Controller)
+    |                              |-- text --> deepseek-v4-pro API
+    |                              `-- inspect-scene --> 3100 raw frame --> deepseek-flash API
+    |-- http/ws://127.0.0.1:3100 --> services/vision --> drivers/xvisio
+    `-- http://127.0.0.1:8766 --> BottleGrasp adapter
 ```
 
-只有 Robot Service 可以拥有 `can0`。Speech、Vision、Skill 和未来 LLM 编排器都不能直接发送 CAN 帧。
+上述五个端口属于正式 `manual-control` profile：`9983` 对局域网开放，其余端口只监听 Ubuntu loopback。Pro 处理普通文本并决定是否调用 `inspect-scene`；只有 Flash 接收图片，两个模型调用都是出站 API，不在本机新增监听端口。视觉 Skill 仅从已运行的 3100 获取原始帧，不重新占用摄像头。`8766` 默认不自行打开相机或机器人；它不是已完成的自主抓取 Worker。
+
+只有 Robot Service 可以拥有 `can0`；Speech、Vision、Skill 和 LLM Controller 均不能直接发送 CAN 帧。
 
 ## 快速启动
 
@@ -100,5 +107,3 @@ cd /home/nieqingcao/ThirdHand/UIEAclub_ThirdHand_VLA
 ```
 
 启动服务不会自动连接 SDK、使能电机、回零或运动。软件停止依赖网页、网络、进程、操作系统和 CAN，不能替代独立硬件急停或物理断电。
-
-当前分支 `refactor/unified-platform-foundation` 保持本地，不推送、不合并。

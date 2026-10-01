@@ -5,9 +5,9 @@
 | 路径 | 用途 | 主要入口 |
 |---|---|---|
 | `launcher/` | 按 profile 启停服务、记录 PID/ready/log、检查进程所有权 | `./thirdhand`、`apps/launcher/src/cli.js` |
-| `web/` | 9983 局域网页面、Three.js/URDF 展示及 Robot/Speech/Vision 代理 | `apps/web/src/server.js` |
+| `web/` | 9983 局域网页面、Three.js/URDF 展示及 Robot/Speech/Vision/BottleGrasp 代理 | `apps/web/src/server.js` |
 | `dummy/` | Dum-E 个性状态机、人物跟随与手势实验应用；当前仅手动启动 | `apps/dummy/apps/run_dummy.py`、`apps/dummy/apps/run_person_follow.py` |
 
-边界：`apps/web` 不直接加载 Startouch SDK，也不直接访问 `can0`。机器人命令必须经过 Robot Service；未来 LLM 动作还必须经过计划、授权和执行层。
+边界：`apps/web` 不直接加载 Startouch SDK，也不直接访问 `can0`。语音与文字请求经 3004 的 LLM Controller；视觉问答只读取现有 3100 视频流。机器人命令仍必须经过确认与 Robot Service；LLM 不能直接执行动作。
 
 运行方法见 [`../docs/RUN_GUIDE.md`](../docs/RUN_GUIDE.md)，Web 接口见 [`../docs/apps/WEB_GATEWAY.md`](../docs/apps/WEB_GATEWAY.md)。

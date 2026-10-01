@@ -118,6 +118,51 @@ def test_overlay_uses_tracker_identity_instead_of_frame_order() -> None:
     assert [target["selected"] for target in targets] == [False, True]
 
 
+def test_depth_evidence_projects_only_with_physically_approved_handeye() -> None:
+    import numpy as np
+
+    module = load_module()
+    mask = np.ones((2, 2), dtype=bool)
+    candidate = SimpleNamespace(detection_id=4, mask=mask)
+    decision = SimpleNamespace(tracks=[SimpleNamespace(
+        candidate=candidate,
+        state="confirmed",
+    )])
+    frame = SimpleNamespace(
+        depth_m=np.full((2, 2), 0.5),
+        xyz_camera_m=np.array([
+            [[0.1, 0.2, 0.5], [0.1, 0.2, 0.5]],
+            [[0.1, 0.2, 0.5], [0.1, 0.2, 0.5]],
+        ]),
+        monotonic_ns=100,
+    )
+    config = SimpleNamespace(min_depth_m=0.1, max_depth_m=2.0)
+
+    class Projection:
+        physically_validated = True
+        last_rejection = None
+
+        @staticmethod
+        def for_frame(frame_ns):
+            assert frame_ns == 100
+            transform = np.eye(4)
+            transform[:3, 3] = [1.0, 2.0, 3.0]
+            return transform
+
+    event = {"targets": [{"detection_id": 4, "stable_id": 1, "blockers": []}]}
+    module.attach_depth_evidence(event, decision, frame, config, Projection())
+    assert event["targets"][0]["camera_xyz_m"] == [0.1, 0.2, 0.5]
+    assert event["targets"][0]["base_xyz_m"] == [1.1, 2.2, 3.5]
+    assert event["targets"][0]["base_pose_status"] == "ready"
+
+    pending = Projection()
+    pending.physically_validated = False
+    event = {"targets": [{"detection_id": 4, "stable_id": 1, "blockers": []}]}
+    module.attach_depth_evidence(event, decision, frame, config, pending)
+    assert event["targets"][0]["base_xyz_m"] is None
+    assert event["targets"][0]["base_pose_status"] == "physical_validation_pending"
+
+
 def test_vision_service_source_has_no_robot_control_dependency() -> None:
     service_root = ROOT / "services/vision"
     source = "\n".join(

@@ -311,10 +311,22 @@ def model_provenance(config) -> dict[str, str]:
     }
 
 
-def attach_depth_evidence(event, decision, frame, config) -> None:
-    """Attach inspectable metric depth without claiming a base-frame pose."""
+def attach_depth_evidence(event, decision, frame, config, projection=None) -> None:
+    """Attach metric depth and fail-closed base projection when approved."""
 
     import numpy as np
+    from handeye_projection import project_point
+
+    base_transform = None
+    base_status = "handeye_not_configured"
+    if projection is not None:
+        if not projection.physically_validated:
+            base_status = "physical_validation_pending"
+        else:
+            base_transform = projection.for_frame(int(frame.monotonic_ns))
+            base_status = "ready" if base_transform is not None else (
+                projection.last_rejection or "robot_state_unavailable"
+            )
 
     tracks = {track.candidate.detection_id: track for track in decision.tracks}
     for target in event.get("targets", []):
@@ -340,7 +352,7 @@ def attach_depth_evidence(event, decision, frame, config) -> None:
             "valid_depth_points": valid_points,
             "camera_xyz_m": None,
             "base_xyz_m": None,
-            "base_pose_status": "handeye_not_approved",
+            "base_pose_status": base_status,
         })
         if track.state in {"occluded", "lost", "retired"}:
             target["depth_valid"] = False
@@ -358,6 +370,10 @@ def attach_depth_evidence(event, decision, frame, config) -> None:
             center = np.median(points, axis=0)
             spread = np.std(points, axis=0)
             target["camera_xyz_m"] = [float(value) for value in center]
+            if base_transform is not None:
+                target["base_xyz_m"] = [
+                    float(value) for value in project_point(base_transform, center)
+                ]
             target["position_std_m"] = [float(value) for value in spread]
             target["depth_m"] = float(center[2])
     event["selectedStableId"] = event.get("selected_stable_id")
@@ -470,6 +486,12 @@ def build_parser() -> argparse.ArgumentParser:
         type=Path,
         default=ROOT / "runtime/build/xvisio/xvisio_rgbd_stream",
     )
+    parser.add_argument("--handeye", type=Path, default=None)
+    parser.add_argument(
+        "--urdf",
+        type=Path,
+        default=None,
+    )
     return parser
 
 
@@ -481,6 +503,19 @@ def run_bridge(args: argparse.Namespace) -> int:
 
     vision_config = VisionConfig.from_yaml(args.config)
     serial = str(config_data["camera_serial"])
+    projection = None
+    if args.handeye is not None:
+        if args.urdf is None:
+            raise ValueError("handeye_requires_robot_urdf")
+        from handeye_projection import HandEyeProjection
+
+        projection = HandEyeProjection(
+            args.handeye,
+            serial,
+            vision_config.camera_registration_id,
+            vision_config.camera_mount_id,
+            args.urdf,
+        )
     quality = int(os.environ.get("CAMERA_JPEG_QUALITY", "75"))
     event_stream = os.fdopen(
         int(os.environ.get("CAMERA_EVENT_FD", "3")),
@@ -601,7 +636,7 @@ def run_bridge(args: argparse.Namespace) -> int:
             encoded,
             model_provenance=model_provenance(vision_config),
         )
-        attach_depth_evidence(event, decision, frame, vision_config)
+        attach_depth_evidence(event, decision, frame, vision_config, projection)
         events.write(event)
 
     runtime = CameraRuntime(
@@ -649,6 +684,8 @@ def run_bridge(args: argparse.Namespace) -> int:
                         str(message["kind"]),
                         bool(message["enabled"]),
                     )
+                elif message.get("type") == "arm_state" and projection is not None:
+                    projection.update(message, time.monotonic_ns())
                 elif message.get("type") == "shutdown":
                     stop.set()
                     return
@@ -674,8 +711,10 @@ def run_bridge(args: argparse.Namespace) -> int:
         "registration_id": vision_config.camera_registration_id,
         "camera_mount_id": vision_config.camera_mount_id,
         "vision_config_id": vision_config.content_id,
-        "calibration_id": None,
-        "calibration_approved": False,
+        "calibration_id": projection.calibration_id if projection is not None else None,
+        "calibration_approved": (
+            projection.physically_validated if projection is not None else False
+        ),
         "model_provenance": model_provenance(vision_config),
         "robotControlEnabled": False,
     })

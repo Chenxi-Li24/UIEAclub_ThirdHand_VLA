@@ -161,16 +161,21 @@ class CameraProcess extends EventEmitter {
     this.runtimeEvidence = null;
     this.lastDetection = null;
     for (const stream of Object.values(this.streams)) stream.reset();
+    const bridgeArgs = [
+      '-u',
+      this.config.bridgeScript,
+      '--config',
+      this.config.visionConfig,
+      '--executable',
+      this.config.xvisioExecutable,
+    ];
+    if (this.config.handeye) {
+      if (!this.config.robotUrdf) throw new Error('handeye requires THIRDHAND_ROBOT_URDF');
+      bridgeArgs.push('--handeye', this.config.handeye, '--urdf', this.config.robotUrdf);
+    }
     const child = spawn(
       this.config.python,
-      [
-        '-u',
-        this.config.bridgeScript,
-        '--config',
-        this.config.visionConfig,
-        '--executable',
-        this.config.xvisioExecutable,
-      ],
+      bridgeArgs,
       {
         cwd: this.config.root,
         env: {
@@ -338,7 +343,7 @@ class CameraProcess extends EventEmitter {
   send(message) {
     if (!this.child?.stdin?.writable || this.child.stdin.destroyed) return false;
     const allowed = new Set([
-      'select_target', 'release_target', 'set_stream_enabled', 'shutdown',
+      'select_target', 'release_target', 'set_stream_enabled', 'arm_state', 'shutdown',
     ]);
     if (!allowed.has(message?.type)) return false;
     if (message.type === 'set_stream_enabled' &&
@@ -349,6 +354,16 @@ class CameraProcess extends EventEmitter {
          message.stableId < 1 || message.stableId > 5)) {
       return false;
     }
+    if (message.type === 'arm_state' && (
+      message.pose_frame !== 'robot_flange' || message.connected !== true ||
+      message.healthy !== true || typeof message.stationary !== 'boolean' ||
+      ![message.flange_position_m, message.flange_euler_rad].every(
+        value => Array.isArray(value) && value.length === 3 && value.every(Number.isFinite)
+      ) || !Array.isArray(message.joints_deg) || message.joints_deg.length !== 6 ||
+      !message.joints_deg.every(Number.isFinite) ||
+      !Number.isSafeInteger(message.observed_monotonic_ns) ||
+      message.observed_monotonic_ns < 0
+    )) return false;
     return this.child.stdin.write(`${JSON.stringify(message)}\n`);
   }
 

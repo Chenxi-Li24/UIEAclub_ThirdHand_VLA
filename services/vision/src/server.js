@@ -232,6 +232,8 @@ function createVisionService(options = {}) {
           type: 'release_target',
           requestId: message.requestId,
         });
+      } else if (message?.type === 'arm_state') {
+        accepted = camera.send(message);
       }
       if (!accepted && socket.readyState === WebSocket.OPEN) {
         socket.send(JSON.stringify({

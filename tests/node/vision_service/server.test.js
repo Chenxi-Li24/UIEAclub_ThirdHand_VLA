@@ -5,6 +5,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
+const { WebSocket } = require('ws');
 
 const { createVisionService } = require(
   '../../../services/vision/src/server',
@@ -153,4 +154,34 @@ test('person-follow aliases expose read-only status and observation', async (t) 
   const observation = await fetch(`${origin}/api/vision/person-follow/observation`).then(r => r.json());
   assert.equal(observation.robotControlEnabled, false);
   assert.equal(observation.selectedStableId, 2);
+});
+
+test('vision websocket forwards validated arm state without robot control', async (t) => {
+  const runtime = fs.mkdtempSync(path.join(os.tmpdir(), 'thirdhand-arm-state-'));
+  const camera = new FakeCamera();
+  const service = createVisionService({
+    host: '127.0.0.1', port: 0,
+    readyFile: path.join(runtime, 'vision.ready'), camera,
+  });
+  t.after(async () => {
+    await service.close();
+    fs.rmSync(runtime, { recursive: true, force: true });
+  });
+  const address = await service.start();
+  const socket = new WebSocket(`ws://127.0.0.1:${address.port}/ws`);
+  t.after(() => socket.close());
+  await new Promise((resolve, reject) => {
+    socket.once('open', resolve);
+    socket.once('error', reject);
+  });
+  const state = {
+    type: 'arm_state', pose_frame: 'robot_flange',
+    connected: true, healthy: true, stationary: true,
+    flange_position_m: [0.1275, 0, 0.17605],
+    flange_euler_rad: [0, 0, 0], joints_deg: [0, 0, 0, 0, 0, 0],
+    observed_monotonic_ns: 123,
+  };
+  socket.send(JSON.stringify(state));
+  await new Promise(resolve => setTimeout(resolve, 10));
+  assert.deepEqual(camera.commands.at(-1), state);
 });

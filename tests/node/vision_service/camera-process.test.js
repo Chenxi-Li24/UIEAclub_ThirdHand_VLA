@@ -55,3 +55,28 @@ test('camera process enables only streams with active HTTP subscribers', () => {
     enabled: false,
   });
 });
+
+test('camera process forwards only validated flange state to projection bridge', () => {
+  const messages = [];
+  const camera = new CameraProcess({ restartDelayMs: 2000 });
+  camera.child = {
+    stdin: {
+      writable: true,
+      destroyed: false,
+      write(line) {
+        messages.push(JSON.parse(line));
+        return true;
+      },
+    },
+  };
+  const state = {
+    type: 'arm_state', pose_frame: 'robot_flange',
+    connected: true, healthy: true, stationary: true,
+    flange_position_m: [0.1275, 0, 0.17605],
+    flange_euler_rad: [0, 0, 0], joints_deg: [0, 0, 0, 0, 0, 0],
+    observed_monotonic_ns: 123,
+  };
+  assert.equal(camera.send(state), true);
+  assert.deepEqual(messages, [state]);
+  assert.equal(camera.send({ ...state, pose_frame: 'tool' }), false);
+});

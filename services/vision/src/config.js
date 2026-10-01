@@ -25,6 +25,8 @@ function loadConfig(env = process.env) {
       path.join(ROOT, 'services/vision/python/camera_bridge.py'),
     visionConfig: env.VISION_CONFIG ||
       path.join(ROOT, 'configs/vision.yaml'),
+    handeye: env.THIRDHAND_VA_HANDEYE || null,
+    robotUrdf: env.THIRDHAND_ROBOT_URDF || null,
     xvisioExecutable: env.XVISIO_STREAM_EXECUTABLE ||
       path.join(ROOT, 'runtime/build/xvisio/xvisio_rgbd_stream'),
   };

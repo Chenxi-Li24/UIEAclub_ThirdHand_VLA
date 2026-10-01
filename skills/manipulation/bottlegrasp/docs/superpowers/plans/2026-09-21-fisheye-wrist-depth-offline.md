@@ -43,7 +43,7 @@
 
 **Files:** Create `apps/web/src/active-depth/fisheye.js`; test `tests/node/web/active-depth-fisheye.test.js`.
 
-**Interfaces:** `streamPixelToRay([u,v]) -> {ok, ray?, reason?}` and `rayToStreamPixel([x,y,z]) -> {ok, pixel?, reason?}`. The profile is the checked-in Lumos SEUCM parameters `fx=392.5984802`, `fy=392.4404297`, `cx=637.3952637`, `cy=641.7739868`, `alpha=0.6799842119`, `beta=0.7471178174`, native 1280×1280. Match the Python `SeucmCamera` math in `/home/nieqingcao/th0814/ThirdHand-XVisio-handeye-web/web-control/server/vision/camera_models.py` and the crop in `services/vision/python/thirdhand_va/vision/nearfield_guard.py`.
+**Interfaces:** `streamPixelToRay([u,v]) -> {ok, ray?, reason?}` and `rayToStreamPixel([x,y,z]) -> {ok, pixel?, reason?}`. The profile is the checked-in Lumos SEUCM parameters `fx=392.5984802`, `fy=392.4404297`, `cx=637.3952637`, `cy=641.7739868`, `alpha=0.6799842119`, `beta=0.7471178174`, native 1280×1280. Match the Python `SeucmCamera` math in `History/source-snapshots/startouch-web-vla/web-control/server/vision/camera_models.py` and the crop in `services/vision/python/thirdhand_va/vision/nearfield_guard.py`.
 
 - [x] **Step 1: Write failing tests.** Use hand-derived center and invalid-domain cases:
 

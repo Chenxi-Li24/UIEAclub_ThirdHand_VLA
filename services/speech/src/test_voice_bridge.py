@@ -247,6 +247,58 @@ class VoiceBridgeProtocolTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(created[0].inputs, ["打开夹爪", "然后松开"])
         self.assertEqual(asr.sample_counts, [])
 
+    async def test_text_result_emits_sanitized_agent_trace_before_reply(self) -> None:
+        class TraceClaude(FakeClaude):
+            def chat(self, text: str) -> dict[str, Any]:
+                self.inputs.append(text)
+                return {
+                    "text": "I can see one red can.",
+                    "actions": [],
+                    "trace": [{
+                        "stage": "vision.inspect_scene",
+                        "status": "completed",
+                        "model": "deepseek-flash",
+                        "frameId": "xvisio-9",
+                        "frameAgeMs": 12,
+                        "retryCount": 0,
+                        "apiKey": "must-not-leak",
+                        "jpeg": "base64-image-data",
+                        "rawError": "provider internals",
+                    }],
+                }
+
+        bridge = VoiceBridge(FakeASR(), lambda: TraceClaude())
+
+        async with running_bridge(bridge) as url:
+            async with connect(
+                url,
+                subprotocols=[WEBSOCKET_SUBPROTOCOL],
+            ) as websocket:
+                await websocket.send(text_message("trace-text", "look ahead"))
+                messages = await receive_through(websocket, "session.completed")
+
+        self.assertEqual(
+            [message["type"] for message in messages],
+            [
+                "session.processing",
+                "agent.trace",
+                "assistant.response",
+                "session.completed",
+            ],
+        )
+        payload = messages[1]["payload"]
+        self.assertEqual(payload["inputMode"], "text")
+        self.assertEqual(payload["stage"], "vision.inspect_scene")
+        self.assertEqual(payload["status"], "completed")
+        self.assertEqual(payload["model"], "deepseek-flash")
+        self.assertEqual(payload["frameId"], "xvisio-9")
+        self.assertEqual(payload["frameAgeMs"], 12)
+        self.assertEqual(payload["retryCount"], 0)
+        serialized = json.dumps(payload)
+        self.assertNotIn("must-not-leak", serialized)
+        self.assertNotIn("base64-image-data", serialized)
+        self.assertNotIn("provider internals", serialized)
+
     async def test_unicode_text_limit_uses_production_websocket_size(self) -> None:
         bridge = VoiceBridge(
             FakeASR(),

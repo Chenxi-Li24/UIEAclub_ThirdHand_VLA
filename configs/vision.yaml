@@ -12,7 +12,7 @@ stability_window: 5
 required_stable_hits: 4
 max_pose_spread_m: 0.012
 min_grasp_width_m: 0.012
-max_grasp_width_m: 0.072
+max_grasp_width_m: 0.080
 max_visible_tracks: 5
 track_confirmation_hits: 3
 track_lost_timeout_ms: 2000

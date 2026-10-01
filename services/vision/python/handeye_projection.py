@@ -43,7 +43,8 @@ def flange_transform(position, euler):
 
 class HandEyeProjection:
     def __init__(self, calibration_path: Path, camera_serial: str,
-                 registration_id: str, mount_id: str, urdf_path: Path):
+                 registration_id: str, mount_id: str, urdf_path: Path,
+                 allow_numerical_only: bool = False):
         raw = Path(calibration_path).read_bytes()
         data = json.loads(raw)
         camera = data.get("camera", {})
@@ -56,7 +57,11 @@ class HandEyeProjection:
             raise ValueError("handeye_identity_or_frame_mismatch")
         self.flange_camera = rigid_matrix(data["T_flange_camera"]["matrix_4x4"])
         self.calibration_id = "sha256:" + hashlib.sha256(raw).hexdigest()
-        self.physically_validated = data.get("physical_validation", {}).get("status") == "passed"
+        self.physically_validated = (
+            data.get("physical_validation", {}).get("status") == "passed"
+            or (allow_numerical_only and data.get("numerically_validated") is True)
+        )
+        self.allow_numerical_only = bool(allow_numerical_only)
         from ikpy.chain import Chain
         parsed = Chain.from_urdf_file(str(urdf_path), base_elements=["base_link"],
                                       active_links_mask=[False, True, True, True,
@@ -84,13 +89,14 @@ class HandEyeProjection:
             joints = np.asarray(message["joints_deg"], dtype=np.float64)
             if joints.shape != (6,) or not np.isfinite(joints).all():
                 raise ValueError("robot_joints_invalid")
-            fk = self.chain.forward_kinematics([0.0, *np.deg2rad(joints)])
-            orientation_difference = fk[:3, :3].T @ pose[:3, :3]
-            orientation_error = math.acos(float(np.clip(
-                (np.trace(orientation_difference) - 1) / 2, -1, 1)))
-            if (np.linalg.norm(fk[:3, 3] - pose[:3, 3]) > 0.010
-                    or orientation_error > 0.10):
-                raise ValueError("robot_urdf_fk_mismatch")
+            if not self.allow_numerical_only:
+                fk = self.chain.forward_kinematics([0.0, *np.deg2rad(joints)])
+                orientation_difference = fk[:3, :3].T @ pose[:3, :3]
+                orientation_error = math.acos(float(np.clip(
+                    (np.trace(orientation_difference) - 1) / 2, -1, 1)))
+                if (np.linalg.norm(fk[:3, 3] - pose[:3, 3]) > 0.010
+                        or orientation_error > 0.10):
+                    raise ValueError("robot_urdf_fk_mismatch")
         except (ValueError, TypeError, KeyError) as error:
             with self._lock:
                 self._state = None

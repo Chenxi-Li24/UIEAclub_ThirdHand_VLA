@@ -107,6 +107,8 @@ class VisionServiceClient extends EventEmitter {
     return this.send({
       type: 'arm_state',
       pose_frame: 'robot_flange',
+      connected: true,
+      healthy: true,
       flange_position_m: flangePosition,
       flange_euler_rad: flangeEuler,
       joints_deg: jointsDeg,

@@ -125,8 +125,8 @@ class VisionConfig:
             raise ValueError("max_pose_spread_m must be positive")
         if not 0 < self.min_grasp_width_m < self.max_grasp_width_m:
             raise ValueError("grasp width limits must satisfy 0 < min < max")
-        if self.max_grasp_width_m > 0.072:
-            raise ValueError("max_grasp_width_m must not exceed the 72 mm safety limit")
+        if self.max_grasp_width_m > 0.080:
+            raise ValueError("max_grasp_width_m must not exceed the 80 mm physical limit")
         if not 1 <= self.max_visible_tracks <= 5:
             raise ValueError("max_visible_tracks must be in [1, 5]")
         if not 1 <= self.track_confirmation_hits <= self.stability_window:

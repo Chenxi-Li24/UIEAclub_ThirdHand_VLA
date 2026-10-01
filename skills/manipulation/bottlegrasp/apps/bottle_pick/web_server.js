@@ -39,6 +39,9 @@ const { createSupervisedPreview } = require(
 const { VisionClient } = require(
   '../../src/thirdhand_va/action/adapters/vision_client'
 );
+const { buildLiftOnlyPlan } = require(
+  '../../src/thirdhand_va/action/grasp/lift_only_plan'
+);
 
 const ROBOT_ENABLE_ACK = REAL_ACK;
 
@@ -104,6 +107,17 @@ function robotRuntimeReady({
       state.stationary === true && cameraInfo?.ready === true &&
       cameraInfo.calibrationApproved === true &&
       sameRuntimeEvidence(cameraInfo.runtimeEvidence, approvedRuntimeEvidence);
+  } catch {
+    return false;
+  }
+}
+
+function liftOnlyRobotReady({ robotClient, cameraInfo }) {
+  try {
+    const state = robotClient?.getRobotState();
+    return robotClient?.connected === true && robotClient?.protocolReady === true &&
+      state?.poseFrame === 'robot_flange' && state.connected === true &&
+      state.healthy === true && state.stateFresh === true && cameraInfo?.ready === true;
   } catch {
     return false;
   }
@@ -412,13 +426,22 @@ async function main() {
   const loadedConfig = loadActionConfig(
     process.env.THIRDHAND_VA_ACTION_CONFIG || path.join(projectRoot, 'configs/action.yaml')
   );
-  const config = process.env.THIRDHAND_ROBOT_WS_URL
+  let config = process.env.THIRDHAND_ROBOT_WS_URL
     ? {
       ...loadedConfig,
       robot: { ...loadedConfig.robot, backend: 'websocket',
         ws_url: process.env.THIRDHAND_ROBOT_WS_URL },
     }
     : loadedConfig;
+  const liftOnly = process.env.THIRDHAND_VA_LIFT_ONLY === '1';
+  if (liftOnly) config = {
+    ...config, execution_enabled: true, workflow_mode: 'lift_only',
+    gripper: { ...config.gripper,
+      execution_max_width_m: config.gripper.physical_max_width_m,
+      contact_max_width_m: config.gripper.physical_max_width_m - 0.001,
+      release_min_width_m: config.gripper.physical_max_width_m,
+    },
+  };
   const visionWsUrl = process.env.THIRDHAND_VA_VISION_WS_URL || null;
   const cameraBridge = visionWsUrl
     ? new VisionServiceClient({
@@ -436,7 +459,7 @@ async function main() {
     if (config.execution_enabled !== true) {
       throw new Error('robot enable requested but action config execution is disabled');
     }
-    approvedRuntimeEvidence = loadApprovedRuntimeEvidence({
+    approvedRuntimeEvidence = liftOnly ? null : loadApprovedRuntimeEvidence({
       visionConfigPath: path.resolve(
         process.env.VISION_CONFIG || path.join(projectRoot, 'configs/vision.yaml')
       ),
@@ -451,7 +474,7 @@ async function main() {
         } : {}),
     };
     robotClient = createRobotClient(config, robotDependencies);
-    homeCoordinator = new HomeCoordinator({
+    homeCoordinator = liftOnly ? null : new HomeCoordinator({
       robotClient,
       homePreset: config.place.home_preset,
       homeJointsDeg: config.robot.presets[config.place.home_preset],
@@ -460,15 +483,17 @@ async function main() {
       startupJointRangesDeg: config.place.startup_joint_ranges_deg,
       timeoutMs: config.home_timeout_ms,
     });
-    const homeStart = homeCoordinator.start();
-    if (homeStart.accepted !== true) {
-      throw new Error(homeStart.reason || 'startup_home_failed');
+    if (homeCoordinator) {
+      const homeStart = homeCoordinator.start();
+      if (homeStart.accepted !== true) {
+        throw new Error(homeStart.reason || 'startup_home_failed');
+      }
     }
     if (robotClient.connect() !== true) throw new Error('robot_start_failed');
     createWorkflow = ({ onFinish }) => new WorkflowClient({
       cameraBridge, robotClient, config, store: statusStore, onFinish,
       workflowTimeoutMs: config.workflow_timeout_ms,
-      runtimeEvidence: () => cameraBridge.getInfo().runtimeEvidence,
+      runtimeEvidence: liftOnly ? null : () => cameraBridge.getInfo().runtimeEvidence,
       approvedRuntimeEvidence,
     });
   } else {
@@ -487,6 +512,8 @@ async function main() {
       frameId: latestVision.frameId,
       evidenceId: latestVision.evidenceId,
       motionEpoch: latestVision.motionEpoch,
+      ...(latestVision.selectedStableId === targetId && latestVision.pose
+        ? { pose: latestVision.pose } : {}),
     };
   };
   const currentEvidence = targetId => {
@@ -511,7 +538,13 @@ async function main() {
       runtimeEvidence: cameraBridge.getInfo().runtimeEvidence,
       config,
       nowMs: Date.now(),
-      buildPlan: null,
+      buildPlan: liftOnly ? (target, activeConfig) => buildLiftOnlyPlan({
+        target,
+        pose: target.pose,
+        config: activeConfig,
+        requestId: `lift-${target.stableId}-${target.frameId}`,
+        motionEpoch: target.motionEpoch,
+      }) : null,
     }),
     currentEvidence: () => currentEvidence(
       supervisedSession.currentPreview?.targetId ?? latestVision?.selectedStableId ?? 1
@@ -519,20 +552,33 @@ async function main() {
     getRobotState: currentRobotState,
     robotClient: robotClient ?? { send: () => false },
   });
+  robotClient?.on?.('event', event => {
+    if (event?.type === 'robot_state') {
+      cameraBridge.sendArmState?.(
+        event.flangePositionM, event.flangeEulerRad, event.jointsDeg,
+        event.velocitiesDegS, event.moving !== true, event.observedMonotonicNs,
+      );
+    }
+    supervisedSession.onRobotEvent(event);
+  });
   const app = createWebServer({
     cameraBridge,
     operatorController,
     host: process.env.THIRDHAND_VA_HOST || '127.0.0.1',
     port: Number(process.env.THIRDHAND_VA_PORT || 8766),
     robotControlEnabled: robotEnabled && config.execution_enabled,
-    robotReady: () => robotRuntimeReady({
+    robotReady: () => liftOnly ? liftOnlyRobotReady({
+      robotClient, cameraInfo: cameraBridge.getInfo(),
+    }) : robotRuntimeReady({
       robotClient,
       cameraInfo: cameraBridge.getInfo(),
       approvedRuntimeEvidence,
       config,
       homeCoordinator,
     }),
-    homeStatus: () => homeRuntimeStatus({ homeCoordinator, robotClient, config }),
+    homeStatus: () => liftOnly
+      ? { phase: 'bypassed_for_lift_only', ready: true, reason: null }
+      : homeRuntimeStatus({ homeCoordinator, robotClient, config }),
     runtimeEvidence: () => {
       const camera = cameraBridge.getInfo().runtimeEvidence;
       return {
@@ -575,6 +621,7 @@ if (require.main === module) {
 }
 
 module.exports = {
-  ROBOT_ENABLE_ACK, createWebServer, homeRuntimeStatus, main, robotRuntimeReady,
+  ROBOT_ENABLE_ACK, createWebServer, homeRuntimeStatus, liftOnlyRobotReady,
+  main, robotRuntimeReady,
   validStart, validStop, validateRuntimeAuthorization,
 };

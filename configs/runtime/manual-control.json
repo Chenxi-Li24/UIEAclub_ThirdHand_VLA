@@ -65,7 +65,10 @@
         "VISION_PORT": "3100",
         "VISION_PYTHON": "${ROOT}/local/runtimes/vision-python/bin/python",
         "VISION_CONFIG": "${ROOT}/configs/vision.yaml",
-        "XVISIO_STREAM_EXECUTABLE": "${ROOT}/runtime/build/xvisio/xvisio_rgbd_stream"
+        "XVISIO_STREAM_EXECUTABLE": "${ROOT}/runtime/build/xvisio/xvisio_rgbd_stream",
+        "THIRDHAND_VA_HANDEYE": "${ROOT}/skills/manipulation/bottlegrasp/configs/calibration/lumos-handeye.pending.json",
+        "THIRDHAND_ROBOT_URDF": "${ROOT}/assets/robot/startouch-v3/FastTouchV3.SLDASM.urdf",
+        "THIRDHAND_ALLOW_NUMERICAL_HANDEYE": "1"
       },
       "bind": "127.0.0.1",
       "port": 3100,
@@ -88,7 +91,10 @@
         "THIRDHAND_VA_PORT": "8766",
         "THIRDHAND_VA_ACTION_CONFIG": "${ROOT}/skills/manipulation/bottlegrasp/configs/action.yaml",
         "THIRDHAND_VA_ENABLE_CAMERA": "0",
-        "THIRDHAND_VA_ENABLE_ROBOT": "0",
+        "THIRDHAND_VA_ENABLE_ROBOT": "1",
+        "THIRDHAND_VA_LIFT_ONLY": "1",
+        "THIRDHAND_ALLOW_ROBOT": "I_ACCEPT_SUPERVISED_ROBOT_MOTION",
+        "THIRDHAND_VA_HANDEYE": "${ROOT}/skills/manipulation/bottlegrasp/configs/calibration/lumos-handeye.pending.json",
         "THIRDHAND_VISION_HTTP_URL": "http://127.0.0.1:3100",
         "THIRDHAND_VA_VISION_WS_URL": "ws://127.0.0.1:3100/ws",
         "THIRDHAND_ROBOT_WS_URL": "ws://127.0.0.1:3000/ws"

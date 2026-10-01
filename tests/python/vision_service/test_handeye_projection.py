@@ -27,6 +27,24 @@ class HandEyeProjectionTests(unittest.TestCase):
         transform = flange_transform([1, 2, 3], [0, 0, math.pi / 2])
         self.assertTrue(np.allclose(project_point(transform, [1, 0, 1]), [1, 3, 4]))
 
+    def test_numerically_validated_calibration_can_be_enabled_without_approval_flag(self):
+        projection = HandEyeProjection(
+            CALIBRATION, "250801DR48FP25002738",
+            "xvisio-sdk:250801DR48FP25002738",
+            "luming_eih_20260817_250801DR48FP25002738_85a58f8a28ac", URDF,
+            allow_numerical_only=True,
+        )
+        self.assertTrue(projection.physically_validated)
+        now = time.monotonic_ns()
+        state = {"type": "arm_state", "pose_frame": "robot_flange",
+                 "connected": True, "healthy": True, "stationary": True,
+                 "flange_position_m": [0.25, 0.06, 0.04],
+                 "flange_euler_rad": [0.2, 0.5, 0.38],
+                 "joints_deg": [0, -1, -0.58, 32.7, 19.2, 0],
+                 "observed_monotonic_ns": now}
+        self.assertTrue(projection.update(state, now))
+        self.assertIsNotNone(projection.for_frame(now))
+
     def test_matching_stationary_zero_state_is_accepted(self):
         now = time.monotonic_ns()
         state = {"type": "arm_state", "pose_frame": "robot_flange",

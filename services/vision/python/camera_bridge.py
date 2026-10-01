@@ -515,6 +515,9 @@ def run_bridge(args: argparse.Namespace) -> int:
             vision_config.camera_registration_id,
             vision_config.camera_mount_id,
             args.urdf,
+            allow_numerical_only=(
+                os.environ.get("THIRDHAND_ALLOW_NUMERICAL_HANDEYE") == "1"
+            ),
         )
     quality = int(os.environ.get("CAMERA_JPEG_QUALITY", "75"))
     event_stream = os.fdopen(

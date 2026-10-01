@@ -105,6 +105,20 @@ test('one accepted plan completes grasp place retreat and home', () => {
   );
 });
 
+test('lift-only plan stops after a verified grasp and lift', () => {
+  const h = harness();
+  const liftOnly = plan({ mode: 'lift_only', pathValidationId: null });
+
+  assert.equal(h.controller.start(liftOnly).accepted, true);
+  for (let index = 0; index < 4; index += 1) h.complete();
+
+  assert.deepEqual(h.sent.map(command => command.source), [
+    'grasp:open', 'grasp:final_approach', 'grasp:close', 'grasp:lift',
+  ]);
+  assert.equal(h.controller.snapshot().phase, 'complete');
+  assert.equal(h.controller.snapshot().holdingObject, true);
+});
+
 test('controller completes every protocol-safe transfer segment before lowering', () => {
   const h = harness();
   const started = h.controller.start(plan({

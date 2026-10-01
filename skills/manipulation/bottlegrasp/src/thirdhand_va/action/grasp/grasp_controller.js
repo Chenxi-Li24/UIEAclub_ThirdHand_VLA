@@ -72,11 +72,11 @@ function validPlan(plan) {
     vector6(plan.homeJointsDeg) &&
     Number.isFinite(plan.homeToleranceDeg) && plan.homeToleranceDeg > 0 &&
     plan.homeToleranceDeg <= 2.0 &&
-    Number.isFinite(plan.widthM) && plan.widthM > 0 && plan.widthM <= 0.072 &&
+    Number.isFinite(plan.widthM) && plan.widthM > 0 && plan.widthM <= 0.080 &&
     Number.isFinite(plan.contactMinWidthM) && plan.contactMinWidthM >= 0 &&
     Number.isFinite(plan.contactMaxWidthM) &&
     plan.contactMaxWidthM >= plan.contactMinWidthM &&
-    plan.contactMaxWidthM <= 0.072 &&
+    plan.contactMaxWidthM <= 0.080 &&
     Number.isFinite(plan.releaseMinWidthM) &&
     plan.releaseMinWidthM > plan.contactMaxWidthM &&
     Number.isFinite(plan.releaseMaxWidthM) &&
@@ -90,7 +90,8 @@ function validPlan(plan) {
     Number.isFinite(plan.openPosition) && plan.openPosition >= 0 && plan.openPosition <= 1 &&
     Number.isFinite(plan.closePosition) && plan.closePosition >= 0 && plan.closePosition <= 1 &&
     plan.closePosition < plan.openPosition &&
-    typeof plan.pathValidationId === 'string' && SHA256_ID.test(plan.pathValidationId);
+    (plan.mode === 'lift_only' ? plan.pathValidationId === null
+      : typeof plan.pathValidationId === 'string' && SHA256_ID.test(plan.pathValidationId));
 }
 
 function freezePlan(plan) {
@@ -282,7 +283,9 @@ class GraspController {
       }
       return this._sendCurrentPhase();
     }
-    const next = this.supervised && completedPhase === 'open' &&
+    const next = this.plan.mode === 'lift_only' && completedPhase === 'lift'
+      ? 'complete'
+      : this.supervised && completedPhase === 'open' &&
       Array.isArray(this.plan.pregraspSegments) && this.plan.pregraspSegments.length > 0
       ? 'pregrasp' : NEXT_PHASE[completedPhase];
     if (next === 'complete') {

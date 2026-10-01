@@ -54,6 +54,20 @@ test('approval flags alone do not block a preview with real coordinates and plan
   assert.deepEqual(preview.blockers, []);
 });
 
+test('lift-only preview needs base coordinates but not alignment approval evidence', () => {
+  const preview = createSupervisedPreview({
+    target: { ...target, baseXyzM: [0.30, 0.10, 0.20],
+      positionStdM: [0.002, 0.002, 0.003],
+      graspPreview: { ...target.graspPreview, blockers: [] } },
+    robotState: { ...robotState, stationary: false, moving: false }, runtimeEvidence,
+    config: { execution_enabled: true, workflow_mode: 'lift_only', grasp: {} },
+    nowMs: 1000,
+    buildPlan: () => ({ schema: 'thirdhand-execution-plan-v2', mode: 'lift_only' }),
+  });
+  assert.equal(preview.executable, true);
+  assert.deepEqual(preview.blockers, []);
+});
+
 test('a single visual target cannot impersonate alignment handoff evidence', () => {
   const preview = createSupervisedPreview({
     target: { ...target, graspPreview: { ...target.graspPreview, blockers: [] } },

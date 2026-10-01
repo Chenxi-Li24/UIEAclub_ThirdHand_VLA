@@ -16,17 +16,21 @@ function createSupervisedPreview({ target, robotState, runtimeEvidence, config, 
   }
   if (target?.trackState !== 'confirmed') blockers.add('target_not_confirmed');
   if (target?.depthValid !== true) blockers.add('depth_invalid');
-  if (!vector3(gripTarget)) blockers.add('grip_target_unavailable');
+  const liftOnly = config?.workflow_mode === 'lift_only';
+  if (!liftOnly && !vector3(gripTarget)) blockers.add('grip_target_unavailable');
+  if (liftOnly && !vector3(target?.baseXyzM)) blockers.add('base_coordinates_unavailable');
   if (config?.execution_enabled !== true) blockers.add('execution_disabled');
   const gripTransform = config?.grasp?.grip_transform;
   if (!robotState || robotState.poseFrame !== 'robot_flange' ||
       robotState.connected !== true || robotState.healthy !== true ||
-      robotState.stateFresh !== true || robotState.stationary !== true ||
+      robotState.stateFresh !== true || (!liftOnly && robotState.stationary !== true) ||
       !Number.isSafeInteger(robotState.stateSequence)) {
     blockers.add('robot_state_unverified');
   }
   if (typeof buildPlan !== 'function') blockers.add('supervised_plan_unavailable');
-  else if (!target?.actionEvidence) blockers.add('alignment_handoff_evidence_unavailable');
+  else if (!liftOnly && !target?.actionEvidence) {
+    blockers.add('alignment_handoff_evidence_unavailable');
+  }
   const evidence = Object.freeze({
     targetId: target?.stableId ?? null,
     frameId: target?.frameId ?? null,

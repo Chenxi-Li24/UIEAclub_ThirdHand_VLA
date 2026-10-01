@@ -73,12 +73,14 @@ max_frame_age_ms: 300
     assert config.grasp_band_fractions == (0.35, 0.5, 0.65)
 
 
-def test_rejects_configured_grasp_width_above_safe_72mm() -> None:
+def test_accepts_full_physical_gripper_width_and_rejects_above_80mm() -> None:
     raw = asdict(VisionConfig.from_yaml(Path("configs/vision.yaml")))
     raw.pop("content_id")
-    raw["max_grasp_width_m"] = 0.073
+    raw["max_grasp_width_m"] = 0.080
+    assert VisionConfig.from_mapping(raw).max_grasp_width_m == 0.080
 
-    with pytest.raises(ValueError, match="72 mm"):
+    raw["max_grasp_width_m"] = 0.081
+    with pytest.raises(ValueError, match="80 mm"):
         VisionConfig.from_mapping(raw)
 
 

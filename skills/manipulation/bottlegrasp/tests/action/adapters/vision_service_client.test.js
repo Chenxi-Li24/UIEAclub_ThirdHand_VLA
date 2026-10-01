@@ -67,6 +67,12 @@ test('vision service adapter reuses 3100 events and translates skill commands', 
   assert.deepEqual(socket.sent.at(-1), {
     type: 'release_target', requestId: 'pick-4',
   });
+  assert.equal(client.sendArmState(
+    [0.2, 0.1, 0.3], [0, 0, 0], [0, 0, 0, 0, 0, 0],
+    [0, 0, 0, 0, 0, 0], true, 1234,
+  ), true);
+  assert.equal(socket.sent.at(-1).connected, true);
+  assert.equal(socket.sent.at(-1).healthy, true);
 
   client.shutdown();
   assert.equal(client.connected, false);

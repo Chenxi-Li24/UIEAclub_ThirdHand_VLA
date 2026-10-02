@@ -72,6 +72,48 @@ class LanguageCandidateContractTests(unittest.TestCase):
                     {"tool": "move_multiple_joints", "input": {"moves": moves}}, "invalid"
                 ))
 
+    def test_camera_x_centimetre_candidate_requires_explicit_matching_direction_and_distance(self):
+        candidate = VoiceBridge._candidate_from_action(
+            {"tool": "translate_camera_x", "input": {
+                "direction": "left", "distance_cm": 2}},
+            "X轴向左移动2厘米",
+        )
+        self.assertEqual(candidate["intent"], "end_effector.step")
+        self.assertEqual(candidate["payload"]["params"], {
+            "action": "end_effector.step", "axis": "camera_x",
+            "direction": "left", "distanceCm": 2,
+        })
+        self.assertTrue(candidate["requiresConfirmation"])
+        chinese = VoiceBridge._candidate_from_action(
+            {"tool": "translate_camera_x", "input": {
+                "direction": "right", "distance_cm": 2}},
+            "末端向右移动两厘米",
+        )
+        self.assertEqual(chinese["payload"]["params"]["distanceCm"], 2)
+        for text, distance in [
+            ("X轴向左移动零点五厘米", 5),
+            ("X轴向左移动十一厘米", 1),
+            ("X轴向左移动二十厘米", 10),
+            ("X轴向左移动1e1cm", 1),
+            ("X轴向左移动1/2cm", 2),
+        ]:
+            with self.subTest(text=text):
+                self.assertIsNone(VoiceBridge._candidate_from_action(
+                    {"tool": "translate_camera_x", "input": {
+                        "direction": "left", "distance_cm": distance}}, text,
+                ))
+        for text, direction, distance in [
+            ("X轴向左移动几厘米", "left", 2),
+            ("X轴向左移动2厘米", "right", 2),
+            ("X轴向左移动2厘米", "left", 3),
+            ("X轴向左移动11厘米", "left", 11),
+        ]:
+            with self.subTest(text=text, direction=direction, distance=distance):
+                self.assertIsNone(VoiceBridge._candidate_from_action(
+                    {"tool": "translate_camera_x", "input": {
+                        "direction": direction, "distance_cm": distance}}, text,
+                ))
+
     def test_stop_is_immediate_and_old_tools_are_rejected(self):
         stop = VoiceBridge._candidate_from_action(
             {"tool": "software_stop", "input": {}}, "停止"

@@ -200,18 +200,21 @@
       <!-- SDK 夹爪工具中心点 -->
       <div class="drawer-section" id="sec-tcp">
         <div class="sec-header">
-          <span>夹爪工具中心 (TCP, mm)</span>
+          <span>夹爪工具中心 (TCP, mm / °)</span>
           <button class="sec-toggle">▾</button>
         </div>
         <div class="sec-body">
           <div class="tcp-grid">
-            <span class="tcp-label">X</span><span class="tcp-val" id="tcp-x">0.0</span>
-            <span class="tcp-label">Y</span><span class="tcp-val" id="tcp-y">0.0</span>
-            <span class="tcp-label">Z</span><span class="tcp-val" id="tcp-z">0.0</span>
-            <span class="tcp-label">Rx</span><span class="tcp-val" id="tcp-rx">0.0</span>
-            <span class="tcp-label">Ry</span><span class="tcp-val" id="tcp-ry">0.0</span>
-            <span class="tcp-label">Rz</span><span class="tcp-val" id="tcp-rz">0.0</span>
+            <label class="tcp-label" for="tcp-x">X（150～660）</label><span class="joint-number-wrap tcp-number-wrap"><input type="number" class="joint-number-input tcp-input" id="tcp-x" step="0.1" value="0.0" aria-label="X目标值"><span class="joint-number-unit">mm</span></span>
+            <label class="tcp-label" for="tcp-y">Y（−650～450）</label><span class="joint-number-wrap tcp-number-wrap"><input type="number" class="joint-number-input tcp-input" id="tcp-y" step="0.1" value="0.0" aria-label="Y目标值"><span class="joint-number-unit">mm</span></span>
+            <label class="tcp-label" for="tcp-z">Z（40～650）</label><span class="joint-number-wrap tcp-number-wrap"><input type="number" class="joint-number-input tcp-input" id="tcp-z" step="0.1" value="0.0" aria-label="Z目标值"><span class="joint-number-unit">mm</span></span>
+            <label class="tcp-label" for="tcp-rx">Rx（−360～360）</label><span class="joint-number-wrap tcp-number-wrap"><input type="number" class="joint-number-input tcp-input" id="tcp-rx" step="0.1" value="0.0" aria-label="Rx目标值"><span class="joint-number-unit">°</span></span>
+            <label class="tcp-label" for="tcp-ry">Ry（−360～360）</label><span class="joint-number-wrap tcp-number-wrap"><input type="number" class="joint-number-input tcp-input" id="tcp-ry" step="0.1" value="0.0" aria-label="Ry目标值"><span class="joint-number-unit">°</span></span>
+            <label class="tcp-label" for="tcp-rz">Rz（−360～360）</label><span class="joint-number-wrap tcp-number-wrap"><input type="number" class="joint-number-input tcp-input" id="tcp-rz" step="0.1" value="0.0" aria-label="Rz目标值"><span class="joint-number-unit">°</span></span>
           </div>
+          <div class="tcp-reference-note">以上为输入范围；范围内目标仍需预览确认可达</div>
+          <div class="control-validation" id="tcp-error" role="alert"></div>
+          <div class="tcp-reference-note">当前控制点：SDK 法兰参考点</div>
           <div class="tcp-axis-legend" aria-label="基础坐标系方向">
             <span class="axis-x">X 前</span>
             <span class="axis-y">Y 左</span>
@@ -474,6 +477,6 @@
   }
   </script>
   <script src="js/runtime-endpoints.js?v=1"></script>
-  <script type="module" src="js/main.js?v=10"></script>
+  <script type="module" src="js/main.js?v=12"></script>
 </body>
 </html>

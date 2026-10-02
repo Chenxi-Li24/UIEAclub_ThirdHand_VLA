@@ -133,6 +133,11 @@ class SimulatedArm:
     def get_gripper_distance(self):
         return self.gripper * GRIPPER_MAX_DISTANCE_M
 
+    def solve_ik(self, pos, quat, q_seed=None):
+        same_pose = all(abs(a - b) < 1e-6 for a, b in zip(pos, [0.45, 0.0, 0.25]))
+        same_orientation = all(abs(a - b) < 1e-6 for a, b in zip(quat, [1.0, 0.0, 0.0, 0.0]))
+        return (list(self.joints), same_pose and same_orientation)
+
     def set_joint_waypoints(self, waypoints, time_sec=None, speed_percent=None):
         del speed_percent
         target = list(waypoints[-1])
@@ -869,6 +874,49 @@ class RobotBridge:
                 request_id=None if request_id is None else str(request_id),
             )
 
+    def preview_ik(self, command: dict[str, Any]) -> None:
+        """Solve a displayed flange target without commanding motion."""
+        request_id = command.get("request_id")
+        position = command.get("position")
+        euler = command.get("euler")
+        if not isinstance(position, list) or len(position) != 3 or not isinstance(euler, list) or len(euler) != 3:
+            emit("error", message="preview_ik requires three position and three Euler values", request_id=request_id)
+            return
+        try:
+            pos = [float(value) for value in position]
+            rot = [float(value) for value in euler]
+        except (TypeError, ValueError):
+            emit("error", message="preview_ik values must be numeric", request_id=request_id)
+            return
+        if not all(math.isfinite(value) for value in pos + rot):
+            emit("error", message="preview_ik values must be finite", request_id=request_id)
+            return
+        with self.arm_lock:
+            if not self.connected or not self.state_ready or self.motion_active or self.arm is None:
+                emit("error", message="robot state is not ready for IK preview", request_id=request_id)
+                return
+            roll, pitch, yaw = rot
+            cr, sr = math.cos(roll / 2), math.sin(roll / 2)
+            cp, sp = math.cos(pitch / 2), math.sin(pitch / 2)
+            cy, sy = math.cos(yaw / 2), math.sin(yaw / 2)
+            quat = [
+                cr * cp * cy + sr * sp * sy,
+                sr * cp * cy - cr * sp * sy,
+                cr * sp * cy + sr * cp * sy,
+                cr * cp * sy - sr * sp * cy,
+            ]
+            try:
+                joints, ok = self.arm.solve_ik(pos, quat, q_seed=self.last_valid_joints)
+                joints = self._finite_values(joints, 6, "IK joints") if ok else []
+                ok = bool(ok) and all(
+                    lower <= value <= upper
+                    for value, (lower, upper) in zip(joints, JOINT_LIMITS_RAD)
+                )
+            except Exception as exc:
+                emit("error", message=f"preview_ik failed: {exc}", request_id=request_id)
+                return
+        emit("ik_preview", request_id=request_id, ok=ok, joints_rad=joints if ok else [])
+
     def move_linear(self, command: dict[str, Any]) -> None:
         """Execute a Cartesian linear move (move_l)."""
         with self.arm_lock:
@@ -1164,6 +1212,8 @@ def main() -> None:
                 bridge.enqueue_motion(command)
             elif name == "move_l":
                 bridge.move_linear(command)
+            elif name == "preview_ik":
+                bridge.preview_ik(command)
             elif name == "go_home":
                 bridge.go_home(command.get("request_id"))
             elif name == "gripper":

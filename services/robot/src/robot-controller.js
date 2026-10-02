@@ -20,6 +20,7 @@ const ALLOWED_COMMANDS = new Set([
   'servo',
   'move_joint',
   'move_l',
+  'preview_ik',
   'preset',
   'gripper',
   'software_stop',
@@ -102,7 +103,7 @@ class RobotController extends EventEmitter {
       this.emit('message', {
         type: 'error',
         code: 'bridge_error',
-        msg: message.message,
+        msg: message.message, request_id: message.request_id,
       });
     });
     this.bridge.on('software_stop_complete', message => {
@@ -206,7 +207,7 @@ class RobotController extends EventEmitter {
       nonce,
       protocol_version: 'thirdhand-robot-lowlevel-v1',
       pose_frame: 'robot_flange',
-      commands: ['move_l', 'move_joint', 'gripper', 'preset', 'software_stop', 'get_state'],
+      commands: ['move_l', 'preview_ik', 'move_joint', 'gripper', 'preset', 'software_stop', 'get_state'],
       correlated_completions: true,
       software_stop_ack: true,
       software_stop_state_boundary: true,
@@ -307,6 +308,9 @@ class RobotController extends EventEmitter {
         return;
       case 'move_l':
         this._sendLinearMotion(message, reply);
+        return;
+      case 'preview_ik':
+        this._sendIkPreview(message, reply);
         return;
       case 'gripper':
         this._sendGripper(message.position, reply, message.request_id);
@@ -524,6 +528,26 @@ class RobotController extends EventEmitter {
     }
   }
 
+  _sendIkPreview(message, reply) {
+    const requestId = typeof message.request_id === 'string' && message.request_id
+      ? message.request_id : randomUUID();
+    if (!linearTargetAllowed(message.position) || !finiteVector(message.euler, 3)) {
+      reply({ type: 'error', code: 'linear_target_invalid', msg: 'Cartesian target is outside the approved workspace', request_id: requestId });
+      return;
+    }
+    const readinessError = this._motionReadinessError();
+    if (readinessError) {
+      reply({ ...readinessError, request_id: requestId });
+      return;
+    }
+    if (!this.bridge.send({
+      cmd: 'preview_ik', position: [...message.position], euler: [...message.euler],
+      request_id: requestId,
+    })) {
+      reply({ type: 'error', code: 'bridge_unavailable', msg: 'Robot bridge is unavailable', request_id: requestId });
+    }
+  }
+
   _sendLinearMotion(message, reply) {
     if (!linearTargetAllowed(message.position) || !finiteVector(message.euler, 3)) {
       reply({
@@ -696,6 +720,13 @@ class RobotController extends EventEmitter {
     if (message.type === 'motion_state') {
       this.motionActive = message.state === 'MOVING';
       this.emit('message', { type: 'motion_state', stateName: message.state, ts: message.ts });
+      return;
+    }
+    if (message.type === 'ik_preview') {
+      this.emit('message', {
+        type: 'ik_preview', request_id: message.request_id, ok: message.ok === true,
+        joints_deg: message.ok === true ? degrees(message.joints_rad || []) : [],
+      });
       return;
     }
     if (message.type === 'command_accepted') {

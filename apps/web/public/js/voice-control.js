@@ -86,6 +86,12 @@ const INTENT_VALIDATORS = {
     Number.isInteger(params?.joint) && params.joint >= 1 && params.joint <= 6 &&
     Number.isFinite(params?.deltaDeg),
   'joint.multi': validManualJointMoves,
+  'end_effector.step': params =>
+    params?.action === 'end_effector.step' && params.axis === 'camera_x' &&
+    ['left', 'right'].includes(params.direction) &&
+    Number.isFinite(params.distanceCm) &&
+    params.distanceCm > 0 && params.distanceCm <= 10 &&
+    Object.keys(params).sort().join(',') === 'action,axis,direction,distanceCm',
   'robot.status': () => true,
   'robot.home': () => true,
   'gripper.open': () => true,
@@ -1108,16 +1114,32 @@ export class VoiceControl {
         this.pendingCandidate = candidate;
         this.candidatePreviewReady = false;
         this.candidatePreviewError = null;
+        const finishPreview = preview => {
+          if (this.pendingCandidate !== candidate) return;
+          if (preview?.ok === false) {
+            this.candidatePreviewError = preview.message || '3D 预览失败，候选不可确认。';
+            this._showNotice(this.candidatePreviewError, 'error');
+          } else {
+            this.candidatePreviewReady = true;
+          }
+          this._renderCandidate(candidate);
+          this._setSessionState('confirm',
+            this.candidatePreviewReady ? '已预览，等待确认' : '预览未通过');
+        };
         try {
           const preview = this.candidateSimulator.simulate(candidate) || {};
-          if (preview.ok === false) throw new Error(preview.message || '3D 预览失败');
-          this.candidatePreviewReady = true;
+          if (typeof preview.then === 'function') {
+            this._renderCandidate(candidate);
+            this._setSessionState('processing', '正在计算 3D 预览');
+            preview.then(finishPreview).catch(error => finishPreview({
+              ok: false, message: error?.message || '3D 预览失败',
+            }));
+          } else {
+            finishPreview(preview);
+          }
         } catch (error) {
-          this.candidatePreviewError = error?.message || '本地 3D 预览失败，候选不可确认。';
-          this._showNotice(this.candidatePreviewError, 'error');
+          finishPreview({ ok: false, message: error?.message || '3D 预览失败' });
         }
-        this._renderCandidate(candidate);
-        this._setSessionState('confirm', '已预览，等待确认');
         break;
       }
 
@@ -1602,6 +1624,7 @@ export class VoiceControl {
     const labels = {
       'joint.set': `J${params?.joint ?? '?'} 到 ${params?.targetDeg ?? '--'}°`,
       'joint.step': `J${params?.joint ?? '?'} ${Number(params?.deltaDeg) >= 0 ? '+' : ''}${params?.deltaDeg ?? '--'}°`,
+      'end_effector.step': `镜头画面 X 轴向${params?.direction === 'left' ? '左' : '右'}平移 ${params?.distanceCm ?? '--'} 厘米`,
       'robot.status': '读取真实机械臂状态',
       'robot.home': '返回右侧 Home 预设位置',
       'gripper.open': '打开夹爪',

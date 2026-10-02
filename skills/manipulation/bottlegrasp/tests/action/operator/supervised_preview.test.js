@@ -12,6 +12,7 @@ const target = {
   evidenceId: `sha256:${'a'.repeat(64)}`,
   motionEpoch: 0,
   frameId: 12,
+  pose: { widthM: 0.06 },
   graspPreview: {
     preview_id: `sha256:${'b'.repeat(64)}`,
     camera_xyz_m: [0.1, 0.2, 0.3],
@@ -24,7 +25,12 @@ const robotState = {
   poseFrame: 'robot_flange', connected: true, healthy: true,
   stateFresh: true, stationary: true, stateSequence: 7,
 };
-const runtimeEvidence = { calibration_id: null, vision_config_id: `sha256:${'c'.repeat(64)}` };
+const runtimeEvidence = { calibration_id: `sha256:${'e'.repeat(64)}`,
+  calibration_approved: true, vision_config_id: `sha256:${'c'.repeat(64)}` };
+const gripTransform = { validated: true,
+  validation_id: `sha256:${'d'.repeat(64)}`,
+  matrix_4x4: [[1, 0, 0, 0.02], [0, 1, 0, 0],
+    [0, 0, 1, 0], [0, 0, 0, 1]] };
 
 test('supervised preview still blocks missing geometry and disabled execution', () => {
   const preview = createSupervisedPreview({
@@ -37,16 +43,15 @@ test('supervised preview still blocks missing geometry and disabled execution', 
   assert.deepEqual(preview.coordinates.grip_target_xyz_m, [0.3, 0.1, 0.2]);
   assert.ok(preview.blockers.includes('execution_disabled'));
   assert.ok(preview.blockers.includes('target_geometry_unavailable'));
-  assert.equal(preview.blockers.includes('calibration_not_approved'), false);
-  assert.equal(preview.blockers.includes('grip_transform_unverified'), false);
+  assert.ok(preview.blockers.includes('grip_transform_unverified'));
 });
 
-test('approval flags alone do not block a preview with real coordinates and plan', () => {
+test('approved calibration and grip transform permit a preview with real coordinates and plan', () => {
   const preview = createSupervisedPreview({
     target: { ...target, actionEvidence: { id: 'test-evidence' },
       graspPreview: { ...target.graspPreview, blockers: [] } },
     robotState, runtimeEvidence,
-    config: { execution_enabled: true, grasp: { grip_transform: { validated: false } } },
+    config: { execution_enabled: true, grasp: { grip_transform: gripTransform } },
     nowMs: 1000,
     buildPlan: () => ({ schema: 'thirdhand-execution-plan-v2' }),
   });
@@ -54,25 +59,40 @@ test('approval flags alone do not block a preview with real coordinates and plan
   assert.deepEqual(preview.blockers, []);
 });
 
-test('lift-only preview needs base coordinates but not alignment approval evidence', () => {
+test('lift-only preview requires stationary robot, pose, calibration and grip transform', () => {
   const preview = createSupervisedPreview({
     target: { ...target, baseXyzM: [0.30, 0.10, 0.20],
       positionStdM: [0.002, 0.002, 0.003],
       graspPreview: { ...target.graspPreview, blockers: [] } },
-    robotState: { ...robotState, stationary: false, moving: false }, runtimeEvidence,
-    config: { execution_enabled: true, workflow_mode: 'lift_only', grasp: {} },
+    robotState: { ...robotState, stationary: false, moving: false },
+    runtimeEvidence: { ...runtimeEvidence, calibration_approved: false },
+    config: { execution_enabled: true, workflow_mode: 'lift_only',
+      grasp: { grip_transform: { validated: false } } },
     nowMs: 1000,
     buildPlan: () => ({ schema: 'thirdhand-execution-plan-v2', mode: 'lift_only' }),
   });
-  assert.equal(preview.executable, true);
-  assert.deepEqual(preview.blockers, []);
+  assert.equal(preview.executable, false);
+  assert.ok(preview.blockers.includes('robot_state_unverified'));
+  assert.ok(preview.blockers.includes('calibration_not_approved'));
+  assert.ok(preview.blockers.includes('grip_transform_unverified'));
+
+  const missingPose = createSupervisedPreview({
+    target: { ...target, pose: null, baseXyzM: [0.30, 0.10, 0.20],
+      positionStdM: [0.002, 0.002, 0.003],
+      graspPreview: { ...target.graspPreview, blockers: [] } },
+    robotState, runtimeEvidence,
+    config: { execution_enabled: true, workflow_mode: 'lift_only',
+      grasp: { grip_transform: gripTransform } }, nowMs: 1000,
+    buildPlan: () => ({ schema: 'thirdhand-execution-plan-v2', mode: 'lift_only' }),
+  });
+  assert.ok(missingPose.blockers.includes('grasp_pose_unavailable'));
 });
 
 test('a single visual target cannot impersonate alignment handoff evidence', () => {
   const preview = createSupervisedPreview({
     target: { ...target, graspPreview: { ...target.graspPreview, blockers: [] } },
     robotState, runtimeEvidence,
-    config: { execution_enabled: true, grasp: {} }, nowMs: 1000,
+    config: { execution_enabled: true, grasp: { grip_transform: gripTransform } }, nowMs: 1000,
     buildPlan: () => ({ schema: 'thirdhand-execution-plan-v2' }),
   });
   assert.equal(preview.executable, false);

@@ -59,9 +59,12 @@ class HandEyeProjection:
         self.calibration_id = "sha256:" + hashlib.sha256(raw).hexdigest()
         self.physically_validated = (
             data.get("physical_validation", {}).get("status") == "passed"
-            or (allow_numerical_only and data.get("numerically_validated") is True)
         )
         self.allow_numerical_only = bool(allow_numerical_only)
+        self.projection_allowed = (
+            self.physically_validated
+            or (self.allow_numerical_only and data.get("numerically_validated") is True)
+        )
         from ikpy.chain import Chain
         parsed = Chain.from_urdf_file(str(urdf_path), base_elements=["base_link"],
                                       active_links_mask=[False, True, True, True,

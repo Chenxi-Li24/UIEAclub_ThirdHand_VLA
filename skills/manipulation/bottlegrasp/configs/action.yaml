@@ -49,6 +49,11 @@ gripper:
 grasp:
   flange_offset_base_m: [0.0475, 0.0100, 0.0]
   offset_validated: false
+  # T_flange_grip. Populate only from a physically measured TCP artifact.
+  grip_transform:
+    measured: false
+    validation_id: null
+    matrix_4x4: null
 place:
   strategy: "fixed_xy_keep_grasp_z"
   validated: false

@@ -2,6 +2,7 @@
 
 const { createHash } = require('node:crypto');
 const { checkWorkspace } = require('../safety/workspace_check');
+const { gripTargetToFlangePose } = require('./grip_transform');
 
 function vector3(value) {
   return Array.isArray(value) && value.length === 3 && value.every(Number.isFinite);
@@ -30,17 +31,22 @@ function buildLiftOnlyPlan({ target, pose, config, requestId, motionEpoch }) {
   if (!vector3(target.positionStdM) || target.positionStdM.some(value => value > 0.05)) {
     throw new TypeError('pose_spread_exceeded');
   }
-  const widthM = Number.isFinite(pose?.widthM)
-    ? pose.widthM : config.gripper.execution_max_width_m * 0.95;
+  if (!Number.isFinite(pose?.widthM)) throw new TypeError('grasp_pose_unavailable');
+  const widthM = pose.widthM;
   if (!Number.isFinite(widthM) || widthM <= 0 ||
       widthM > config.gripper.execution_max_width_m) {
     throw new TypeError('grasp_width_invalid');
   }
-  const offset = config.grasp.flange_offset_base_m;
-  if (!vector3(offset)) throw new TypeError('grasp_offset_invalid');
-  const finalApproachM = rounded(target.baseXyzM.map(
-    (value, index) => value + offset[index]
-  ));
+  const gripTransform = config.grasp?.grip_transform;
+  if (gripTransform?.validated !== true ||
+      !/^sha256:[0-9a-f]{64}$/.test(gripTransform?.validation_id ?? '')) {
+    throw new TypeError('grip_transform_unverified');
+  }
+  const flangePose = gripTargetToFlangePose({
+    positionM: target.baseXyzM,
+    eulerRad: config.motion.grasp_euler_rad,
+  }, gripTransform.matrix_4x4);
+  const finalApproachM = rounded(flangePose.positionM);
   const pregraspM = rounded([
     finalApproachM[0], finalApproachM[1],
     finalApproachM[2] + config.motion.pregrasp_offset_m,
@@ -66,8 +72,8 @@ function buildLiftOnlyPlan({ target, pose, config, requestId, motionEpoch }) {
     pregraspSegments: [{ position: pregraspM,
       timeSec: duration(pregraspM, finalApproachM, speed) }],
     finalApproachM, liftM, prePlaceM: idle, placeM: idle, retreatM: idle,
-    graspEulerRad: [...config.motion.grasp_euler_rad],
-    placeEulerRad: [...config.motion.grasp_euler_rad],
+    graspEulerRad: [...flangePose.eulerRad],
+    placeEulerRad: [...flangePose.eulerRad],
     homePreset: 'unused', homeJointsDeg: [0, 0, 0, 0, 0, 0],
     homeToleranceDeg: 0.5, widthM,
     contactMinWidthM: config.gripper.contact_min_width_m,

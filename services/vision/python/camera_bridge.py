@@ -320,7 +320,7 @@ def attach_depth_evidence(event, decision, frame, config, projection=None) -> No
     base_transform = None
     base_status = "handeye_not_configured"
     if projection is not None:
-        if not projection.physically_validated:
+        if not projection.projection_allowed:
             base_status = "physical_validation_pending"
         else:
             base_transform = projection.for_frame(int(frame.monotonic_ns))
@@ -717,6 +717,9 @@ def run_bridge(args: argparse.Namespace) -> int:
         "calibration_id": projection.calibration_id if projection is not None else None,
         "calibration_approved": (
             projection.physically_validated if projection is not None else False
+        ),
+        "calibration_projection_enabled": (
+            projection.projection_allowed if projection is not None else False
         ),
         "model_provenance": model_provenance(vision_config),
         "robotControlEnabled": False,

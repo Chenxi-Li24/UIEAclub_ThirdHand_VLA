@@ -19,11 +19,18 @@ function createSupervisedPreview({ target, robotState, runtimeEvidence, config, 
   const liftOnly = config?.workflow_mode === 'lift_only';
   if (!liftOnly && !vector3(gripTarget)) blockers.add('grip_target_unavailable');
   if (liftOnly && !vector3(target?.baseXyzM)) blockers.add('base_coordinates_unavailable');
+  if (liftOnly && !Number.isFinite(target?.pose?.widthM)) blockers.add('grasp_pose_unavailable');
   if (config?.execution_enabled !== true) blockers.add('execution_disabled');
   const gripTransform = config?.grasp?.grip_transform;
+  if (runtimeEvidence?.calibration_approved !== true) blockers.add('calibration_not_approved');
+  if (gripTransform?.validated !== true ||
+      !/^sha256:[0-9a-f]{64}$/.test(gripTransform?.validation_id ?? '') ||
+      !Array.isArray(gripTransform?.matrix_4x4)) {
+    blockers.add('grip_transform_unverified');
+  }
   if (!robotState || robotState.poseFrame !== 'robot_flange' ||
       robotState.connected !== true || robotState.healthy !== true ||
-      robotState.stateFresh !== true || (!liftOnly && robotState.stationary !== true) ||
+      robotState.stateFresh !== true || robotState.stationary !== true ||
       !Number.isSafeInteger(robotState.stateSequence)) {
     blockers.add('robot_state_unverified');
   }

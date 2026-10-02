@@ -27,14 +27,15 @@ class HandEyeProjectionTests(unittest.TestCase):
         transform = flange_transform([1, 2, 3], [0, 0, math.pi / 2])
         self.assertTrue(np.allclose(project_point(transform, [1, 0, 1]), [1, 3, 4]))
 
-    def test_numerically_validated_calibration_can_be_enabled_without_approval_flag(self):
+    def test_numerical_override_enables_projection_without_claiming_physical_approval(self):
         projection = HandEyeProjection(
             CALIBRATION, "250801DR48FP25002738",
             "xvisio-sdk:250801DR48FP25002738",
             "luming_eih_20260817_250801DR48FP25002738_85a58f8a28ac", URDF,
             allow_numerical_only=True,
         )
-        self.assertTrue(projection.physically_validated)
+        self.assertFalse(projection.physically_validated)
+        self.assertTrue(projection.projection_allowed)
         now = time.monotonic_ns()
         state = {"type": "arm_state", "pose_frame": "robot_flange",
                  "connected": True, "healthy": True, "stationary": True,

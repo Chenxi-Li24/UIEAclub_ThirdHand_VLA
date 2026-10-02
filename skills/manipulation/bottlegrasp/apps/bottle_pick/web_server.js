@@ -117,7 +117,9 @@ function liftOnlyRobotReady({ robotClient, cameraInfo }) {
     const state = robotClient?.getRobotState();
     return robotClient?.connected === true && robotClient?.protocolReady === true &&
       state?.poseFrame === 'robot_flange' && state.connected === true &&
-      state.healthy === true && state.stateFresh === true && cameraInfo?.ready === true;
+      state.healthy === true && state.stateFresh === true &&
+      state.stationary === true && cameraInfo?.ready === true &&
+      cameraInfo.calibrationApproved === true;
   } catch {
     return false;
   }
@@ -436,11 +438,6 @@ async function main() {
   const liftOnly = process.env.THIRDHAND_VA_LIFT_ONLY === '1';
   if (liftOnly) config = {
     ...config, execution_enabled: true, workflow_mode: 'lift_only',
-    gripper: { ...config.gripper,
-      execution_max_width_m: config.gripper.physical_max_width_m,
-      contact_max_width_m: config.gripper.physical_max_width_m - 0.001,
-      release_min_width_m: config.gripper.physical_max_width_m,
-    },
   };
   const visionWsUrl = process.env.THIRDHAND_VA_VISION_WS_URL || null;
   const cameraBridge = visionWsUrl

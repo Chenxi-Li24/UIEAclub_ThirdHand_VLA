@@ -1,6 +1,8 @@
 'use strict';
 
 const { EventEmitter } = require('events');
+const { randomUUID } = require('crypto');
+const { WORKSPACE_M } = require('./camera-x-step');
 const DefaultWebSocket = require('ws');
 const { MANUAL_SKILL, normalizeMultiJointMoves } = require('./manual-joint-control');
 const {
@@ -100,6 +102,9 @@ class LanguageUpstreamBridge extends EventEmitter {
     this.upstreamSpeedScale = null;
     this.upstreamPresets = {};
     this.latestJointsDeg = null;
+    this.latestFlangePositionM = null;
+    this.latestFlangeEulerRad = null;
+    this.pendingIk = new Map();
     this.latestGripperPosition = null;
     this.latestRobotStateName = null;
     this.latestRobotStateAtMs = null;
@@ -121,6 +126,7 @@ class LanguageUpstreamBridge extends EventEmitter {
     this.reconnectTimer = null;
     if (this.inFlight?.acceptTimer) this.cancelSchedule(this.inFlight.acceptTimer);
     this.inFlight = null;
+    this._clearIkPreviews('Language upstream closed');
     const socket = this.socket;
     this.socket = null;
     if (socket && socket.readyState < 2) socket.close();
@@ -172,6 +178,8 @@ class LanguageUpstreamBridge extends EventEmitter {
       activeViewActive: false,
       graspActive: false,
       jointsDeg: this.latestJointsDeg === null ? null : [...this.latestJointsDeg],
+      flangePositionM: this.latestFlangePositionM === null ? null : [...this.latestFlangePositionM],
+      flangeEulerRad: this.latestFlangeEulerRad === null ? null : [...this.latestFlangeEulerRad],
       gripperPosition: this.latestGripperPosition,
     };
   }
@@ -184,9 +192,40 @@ class LanguageUpstreamBridge extends EventEmitter {
   send(command) {
     if (!command || typeof command !== 'object') return false;
     if (command.cmd === 'move_joint') return this._sendJoint(command);
+    if (command.cmd === 'move_l') return this._sendLinear(command);
     if (command.cmd === 'preset_home') return this._sendHome(command);
     if (command.cmd === 'gripper') return this._sendGripper(command);
     return false;
+  }
+
+  previewIk(position, euler) {
+    const state = this.getRobotState();
+    if (!this._canStart(state)) return Promise.resolve({ ok: false, reason: '机器人未就绪，不能预览末端目标' });
+    const target = finiteArray(position, 3);
+    const angles = finiteArray(euler, 3);
+    if (!target || !angles || target.some((value, index) =>
+      value < WORKSPACE_M[index][0] || value > WORKSPACE_M[index][1])) {
+      return Promise.resolve({ ok: false, reason: '末端目标位置或姿态无效' });
+    }
+    const requestId = randomUUID();
+    return new Promise(resolve => {
+      const timer = this.schedule(() => {
+        this.pendingIk.delete(requestId);
+        resolve({ ok: false, reason: '末端 IK 预览超时' });
+      }, 5000);
+      this.pendingIk.set(requestId, { resolve, timer });
+      this._sendJson({
+        cmd: 'preview_ik', position: target, euler: angles, request_id: requestId,
+      });
+    });
+  }
+
+  _clearIkPreviews(reason) {
+    for (const [requestId, pending] of this.pendingIk) {
+      this.cancelSchedule(pending.timer);
+      pending.resolve({ ok: false, reason });
+      this.pendingIk.delete(requestId);
+    }
   }
 
   sendManual(command) {
@@ -247,6 +286,9 @@ class LanguageUpstreamBridge extends EventEmitter {
   _resetConnection(reason) {
     this.connected = false;
     this.latestJointsDeg = null;
+    this.latestFlangePositionM = null;
+    this.latestFlangeEulerRad = null;
+    this._clearIkPreviews(reason);
     this.latestRobotStateName = null;
     this.latestRobotStateAtMs = null;
     this.motionActive = false;
@@ -261,6 +303,16 @@ class LanguageUpstreamBridge extends EventEmitter {
   _handleMessage(message) {
     if (!message || typeof message !== 'object') return;
     this.emit('upstream_message', message);
+    const pendingIk = this.pendingIk.get(message.request_id);
+    if (pendingIk && (message.type === 'ik_preview' || message.type === 'error')) {
+      this.cancelSchedule(pendingIk.timer);
+      this.pendingIk.delete(message.request_id);
+      pendingIk.resolve(message.type === 'ik_preview' && message.ok === true &&
+        finiteArray(message.joints_deg, 6)
+        ? { ok: true, jointsDeg: [...message.joints_deg] }
+        : { ok: false, reason: message.msg || '目标位姿不可达' });
+      return;
+    }
     if (message.type === 'config') {
       this.connected = message.connection?.connected === true;
       this.simulated = message.connection?.simulated === true;
@@ -283,6 +335,8 @@ class LanguageUpstreamBridge extends EventEmitter {
       }
       if (!this.connected) {
         this.latestJointsDeg = null;
+        this.latestFlangePositionM = null;
+        this.latestFlangeEulerRad = null;
         this.latestRobotStateAtMs = null;
         this.latestRobotStateName = null;
         this.motionActive = false;
@@ -295,6 +349,8 @@ class LanguageUpstreamBridge extends EventEmitter {
       const joints = finiteArray(message.joints, 6);
       if (!joints) return;
       this.latestJointsDeg = joints;
+      this.latestFlangePositionM = finiteArray(message.flange_position_m, 3);
+      this.latestFlangeEulerRad = finiteArray(message.flange_euler_rad, 3);
       this.latestGripperPosition = Number.isFinite(Number(message.gripperPosition))
         ? Number(message.gripperPosition)
         : this.latestGripperPosition;
@@ -303,6 +359,8 @@ class LanguageUpstreamBridge extends EventEmitter {
       this.emit('message', {
         type: 'robot_state',
         joints: [...joints],
+        flangePositionM: this.latestFlangePositionM === null ? null : [...this.latestFlangePositionM],
+        flangeEulerRad: this.latestFlangeEulerRad === null ? null : [...this.latestFlangeEulerRad],
         stateName: this.latestRobotStateName,
         connected: this.connected,
         observedAtMs: this.latestRobotStateAtMs,
@@ -371,6 +429,29 @@ class LanguageUpstreamBridge extends EventEmitter {
       sentAtMs: this.now(),
     });
     this._sendJson({ cmd: 'servo', joints: targetDeg });
+    return true;
+  }
+
+  _sendLinear(command) {
+    const state = this.getRobotState();
+    const position = finiteArray(command.position, 3);
+    const euler = finiteArray(command.euler, 3);
+    const timeSec = Number(command.time_sec);
+    if (!this._canStart(state) || !position || !euler ||
+        !finiteArray(state.flangePositionM, 3) ||
+        position.some((value, index) =>
+          value < WORKSPACE_M[index][0] || value > WORKSPACE_M[index][1]) ||
+        !Number.isFinite(timeSec) || timeSec < 2 || timeSec > 30 ||
+        typeof command.request_id !== 'string' || !command.request_id) return false;
+    this._beginCorrelation({
+      kind: 'cartesian', command: 'move_l',
+      localRequestId: command.request_id,
+      targetPositionM: position, targetEulerRad: euler,
+      targetDistanceM: Math.hypot(...position.map((value, index) =>
+        value - state.flangePositionM[index])),
+      sentAtMs: this.now(),
+    });
+    this._sendJson({ cmd: 'move_l', position, euler, time_sec: timeSec });
     return true;
   }
 
@@ -472,7 +553,7 @@ class LanguageUpstreamBridge extends EventEmitter {
   _handleError(message) {
     const active = this.inFlight;
     if (!active) return;
-    const upstreamId = message.requestId ?? null;
+    const upstreamId = message.request_id ?? message.requestId ?? null;
     if (active.upstreamRequestId === undefined || upstreamId === active.upstreamRequestId) {
       this._failInFlight(message.msg || 'Formal 3000 rejected the Language command');
     }
@@ -480,11 +561,21 @@ class LanguageUpstreamBridge extends EventEmitter {
 
   _completeCorrelationIfVerified() {
     const active = this.inFlight;
-    if (!active || active.kind !== 'joint' || !active.completeReceived) return;
+    if (!active || !['joint', 'cartesian'].includes(active.kind) || !active.completeReceived) return;
     if (this.latestRobotStateAtMs < active.completedAtMs || this.latestRobotStateName !== 'IDLE') return;
-    const matches = active.targetDeg.every(
-      (value, index) => Math.abs(value - this.latestJointsDeg[index]) <= 1
-    );
+    const matches = active.kind === 'joint'
+      ? active.targetDeg.every((value, index) =>
+        Math.abs(value - this.latestJointsDeg[index]) <= 1)
+      : Array.isArray(this.latestFlangePositionM) &&
+        Array.isArray(this.latestFlangeEulerRad) &&
+        Math.hypot(...active.targetPositionM.map((value, index) =>
+          value - this.latestFlangePositionM[index])) <=
+          Math.min(0.005, active.targetDistanceM / 2) &&
+        Math.hypot(...active.targetEulerRad.map((value, index) =>
+          Math.atan2(
+            Math.sin(value - this.latestFlangeEulerRad[index]),
+            Math.cos(value - this.latestFlangeEulerRad[index]),
+          ))) <= 0.05;
     if (matches) this.inFlight = null;
   }
 

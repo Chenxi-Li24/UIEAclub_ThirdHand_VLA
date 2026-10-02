@@ -908,6 +908,18 @@ html, body {
   text-align: right;
 }
 
+.tcp-number-wrap {
+  justify-self: end;
+  width: 136px;
+  min-width: 136px;
+}
+
+.tcp-reference-note {
+  margin-top: 5px;
+  color: var(--text-secondary);
+  font-size: 0.64rem;
+}
+
 /* ── Toggle ────────────────────────────────────────────── */
 .toggle-label {
   display: flex;

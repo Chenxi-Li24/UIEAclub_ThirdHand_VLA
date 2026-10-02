@@ -19,6 +19,7 @@ import json
 import logging
 import math
 import os
+import re
 from pathlib import Path
 import struct
 import time
@@ -1629,6 +1630,58 @@ class VoiceBridge:
                         "type": "configured_drop_zone",
                     },
                 }},
+                "sourceText": source_text,
+                "requiresConfirmation": True,
+            }
+
+        if tool == "translate_camera_x":
+            if set(args) != {"direction", "distance_cm"}:
+                return None
+            direction = args["direction"]
+            distance = args["distance_cm"]
+            if not isinstance(direction, str) or direction not in {"left", "right"} or isinstance(distance, bool) or (
+                not isinstance(distance, (int, float))
+                or not math.isfinite(distance)
+                or not 0 < distance <= 10
+            ):
+                return None
+            # Never invent a centimetre amount: require the original utterance to
+            # contain a concrete distance with a centimetre unit.
+            matches = re.findall(
+                r"([零〇一二两三四五六七八九十百千万亿负廿半点拾\d.eE/+\-]+)"
+                r"\s*(?:厘米|公分|cm|centimet(?:er|re)s?)",
+                source_text, re.IGNORECASE,
+            )
+            if len(matches) != 1:
+                return None
+            stated_text = matches[0]
+            chinese_cm = {"一": 1, "二": 2, "两": 2, "三": 3, "四": 4,
+                          "五": 5, "六": 6, "七": 7, "八": 8, "九": 9, "十": 10}
+            if stated_text in chinese_cm:
+                stated_cm = chinese_cm[stated_text]
+            elif re.fullmatch(r"\d+(?:\.\d+)?", stated_text):
+                stated_cm = float(stated_text)
+            else:
+                return None
+            if abs(stated_cm - distance) > 1e-6:
+                return None
+            left = bool(re.search(r"左|\bleft\b", source_text, re.IGNORECASE))
+            right = bool(re.search(r"右|\bright\b", source_text, re.IGNORECASE))
+            if left == right or (direction == "left") != left:
+                return None
+            created_at = now_ms()
+            params = {"action": "end_effector.step", "axis": "camera_x",
+                      "direction": direction, "distanceCm": distance}
+            return {
+                "candidateId": str(uuid.uuid4()),
+                "traceId": str(uuid.uuid4()),
+                "createdAt": created_at,
+                "expiresAt": created_at + 120_000,
+                "skill": "manual_joint_control@1",
+                "intent": "end_effector.step",
+                "tool": tool,
+                "args": params,
+                "payload": {"params": params},
                 "sourceText": source_text,
                 "requiresConfirmation": True,
             }

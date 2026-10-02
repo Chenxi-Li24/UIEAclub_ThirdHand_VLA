@@ -44,6 +44,15 @@ function loadConfig(env = process.env) {
       vaHttpUrl: env.VA_HTTP_URL || 'http://127.0.0.1:8766',
       directionalEnabled: env.DIRECTIONAL_CONTROL_ENABLED === '1',
       directionalRealControlEnabled: env.DIRECTIONAL_REAL_CONTROL === '1',
+      cameraMountFile: env.CAMERA_X_MOUNT_FILE || path.join(
+        ROOT, 'skills', 'manipulation', 'bottlegrasp', 'configs', 'calibration',
+        'lumos-handeye.pending.json',
+      ),
+      cameraDirectionValidationFile: env.CAMERA_X_VALIDATION_FILE || path.join(
+        ROOT, 'runtime', 'run', 'camera-x-direction-validated.json',
+      ),
+      cameraProbeEnabled: env.CAMERA_X_PROBE_ENABLED === '1',
+      cameraRealControlEnabled: env.CAMERA_X_REAL_CONTROL === '1',
       stateMaxAgeMs: 500,
       maxDeltaDeg: null,
       speedScale: 0.05,

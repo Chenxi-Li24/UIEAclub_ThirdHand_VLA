@@ -1,6 +1,8 @@
 'use strict';
 
 const { WebSocket } = require('ws');
+const fs = require('fs');
+const { cameraXTarget, normalizeCameraXStep } = require('./language/camera-x-step');
 const { BottlePickAdapter } = require('./language/bottle-pick-adapter');
 const { LanguageUpstreamBridge } = require('./language/language-upstream-bridge');
 const { ManualJointOrchestrator } = require('./language/manual-joint-control');
@@ -18,6 +20,8 @@ const ROBOT_COMMANDS = new Set([
   'disconnect',
   'status',
   'servo',
+  'move_l',
+  'preview_ik',
   'preset',
   'gripper',
   'software_stop',
@@ -41,6 +45,20 @@ class RobotProxy {
   constructor(robotWsUrl, languageConfig = {}) {
     this.robotWsUrl = robotWsUrl;
     this.languageConfig = languageConfig;
+    this.cameraMount = null;
+    this.cameraDirectionValidated = false;
+    try {
+      this.cameraMount = JSON.parse(fs.readFileSync(languageConfig.cameraMountFile, 'utf8'));
+      const proof = JSON.parse(fs.readFileSync(languageConfig.cameraDirectionValidationFile, 'utf8'));
+      const mountId = this.cameraMount?.camera?.camera_mount_id;
+      const serial = this.cameraMount?.camera?.camera_serial;
+      this.cameraDirectionValidated = typeof mountId === 'string' && mountId.trim() !== '' &&
+        typeof serial === 'string' && serial.trim() !== '' &&
+        proof.cameraMountId === mountId && proof.cameraSerial === serial &&
+        proof.leftMovesLeft === true && proof.rightMovesRight === true;
+    } catch {
+      // A missing mount or direction proof leaves real camera-frame motion disabled.
+    }
     this.sessions = new Set();
     this.languageCandidateOwners = new Map();
     this.skillExecutors = new SkillExecutorRegistry();
@@ -96,6 +114,12 @@ class RobotProxy {
       gripperCloseTarget: languageConfig.gripperCloseTarget,
       gripperTimeoutMs: languageConfig.gripperTimeoutMs,
       skillExecutors: this.skillExecutors,
+      planCameraX: params => cameraXTarget(
+        this.languageUpstream.getRobotState(), params, this.cameraMount),
+      previewPose: (position, euler) => this.languageUpstream.previewIk(position, euler),
+      cameraProbeEnabled: languageConfig.cameraProbeEnabled,
+      cameraRealControlEnabled: languageConfig.cameraRealControlEnabled &&
+        this.cameraDirectionValidated,
     });
     this.directionalController = new DirectionalJointOrchestrator({
       ...common,
@@ -122,8 +146,58 @@ class RobotProxy {
       directional: this.directionalController.runtimeConfig(),
       executionBackend: 'formal-3000-upstream',
       manualControlBackend: 'formal-3000-upstream',
+      cameraX: {
+        previewAvailable: Boolean(this.cameraMount),
+        probeEnabled: this.languageConfig.cameraProbeEnabled,
+        realControlEnabled: this.languageConfig.cameraRealControlEnabled &&
+          this.cameraDirectionValidated,
+        directionValidated: this.cameraDirectionValidated,
+        maxDistanceCm: 10,
+        probeMaxDistanceCm: 1,
+      },
       upstream: this.languageUpstream.publicStatus(),
     };
+  }
+
+  async _previewCameraX(browser, candidate) {
+    const params = candidate?.payload?.params;
+    const reply = result => sendJson(browser, {
+      type: 'skill.candidate.preview',
+      candidateId: candidate?.candidateId,
+      traceId: candidate?.traceId,
+      ...result,
+    });
+    const checked = normalizeCameraXStep(params);
+    if (!checked.ok) return reply({ ok: false, reason: checked.reason });
+    const state = this.languageUpstream.getRobotState();
+    if (!state.connected || !state.stateFresh || state.stateName !== 'IDLE' ||
+        state.motionActive || state.ageMs > 500) {
+      return reply({ ok: false, reason: '机器人状态未就绪，不能预览末端平移' });
+    }
+    const plan = cameraXTarget(state, params, this.cameraMount);
+    if (!plan.ok) return reply({ ok: false, reason: plan.reason });
+    const ik = await this.languageUpstream.previewIk(plan.position, plan.euler);
+    if (!ik.ok) return reply({ ok: false, reason: ik.reason });
+    const bound = this.languageController.bindCameraPreview(browser, candidate, {
+      originPositionM: state.flangePositionM,
+      originEulerRad: state.flangeEulerRad,
+      targetPositionM: plan.position,
+      targetEulerRad: plan.euler,
+      timeSec: plan.timeSec,
+      jointsDeg: ik.jointsDeg,
+    });
+    if (!bound) return reply({ ok: false, reason: '候选已失效，请重新输入末端目标' });
+    return reply({
+      ok: true, jointsDeg: ik.jointsDeg,
+      targetPositionM: plan.position,
+      cameraMountId: plan.cameraMountId,
+      direction: params.direction,
+      distanceCm: params.distanceCm,
+      executionMode: this.languageConfig.cameraRealControlEnabled &&
+        this.cameraDirectionValidated ? 'real'
+        : this.languageConfig.cameraProbeEnabled && params.distanceCm <= 1 ? 'probe'
+          : 'blocked',
+    });
   }
 
   broadcast(message) {
@@ -200,6 +274,15 @@ class RobotProxy {
           this.directionalController.register(browser, candidate);
         } else {
           this.languageController.register(browser, candidate);
+          if (candidate?.intent === 'end_effector.step') {
+            this._previewCameraX(browser, candidate).catch(error => sendJson(browser, {
+              type: 'skill.candidate.preview',
+              candidateId: candidate.candidateId,
+              traceId: candidate.traceId,
+              ok: false,
+              reason: error.message || '镜头 X 轴预览失败',
+            }));
+          }
         }
         return;
       }

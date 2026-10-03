@@ -34,6 +34,9 @@ const DEFAULT_HOME_PRESET_DEG = Object.freeze([
 const DEFAULT_ZERO_PRESET_DEG = Object.freeze([
   0, 0, 0, 0, 0, 0,
 ]);
+const DEFAULT_OBSERVE_PRESET_DEG = Object.freeze([
+  0, 90, -90, 90, 0, 0,
+]);
 function degrees(values) {
   return values.map(value => Number(value) * 180 / Math.PI);
 }
@@ -175,6 +178,7 @@ class RobotController extends EventEmitter {
       presets: {
         zero: [...(this.config.zeroPresetDeg || DEFAULT_ZERO_PRESET_DEG)],
         home: [...(this.config.homePresetDeg || DEFAULT_HOME_PRESET_DEG)],
+        observe: [...DEFAULT_OBSERVE_PRESET_DEG],
       },
       jointLimits: DEFAULT_JOINT_LIMITS_DEG,
       model: {
@@ -283,6 +287,7 @@ class RobotController extends EventEmitter {
         const presets = {
           zero: this.config.zeroPresetDeg || DEFAULT_ZERO_PRESET_DEG,
           home: this.config.homePresetDeg || DEFAULT_HOME_PRESET_DEG,
+          observe: DEFAULT_OBSERVE_PRESET_DEG,
         };
         const target = presets[message.name];
         if (!target) {

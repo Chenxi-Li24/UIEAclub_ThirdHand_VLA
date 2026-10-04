@@ -1,6 +1,7 @@
 'use strict';
 
 const { gripTargetToFlangePose } = require('../grasp/grip_transform');
+const builtPlans = new WeakSet();
 
 function deepFreeze(value) {
   if (value && typeof value === 'object') {
@@ -42,13 +43,16 @@ function buildPrototypeGraspPlan(input = {}) {
     euler:[...flange.eulerRad],time_sec:time});
   // No starting pose is supplied: this duration is a nominal preview value,
   // not a trajectory duration from an actual robot configuration.
-  return deepFreeze({schema:'thirdhand-prototype-grasp-plan-v1',requestId:input.requestId,
+  const plan = deepFreeze({schema:'thirdhand-prototype-grasp-plan-v1',requestId:input.requestId,
     simulationOnly:true,widthM:input.widthM,steps:[
       {phase:'pregrasp',command:move(pregrasp,approachTime)},
       {phase:'approach',command:move(approach,approachTime)},
       {phase:'grip',command:{cmd:'gripper',position:0}},
       {phase:'lift',command:move(lift,liftTime)},
     ]});
+  builtPlans.add(plan);
+  return plan;
 }
 
-module.exports = { buildPrototypeGraspPlan };
+function isPrototypePlan(value) { return builtPlans.has(value); }
+module.exports = { buildPrototypeGraspPlan, isPrototypePlan };

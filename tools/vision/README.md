@@ -42,8 +42,10 @@ The helper is a detached process, not an installed boot service. Its PID is
 recorded under `runtime/run/robot-state-relay.pid`; confirm the command line before
 stopping that exact process. No robot service restart is required.
 
-Live activation was rolled back: a separate legacy hand-eye Web service under
-`/home/nieqingcao/th0814/ThirdHand-XVisio-handeye-web` also runs XVisio acquisition,
-and Vision could not recover valid camera frames during this activation attempt.
-The relay is currently stopped. Camera ownership must be resolved with operator
-approval before retrying; this helper does not stop unrelated camera services.
+Live activation succeeded after operator approval to pause only the legacy
+hand-eye Web service's camera acquisition with its `estop_camera` command.
+The legacy Web/robot processes remain running. Vision and this relay are active;
+target 1 produced `base_pose_status: ready` and finite base coordinates.
+Earlier attempts were rolled back while both services were acquiring XVisio.
+Do not resume the legacy camera concurrently with Vision. No physical grasp was
+performed; numerical preview and remaining perception blockers are unchanged.

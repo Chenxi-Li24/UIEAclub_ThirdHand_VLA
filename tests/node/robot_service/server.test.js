@@ -73,6 +73,7 @@ test('robot service stays disconnected until explicit connect', async (t) => {
   assert.deepEqual(config.presets, {
     zero: [0, 0, 0, 0, 0, 0],
     home: [-0.163927, -2.611904, -4, 33.058620, 0.338783, 0.185784],
+    observe: [0, 90, -90, 90, 0, 0],
   });
 
   const capabilityPromise = nextMessage(

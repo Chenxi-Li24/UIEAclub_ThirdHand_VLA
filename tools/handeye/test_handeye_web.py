@@ -9,9 +9,10 @@ from handeye_web import CalibrationSession
 class WebTests(unittest.TestCase):
     def bundle(self):
         dictionary=cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_5X5_100)
-        board=cv2.aruco.CharucoBoard((9,12),.015,.01125,dictionary)
+        # Actual operator board: 12 columns x 9 rows, NOT the old script's 9x12.
+        board=cv2.aruco.CharucoBoard((12,9),.015,.01125,dictionary)
         image=np.full((480,640),255,np.uint8)
-        image[40:440,170:470]=board.generateImage((300,400))
+        image[90:390,120:520]=board.generateImage((400,300))
         return {'rgb':cv2.cvtColor(image,cv2.COLOR_GRAY2RGB),
                 'metadata':{'schema':'thirdhand-raw-rgbd-frame-v1','camera_serial':'250801DR48FP25002738',
                             'point_frame':'xvisio_color','length_unit':'m','monotonic_ns':1000000000,'frame_id':7}}

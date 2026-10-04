@@ -20,7 +20,7 @@ SERIAL='250801DR48FP25002738'
 VISION='http://127.0.0.1:3100'
 ROBOT='ws://192.168.58.68:9983/ws'
 LIVE=Path(os.environ.get('THIRDHAND_LIVE_ROOT',str(Path.home()/'ThirdHand'/'UIEAclub_ThirdHand_VLA'))).resolve()
-BOARD={'squares_x':9,'squares_y':12,'square_length_m':.015,'marker_length_m':.01125,'dictionary':'DICT_5X5_100'}
+BOARD={'squares_x':12,'squares_y':9,'square_length_m':.015,'marker_length_m':.01125,'dictionary':'DICT_5X5_100'}
 
 
 class CalibrationSession:
@@ -28,7 +28,7 @@ class CalibrationSession:
         self.root=Path(root);self.root.mkdir(parents=True,exist_ok=True)
         self.samples=[];self.last_frame=-1;self.overlay=None;self.result=None
         self.dictionary=cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_5X5_100)
-        self.board=cv2.aruco.CharucoBoard((9,12),.015,.01125,self.dictionary)
+        self.board=cv2.aruco.CharucoBoard((BOARD['squares_x'],BOARD['squares_y']),BOARD['square_length_m'],BOARD['marker_length_m'],self.dictionary)
         self.detector=cv2.aruco.ArucoDetector(self.dictionary,cv2.aruco.DetectorParameters())
         manifest=self.root/'samples.json'
         if manifest.exists():
@@ -69,7 +69,7 @@ class CalibrationSession:
         if count<30:raise ValueError('need_30_charuco_corners_visible')
         obj=self.board.getChessboardCorners()[corner_ids.ravel()].astype(float)
         extent=np.ptp(obj,axis=0)
-        if extent[0]<.5*9*.015 or extent[1]<.5*12*.015:raise ValueError('board_coverage_too_small')
+        if extent[0]<.5*BOARD['squares_x']*BOARD['square_length_m'] or extent[1]<.5*BOARD['squares_y']*BOARD['square_length_m']:raise ValueError('board_coverage_too_small')
         sample={'frame':metadata,'robot_state':state,'T_base_flange':flange.tolist(),
                 'sync_delta_ms':(state['producer_monotonic_ns']-metadata['monotonic_ns'])/1e6,
                 'object_points':obj.tolist(),'image_points':charuco.reshape(-1,2).tolist(),
@@ -120,7 +120,7 @@ class CalibrationSession:
 HTML='''<!doctype html><html lang="zh-CN"><meta charset="UTF-8"><title>手眼标定 · 端口只读采样</title>
 <style>body{margin:0;background:#0d1117;color:#c9d1d9;font:14px system-ui}main{display:flex;gap:18px;padding:16px;flex-wrap:wrap}.view{flex:1;min-width:280px}img{width:100%;height:auto;border-radius:8px}.panel{width:320px}h2{color:#58a6ff}button{display:block;width:100%;margin:12px 0;padding:12px;background:#238636;color:white;border:0;border-radius:6px;cursor:pointer}button:disabled{opacity:.5}pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#161b22;padding:10px;max-height:280px;overflow:auto}.note{color:#f0c674}a{color:#58a6ff}</style>
 <main><section class="view"><h2>Vision SDK 原始画面</h2><img src="/video_feed"><p>保持原始 640×480 比例；不打开 USB/UVC 或 CAN。</p><h3>最近一次采样标记</h3><img id="overlay" hidden></section>
-<section class="panel"><h2>手眼标定 · 只读采样</h2><p>ChArUco 9×12 · 方格 15 mm · 标记 11.25 mm · DICT_5X5_100</p><p class="note">标定板固定在桌面。通过原控制页手动调整安全姿态，静止后采样；此页不发运动或夹爪命令。</p>
+<section class="panel"><h2>手眼标定 · 只读采样</h2><p>ChArUco 12 列 × 9 行 · 方格 15 mm · 标记 11.25 mm · DICT_5X5_100</p><p class="note">标定板固定在桌面。通过原控制页手动调整安全姿态，静止后采样；此页不发运动或夹爪命令。</p>
 <a href="http://192.168.58.68:9983/" target="_blank" rel="noopener">打开原机械臂控制页</a>
 <pre id="state">等待端口反馈…</pre><button id="capture" onclick="act('capture')">采集当前姿态 + 标定板</button>
 <button id="compute" disabled onclick="act('compute')">计算候选标定（至少 15 组）</button>

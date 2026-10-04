@@ -13,7 +13,7 @@ Images and timestamped raw-frame NPZs come from the existing Vision owner on
 for the operator page; the original `calibration/handeye_calib.py` in the operator's home directory
 and its results are not overwritten.
 
-The board matches the operator's existing script: 9 x 12 squares, 15 mm square,
+The board matches the physical board observed in the SDK stream: 12 columns x 9 rows, 15 mm square,
 11.25 mm marker, DICT_5X5_100. It must remain physically fixed. The existing
 robot control page is the only manual motion interface. This page owns no motion.
 

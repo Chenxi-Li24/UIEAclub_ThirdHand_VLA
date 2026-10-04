@@ -14,7 +14,7 @@ def loop(s,stream,api):
  while not s.stop:
   frame,_=r.latest()
   try: state=json.load(urllib.request.urlopen(api,timeout=.5))
-  except Exception as e: state={"identity_state":"LOST","gateway":{"reason_code":f"OBSERVATION_UNAVAILABLE:{e}"}}
+  except Exception as e: state={"identity_state":"LOST","robot":{"reason_code":f"OBSERVATION_UNAVAILABLE:{e}"}}
   if frame is not None:
    ok,j=cv2.imencode(".jpg",render_overlay(frame,state),[cv2.IMWRITE_JPEG_QUALITY,85])
    if ok:

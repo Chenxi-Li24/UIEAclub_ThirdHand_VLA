@@ -144,8 +144,6 @@ class RobotWebSocketClient:
                     continue
                 if typ == "motion_ack" and event_request_id == request_id:
                     return event
-                if typ == "gateway_1023" and event.get("status") == "ready":
-                    continue
             remaining = deadline - time.time()
             if remaining <= 0:
                 break

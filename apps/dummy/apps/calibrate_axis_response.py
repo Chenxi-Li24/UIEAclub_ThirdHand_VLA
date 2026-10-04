@@ -2,7 +2,7 @@
 """Measure how each Touch R1 joint moves the locked person in the image.
 
 This is a live hardware commissioning helper. It sends small joint offsets
-through the existing Robot Service / 31023 gateway path, then measures the
+through TouchR1Adapter and the existing Robot Service, then measures the
 change in the local person-lock target. It does not talk to CAN directly.
 """
 
@@ -45,7 +45,7 @@ def parse_args(argv=None):
     parser.add_argument("--samples", type=int, default=5)
     parser.add_argument("--sample-s", type=float, default=0.10)
     parser.add_argument("--skip-home", action="store_true")
-    parser.add_argument("--robot-ws", default="ws://127.0.0.1:31023/ws")
+    parser.add_argument("--robot-ws", default="ws://127.0.0.1:3000/ws")
     parser.add_argument("--robot-health", default="http://127.0.0.1:3000/health")
     parser.add_argument("--output", default="logs/axis-response.json")
     parser.add_argument("--max-step-output-deg", type=float, default=1.2)

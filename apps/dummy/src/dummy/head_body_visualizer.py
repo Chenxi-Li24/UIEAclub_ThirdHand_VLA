@@ -12,7 +12,7 @@ def render_head_body_overlay(
     debug=None,
     error=None,
     enabled=False,
-    gateway_url="ws://127.0.0.1:31023/ws",
+    robot_url="ws://127.0.0.1:3000/ws",
 ):
     out = cv2.cvtColor(frame, cv2.COLOR_GRAY2BGR) if len(frame.shape) == 2 else frame.copy()
     h, w = out.shape[:2]
@@ -44,7 +44,7 @@ def render_head_body_overlay(
     else:
         status = f"target={getattr(target, 'kind', 'none')}"
 
-    _draw_status_strip(out, status, debug, error, enabled, gateway_url, color)
+    _draw_status_strip(out, status, debug, error, enabled, robot_url, color)
     _draw_joint_bars(out, joints, command, x=max(20, w - 250), y=max(90, h // 2 - 52))
     return out
 
@@ -76,7 +76,7 @@ def _tag(frame, text, x, y, color):
     cv2.putText(frame, text, (int(x), int(y)), cv2.FONT_HERSHEY_SIMPLEX, 0.44, color, 1, cv2.LINE_AA)
 
 
-def _draw_status_strip(frame, status, debug, error, enabled, gateway_url, color):
+def _draw_status_strip(frame, status, debug, error, enabled, robot_url, color):
     h, w = frame.shape[:2]
     strip_h = 58
     y0 = h - strip_h
@@ -92,7 +92,7 @@ def _draw_status_strip(frame, status, debug, error, enabled, gateway_url, color)
         lock = f"reject={debug['rejected']}"
     _put(frame, f"{mode}  {status}", 14, y0 + 22, color)
     _put(frame, f"{depth_line}   {lock}", 14, y0 + 46, (180, 230, 255))
-    _put(frame, f"{control}   {gateway_url}", max(14, w - 600), y0 + 46, _control_color(control))
+    _put(frame, f"{control}   {robot_url}", max(14, w - 600), y0 + 46, _control_color(control))
 
 
 def _draw_joint_bars(frame, joints, command, *, x, y):

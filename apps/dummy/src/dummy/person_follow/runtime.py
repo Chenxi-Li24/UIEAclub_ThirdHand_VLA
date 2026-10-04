@@ -2,8 +2,8 @@ from __future__ import annotations
 
 
 class PersonFollowRuntime:
-    def __init__(self, gateway, max_observation_age_s=0.5):
-        self.gateway = gateway
+    def __init__(self, adapter, max_observation_age_s=0.5):
+        self.adapter = adapter
         self.max_observation_age_s = float(max_observation_age_s)
 
     async def handle(self, observation, now: float):

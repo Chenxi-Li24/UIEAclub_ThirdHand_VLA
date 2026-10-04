@@ -14,7 +14,7 @@ class Window:
   self.args=args; self.reader=MjpegReader(args.stream); self.reader.start(); self.root=tk.Tk(); self.root.title("ThirdHand Person Follow — READ ONLY"); self.root.configure(bg="#090d12"); self.label=tk.Label(self.root,bg="#090d12"); self.label.pack(); self.status=tk.Label(self.root,text="starting",fg="#9ff",bg="#090d12",font=("monospace",11)); self.status.pack(fill="x"); self.root.protocol("WM_DELETE_WINDOW",self.close); self.root.after(30,self.tick)
  def observation(self):
   try: return json.load(urllib.request.urlopen(self.args.observation,timeout=.25))
-  except Exception as e: return {"identity_state":"LOST","gateway":{"reason_code":f"OBSERVATION_UNAVAILABLE:{e}"}}
+  except Exception as e: return {"identity_state":"LOST","robot":{"reason_code":f"OBSERVATION_UNAVAILABLE:{e}"}}
  def tick(self):
   frame,error=self.reader.latest(); state=self.observation()
   if frame is not None:

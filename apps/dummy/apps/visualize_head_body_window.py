@@ -87,7 +87,7 @@ class App:
             debug=debug,
             error=error,
             enabled=self.args.enable_motion_preview,
-            gateway_url=self.args.gateway_url,
+            robot_url=self.args.robot_ws,
         )
         cv2.putText(
             overlay,
@@ -178,7 +178,6 @@ def main(argv=None):
     parser.add_argument("--hz", type=float, default=12.0)
     parser.add_argument("--width", type=int, default=1180)
     parser.add_argument("--height", type=int, default=880)
-    parser.add_argument("--gateway-url", default="ws://127.0.0.1:31023/ws")
     parser.add_argument("--robot-ws", default="ws://127.0.0.1:3000/ws")
     parser.add_argument("--robot-health", default="http://127.0.0.1:3000/health")
     parser.add_argument("--live-robot", action="store_true", help="read live robot joints for the overlay")

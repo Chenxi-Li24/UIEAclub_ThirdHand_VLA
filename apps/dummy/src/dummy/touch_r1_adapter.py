@@ -99,6 +99,8 @@ class TouchR1Adapter:
             raise ValueError("joint target must contain six degree values")
         out = [float(x) for x in joints]
         for index, (value, (lo, hi)) in enumerate(zip(out, self.joint_limits), start=1):
+            if not math.isfinite(value):
+                raise ValueError(f"J{index} target must be finite")
             if value < lo - 0.05 or value > hi + 0.05:
                 raise ValueError(f"J{index} target {value:.3f} outside limit [{lo},{hi}]")
             out[index - 1] = min(max(value, lo), hi)
@@ -162,6 +164,8 @@ class TouchR1Adapter:
             raise RuntimeError(f"robot command timed out waiting for request_id={request_id}")
         if isinstance(ack, dict) and ack.get("type") == "error":
             raise RuntimeError(f"robot command rejected: {ack.get('code', '-')}: {ack.get('msg', ack)}")
+        if isinstance(ack, dict) and ack.get("status") in {"failed", "rejected", "uncertain"}:
+            raise RuntimeError(f"robot command {ack['status']}: {ack.get('msg', ack)}")
         self._last_send = time.time()
         return True
 
@@ -187,7 +191,7 @@ class TouchR1Adapter:
         if self.client.snapshot.moving or self.client.snapshot.state_name == "MOVING":
             await self.wait_idle()
         value = float(position)
-        if value < 0 or value > 1:
+        if not math.isfinite(value) or value < 0 or value > 1:
             raise ValueError("gripper position must be 0..1")
         await self.client.command("gripper", position=value)
 

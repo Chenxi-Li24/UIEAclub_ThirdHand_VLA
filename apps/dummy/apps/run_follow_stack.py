@@ -3,7 +3,7 @@
 
 This script does not bypass Robot Service.  It keeps the chain as:
 
-    Dummy follow -> 31023 gateway -> 3000 Robot Service -> Startouch SDK.
+    Dummy follow -> TouchR1Adapter -> 3000 Robot Service -> Startouch SDK.
 
 By default it starts/verifies the services only.  Add ``--enable-motion`` to
 start the head-body follow loop after Robot Service reports fresh state.
@@ -23,10 +23,12 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
-import websockets
-
-
 APP_DIR = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(APP_DIR / "src"))
+
+from dummy.config import load_config
+from dummy.touch_r1_adapter import TouchR1Adapter
+
 ROOT = APP_DIR.parents[1]
 PYTHON = ROOT / "local" / "runtimes" / "vision-python" / "bin" / "python"
 NODE = ROOT / "local" / "runtimes" / "node" / "bin" / "node"
@@ -43,7 +45,6 @@ def parse_args(argv=None):
     parser.add_argument("--no-start", action="store_true", help="only diagnose existing services")
     parser.add_argument("--robot-health", default="http://127.0.0.1:3000/health")
     parser.add_argument("--robot-ws", default="ws://127.0.0.1:3000/ws")
-    parser.add_argument("--gateway-ws", default="ws://127.0.0.1:31023/ws")
     return parser.parse_args(argv)
 
 
@@ -102,21 +103,6 @@ def ensure_robot_service(args):
     wait_for(lambda: http_json(args.robot_health), "Robot Service 3000")
 
 
-def ensure_gateway(args):
-    if gateway_ready(args.gateway_ws):
-        print("[stack] gateway 31023 already up", flush=True)
-        return
-    if args.no_start:
-        raise RuntimeError("Gateway 31023 is not reachable")
-    start_background(
-        "gateway-31023",
-        [PYTHON, APP_DIR / "apps" / "run_1023_gateway.py", "--port", "31023"],
-        "gateway-31023.log",
-        cwd=APP_DIR,
-    )
-    wait_for(lambda: gateway_ready(args.gateway_ws), "Gateway 31023")
-
-
 def wait_for(fn, label, timeout=8.0):
     deadline = time.time() + timeout
     last = None
@@ -137,42 +123,22 @@ def summarize_health(health):
     )
 
 
-async def _gateway_ready(ws_url):
+async def _connect_robot(robot_ws, robot_health):
+    config = load_config()
+    config.setdefault("robot", {}).update(ws_url=robot_ws, health_url=robot_health)
+    adapter = TouchR1Adapter(config)
     try:
-        async with websockets.connect(ws_url, open_timeout=1.0) as ws:
-            raw = await asyncio.wait_for(ws.recv(), timeout=1.0)
-            message = json.loads(raw)
-            return message.get("type") == "gateway_1023" and message.get("status") == "ready"
-    except Exception:
-        return False
-
-
-def gateway_ready(ws_url):
-    return asyncio.run(_gateway_ready(ws_url))
-
-
-async def _connect_robot(gateway_ws):
-    async with websockets.connect(gateway_ws, open_timeout=2.0) as ws:
-        await asyncio.wait_for(ws.recv(), timeout=2.0)
-        await ws.send(json.dumps({"cmd": "connect", "request_id": "stack-connect"}))
-        deadline = time.time() + 12.0
-        while time.time() < deadline:
-            try:
-                raw = await asyncio.wait_for(ws.recv(), timeout=1.0)
-            except asyncio.TimeoutError:
-                await ws.send(json.dumps({"cmd": "status", "request_id": "stack-status"}))
-                continue
-            message = json.loads(raw)
-            if message.get("type") == "robot_state" and message.get("connected") and message.get("healthy"):
-                return message
-            if message.get("type") == "error":
-                print(f"[stack] robot error: {message.get('code')} {message.get('msg')}", flush=True)
-        raise RuntimeError("Robot SDK did not report connected healthy state")
+        state = await adapter.connect()
+        if not state.connected or not state.state_ready:
+            raise RuntimeError("Robot SDK did not report connected/stateReady")
+        return list(state.joints_deg)
+    finally:
+        # Close this client only; leave the SDK available to the follow loop.
+        await adapter.close()
 
 
 def connect_robot(args):
-    state = asyncio.run(_connect_robot(args.gateway_ws))
-    joints = state.get("joints_deg") or state.get("joints") or []
+    joints = asyncio.run(_connect_robot(args.robot_ws, args.robot_health))
     print(
         "[stack] robot SDK ready q=["
         + ", ".join(f"{float(value):.2f}" for value in joints[:6])
@@ -189,7 +155,7 @@ def run_follow(args):
         "--hz",
         str(args.hz),
         "--robot-ws",
-        args.gateway_ws,
+        args.robot_ws,
         "--robot-health",
         args.robot_health,
     ]
@@ -219,7 +185,6 @@ def run(argv=None):
     install_signal_handlers()
     try:
         ensure_robot_service(args)
-        ensure_gateway(args)
         connect_robot(args)
         health = http_json(args.robot_health) or {}
         print(f"[stack] final robot health: {summarize_health(health)}", flush=True)

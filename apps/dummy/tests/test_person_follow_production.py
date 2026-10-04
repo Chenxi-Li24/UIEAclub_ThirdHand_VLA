@@ -8,16 +8,13 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from dummy.person_follow.contracts import MotionProposal, VisionObservation
+from dummy.person_follow.contracts import VisionObservation
 from dummy.person_follow.controller import JacobianController
 from dummy.person_follow.jacobian import LocalVisualJacobian
 from dummy.person_follow.logging import JsonlEventLogger
 from dummy.person_follow.proposal import ProposalFactory
 from dummy.person_follow.session import FollowSession, FollowState
 from dummy.person_follow.verifier import MoveVerifier
-from dummy.gateway.ownership import LeaseRegistry
-from dummy.gateway.policy import GatewayPolicy
-from dummy.gateway.protocol import validate_request
 
 
 def observation(**overrides):
@@ -82,7 +79,7 @@ def test_measured_jacobian_reduces_error_with_bounded_step():
     assert np.linalg.norm(predicted) < np.linalg.norm([30.0, -20.0])
 
 
-def test_proposal_is_fresh_single_use_and_bound_to_identity():
+def test_proposal_is_fresh_and_bound_to_identity():
     factory = ProposalFactory(max_age_s=0.25)
     proposal = factory.create("s1", observation(), (0.2, -0.1), now=10.1)
     assert proposal.identity_id == "person-1"
@@ -98,25 +95,3 @@ def test_verifier_requires_same_identity_and_progress():
     assert result.ok
     wrong = verifier.verify(before, observation(identity_id="person-2"), target_px=(320.0, 240.0))
     assert not wrong.ok and wrong.reason_code == "IDENTITY_CHANGED"
-
-
-def test_gateway_protocol_and_policy_reject_replay_raw_and_expired():
-    registry = LeaseRegistry(ttl_s=1.0)
-    lease = registry.acquire("s1", now=1.0)
-    proposal = MotionProposal(
-        schema_version="1.0", proposal_id="p1", session_id="s1",
-        identity_id="person-1", frame_id="f1", calibration_hash="cal-sha",
-        created_at=1.0, expires_at=1.2, joints_deg=(0.2, -0.1),
-    )
-    request = {"cmd": "execute_proposal", "request_id": "r1", "lease_id": lease.lease_id,
-               "proposal": proposal.to_dict()}
-    parsed = validate_request(request)
-    policy = GatewayPolicy(max_step_deg=0.75)
-    first = policy.authorize(parsed, registry, current_joints=(0.0, 0.0), now=1.1)
-    assert first.ok
-    assert not policy.authorize(parsed, registry, current_joints=(0.0, 0.0), now=1.1).ok
-    assert not GatewayPolicy().authorize_command({"cmd": "set_joint_raw"}).ok
-    expired = dict(request)
-    expired["request_id"] = "r2"
-    expired["proposal"] = dict(request["proposal"], proposal_id="p2")
-    assert not policy.authorize(validate_request(expired), registry, (0.0, 0.0), now=2.0).ok

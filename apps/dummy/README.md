@@ -8,9 +8,38 @@ It is not part of the default launcher profile and must be started explicitly.
 
 `DummyDirector` composes Vision, Speech and Robot Service into a long-running personality and person-follow loop. It is application-level orchestration, not a device service or a one-shot Skill.
 
-The current adapter still sends legacy Robot Service motion commands directly. Until person-follow and gestures use the plan, authorization and Skill execution chain, do not add this application to the default one-click startup.
+All Dummy motion goes through `TouchR1Adapter` directly to Robot Service `/ws`
+on port 3000. There is no Dummy relay server, ownership lease, lease heartbeat
+or lease-based authorization. `request_id` remains a command/reply correlation
+ID, not a lease or permission token. Robot Service remains the only CAN/SDK owner.
+
+The production person-follow runtime is still an observation-validation scaffold;
+it does not generate or execute motions by itself. The working follow loop is
+`apps/run_head_body_follow.py` (also wrapped by `run_dume_follow_touch_r1.py`).
 
 ## Run
+
+The follow-stack launcher now starts/checks only Robot Service, then connects
+through the same adapter used by the follow loop:
+
+```bash
+cd $HOME/ThirdHand/UIEAclub_ThirdHand_VLA/apps/dummy
+../../local/runtimes/vision-python/bin/python apps/run_follow_stack.py --no-start
+../../local/runtimes/vision-python/bin/python apps/run_follow_stack.py --enable-motion
+```
+
+The first command checks an existing service and connects the SDK; connecting
+can enable motors even without starting the follow loop. The second starts
+Robot Service if necessary and enables following. Omit `--no-start` to allow
+service startup without starting the follow loop.
+
+Follow and calibration entrypoints default to `ws://127.0.0.1:3000/ws` and
+`http://127.0.0.1:3000/health`. When running Dummy on another machine, set
+`--robot-ws ws://<ubuntu-address>:3000/ws` and
+`--robot-health http://<ubuntu-address>:3000/health` together. For the generic
+personality loop, configure `robot.ws_url` and `robot.health_url` in
+`configs/dum_e_touch_r1.yaml`. The `robot` section in
+`configs/person_follow_production.yaml` uses the same adapter contract.
 
 For the real camera/person-follow demo, use the `vision-python` runtime. It
 contains the OpenCV cascade runtime used for face/upper-body locking.
@@ -60,21 +89,31 @@ Wake word currently listens to the ThirdHand speech websocket when available and
 
 ## Safety
 
-The adapter sends bounded absolute joint targets through Robot Service `move_joint`; configuration clamps each relative command. The real follow entrypoint also holds an exclusive process lock so a second Dummy controller cannot compete for the arm. Keep a hardware stop or physical power cut reachable for real robot tests.
+The adapter retains joint limits, finite-value validation, relative-step
+clamping, command intervals, motion-busy checks, workspace geometry checks and
+request-matched completion/error handling. Robot Service's own readiness,
+fresh-feedback, joint-limit and speed checks are unchanged. The workspace guard
+checks targets against the base bottom plane; it is not full collision planning.
+
+The real follow entrypoint still holds a local process lock against duplicate
+Dummy follow loops. This is not an ownership lease and does not prevent the
+webpage or another client from sending commands. Do not run competing motion
+controllers at the same time. Keep a hardware stop or physical power cut
+reachable for real robot tests; software stop is not a hardware emergency stop.
 
 ## Migration plan
 
 1. **Directory migration (complete):** keep the application under `apps/dummy`, preserve its internal Python package, and make application-owned model paths independent of the working directory.
 2. **Contract adaptation:** replace ad hoc Vision health/MJPEG parsing with the formal Vision Service target and stable identity contracts.
 3. **Capability split:** move reusable person-follow and gesture primitives into `skills/interaction/person-follow` and `skills/manipulation/gesture`; keep personality state and lifecycle in this application.
-4. **Authorization:** route every physical action through TaskPlan, one-time authorization and Robot Service `/execution`; remove direct legacy motion commands from `TouchR1Adapter`.
-5. **Lifecycle integration:** add an opt-in launcher profile only after authorization, cancellation, stale-target and software-stop tests pass. Do not include it in the default or manual-control profiles.
+4. **Transport adaptation (complete):** use only `TouchR1Adapter -> Robot Service :3000/ws` for Dummy motion. Do not reintroduce a separate relay or lease service.
+5. **Lifecycle integration:** add an opt-in launcher profile only after cancellation, stale-target and software-stop tests pass. Do not include it in the default or manual-control profiles.
 6. **Hardware acceptance:** validate target loss, reacquisition, joint limits, command rate, operator cancellation and hardware stop behavior with a cleared workspace.
 
 Completion requires all of the following:
 
 - no process outside Robot Service opens `can0` or imports Startouch SDK;
-- stable target identity is preserved between Vision evidence and motion authorization;
-- motion stops on stale vision, target change, authorization expiry or operator cancellation;
+- stable target identity is preserved between Vision evidence and motion commands;
+- motion stops on stale vision, target change or operator cancellation;
 - offline tests pass without camera or robot hardware;
 - real-hardware tests require an explicit operator-selected profile.

@@ -62,8 +62,8 @@ def parse_args(argv=None):
     )
     parser.add_argument(
         "--robot-ws",
-        default="ws://127.0.0.1:31023/ws",
-        help="Robot command WebSocket; hardware experiments default to the 31023 debug gateway",
+        default="ws://127.0.0.1:3000/ws",
+        help="Robot Service WebSocket used directly by TouchR1Adapter",
     )
     parser.add_argument(
         "--robot-health",

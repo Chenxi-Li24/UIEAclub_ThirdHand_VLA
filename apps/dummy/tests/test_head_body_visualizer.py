@@ -22,7 +22,7 @@ def test_overlay_draws_target_and_motion_text_without_resizing_frame():
         joints,
         error=None,
         enabled=False,
-        gateway_url="ws://127.0.0.1:31023/ws",
+        robot_url="ws://127.0.0.1:3000/ws",
     )
 
     assert rendered.shape == frame.shape

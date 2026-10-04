@@ -20,7 +20,7 @@ def parse_args(argv=None):
     parser.add_argument("--enable-motion", action="store_true")
     parser.add_argument("--joint", type=int, required=True, choices=range(1, 7), help="1-based joint index")
     parser.add_argument("--delta-deg", type=float, default=2.0)
-    parser.add_argument("--robot-ws", default="ws://127.0.0.1:31023/ws")
+    parser.add_argument("--robot-ws", default="ws://127.0.0.1:3000/ws")
     parser.add_argument("--robot-health", default="http://127.0.0.1:3000/health")
     parser.add_argument("--return-zero", action="store_true", help="return to zero preset after the nudge")
     return parser.parse_args(argv)

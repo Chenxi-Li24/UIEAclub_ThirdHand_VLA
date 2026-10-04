@@ -4,6 +4,7 @@ import asyncio
 import json
 import time
 import urllib.request
+from uuid import uuid4
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -43,6 +44,7 @@ class RobotWebSocketClient:
         self.events = []
         self.listeners = []
         self._state_event = asyncio.Event()
+        self._event_condition = asyncio.Condition()
 
     def health(self):
         with urllib.request.urlopen(self.health_url, timeout=self.timeout) as response:
@@ -72,6 +74,8 @@ class RobotWebSocketClient:
                 self.events.append(msg)
                 self.events = self.events[-200:]
                 self._apply(msg)
+                async with self._event_condition:
+                    self._event_condition.notify_all()
                 for cb in list(self.listeners):
                     try:
                         cb(msg)
@@ -117,6 +121,40 @@ class RobotWebSocketClient:
             await self.close()
             await self.open()
             await self.ws.send(payload)
+
+    async def command_wait(self, cmd, *, timeout=2.0, terminal_only=True, **kwargs):
+        request_id = kwargs.get("request_id")
+        if not isinstance(request_id, str) or not request_id:
+            request_id = f"dummy-{uuid4()}"
+            kwargs["request_id"] = request_id
+        start_index = len(self.events)
+        await self.command(cmd, **kwargs)
+        deadline = time.time() + float(timeout)
+        while time.time() < deadline:
+            for event in self.events[start_index:]:
+                typ = event.get("type")
+                event_request_id = event.get("request_id")
+                if typ == "error" and event_request_id in {None, request_id}:
+                    return event
+                if typ == "command_status" and event_request_id == request_id:
+                    if not terminal_only and event.get("status") == "accepted":
+                        return event
+                    if event.get("status") in {"complete", "failed", "rejected", "uncertain"}:
+                        return event
+                    continue
+                if typ == "motion_ack" and event_request_id == request_id:
+                    return event
+                if typ == "gateway_1023" and event.get("status") == "ready":
+                    continue
+            remaining = deadline - time.time()
+            if remaining <= 0:
+                break
+            async with self._event_condition:
+                try:
+                    await asyncio.wait_for(self._event_condition.wait(), timeout=min(remaining, 0.25))
+                except asyncio.TimeoutError:
+                    pass
+        return None
 
     async def wait_state(self, timeout=5.0):
         if self.snapshot.state_ready:

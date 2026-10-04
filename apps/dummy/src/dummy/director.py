@@ -82,7 +82,7 @@ class DummyDirector:
         await self.adapter.connect()
         print("[dummy] robot connected; starting wake_up", flush=True)
         if self.config.get("robot", {}).get("go_home_on_start", True) and hasattr(self.adapter, "go_home"):
-            print("[dummy] going to configured Home preset", flush=True)
+            print("[dummy] going to configured initial preset", flush=True)
             await self.adapter.go_home()
             self.follow.reset_base((await self.adapter.get_state()).joints_deg)
         await self.gesture("wake_up")
@@ -165,7 +165,7 @@ class DummyDirector:
                     else:
                         await self.gesture("droop")
                         if self.config.get("robot", {}).get("go_home_on_lost", True) and hasattr(self.adapter, "go_home"):
-                            print("[dummy] target lost; returning to Home preset", flush=True)
+                            print("[dummy] target lost; returning to initial preset", flush=True)
                             await self.adapter.go_home()
                             self.follow.reset_base((await self.adapter.get_state()).joints_deg)
                         self._set_state(State.IDLE)

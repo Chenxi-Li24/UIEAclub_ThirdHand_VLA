@@ -3,7 +3,13 @@ import yaml
 
 
 APP_ROOT = Path(__file__).resolve().parents[2]
+PROJECT_ROOT = APP_ROOT.parents[1]
 DEFAULT_CONFIG = APP_ROOT / "configs" / "dum_e_touch_r1.yaml"
+
+
+def resolve_project_path(value):
+    path = Path(value).expanduser()
+    return path if path.is_absolute() else PROJECT_ROOT / path
 
 
 def load_config(path=None):

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from .config import resolve_project_path
 from .person_lock_tracker import Candidate
 
 
@@ -9,7 +10,9 @@ class YoloPersonDetector:
     def __init__(self, config, *, model=None):
         vision = config.get("vision_service", {})
         self.enabled = bool(vision.get("yolo_person_enabled", True))
-        self.model_path = str(vision.get("yolo_person_model_path", "/home/nieqingcao/yolov8n.pt"))
+        self.model_path = str(resolve_project_path(
+            vision.get("yolo_person_model_path", "local/models/vision/yolov8n.pt")
+        ))
         self.min_score = float(vision.get("yolo_person_min_score", 0.25))
         self.model = model
         self.available = model is not None
@@ -19,10 +22,12 @@ class YoloPersonDetector:
 
     def _load_model(self):
         try:
+            path = Path(self.model_path)
+            if not path.is_file():
+                raise FileNotFoundError(f"YOLO model not found: {path}")
             from ultralytics import YOLO
 
-            path = Path(self.model_path)
-            self.model = YOLO(str(path if path.exists() else self.model_path))
+            self.model = YOLO(str(path))
             self.available = True
         except Exception as exc:
             self.error = str(exc)

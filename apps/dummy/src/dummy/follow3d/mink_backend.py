@@ -7,6 +7,7 @@ import tempfile
 
 import numpy as np
 
+from ..config import resolve_project_path
 
 @dataclass
 class MinkLookAtResult:
@@ -21,7 +22,8 @@ class MinkLookAtController:
     def __init__(self, config):
         options = config.get("mink_lookat", {})
         self.enabled = bool(options.get("enabled", False))
-        self.model_path = str(options.get("model_path", "") or "")
+        model_path = options.get("model_path", "") or ""
+        self.model_path = str(resolve_project_path(model_path)) if model_path else ""
         self.camera_frame = str(options.get("camera_frame", "camera"))
         self.frame_type = str(options.get("frame_type", "body"))
         self.camera_axis = options.get("camera_axis", [0.0, 0.0, 1.0])

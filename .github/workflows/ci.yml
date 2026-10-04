@@ -31,5 +31,8 @@ jobs:
       - name: Python tests
         run: npm run test:python
 
+      - name: Dummy adapter and resource path tests
+        run: python -m pytest -q apps/dummy/tests/test_direct_robot_control.py apps/dummy/tests/test_resource_paths.py apps/dummy/tests/test_yolo_person_detector.py
+
       - name: Source boundary audit
         run: python tools/diagnostics/audit_boundaries.py --root .

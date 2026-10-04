@@ -293,7 +293,7 @@ def test_mink_controller_resolves_startouch_package_uri_when_enabled():
     cfg = config()
     cfg["mink_lookat"] = {
         "enabled": True,
-        "model_path": "/home/nieqingcao/ThirdHand/UIEAclub_ThirdHand_VLA/assets/robot/startouch-v3/FastTouchV3.SLDASM.urdf",
+        "model_path": "assets/robot/startouch-v3/FastTouchV3.SLDASM.urdf",
     }
 
     controller = MinkLookAtController(cfg)
@@ -306,7 +306,7 @@ def test_mink_controller_solves_3d_lookat_to_six_joint_target():
     cfg = config()
     cfg["mink_lookat"] = {
         "enabled": True,
-        "model_path": "/home/nieqingcao/ThirdHand/UIEAclub_ThirdHand_VLA/assets/robot/startouch-v3/FastTouchV3.SLDASM.urdf",
+        "model_path": "assets/robot/startouch-v3/FastTouchV3.SLDASM.urdf",
         "camera_frame": "gripper_base",
         "frame_type": "body",
         "dt": 0.1,

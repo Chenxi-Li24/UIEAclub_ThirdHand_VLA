@@ -69,6 +69,19 @@ cd $HOME/ThirdHand/UIEAclub_ThirdHand_VLA/apps/dummy
 ../../local/runtimes/python/bin/python apps/run_dummy.py
 ```
 
+## Resource paths
+
+URDF, hand-eye calibration and YOLO paths are relative to the repository root,
+not the process working directory or the original Ubuntu checkout. Mink resolves
+its model path before loading. MediaPipe's `models/...` path remains relative to
+`apps/dummy`, as before.
+
+Prepare YOLO person weights at `local/models/vision/yolov8n.pt`, or set
+`vision_service.yolo_person_model_path` to an explicit local path. Weights are
+not committed to Git; a missing file reports an unavailable detector rather
+than automatically downloading a model. A fresh clone still needs its local
+model assets and optional Mink/MuJoCo dependencies prepared before hardware use.
+
 ## Individual checks
 
 ```bash

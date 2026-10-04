@@ -1,0 +1,9 @@
+{
+  "requestId": "prototype-1",
+  "target": {"positionM": [0.3, -0.2, 0.1], "eulerRad": [0, 0, 0]},
+  "widthM": 0.04,
+  "flangeToGrip": [[1, 0, 0, 0.02], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]],
+  "pregraspOffsetM": 0.1,
+  "liftDistanceM": 0.05,
+  "linearSpeedMps": 0.02
+}

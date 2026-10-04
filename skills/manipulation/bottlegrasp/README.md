@@ -49,6 +49,21 @@ V 不导入 A、不发送动作；A 不读取模型、掩膜或 tracker 内部�
 
 ## 安装与只读预检
 
+### 独立抓取原型（仅模拟）
+
+在本目录执行：
+
+```bash
+node scripts/action/prototype_grasp_validation.js --fixture tests/fixtures/action/prototype-grasp.json
+```
+
+入口生成并模拟执行 `pregrasp → approach → grip → lift` 四阶段，输出包含计划、
+命令记录和最终状态的确定性 JSON，`simulationOnly=true`。不依赖正式审批门控或
+验证报告，不接入正式服务或硬件适配器，也不执行真实抓取。仅接受 `--fixture FILE`。
+示例几何与法兰偏移是测试数据，不是实测标定；输入没有起始位姿，因此预抓取时间
+只是偏移量/速度的名义预览值，不能作为真实机械臂轨迹时长。`widthM` 保留在计划中，
+夹爪命令仍是归一化闭合值，不表示毫米级开口控制。
+
 ```bash
 cd $HOME/th0814/VA/bottlegrasp
 $HOME/miniconda3/envs/thirdhand-groundedsam2/bin/python \

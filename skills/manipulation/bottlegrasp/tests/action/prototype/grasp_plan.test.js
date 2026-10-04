@@ -54,7 +54,8 @@ test('rejects malformed geometry and positive motion inputs', () => {
 
 test('rejects reflected aliased and malformed transforms', () => {
   const row = [1,0,0,0];
-  for (const matrix of [[], [row,row,[0,0,1,0],[0,0,0,1]],
+  for (const matrix of [[], [[1,0,0,0],[0,1,0,0],[0,0,1,0],new Array(4)],
+    [row,row,[0,0,1,0],[0,0,0,1]],
     [[-1,0,0,0],[0,1,0,0],[0,0,1,0],[0,0,0,1]]]) {
     assert.throws(() => buildPrototypeGraspPlan({...input(),flangeToGrip:matrix}), /grip_transform/);
   }

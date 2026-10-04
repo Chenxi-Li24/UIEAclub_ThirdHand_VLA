@@ -95,7 +95,7 @@ It must not accept an `--execute`, `--real`, backend, socket, or CAN option.
 
 ### Fixtures and tests
 
-Add a deterministic fixture containing a target pose, a measured example
+Add a deterministic synthetic fixture containing a target pose, an example
 flange-to-grip transform, bottle width, and motion settings. The fixture is
 prototype input only and is not an approval artifact.
 

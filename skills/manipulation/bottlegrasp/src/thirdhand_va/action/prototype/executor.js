@@ -13,6 +13,8 @@ class PrototypeGraspExecutor {
     this.reason = null;
     this.inFlightRequestId = null;
     this.completed = new Set();
+    this.sending = false;
+    this.pendingAck = null;
   }
   start(plan) {
     if (this.status !== 'idle') return {accepted:false,reason:'prototype_session_active'};
@@ -26,6 +28,10 @@ class PrototypeGraspExecutor {
     if (!event || event.type !== 'command_complete') return {handled:false};
     if (this.completed.has(event.request_id)) return {handled:true,duplicate:true};
     if (this.status !== 'running' || event.request_id !== this.inFlightRequestId) return {handled:false};
+    if (this.sending) {
+      this.pendingAck ??= {type:event.type,request_id:event.request_id,reached:event.reached};
+      return {handled:true,deferred:true};
+    }
     this.inFlightRequestId = null;
     if (event.reached !== true) {
       this.status = 'failed'; this.reason = 'prototype_completion_failed';
@@ -42,10 +48,20 @@ class PrototypeGraspExecutor {
     this.inFlightRequestId = `${this.plan.requestId}:${step.phase}`;
     const command = {...step.command,request_id:this.inFlightRequestId,
       source:'prototype_grasp_validation'};
+    let sent = false;
+    this.sending = true;
     try {
-      if (this.simulator.send(command) === true) return;
+      sent = this.simulator.send(command) === true;
     } catch {
       // A simulator callback failure is terminal for this run.
+    } finally {
+      this.sending = false;
+    }
+    const pendingAck = this.pendingAck;
+    this.pendingAck = null;
+    if (sent) {
+      if (pendingAck) this.ack(pendingAck);
+      return;
     }
     this.status = 'failed'; this.reason = 'prototype_send_failed'; this.inFlightRequestId = null;
   }

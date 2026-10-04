@@ -59,6 +59,22 @@ test('simulator keeps independent immutable command copies', () => {
   assert.throws(() => simulator.commands.push({}), TypeError);
 });
 
+test('synchronous acknowledgements wait for successful send before advancing', () => {
+  for (const fail of [false,true]) {
+    let executor;
+    const simulator = new PrototypeSimulator({onCommand(command) {
+      executor.ack({type:'command_complete',request_id:command.request_id,reached:true});
+      assert.equal(simulator.commands.at(-1).request_id,command.request_id);
+      if (fail) throw new Error('callback failed after acknowledgement');
+    }});
+    executor = new PrototypeGraspExecutor({simulator});
+    executor.start(plan());
+    assert.equal(executor.snapshot().status,fail ? 'failed' : 'complete');
+    assert.equal(executor.snapshot().completedPhases,fail ? 0 : 4);
+    assert.equal(simulator.commands.length,fail ? 1 : 4);
+  }
+});
+
 test('executor rejects arbitrary adapters and malformed plans before sending', () => {
   assert.throws(() => new PrototypeGraspExecutor({simulator:{send(){return true;}}}),
     /prototype_simulator_required/);

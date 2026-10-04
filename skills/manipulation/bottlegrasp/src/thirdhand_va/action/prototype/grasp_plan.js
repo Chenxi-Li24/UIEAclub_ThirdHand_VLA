@@ -30,7 +30,12 @@ function buildPrototypeGraspPlan(input = {}) {
   if (![input.pregraspOffsetM,input.liftDistanceM,input.linearSpeedMps].every(positive)) {
     throw new TypeError('prototype_motion_invalid');
   }
-  const flange = gripTargetToFlangePose(input.target, input.flangeToGrip);
+  const matrix = input.flangeToGrip;
+  if (!Array.isArray(matrix) || matrix.length !== 4 || !Array.from(matrix).every(row =>
+    Array.isArray(row) && row.length === 4 && Array.from(row).every(Number.isFinite))) {
+    throw new TypeError('prototype_grip_transform_invalid');
+  }
+  const flange = gripTargetToFlangePose(input.target, matrix);
   const approach = flange.positionM;
   const pregrasp = approach.map((value,index) => rounded(value + (index === 2 ? input.pregraspOffsetM : 0)));
   const lift = approach.map((value,index) => rounded(value + (index === 2 ? input.liftDistanceM : 0)));

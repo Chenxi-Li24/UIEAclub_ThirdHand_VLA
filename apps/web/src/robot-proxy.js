@@ -134,6 +134,8 @@ class RobotProxy {
     return this.languageUpstream.getRobotState();
   }
 
+  setGraspInterlock(getStatus) { this.graspInterlock = getStatus; }
+
   attach(browser) {
     const upstream = new WebSocket(this.robotWsUrl);
     const session = { browser, upstream, queue: [] };
@@ -189,6 +191,10 @@ class RobotProxy {
       }
 
       if (message.type === 'skill.candidate') {
+        if (this.graspInterlock?.()?.active) {
+          sendJson(browser, {type:'error',code:'grasp_active',msg:'抓取流程正在控制机械臂'});
+          return;
+        }
         const candidate = message.candidate || message.payload;
         let owners = this.languageCandidateOwners.get(browser);
         if (!owners) {
@@ -205,6 +211,10 @@ class RobotProxy {
       }
 
       if (message.type === 'confirmation.decision') {
+        if (this.graspInterlock?.()?.active) {
+          sendJson(browser, {type:'error',code:'grasp_active',msg:'抓取流程正在控制机械臂'});
+          return;
+        }
         const owners = this.languageCandidateOwners.get(browser);
         const owner = owners?.get(message.candidateId);
         if (owner === DIRECTIONAL_SKILL) {
@@ -222,6 +232,13 @@ class RobotProxy {
           code: 'service_unavailable',
           msg: `Command ${message?.cmd || '<missing>'} has not migrated to an online service`,
         });
+        return;
+      }
+      const grasp = this.graspInterlock?.();
+      if (grasp?.active && !['software_stop','estop','status','ping','preview_ik'].includes(message.cmd)
+          && message.source !== `web-grasp:${grasp.sessionId}`) {
+        sendJson(browser, {type:'error',code:'grasp_active',request_id:message.request_id,
+          msg:'抓取流程正在控制机械臂；可使用软件停止'});
         return;
       }
       const payload = JSON.stringify(message);

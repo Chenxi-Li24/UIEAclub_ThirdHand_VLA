@@ -523,8 +523,10 @@ class UIControls {
     this.visionTargetExecutionEnabled = false;
     this.selectedVisionTarget = null;
     this.pendingVisionSelection = null;
-    this.graspMode = 'step';
+    this.graspMode = 'auto';
     this.graspPhase = 'idle';
+    this.webGraspEnabled = false;
+    this.webGraspStatus = {phase:'idle',active:false,sessionId:null};
     this.activeDepthStatus = { phase: 'idle', active: false, sessionId: null };
     this._drawerCollapsed = false;
     this.drawer = null;
@@ -843,7 +845,7 @@ class UIControls {
       console.log('[UI] config received, presets:', data.presets ? Object.keys(data.presets) : 'none');
       if (data.presets) this._setPresets(data.presets);
       if (data.jointLimits) this._setJointLimits(data.jointLimits);
-      this.visionConfigExecutionEnabled = data.visionSafety?.robotExecutionEnabled === true;
+      this.visionConfigExecutionEnabled = false;
       this._updateVisionControls();
       if (data.connection) {
         this.robotConnected = data.connection.connected === true;
@@ -1155,7 +1157,7 @@ class UIControls {
       if (!objects.some(obj => obj.selected === true)) {
         this.selectedVisionTarget = null;
       }
-      this.visionTargetExecutionEnabled = data.robotExecutionEnabled === true;
+      this.visionTargetExecutionEnabled = false;
       this._updateVisionControls();
     });
 
@@ -1203,11 +1205,11 @@ class UIControls {
     });
     this.ws.on('camera_status', applyXVisionStatus);
 
-    this.ws.on('grasp_status', (data) => {
-      this.graspPhase = data.phase || 'idle';
+    this.ws.on('grasp.config', data => {
+      this.webGraspEnabled = data.enabled === true;
       this._updateVisionControls();
-      this._log(`视觉夹取: ${this.graspPhase}${data.reason ? ` (${data.reason})` : ''}`);
     });
+    this.ws.on('grasp.status', data => this._applyWebGraspStatus(data));
 
     this.visionWs.on("vision_warning", data => {
       this._log("⚠ Vision: " + (data.error || data.stage || "warning"));
@@ -1250,6 +1252,9 @@ class UIControls {
     // === End Active Depth Controls ===
 
     document.querySelectorAll('[data-grasp-mode]').forEach(button => {
+      button.disabled = true;
+      button.classList.toggle('active', button.dataset.graspMode === 'auto');
+      button.setAttribute('aria-pressed', String(button.dataset.graspMode === 'auto'));
       button.addEventListener('click', () => {
         this.graspMode = button.dataset.graspMode;
         document.querySelectorAll('[data-grasp-mode]').forEach(candidate => {
@@ -1261,16 +1266,14 @@ class UIControls {
       });
     });
     document.getElementById('btn-grasp-start')?.addEventListener('click', () => {
-      this.ws.send({ cmd: 'start_vision_grasp', mode: this.graspMode });
-      this._log(`→ ${this.graspMode === 'auto' ? '自动' : '分步'}视觉夹取`);
-    });
-    document.getElementById('btn-grasp-next')?.addEventListener('click', () => {
-      this.ws.send({ cmd: 'advance_vision_grasp' });
-      this._log('→ 执行夹取下一步');
+      const stableId = Number(this.selectedVisionTarget?.stableId);
+      if (!Number.isSafeInteger(stableId) || this.webGraspStatus.active) return;
+      const requestId = globalThis.crypto?.randomUUID?.() || `web-grasp-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+      this._requestWebGrasp('/api/grasp/start', {stableId,requestId});
     });
     document.getElementById('btn-grasp-cancel')?.addEventListener('click', () => {
-      this.ws.send({ cmd: 'cancel_vision_grasp' });
-      this._log('→ 取消视觉夹取');
+      const sessionId = this.webGraspStatus.sessionId;
+      if (sessionId && this.webGraspStatus.active) this._requestWebGrasp('/api/grasp/stop', {sessionId});
     });
 
     // 如有预设提前到达，补渲染
@@ -1284,17 +1287,40 @@ class UIControls {
     const start = document.getElementById('btn-grasp-start');
     const next = document.getElementById('btn-grasp-next');
     const cancel = document.getElementById('btn-grasp-cancel');
-    const active = !['idle', 'aborted'].includes(this.graspPhase);
-    const targetReady = this.selectedVisionTarget?.actionable === true;
+    const active = this.webGraspStatus?.active === true;
+    const targetReady = Number.isSafeInteger(Number(this.selectedVisionTarget?.stableId));
     if (start) {
       start.disabled = active || !this.robotStateReady || !targetReady ||
-        !this.visionConfigExecutionEnabled || !this.visionTargetExecutionEnabled;
+        !this.webGraspEnabled;
+      start.textContent = '一键抓取（TCP 60 mm）';
     }
     if (next) {
-      next.disabled = this.graspMode !== 'step' || this.graspPhase !== 'preview_ready';
+      next.disabled = true;
     }
     if (cancel) cancel.disabled = !active;
+    const lock = document.getElementById('vision-lock-reason');
+    if (lock && this.webGraspEnabled) {
+      lock.textContent = `${active ? '执行中' : '新抓取流程'}：${this.webGraspStatus.phase || 'idle'}${this.webGraspStatus.reason ? ' / '+this.webGraspStatus.reason : ''} · TCP 60 mm（近似）`;
+      lock.classList.toggle('ready', !active && targetReady);
+    }
     this._renderActiveDepthStatus();
+  }
+
+  _applyWebGraspStatus(data) {
+    const previous = this.webGraspStatus.phase;
+    this.webGraspStatus = data;
+    this.graspPhase = data.phase || 'idle';
+    if (previous !== this.graspPhase) this._log(`新抓取: ${this.graspPhase}${data.reason ? ' / '+data.reason : ''}`);
+    this._updateVisionControls();
+  }
+
+  async _requestWebGrasp(path, body) {
+    try {
+      const response = await fetch(path, {method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)});
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || `HTTP ${response.status}`);
+      this._applyWebGraspStatus(data);
+    } catch (error) { this._log(`抓取请求失败: ${error.message}`); }
   }
 
   async _requestActiveDepth(path, body) {

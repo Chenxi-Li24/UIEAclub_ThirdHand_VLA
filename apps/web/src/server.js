@@ -4,6 +4,7 @@
 const fs = require('node:fs');
 const http = require('node:http');
 const path = require('node:path');
+const { randomUUID } = require('node:crypto');
 const { WebSocketServer } = require('ws');
 const { loadConfig } = require('./config');
 const { proxyHttpRequest } = require('./http-proxy');
@@ -97,18 +98,24 @@ function createWebGateway(options = {}) {
   }
   const activeDepthReady = Boolean(coordinator);
   const graspEnv = options.env || process.env;
+  const graspOwnerToken = options.graspOwnerToken || randomUUID();
   let graspController = options.graspController || null;
   let graspReason = null;
   if (!graspController && graspEnv.WEB_GRASP_CONFIG) {
     try {
       const factory = require(graspEnv.WEB_GRASP_MODULE || './grasp');
-      graspController = factory.createFromFile(graspEnv.WEB_GRASP_CONFIG);
+      graspController = factory.createFromFile(graspEnv.WEB_GRASP_CONFIG,{ownerToken:graspOwnerToken});
     } catch (error) { graspReason = error.code || error.message || 'grasp_configuration_invalid'; }
   }
   const graspConfig = { type: 'grasp.config', enabled: Boolean(graspController),
     gripOffsetM: graspController?.status().gripOffsetM || null, legacyGraspEnabled: false,
     startEndpoint: '/api/grasp/start', reason: graspReason };
   robotProxy.setGraspInterlock?.(() => graspController?.status());
+  visionProxy.canForward = browser => {
+    if (!graspController?.status().active) return true;
+    if (browser.readyState === browser.OPEN) browser.send(JSON.stringify({type:'error',code:'grasp_active'}));
+    return false;
+  };
   if (graspController) graspController.on('status', status => robotProxy.broadcast(status));
   const connections = new Set();
   let closing = false;
@@ -167,6 +174,9 @@ function createWebGateway(options = {}) {
       try {
         const body = await readJson(request);
         if (pathname.endsWith('/start')) {
+          if (robotProxy.hasActiveControl?.() && !graspController.status().active) {
+            writeJson(response,409,{error:'robot_control_busy'});return;
+          }
           if (!exactKeys(body, ['stableId','requestId']) || !Number.isSafeInteger(body.stableId)
               || body.stableId < 1 || body.stableId > 5 || typeof body.requestId !== 'string'
               || !/^[\w:-]{1,120}$/.test(body.requestId)) {
@@ -245,6 +255,9 @@ function createWebGateway(options = {}) {
       && /^[1-5]$/.test(pathname.slice('/api/vision/targets/'.length));
     if ((request.method === 'GET' && (visionGetRoutes.has(pathname) || isVisionTargetRoute)) ||
         (request.method === 'POST' && visionPostRoutes.has(pathname))) {
+      if (request.method === 'POST' && graspController?.status().active) {
+        writeJson(response,409,{error:'grasp_active'});return;
+      }
       proxyHttpRequest(request, response, config.visionHttpUrl, pathname);
       return;
     }
@@ -270,7 +283,7 @@ function createWebGateway(options = {}) {
         request,
         socket,
         head,
-        ws => robotWss.emit('connection', ws),
+        ws => robotWss.emit('connection', ws, request),
       );
       return;
     }
@@ -302,8 +315,8 @@ function createWebGateway(options = {}) {
       ws => voiceWss.emit('connection', ws),
     );
   });
-  robotWss.on('connection', socket => {
-    robotProxy.attach(socket);
+  robotWss.on('connection', (socket, request) => {
+    robotProxy.attach(socket,{graspOwner:request?.headers['x-thirdhand-grasp-owner']===graspOwnerToken});
     if (coordinator && socket.readyState === socket.OPEN) {
       socket.send(JSON.stringify(coordinator.status()));
     }

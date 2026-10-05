@@ -59,8 +59,18 @@ through the protected execution socket or CAN. Bound alignment steps/budgets.
 One session and one outstanding command. Request IDs make starts idempotent.
 During a grasp, unrelated manual motion/connect/disconnect commands and the
 separate depth session are rejected; software stop and emergency stop remain
-available. Correlate completion and errors with request IDs. Health, finite
-joint feedback, hard joint limits and freshness are required throughout motion.
+available. Correlate completion and errors with request IDs. The trusted internal
+socket is bound using an unpublished per-gateway nonce, not a client source tag.
+Recheck ownership at actual sends, including queued and language sends; reject
+acquisition when a prior executor is active. Lock vision selection mutations.
+
+The hash-bound existing bridge intentionally pauses robot_state during motion.
+Require fresh healthy hard-limit-valid feedback before each bounded segment and
+after its matching completion. For an accepted motion only, permit that expected
+quiet interval until its command deadline (15 seconds), without pretending to
+monitor joints continuously. Any invalid received state, connection loss or
+missing terminal feedback still stops. Completion waits for a later valid IDLE
+sequence, including depth-alignment servo; accepted alone never advances a phase.
 
 Refresh the locked target after preapproach and recheck the contact/lift plan.
 Abort on target switch/loss before contact commitment. During the final bounded
@@ -76,6 +86,9 @@ inspect the resulting camera view and report the observed physical outcome.
 
 On stale/invalid robot feedback, motion timeout, disconnect or ambiguous motion
 completion, request software stop once and terminate without auto-reconnect.
+If stop cannot be confirmed, keep the session uncertain and interlocked rather
+than release control to another actor. Unknown errors after sent/accepted motion
+are uncertainty, not evidence that the motion stopped.
 Software stop disables the existing SDK and may remove holding torque; use it
 for active/uncertain motion, not as cleanup of an idle rejected request. On an
 idle plan/target/contact failure, end the session while preserving holding.

@@ -54,3 +54,33 @@ test('one in-flight command and web-only command allowlist are enforced',async t
  await assert.rejects(client.command({cmd:'connect'}),/command_forbidden/);
  await assert.rejects(p,/command_timeout/);
 });
+test('bound terminal-only bridge motion waits for post-completion fresh state without dropping SDK',async t=>{
+ let stopFrames;const {client,received,stopFrames:stop}=await setup(t,(s,m)=>{
+  if(m.cmd==='software_stop'){s.send(JSON.stringify({type:'command_status',status:'complete',request_id:m.request_id,stopped:true}));return;}
+  stopFrames();s.send(JSON.stringify({type:'command_status',status:'accepted',request_id:m.request_id}));
+  s.send(JSON.stringify({type:'motion_state',stateName:'MOVING'}));
+  setTimeout(()=>s.send(JSON.stringify({type:'command_status',status:'complete',request_id:m.request_id,reached:true,robot_healthy:true})),180);
+  setTimeout(()=>{const state=robot(1000);state.flange_position_m=[0.305,0,0.2];s.send(JSON.stringify(state));},210);
+ },{terminalFeedbackOnly:true});stopFrames=stop;
+ const result=await client.command({cmd:'move_l',position:[0.305,0,0.2],euler:[0,0,0]},600);
+ assert.equal(result.reached,true);assert.equal(client.state().state_sequence,1000);
+ assert.deepEqual(received.map(m=>m.cmd),['move_l']);
+});
+test('alignment waits for actual final IDLE snapshot after its correlated completion',async t=>{
+ const {client,stopFrames}=await setup(t,(s,m)=>{
+  stopFrames();s.send(JSON.stringify({type:'command_status',status:'accepted',request_id:m.request_id}));
+  s.send(JSON.stringify({type:'command_status',status:'complete',request_id:m.request_id,reached:true,robot_healthy:true}));
+  setTimeout(()=>{const state=robot(1000);state.joints_deg=[0,0,-1,1,0,0];s.send(JSON.stringify(state));},30);
+ });
+ const result=await client.execute({operation:'vision.align.step',primitiveId:'test-align',parameters:{tier:'wrist',startJointsDeg:[0,0,-1,0,0,0],targetJointsDeg:[0,0,-1,1,0,0],timeoutMs:500}});
+ assert.equal(result.status,'completed');
+});
+test('unattributed error after accepted motion stops uncertain execution once',async t=>{
+ const {client,received}=await setup(t,(s,m)=>{
+  if(m.cmd==='software_stop'){s.send(JSON.stringify({type:'command_status',status:'complete',request_id:m.request_id,stopped:true}));return;}
+  s.send(JSON.stringify({type:'command_status',status:'accepted',request_id:m.request_id}));
+  s.send(JSON.stringify({type:'error',msg:'joint motion failed'}));
+ });
+ await assert.rejects(client.command({cmd:'move_l',position:[0.305,0,0.2],euler:[0,0,0]}),/robot_error/);await sleep(20);
+ assert.equal(received.filter(m=>m.cmd==='software_stop').length,1);
+});

@@ -62,3 +62,16 @@ test('completion preceding the final IDLE feedback waits instead of dropping the
  robot.state=options=>{if(late){late=false;if(options?.idle){const e=new Error('robot_not_stationary');e.code=e.message;throw e;}return {...originalState(),moving:true,stateName:'MOVING'};}return originalState();};
  await c.start(2,'late-idle');const s=await finish(c);assert.equal(s.phase,'complete',s.reason);
 });
+test('selection lost while opening prevents even the first preapproach segment',async()=>{
+ const options={},v=await setup(options),original=v.robot.command;
+ v.robot.command=async cmd=>{const r=await original(cmd);if(cmd.cmd==='gripper'&&cmd.position===1)options.switchTarget=true;return r;};
+ await v.c.start(2,'lost-opening');const status=await finish(v.c);
+ assert.equal(status.phase,'failed');assert.equal(v.events.some(e=>e.cmd==='move_l'),false);
+});
+test('failed stop confirmation keeps uncertain motion owned and interlocked',async()=>{
+ const {c,robot}=await setup({command:async cmd=>{if(cmd.cmd==='gripper')return {reached:true};const e=new Error('robot_error');e.code='robot_error';e.motionUncertain=true;throw e;}});
+ const state=robot.state();robot.state=()=>({...state,gripper_width_m:0.08,state_sequence:++state.state_sequence});robot.stop=async()=>{throw Error('stop_unconfirmed');};
+ await c.start(2,'uncertain-stop');for(let i=0;i<1000&&c.status().phase!=='uncertain';i++)await pause();
+ assert.equal(c.status().phase,'uncertain');assert.equal(c.status().active,true);assert.ok(robot.ownerTag);
+ await assert.rejects(c.start(2,'no-reentry'),/grasp_active/);
+});

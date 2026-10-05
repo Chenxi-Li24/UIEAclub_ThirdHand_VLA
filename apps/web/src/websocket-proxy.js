@@ -37,6 +37,7 @@ class WebSocketProxy {
     upstream.on('open', () => {
       for (const { data, isBinary } of session.queue.splice(0)) {
         if (upstream.readyState !== WebSocket.OPEN) break;
+        if (this.canForward?.(browser,data,isBinary) === false) continue;
         upstream.send(data, { binary: isBinary });
       }
       session.queuedBytes = 0;
@@ -60,6 +61,7 @@ class WebSocketProxy {
     });
 
     browser.on('message', (data, isBinary) => {
+      if (this.canForward?.(browser,data,isBinary) === false) return;
       if (upstream.readyState === WebSocket.OPEN) {
         upstream.send(data, { binary: isBinary });
         return;

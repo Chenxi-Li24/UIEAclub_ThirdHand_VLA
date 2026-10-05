@@ -25,15 +25,15 @@ class GraspCoordinator extends EventEmitter{
   this._run(s).catch(async e=>{
    if(s.terminal)return;
    let phase='failed';
-   if(s.motionUncertain&&!(this.robotClient.lastStopAt>=s.startedAt)){
-    try{await this.robotClient.stop();}catch{phase='uncertain';}
+   if(s.motionUncertain){
+    try{if(this.robotClient.lastStopAt>=s.startedAt&&this.robotClient.lastStopPromise)await this.robotClient.lastStopPromise;else await this.robotClient.stop();}catch{phase='uncertain';}
    }
    this._terminal(s,phase,e.code||e.message||'grasp_failed');
   });return this.status();
  }
  _terminal(s,phase,reason,result=null){
   if(s.terminal)return;s.terminal=true;
-  this._publish({phase,active:false,reason,holding:s.holding,result});s.result=this.status();this.robotClient.ownerTag=null;
+  this._publish({phase,active:phase==='uncertain',interlocked:phase==='uncertain',reason,holding:s.holding,result});s.result=this.status();if(phase!=='uncertain')this.robotClient.ownerTag=null;
  }
  async _depth(s){
   let count=0,lastFrame=-1,aligned=false;const until=this.now()+95000;
@@ -82,7 +82,7 @@ class GraspCoordinator extends EventEmitter{
  async _command(command,s){
   this._alive(s);s.inFlight=true;this._record('command',{command});
   try{const result=await this.robotClient.command(command,this.config.commandTimeoutMs);this._record('completion',{command:command.cmd,result});this._alive(s);return result;}
-  catch(e){if(['move_l','servo'].includes(command.cmd)&&['feedback_stale','feedback_invalid','web_disconnected','web_transport_error','command_timeout','web_send_failed'].includes(e.code))s.motionUncertain=true;throw e;}
+  catch(e){if(['move_l','servo'].includes(command.cmd)&&(e.motionUncertain||['feedback_stale','feedback_invalid','web_disconnected','web_transport_error','command_timeout','web_send_failed'].includes(e.code)))s.motionUncertain=true;throw e;}
   finally{s.inFlight=false;}
  }
  _path(from,to){const n=Math.max(1,Math.ceil(distance(from,to.position)/this.config.segmentM));if(n>200)throw fault('path_too_long');
@@ -90,10 +90,12 @@ class GraspCoordinator extends EventEmitter{
  async _move(path,phase,s){
   this._publish({phase});
   for(const pose of path){
+   if(phase==='preapproach')await this._target(s);
    this._alive(s);const before=this.robotClient.state({idle:true});
    if(distance(before.flange_position_m,pose.position)>this.config.segmentM+this.config.positionToleranceM)throw fault('segment_start_changed');
    const ik=await this.robotClient.preview(pose);this._alive(s);
    if(!validateJoints(ik.joints_deg,this.config.jointLimits)||ik.joints_deg.some((x,i)=>Math.abs(x-before.joints_deg[i])>this.config.maxIkStepDeg))throw fault('ik_discontinuity');
+   if(phase==='preapproach')await this._target(s);
    const started=this.now();await this._command({cmd:'move_l',position:pose.position,euler:pose.euler,
     position_tolerance_m:this.config.positionToleranceM,orientation_tolerance_rad:this.config.orientationToleranceRad},s);
    const after=await this._stable(s);
@@ -102,12 +104,18 @@ class GraspCoordinator extends EventEmitter{
    await this.sleep(Math.max(0,this.config.stepIntervalMs-(this.now()-started)));
   }
  }
+ async _target(s){
+  this._alive(s);const {observation}=await this.visionClient.snapshot(s.stableId);this._alive(s);
+  const ts=Number(observation.observedAtMs??observation.ts),target=(observation.targets||[]).find(t=>Number(t.stable_id??t.stableId)===s.stableId);
+  if(!Number.isFinite(ts)||this.now()-ts>this.config.visionMaxAgeMs||ts-this.now()>500)throw fault('vision_stale');
+  if(Number(observation.selectedStableId??observation.selected_stable_id)!==s.stableId||!target||target.track_state!=='confirmed')throw fault('target_lost');
+ }
  async _run(s){
   await this.robotClient.ready();this._alive(s);
   const observation=await this._depth(s);this._publish({phase:'planning'});
   let g=this._geometry(observation,s);this._publish({targetM:g.targetM,widthM:g.widthM,phase:'path_checking'});
   await this._check([...g.paths.preapproach,...g.paths.approach,...g.paths.lift],s);
-  this._publish({phase:'opening'});await this._command({cmd:'gripper',position:1},s);
+  await this._target(s);this._publish({phase:'opening'});await this._command({cmd:'gripper',position:1},s);
   if((await this._stable(s)).gripper_width_m<0.074)throw fault('gripper_not_open');
   await this._move(g.paths.preapproach,'preapproach',s);this._publish({phase:'target_refresh',depthValidFrames:0});
   const refreshed=await this._depth(s),updated=this._geometry(refreshed,s);
@@ -125,7 +133,8 @@ class GraspCoordinator extends EventEmitter{
    actualGripM:getGripPosition(final,this.config),gripperWidthM:final.gripper_width_m,liftM:this.config.liftM});
  }
  async stop(sessionId){
-  const s=this.session;if(!s||s.id!==sessionId||s.terminal)return this.status();s.canceled=true;
+  const s=this.session;if(!s||s.id!==sessionId||(s.terminal&&this.current.phase!=='uncertain'))return this.status();s.canceled=true;
+  if(s.terminal){try{await this.robotClient.stop();this._publish({phase:'stopped',active:false,interlocked:false,reason:'operator_stop'});this.robotClient.ownerTag=null;}catch{}return this.status();}
   if(this.depthCoordinator.status().active){await this.depthCoordinator.stop(this.depthCoordinator.status().sessionId);}
   let phase='stopped';if(s.inFlight||this.robotClient.last?.moving){try{await this.robotClient.stop();}catch{phase='uncertain';}}
   this._terminal(s,phase,'operator_stop');return this.status();

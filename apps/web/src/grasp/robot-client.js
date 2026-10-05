@@ -8,17 +8,18 @@ const ALLOWED=new Set(['servo','move_l','preview_ik','gripper','software_stop'])
 function error(code){const e=new Error(code);e.code=code;return e;}
 const delay=ms=>new Promise(r=>setTimeout(r,ms));
 class WebRobotClient extends EventEmitter{
- constructor({url,jointLimits=DEFAULT_LIMITS,stateMaxAgeMs=750,now=Date.now,deferConnect=false}){
+ constructor({url,jointLimits=DEFAULT_LIMITS,stateMaxAgeMs=750,now=Date.now,deferConnect=false,terminalFeedbackOnly=false,ownerToken=null}){
   super();const endpoint=new URL(url);
   if(!['ws:','wss:'].includes(endpoint.protocol)||endpoint.pathname!=='/ws')throw error('web_endpoint_invalid');
   this.now=now;this.jointLimits=jointLimits;this.stateMaxAgeMs=stateMaxAgeMs;
+  this.terminalFeedbackOnly=terminalFeedbackOnly;this.ownerToken=ownerToken;
   this.last=null;this.receivedAt=0;this.pending=null;this.closed=false;this.ownerTag=null;
   this.url=endpoint.toString();this.socket=null;
   if(!deferConnect)this._open();
  }
  _open(){
   if(this.socket||this.closed)return;
-  this.socket=new WebSocket(this.url);
+  this.socket=new WebSocket(this.url,this.ownerToken?{headers:{'x-thirdhand-grasp-owner':this.ownerToken}}:{});
   this.socket.on('message',raw=>this._message(raw));
   this.socket.on('error',()=>this._settle(error('web_transport_error')));
   this.socket.on('close',()=>{this.last=null;this._settle(error('web_disconnected'));this.emit('disconnected');});
@@ -27,11 +28,17 @@ class WebRobotClient extends EventEmitter{
   let m;try{m=JSON.parse(raw);}catch{return;}
   if(m.type==='robot_state'){
    if(this.last&&Number(m.state_sequence)<=Number(this.last.state_sequence))return;
-   this.last=m;this.receivedAt=this.now();this.emit('state',m);return;
+   this.last=m;this.receivedAt=this.now();this.emit('state',m);this._finishCompletion();return;
   }
   const p=this.pending;if(!p)return;
-  if(m.type==='error'&&(!m.request_id||m.request_id===p.id)){this._settle(error(m.code||m.reason||m.msg||'robot_error'));return;}
+  if(m.type==='connection'&&m.connected===false){p.unsafe('web_disconnected');return;}
+  if(m.type==='error'&&(!m.request_id||m.request_id===p.id)){
+   const code=m.code||'robot_error';
+   if(['move_l','servo'].includes(p.payload.cmd)&&(!m.request_id||p.accepted))p.unsafe(code);
+   else this._settle(error(code));return;
+  }
   if(m.request_id!==p.id)return;
+  if(m.type==='command_status'&&m.status==='accepted'){p.accepted=true;return;}
   if(p.payload.cmd==='preview_ik'&&m.type==='ik_preview'){
    if(m.ok!==true||!validateJoints(m.joints_deg,this.jointLimits)){this._settle(error('ik_invalid'));return;}
    this._settle(null,m);return;
@@ -41,11 +48,15 @@ class WebRobotClient extends EventEmitter{
    this._settle(m.stopped===true?null:error('stop_unconfirmed'),m);return;
   }
   if(m.robot_healthy===false){this._settle(error('feedback_invalid'));return;}
-  try{this.state();}catch(e){this._settle(e);return;}
-  if(m.reached!==true&&!(p.payload.cmd==='gripper'&&p.payload.position===0)){
-   this._settle(error('target_not_reached'));return;
-  }
-  this.emit('completion',m);this._settle(null,m);
+  p.completion=m;p.completionSequence=this.last?.state_sequence??-1;p.completedAt=this.now();
+  this._finishCompletion();
+ }
+ _finishCompletion(){
+  const p=this.pending;if(!p?.completion||this.last?.state_sequence<=p.completionSequence)return;
+  let state;try{state=this.state({idle:true});}catch(e){if(e.code==='robot_not_stationary')return;p.unsafe(e.code);return;}
+  const m=p.completion;
+  if(m.reached!==true&&!(p.payload.cmd==='gripper'&&p.payload.position===0)){this._settle(error('target_not_reached'));return;}
+  this.emit('completion',m);this._settle(null,{...m,final_state_sequence:state.state_sequence});
  }
  _settle(e,value){
   const p=this.pending;if(!p)return;this.pending=null;
@@ -79,10 +90,15 @@ class WebRobotClient extends EventEmitter{
   const id=payload.request_id||randomUUID();const outgoing={...payload,request_id:id,source:this.ownerTag||'web-grasp'};
   return new Promise((resolve,reject)=>{
    const p={id,payload:outgoing,resolve,reject};this.pending=p;
-   const unsafe=code=>{if(this.pending!==p)return;const moving=['move_l','servo'].includes(outgoing.cmd);this._settle(error(code));
+   const unsafe=code=>{if(this.pending!==p)return;const moving=['move_l','servo'].includes(outgoing.cmd);const e=error(code);e.motionUncertain=moving;this._settle(e);
     if(moving)this.stop().catch(()=>{});};
+   p.unsafe=unsafe;
    p.timer=setTimeout(()=>unsafe('command_timeout'),timeoutMs);
-   if(outgoing.cmd!=='software_stop')p.watchdog=setInterval(()=>{try{this.state();}catch(e){unsafe(e.code);}},Math.min(100,this.stateMaxAgeMs/3));
+   if(outgoing.cmd!=='software_stop')p.watchdog=setInterval(()=>{try{this.state();}catch(e){
+    const quiet=this.terminalFeedbackOnly&&['move_l','servo'].includes(outgoing.cmd)&&p.accepted&&e.code==='feedback_stale';
+    if(quiet&&(!p.completion||this.now()-p.completedAt<=this.stateMaxAgeMs))return;
+    unsafe(e.code);
+   }},Math.min(100,this.stateMaxAgeMs/3));
    this.emit('command',outgoing);
    this.socket.send(JSON.stringify(outgoing),e=>{if(e&&this.pending===p)unsafe('web_send_failed');});
   });
@@ -92,7 +108,8 @@ class WebRobotClient extends EventEmitter{
   this.lastStopAt=this.now();
   if(this.pending?.payload.cmd==='software_stop')throw error('stop_in_flight');
   if(this.pending)this._settle(error('operator_stop'));
-  const r=await this.command({cmd:'software_stop'},5000);return {...r,status:r.stopped?'interrupted':'uncertain'};
+  this.lastStopPromise=this.command({cmd:'software_stop'},5000).then(r=>({...r,status:r.stopped?'interrupted':'uncertain'}));
+  return this.lastStopPromise;
  }
  async execute(primitive){
   const p=primitive?.parameters,robot=this.state({idle:true});

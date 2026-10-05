@@ -9,15 +9,26 @@ class Controller extends EventEmitter{
 }
 async function setup(t,controller){
  const temp=fs.mkdtempSync(path.join(os.tmpdir(),'grasp-gateway-'));const proxy={getRobotState:()=>null,broadcast:()=>{},attach:()=>{},close:()=>{},setGraspInterlock:fn=>proxy.interlock=fn};
+ const visionProxy={attach(){},close(){}};
  const gateway=createWebGateway({host:'127.0.0.1',port:0,readyFile:path.join(temp,'ready'),robotProxy:proxy,
-  visionProxy:{attach(){},close(){}},voiceProxy:{attach(){},close(){}},coordinator:{on(){},status(){return {active:false};},async close(){}},graspController:controller,env:{}});
+  visionProxy,voiceProxy:{attach(){},close(){}},coordinator:{on(){},status(){return {active:false};},async close(){}},graspController:controller,env:{}});
  const address=await gateway.start();t.after(async()=>{await gateway.close();fs.rmSync(temp,{recursive:true,force:true});});
- return {url:`http://127.0.0.1:${address.port}`,proxy};
+ return {url:`http://127.0.0.1:${address.port}`,proxy,visionProxy};
 }
 const post=(url,p,body,origin)=>fetch(url+p,{method:'POST',headers:{'content-type':'application/json',...(origin?{origin}: {})},body:JSON.stringify(body)});
 test('grasp routes are explicitly unavailable without experiment controller',async t=>{
  const {url}=await setup(t);const r=await post(url,'/api/grasp/start',{stableId:2,requestId:'r1'});assert.equal(r.status,503);
  const s=await (await fetch(url+'/api/grasp/status')).json();assert.equal(s.active,false);
+});
+test('selection release and vision websocket mutations are locked during a grasp',async t=>{
+ const c=new Controller(),{url,visionProxy}=await setup(t,c);await post(url,'/api/grasp/start',{stableId:2,requestId:'lock-target'});
+ for(const route of ['/api/vision/select','/api/vision/release'])assert.equal((await post(url,route,{stableId:1})).status,409);
+ const replies=[],browser={OPEN:1,readyState:1,send:raw=>replies.push(JSON.parse(raw))};
+ assert.equal(visionProxy.canForward(browser),false);assert.equal(replies[0].code,'grasp_active');
+});
+test('an existing queued or language executor prevents acquiring grasp ownership',async t=>{
+ const c=new Controller(),{url,proxy}=await setup(t,c);proxy.hasActiveControl=()=>true;
+ const r=await post(url,'/api/grasp/start',{stableId:2,requestId:'busy'});assert.equal(r.status,409);assert.equal(c.starts,0);
 });
 test('one start exposes 60mm runtime and installs active motion ownership',async t=>{
  const c=new Controller(),{url,proxy}=await setup(t,c);

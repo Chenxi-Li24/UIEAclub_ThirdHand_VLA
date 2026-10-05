@@ -14,6 +14,7 @@ import sys
 import tempfile
 import threading
 import time
+from joint_speed_policy import bounded_speed_percent, validate_sdk_speed_reference
 from typing import Any
 
 try:
@@ -26,6 +27,7 @@ SDK_PATH = os.path.expanduser(os.environ.get("STARTOUCH_SDK_PATH", ""))
 MODULE_PATH = os.path.expanduser(os.environ.get("STARTOUCH_MODULE_PATH", ""))
 CAN_INTERFACE = os.environ.get("STARTOUCH_CAN_INTERFACE", "can0")
 SIMULATE = os.environ.get("STARTOUCH_SIMULATE", "0") == "1"
+SPEED_PERCENT = bounded_speed_percent(os.environ.get("STARTOUCH_SPEED_SCALE", "0.05"))
 DRY_RUN = os.environ.get("STARTOUCH_DRY_RUN", "0") == "1"
 GRIPPER_ENABLED = os.environ.get("STARTOUCH_GRIPPER", "1") != "0"
 GRIPPER_MAX_DISTANCE_M = min(
@@ -139,9 +141,13 @@ class SimulatedArm:
         return (list(self.joints), same_pose and same_orientation)
 
     def set_joint_waypoints(self, waypoints, time_sec=None, speed_percent=None):
-        del speed_percent
         target = list(waypoints[-1])
+        speed = bounded_speed_percent(speed_percent) if speed_percent is not None else None
         duration = max(0.05, float(time_sec or 0.5))
+        if speed is not None:
+            duration = max(0.05, max(
+                abs(a-b) / math.radians(ref * speed)
+                for a,b,ref in zip(self.joints,target,(300,300,300,1000,1000,1000))))
         start = list(self.joints)
         steps = max(1, int(duration / 0.02))
         for step in range(1, steps + 1):
@@ -600,6 +606,7 @@ class RobotBridge:
                     )
                 if module_path not in sys.path:
                     sys.path.insert(0, module_path)
+                validate_sdk_speed_reference(SDK_PATH)
                 from startouchclass import SingleArm
 
                 arm = SingleArm(
@@ -784,7 +791,7 @@ class RobotBridge:
             "start_joints_rad": start_joints,
             "joints_rad": target,
             "waypoints_rad": waypoints,
-            "time_sec": max(0.2, min(30.0, float(command.get("time_sec", 2.0)))),
+            "speed_percent": min(SPEED_PERCENT, bounded_speed_percent(command.get("speed_percent", SPEED_PERCENT))),
             "request_id": command.get("request_id"),
             "source": source,
             "command": command_name,
@@ -935,7 +942,7 @@ class RobotBridge:
 
         position = command.get("position")
         euler = command.get("euler")
-        time_sec = float(command.get("time_sec", 2.0))
+        speed_percent = min(SPEED_PERCENT, bounded_speed_percent(command.get("speed_percent", SPEED_PERCENT)))
         request_id = command.get("request_id")
 
         if not isinstance(position, list) or len(position) != 3:
@@ -954,13 +961,12 @@ class RobotBridge:
             emit("error", message="move_l position/euler contain non-finite values")
             return
 
-        time_sec = max(0.2, min(30.0, time_sec))
         # Use a fake joint target so enqueue_motion doesn't reject it
         fake_item = {
             "start_joints_rad": self.last_valid_joints or [0.0] * 6,
             "joints_rad": self.last_valid_joints or [0.0] * 6,
             "waypoints_rad": [self.last_valid_joints or [0.0] * 6],
-            "time_sec": time_sec,
+            "speed_percent": speed_percent,
             "request_id": request_id,
             "source": "move_l",
             "command": "move_l",
@@ -990,7 +996,7 @@ class RobotBridge:
             "start_joints_rad": self.last_valid_joints or [0.0] * 6,
             "joints_rad": [0.0] * 6,
             "waypoints_rad": [[0.0] * 6],
-            "time_sec": 5.0,
+            "speed_percent": SPEED_PERCENT,
             "request_id": request_id,
             "source": "go_home",
             "command": "go_home",
@@ -1092,14 +1098,11 @@ class RobotBridge:
                     continue
 
                 if command.get("_go_home"):
-                    # go_home path
-                    if hasattr(arm, 'go_home'):
-                        arm.go_home()
-                    else:
-                        arm.set_joint_waypoints(
-                            [command["start_joints_rad"], [0.0] * 6],
-                            time_sec=5.0,
-                        )
+                    # Homing obeys the same policy; never use SDK default speed.
+                    duration = arm.set_joint_waypoints(
+                        [command["start_joints_rad"], [0.0] * 6],
+                        speed_percent=command["speed_percent"],
+                    )
                     # After homing, read actual joint state
                     try:
                         joints = self._finite_values(arm.get_joint_positions(), 6, "joint positions after home")
@@ -1112,17 +1115,16 @@ class RobotBridge:
                         emit(
                             "command_complete",
                             command="go_home",
-                            duration_sec=5.0,
+                            duration_sec=float(duration),
                             request_id=command["request_id"],
                         )
                 elif command.get("_move_l_pos"):
                     # move_l Cartesian path
                     pos = command["_move_l_pos"]
                     euler = command["_move_l_euler"]
-                    time_sec = command["time_sec"]
-                    arm.move_l(
+                    duration = arm.move_l(
                         [[pos[0], pos[1], pos[2], euler[0], euler[1], euler[2]]],
-                        time_sec=time_sec,
+                        speed_percent=command["speed_percent"],
                         blend_radius_m=0.0,
                         position_tolerance_m=0.04,
                         orientation_tolerance_rad=0.4,
@@ -1138,14 +1140,14 @@ class RobotBridge:
                         emit(
                             "command_complete",
                             command="move_l",
-                            duration_sec=float(time_sec),
+                            duration_sec=float(duration),
                             request_id=command["request_id"],
                         )
                 else:
                     # Joint waypoints path (existing)
                     duration = arm.set_joint_waypoints(
                         [command["start_joints_rad"], *command["waypoints_rad"]],
-                        time_sec=command["time_sec"],
+                        speed_percent=command["speed_percent"],
                     )
                     if not self.stop_requested.is_set():
                         with self.arm_lock:

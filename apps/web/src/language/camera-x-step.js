@@ -83,7 +83,6 @@ function cameraXTarget(state, params, mount) {
     position: target,
     euler: [...euler],
     displacementM: target.map((value, index) => value - position[index]),
-    timeSec: Math.max(2, params.distanceCm / 2),
     cameraMountId: mount.camera?.camera_mount_id ?? mount.camera_mount_id ?? null,
   };
 }

@@ -200,3 +200,17 @@ test('switching from an unexecuted TCP preview to one joint restores the other f
   assert.deepEqual(model, [7, 2, 3, 4, 5, 6]);
   assert.deepEqual(ui.inputs.map(input => Number(input.value)), [7, 2, 3, 4, 5, 6]);
 });
+
+test('manual TCP sends valid target without its former Cartesian duration cap',()=>{
+  const classStart=source.indexOf('class UIControls {'),classEnd=source.indexOf('// === App Entry ===',classStart);
+  const UIControls=vm.runInNewContext(source.slice(start,end)+'\n'+source.slice(classStart,classEnd)+'\nUIControls',{console});
+  const ui=Object.create(UIControls.prototype), sent=[];
+  Object.assign(ui,{ws:{send:c=>sent.push(c)},tcpPreviewOk:true,
+    tcpInputs:['660','-650','650','0','0','0'].map(value=>({value})),
+    lastRobotState:{tcpPos:[150,450,40],tcpEuler:[0,0,0],observedAt:Date.now()},
+    _tcpError(){},_log(){},_setRealtimeSync(){},clearVoicePreview(){}});
+  ui._sendTcp();
+  assert.equal(sent.length,1);
+  assert.equal(sent[0].cmd,'move_l');
+  assert.equal('time_sec' in sent[0],false);
+});

@@ -52,3 +52,12 @@ test('invalid joint solutions cannot silently pass hard physical limits',()=>{
  for(const q of [[0,0,1,0,0,0],[0,0,NaN,0,0,0],[0,0,-1]])assert.equal(validateJoints(q,limits),false);
 });
 module.exports={fixture};
+test('farther preapproach preserves current SDK height for eye-in-hand visibility',()=>{
+ const f=fixture();f.config.preapproachM=0.18;f.config.keepPreapproachSdkHeight=true;f.robot.flange_position_m[2]=0.15;
+ const g=buildGraspGeometry(f);
+ assert.deepEqual(g.preapproach.position,[0.33334,0,0.15]);
+ assert.deepEqual(g.preapproach.gripM,[0.22,0,0.15]);
+ assert.deepEqual(g.contact.position,[0.51334,0,0.2]);
+ assert.ok(g.paths.preapproach.every(p=>p.position[2]===0.15));
+ const distance=Math.hypot(...g.contact.position.map((x,i)=>x-g.preapproach.position[i]));assert.ok(distance<0.22);
+});

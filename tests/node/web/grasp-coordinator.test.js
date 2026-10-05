@@ -5,7 +5,7 @@ const {fixture}=require('./grasp-geometry.test');
 const pause=()=>new Promise(r=>setImmediate(r));
 async function setup(options={}){
  const f=fixture(),events=[];let frame=10,sequence=1;
- const config={...f.config,stepIntervalMs:0,commandTimeoutMs:1000,maxIkStepDeg:5,positionToleranceM:0.015,
+ const config={...f.config,...options.config,stepIntervalMs:0,commandTimeoutMs:1000,maxIkStepDeg:5,positionToleranceM:0.015,
   orientationToleranceRad:0.1,contactMinM:0.008,contactMaxM:0.070};
  const state={...f.robot,connected:true,healthy:true,moving:false,stateName:'IDLE',gripper_width_m:0.003,
   state_sequence:sequence,observedAtMs:1000};
@@ -86,4 +86,8 @@ test('persistent missing visual evidence expires before preapproach motion witho
  c.visionClient.snapshot=async id=>{if(c.status().phase==='preapproach'){const e=new Error('status detection is updating');e.code='vision_evidence_mismatch';throw e;}return snapshot(id);};
  await c.start(2,'epoch-expired');const s=await finish(c);assert.equal(s.reason,'vision_evidence_timeout');
  assert.equal(events.some(e=>e.cmd==='move_l'||e.cmd==='software_stop'),false);
+});
+test('visibility-preserving farther checkpoint executes its bounded final approach',async()=>{
+ const {c}=await setup({config:{preapproachM:0.18,maxApproachM:0.22,keepPreapproachSdkHeight:true}});
+ await c.start(2,'farther-checkpoint');const s=await finish(c);assert.equal(s.phase,'complete',s.reason);
 });

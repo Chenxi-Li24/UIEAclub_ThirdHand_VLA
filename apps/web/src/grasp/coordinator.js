@@ -132,7 +132,7 @@ class GraspCoordinator extends EventEmitter{
   const refreshed=await this._depth(s),updated=this._geometry(refreshed,s);
   if(distance(updated.targetM,g.targetM)>0.04)throw fault('target_moved');g=updated;
   const approach=this._path(this.robotClient.state({idle:true}).flange_position_m,g.contact);
-  if(distance(this.robotClient.state().flange_position_m,g.contact.position)>0.14)throw fault('approach_distance_changed');
+  if(distance(this.robotClient.state().flange_position_m,g.contact.position)>(this.config.maxApproachM??0.14))throw fault('approach_distance_changed');
   await this._check([...approach,...g.paths.lift],s);await this._move(approach,'approach',s);
   this._publish({phase:'closing'});await this._command({cmd:'gripper',position:0},s);
   const contact=await this._stable(s);

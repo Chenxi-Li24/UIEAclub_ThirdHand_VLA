@@ -38,8 +38,13 @@ frame's T_base_camera; compare the published base point only for corruption,
 not physical precision qualification. Preserve the current wrist orientation.
 T_base_flange_desired = T_base_grip_desired * inverse(T_flange_grip).
 T_base_sdk_desired = T_base_flange_desired * T_flange_sdk_tool.
-Apply each compensation once, rotating it with the flange. Preapproach is
-0.100 m opposite the flange +X direction; lift is +0.050 m in base Z.
+Apply each compensation once, rotating it with the flange. The live eye-in-hand
+camera lost the bottle below its image edge during the original rising 0.100 m
+preapproach. The corrected checkpoint is 0.180 m opposite the flange +X direction,
+preserving current SDK height during preapproach. Refresh depth at that farther
+checkpoint, then lock the bounded final approach (maximum 0.220 m diagonal,
+still <=0.005 m segments). Lift is +0.050 m in base Z. This changes the visibility
+checkpoint, not the 60 mm TCP, desired contact point, SDK configuration or limits.
 
 Use short Cartesian segments of at most 0.005 m, preview every segment through
 9983/ws, reject nonfinite or out-of-hard-limit IK and discontinuous joint

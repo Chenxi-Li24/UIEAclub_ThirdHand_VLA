@@ -49,12 +49,13 @@ def config():
             "enabled": True,
             "deadzone_px": 10,
             "gain": 0.5,
-            "max_step_deg": 2.0,
+            "max_speed_deg_s": 10.0,
+            "control_period_s": 0.2,
             "max_excursion_deg": 40.0,
             "axes": [
-                {"name": "J1_yaw", "joint_index": 0, "px_per_deg": [5.0, 0.0], "max_step_deg": 2.0, "max_excursion_deg": 10.0},
+                {"name": "J1_yaw", "joint_index": 0, "px_per_deg": [5.0, 0.0], "max_speed_deg_s": 10.0, "max_excursion_deg": 10.0},
                 {"name": "J2_disabled", "joint_index": 1, "px_per_deg": [100.0, 0.0], "enabled": False},
-                {"name": "J4_pitch", "joint_index": 3, "px_per_deg": [0.0, -4.0], "max_step_deg": 2.0, "max_excursion_deg": 10.0},
+                {"name": "J4_pitch", "joint_index": 3, "px_per_deg": [0.0, -4.0], "max_speed_deg_s": 10.0, "max_excursion_deg": 10.0},
             ],
         },
         "distance_follow": {
@@ -179,7 +180,7 @@ def test_image_jacobian_servo_respects_axis_absolute_limits():
             "name": "J4_tilt_micro",
             "joint_index": 3,
             "px_per_deg": [0.0, -4.0],
-            "max_step_deg": 5.0,
+            "max_speed_deg_s": 10.0,
             "min_deg": -2.0,
             "max_deg": 8.0,
         },
@@ -193,7 +194,7 @@ def test_image_jacobian_servo_respects_axis_absolute_limits():
     assert command.joints_deg[3] <= 8.0
 
 
-def test_image_jacobian_servo_deadzone_clamps_axis_absolute_limits():
+def test_image_jacobian_servo_holds_when_current_pose_is_outside_follow_range():
     cfg = config()
     cfg["image_jacobian_servo"]["deadzone_px"] = 999
     cfg["image_jacobian_servo"]["axes"] = [
@@ -201,7 +202,7 @@ def test_image_jacobian_servo_deadzone_clamps_axis_absolute_limits():
             "name": "J4_tilt_micro",
             "joint_index": 3,
             "px_per_deg": [0.0, -4.0],
-            "max_step_deg": 5.0,
+            "max_speed_deg_s": 10.0,
             "min_deg": -1.5,
             "max_deg": 4.0,
         },
@@ -211,9 +212,9 @@ def test_image_jacobian_servo_deadzone_clamps_axis_absolute_limits():
 
     command = servo.update([0, 0, 0, 8.6, 0, 0], target(320, 240))
 
-    assert command.ok
-    assert command.reason == "deadzone"
-    assert command.joints_deg[3] == 4.0
+    assert not command.ok
+    assert command.reason == "outside_follow_range"
+    assert command.joints_deg[3] == 8.6
 
 
 def test_image_jacobian_servo_loads_axis_response_calibration_file():

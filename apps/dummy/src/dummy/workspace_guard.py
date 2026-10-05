@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import math
+from collections import OrderedDict
 from pathlib import Path
 import re
 import struct
@@ -37,6 +38,7 @@ class WorkspaceGuard:
         self.base_bottom_z_m: float | None = None
         self._links: dict[str, _LinkMesh] = {}
         self._joints: list[_Joint] = []
+        self._cache = OrderedDict()
         if self.enabled:
             self._load()
 
@@ -52,8 +54,21 @@ class WorkspaceGuard:
         if len(joints) != 6:
             return False, "workspace_guard_requires_6_joints"
         for index, (value, (lo, hi)) in enumerate(zip(joints, self.joint_limits), start=1):
+            if not math.isfinite(value):
+                return False, "workspace_guard_invalid_joints"
             if value < float(lo) - 0.05 or value > float(hi) + 0.05:
                 return False, f"workspace_guard_joint_limit_J{index}"
+        key = (tuple(joints), self.clearance_m, self.base_bottom_z_m)
+        if key in self._cache:
+            self._cache.move_to_end(key)
+            return self._cache[key]
+        result = self._check_geometry(joints)
+        self._cache[key] = result
+        if len(self._cache) > 128:
+            self._cache.popitem(last=False)
+        return result
+
+    def _check_geometry(self, joints):
         min_z = self.min_geometry_z_m(joints)
         if min_z is None or self.base_bottom_z_m is None:
             return False, "workspace_guard_geometry_failed"
@@ -76,9 +91,8 @@ class WorkspaceGuard:
             points = mesh.points
             if points.size == 0:
                 continue
-            homogeneous = np.c_[points, np.ones(points.shape[0])]
-            transformed = (transform @ homogeneous.T).T[:, :3]
-            z_values.append(float(np.min(transformed[:, 2])))
+            # Only the Z row is needed; this is the exact same rigid transform.
+            z_values.append(float(np.min(points @ transform[2, :3] + transform[2, 3])))
         return min(z_values) if z_values else None
 
     def _load(self) -> None:
@@ -211,7 +225,7 @@ def _read_stl_vertices(path: Path) -> np.ndarray:
     text = raw.decode("utf-8", errors="ignore")
     vertices = [
         tuple(float(part) for part in match.group(1).split())
-        for match in re.finditer(r"vertex\\s+([^\\n]+)", text)
+        for match in re.finditer(r"vertex\s+([^\n]+)", text)
     ]
     if not vertices:
         raise ValueError(f"stl_vertices_missing: {path}")

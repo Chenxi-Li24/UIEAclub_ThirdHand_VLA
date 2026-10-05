@@ -39,8 +39,8 @@ RUN_DIR = ROOT / "runtime" / "run"
 def parse_args(argv=None):
     parser = argparse.ArgumentParser(description="Start Dummy follow stack")
     parser.add_argument("--enable-motion", action="store_true", help="start real robot follow after checks")
-    parser.add_argument("--hz", type=float, default=6.0, help="follow loop rate when --enable-motion is set")
-    parser.add_argument("--skip-home", action="store_true", help="debug only: do not return to zero before follow")
+    parser.add_argument("--hz", type=float, default=10.0, help="follow scheduler rate when --enable-motion is set")
+    parser.add_argument("--skip-home", action="store_true", help="compatibility flag; automatic zero is disabled")
     parser.add_argument("--max-frames", type=int, default=0, help="optional follow loop frame limit")
     parser.add_argument("--no-start", action="store_true", help="only diagnose existing services")
     parser.add_argument("--robot-health", default="http://127.0.0.1:3000/health")
@@ -79,6 +79,7 @@ def start_background(name, args, log_name, *, cwd=ROOT, env=None):
         stderr=subprocess.STDOUT,
         start_new_session=True,
     )
+    log_file.close()
     print(f"[stack] started {name} pid={process.pid} log={log_path}", flush=True)
     return process
 
@@ -170,6 +171,21 @@ def run_follow(args):
         cwd=APP_DIR,
     )
     print(f"[stack] follow running pid={process.pid}", flush=True)
+    try:
+        result = process.wait()
+        if result:
+            raise RuntimeError(f"Dummy exited with status {result}")
+    except KeyboardInterrupt:
+        # This child belongs to Dummy. Never stop the shared robot subprocess.
+        if process.poll() is None:
+            process.send_signal(signal.SIGTERM)
+            try:
+                process.wait(timeout=40)
+            except subprocess.TimeoutExpired:
+                print("[stack] Dummy cleanup timed out; terminating Dummy only; shared motion may still be finishing", flush=True)
+                process.kill()
+                process.wait(timeout=5)
+        raise
 
 
 def install_signal_handlers():

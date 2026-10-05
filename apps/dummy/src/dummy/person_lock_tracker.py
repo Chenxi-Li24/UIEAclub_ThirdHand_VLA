@@ -105,7 +105,7 @@ class PersonLockTracker:
             int(height),
             max(0.01, self.locked.score * (1.0 - age / self.hold_s)),
             "person_lock_hold",
-            float(now),
+            self.last_seen,
         )
 
     def _best_candidate(self, candidates, width, height):

@@ -29,31 +29,55 @@ class MjpegReader:
         self.received_at = 0.0
         self.stop = False
         self.thread = None
+        self._stop_event = threading.Event()
+        self._response = None
 
     def start(self):
         if self.thread is not None:
             return
-        self.thread = threading.Thread(target=self._run, daemon=True)
+        self.stop = False
+        self._stop_event.clear()
+        self.thread = threading.Thread(target=self._run, name="dummy-mjpeg", daemon=False)
         self.thread.start()
 
     def close(self):
         self.stop = True
+        self._stop_event.set()
+        with self.lock:
+            response = self._response
+        if response is not None:
+            response.close()
+        if self.thread is not None:
+            self.thread.join(timeout=6.0)
+            if self.thread.is_alive():
+                raise RuntimeError("Dummy MJPEG reader did not stop")
+            self.thread = None
 
     def _run(self):
         while not self.stop:
             try:
                 with urllib.request.urlopen(self.url, timeout=5) as response:
+                    with self.lock:
+                        self._response = response
                     buf = b""
                     while not self.stop:
-                        chunk = response.read(8192)
+                        read_available = getattr(response, "read1", response.read)
+                        chunk = read_available(65536)
                         if not chunk:
                             raise EOFError("stream ended")
                         buf += chunk
-                        start = buf.find(b"\xff\xd8")
-                        end = buf.find(b"\xff\xd9", start + 2)
-                        if start >= 0 and end >= 0:
+                        # Drain every complete JPEG, decode only the newest one.
+                        jpg = None
+                        while True:
+                            start = buf.find(b"\xff\xd8")
+                            end = buf.find(b"\xff\xd9", start + 2) if start >= 0 else -1
+                            if start < 0 or end < 0:
+                                break
                             jpg = buf[start:end + 2]
                             buf = buf[end + 2:]
+                        if len(buf) > 8 * 1024 * 1024:
+                            raise ValueError("MJPEG frame exceeded buffer limit")
+                        if jpg is not None:
                             rgb = np.asarray(Image.open(BytesIO(jpg)).convert("RGB"))
                             bgr = cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR)
                             with self.lock:
@@ -64,7 +88,10 @@ class MjpegReader:
             except Exception as exc:
                 with self.lock:
                     self.error = str(exc)
-                time.sleep(1)
+                self._stop_event.wait(1)
+            finally:
+                with self.lock:
+                    self._response = None
 
     def latest(self):
         with self.lock:
@@ -85,6 +112,7 @@ class VisionServiceTracker:
         self.health_url = v.get("health_url", "http://127.0.0.1:3100/health")
         self.observation_url = v.get("observation_url", "http://127.0.0.1:3100/api/vision/person-follow/observation")
         self.allow_health_fallback = bool(v.get("allow_health_fallback", False))
+        self.rgbd_enabled = bool(v.get("rgbd_enabled", False))
         self.prefer_labels = tuple(v.get("prefer_labels", ["person", "face", "human", "bottle"]))
         self.width = int(config.get("vision", {}).get("frame_w", v.get("frame_w", 640)))
         self.height = int(config.get("vision", {}).get("frame_h", v.get("frame_h", 480)))
@@ -207,9 +235,6 @@ class VisionServiceTracker:
                 error or stale_error,
             )
         if sequence is not None and sequence == self._last_frame_sequence:
-            held = self._held_target()
-            if held.found:
-                return held, frame, error
             return (
                 Target(False, w=frame.shape[1], h=frame.shape[0], kind="vision_frame_duplicate", ts=now),
                 frame,
@@ -220,7 +245,11 @@ class VisionServiceTracker:
         target = self.detect(frame)
         if self.person_lock is not None:
             target = self._lock_person_target(target, frame.shape[1], frame.shape[0], yolo_candidates)
-        target = self._merge_rgbd_target(target)
+        if self.rgbd_enabled:
+            target = self._merge_rgbd_target(target)
+        if target.found and "hold" not in str(target.kind):
+            # Receive time is not a camera capture timestamp. Keep its age honest.
+            target.ts = float(received_at or now)
         if not target.found and self.allow_health_fallback:
             health_target, _health_error = self._read_health_target()
             if health_target.found:
@@ -641,5 +670,5 @@ class VisionServiceTracker:
             self.last_target.h,
             max(0.01, self.last_target.score * (1.0 - age / self.target_hold_s)),
             f"{self.last_target.kind}_hold",
-            time.time(),
+            self.last_target.ts,
         )

@@ -713,20 +713,20 @@ class RobotBridge:
                 list(self.last_valid_joints) if self.last_valid_joints is not None else None
             )
         if not connected:
-            emit("error", message="Startouch SDK is not connected")
+            emit("error", request_id=command.get("request_id"), message="Startouch SDK is not connected")
             return
         if not state_ready or start_joints is None:
-            emit("error", message="robot state is not ready; motion command was rejected")
+            emit("error", request_id=command.get("request_id"), message="robot state is not ready; motion command was rejected")
             return
         if motion_active or not self.motion_queue.empty():
-            emit("error", message="a joint motion is already active")
+            emit("error", request_id=command.get("request_id"), message="a joint motion is already active")
             return
 
         command_name = str(command.get("cmd", "move_joint"))
         if command_name == "move_joint_path":
             raw_waypoints = command.get("waypoints_rad")
             if not isinstance(raw_waypoints, list) or not raw_waypoints:
-                emit("error", message="waypoints_rad must contain at least one waypoint")
+                emit("error", request_id=command.get("request_id"), message="waypoints_rad must contain at least one waypoint")
                 return
         else:
             raw_waypoints = [command.get("joints_rad")]
@@ -735,6 +735,7 @@ class RobotBridge:
             if not isinstance(joints, list) or len(joints) != 6:
                 emit(
                     "error",
+                    request_id=command.get("request_id"),
                     message=f"waypoint {point_index} must contain six values",
                 )
                 return
@@ -743,12 +744,14 @@ class RobotBridge:
             except (TypeError, ValueError):
                 emit(
                     "error",
+                    request_id=command.get("request_id"),
                     message=f"waypoint {point_index} contains a non-numeric value",
                 )
                 return
             if not all(math.isfinite(value) for value in point):
                 emit(
                     "error",
+                    request_id=command.get("request_id"),
                     message=f"waypoint {point_index} contains a non-finite value",
                 )
                 return
@@ -759,6 +762,7 @@ class RobotBridge:
                 if value < limits[0] or value > limits[1]:
                     emit(
                         "error",
+                        request_id=command.get("request_id"),
                         message=(
                             f"waypoint {point_index} J{joint_index} is outside "
                             "the Startouch joint limit"
@@ -776,6 +780,7 @@ class RobotBridge:
         ):
             emit(
                 "error",
+                request_id=command.get("request_id"),
                 message="all-zero target rejected; use the explicit zero preset",
             )
             return
@@ -1199,6 +1204,7 @@ def main() -> None:
     for line in sys.stdin:
         if bridge.shutdown_requested.is_set():
             break
+        command = {}
         try:
             command = json.loads(line)
             name = command.get("cmd")
@@ -1236,7 +1242,11 @@ def main() -> None:
         except json.JSONDecodeError as exc:
             emit("error", message=f"invalid bridge JSON: {exc}")
         except Exception as exc:
-            emit("error", message=f"bridge command failed: {exc}")
+            emit(
+                "error",
+                message=f"bridge command failed: {exc}",
+                request_id=command.get("request_id") if isinstance(command, dict) else None,
+            )
 
 
 if __name__ == "__main__":

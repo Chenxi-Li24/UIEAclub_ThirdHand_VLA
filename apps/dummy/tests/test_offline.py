@@ -518,7 +518,10 @@ def test_touch_r1_adapter_sends_timed_move_joint_for_follow_speed():
             return self.snapshot
 
     async def exercise():
-        adapter = TouchR1Adapter(load_config())
+        cfg = load_config()
+        cfg["workspace_guard"]["enabled"] = False
+        cfg["robot"]["follow_wait_complete"] = False
+        adapter = TouchR1Adapter(cfg)
         adapter.client = FakeRobotClient()
         await adapter.send_joint_target([4, 0, -4, 37, 0, 0])
         return adapter.client.commands[-1]
@@ -527,10 +530,10 @@ def test_touch_r1_adapter_sends_timed_move_joint_for_follow_speed():
 
     assert command == "move_joint"
     assert kwargs["joints_deg"] == [4.0, 0.0, -4.0, 37.0, 0.0, 0.0]
-    assert kwargs["time_sec"] == 0.5
+    assert kwargs["time_sec"] == 0.8
 
 
-def test_touch_r1_adapter_refreshes_joint_state_before_delta_validation():
+def test_touch_r1_adapter_refreshes_joint_state_before_speed_calculation():
     class FreshStateClient:
         def __init__(self):
             self.snapshot = RobotSnapshot(
@@ -551,7 +554,10 @@ def test_touch_r1_adapter_refreshes_joint_state_before_delta_validation():
             self.commands.append((command, kwargs))
 
     async def exercise():
-        adapter = TouchR1Adapter(load_config())
+        cfg = load_config()
+        cfg["workspace_guard"]["enabled"] = False
+        cfg["robot"]["follow_wait_complete"] = False
+        adapter = TouchR1Adapter(cfg)
         adapter.client = FreshStateClient()
         await adapter.send_joint_target([8, 0, -4, 41, 0, 0])
         return adapter.client.commands[-1]
@@ -561,6 +567,7 @@ def test_touch_r1_adapter_refreshes_joint_state_before_delta_validation():
     assert command == "move_joint"
     assert kwargs["joints_deg"][0] == 8.0
     assert kwargs["joints_deg"][3] == 41.0
+    assert kwargs["time_sec"] == 0.8
 
 
 def test_touch_r1_adapter_can_send_servo_targets_for_follow_mode():
@@ -585,6 +592,8 @@ def test_touch_r1_adapter_can_send_servo_targets_for_follow_mode():
     async def exercise():
         cfg = load_config()
         cfg.setdefault("robot", {})["follow_command"] = "servo"
+        cfg["robot"]["follow_wait_complete"] = False
+        cfg["workspace_guard"]["enabled"] = False
         adapter = TouchR1Adapter(cfg)
         adapter.client = FakeRobotClient()
         await adapter.send_joint_target([3, 0, -4, 36, 0, 0])

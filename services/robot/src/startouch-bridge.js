@@ -152,7 +152,6 @@ class StartouchBridge extends EventEmitter {
     }
     if (message.type === 'error') {
       this.emit('bridge_error', message);
-      this.emit('message', { ...message, type: 'bridge_error' });
       return;
     }
     this.emit(message.type, message);

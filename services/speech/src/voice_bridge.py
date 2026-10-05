@@ -49,6 +49,8 @@ except ImportError:  # pragma: no cover - compatibility fallback
 
 PROTOCOL_VERSION = 1
 WEBSOCKET_SUBPROTOCOL = "thirdhand.voice.v1"
+TRANSCRIPT_PATH = "/v1/transcripts"
+TRANSCRIPT_SUBPROTOCOL = "thirdhand.transcripts.v1"
 WEBSOCKET_PATH = "/v1/voice"
 
 AUDIO_MAGIC = b"THV1"
@@ -317,6 +319,7 @@ class VoiceBridge:
         self.asr_lock = asyncio.Lock()
         self.background_tasks: set[asyncio.Task] = set()
         self.connections: dict[int, ConnectionContext] = {}
+        self.transcript_subscribers: dict[int, asyncio.Queue] = {}
 
     async def handle_connection(
         self,
@@ -324,6 +327,9 @@ class VoiceBridge:
         legacy_path: Optional[str] = None,
     ) -> None:
         path = connection_path(websocket, legacy_path)
+        if path == TRANSCRIPT_PATH:
+            await self._handle_transcript_subscriber(websocket)
+            return
         if path != WEBSOCKET_PATH:
             await websocket.close(code=1008, reason="Unsupported WebSocket path")
             return
@@ -357,6 +363,47 @@ class VoiceBridge:
             if recording_changed and self.model_manager is not None:
                 await self._broadcast_model_status(self.model_manager.status())
             LOG.info("client disconnected peer=%s", peer)
+
+    async def _handle_transcript_subscriber(self, websocket: Any) -> None:
+        if getattr(websocket, "subprotocol", None) != TRANSCRIPT_SUBPROTOCOL:
+            await websocket.close(code=1002, reason="Transcript subprotocol is required")
+            return
+        # This is a local, read-only ASR fan-out, not another audio/model session.
+        peer = getattr(websocket, "remote_address", None)
+        if not peer or peer[0] not in {"127.0.0.1", "::1"}:
+            await websocket.close(code=1008, reason="Transcript subscribers must use loopback")
+            return
+        queue = asyncio.Queue(maxsize=8)
+        self.transcript_subscribers[id(websocket)] = queue
+        async def forward():
+            while True:
+                envelope = await queue.get()
+                await asyncio.wait_for(websocket.send(json.dumps(envelope, ensure_ascii=False)), timeout=2.0)
+        async def receive():
+            async for _incoming in websocket:
+                await websocket.close(code=1008, reason="Transcript stream is read-only")
+                return
+        tasks = [asyncio.create_task(forward()), asyncio.create_task(receive())]
+        try:
+            done, _pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+            for task in done:
+                task.result()
+        except (ConnectionClosed, asyncio.TimeoutError):
+            pass
+        finally:
+            self.transcript_subscribers.pop(id(websocket), None)
+            for task in tasks:
+                task.cancel()
+            await asyncio.gather(*tasks, return_exceptions=True)
+            await websocket.close()
+
+    def _publish_transcript(self, envelope: dict) -> None:
+        if envelope.get("type") != "transcript.final":
+            return
+        for queue in list(self.transcript_subscribers.values()):
+            if queue.full():
+                queue.get_nowait()
+            queue.put_nowait(envelope)
 
     async def _handle_control(self, context: ConnectionContext, raw: str) -> None:
         try:
@@ -1926,6 +1973,9 @@ class VoiceBridge:
         except ConnectionClosed:
             context.closed = True
 
+        if not context.closed and message_type == "transcript.final":
+            self._publish_transcript(envelope)
+
     async def _send_error(
         self,
         context: ConnectionContext,
@@ -2087,7 +2137,7 @@ async def run_server(args: argparse.Namespace) -> None:
         bridge.handle_connection,
         args.host,
         args.port,
-        subprotocols=[WEBSOCKET_SUBPROTOCOL],
+        subprotocols=[WEBSOCKET_SUBPROTOCOL, TRANSCRIPT_SUBPROTOCOL],
         max_size=MAX_WEBSOCKET_MESSAGE_BYTES,
         compression=None,
         ping_interval=None,

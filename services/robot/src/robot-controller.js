@@ -102,13 +102,7 @@ class RobotController extends EventEmitter {
 
   _bindBridge() {
     this.bridge.on('message', message => this._handleBridgeMessage(message));
-    this.bridge.on('bridge_error', message => {
-      this.emit('message', {
-        type: 'error',
-        code: 'bridge_error',
-        msg: message.message, request_id: message.request_id,
-      });
-    });
+    this.bridge.on('bridge_error', message => this._handleBridgeMessage(message));
     this.bridge.on('software_stop_complete', message => {
       this._finalizeInterruptedExecutions('interrupted', null);
       const requestId = this.pendingStopRequestId;
@@ -243,6 +237,12 @@ class RobotController extends EventEmitter {
   }
 
   handleCommand(message, reply) {
+    const originalReply = reply;
+    reply = response => originalReply({
+      ...response,
+      ...(typeof message?.request_id === 'string' && message.request_id
+        ? { request_id: message.request_id } : {}),
+    });
     if (!message || typeof message !== 'object' || !ALLOWED_COMMANDS.has(message.cmd)) {
       reply({ type: 'error', code: 'unsupported_command', msg: 'Unsupported robot command' });
       return;
@@ -297,12 +297,14 @@ class RobotController extends EventEmitter {
         this._sendJointMotion(
           target, `preset:${message.name}`, reply,
           message.request_id, 'preset',
+          message.time_sec,
         );
         return;
       }
       case 'servo':
         this._sendJointMotion(
           message.joints, 'servo', reply, message.request_id, 'move_joint',
+          message.time_sec,
         );
         return;
       case 'move_joint':

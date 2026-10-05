@@ -178,7 +178,8 @@ class DummyDirector:
                     cmd = list(self.idle_base)
                     cmd[1] += math.sin(phase) * amp
                     cmd[2] -= math.sin(phase) * amp
-                    await self.adapter.send_joint_target(cmd)
+                    if self.config.get("idle", {}).get("enabled", False):
+                        await self.adapter.send_joint_target(cmd)
                     if now - self.last_activity > self.sleep_after_s:
                         await self.gesture("sleep")
                         self._set_state(State.SLEEP)
@@ -188,4 +189,6 @@ class DummyDirector:
                 await asyncio.sleep(period)
         finally:
             wake_task.cancel()
+            await asyncio.gather(wake_task, return_exceptions=True)
             self.tracker.close()
+            await self.adapter.close()

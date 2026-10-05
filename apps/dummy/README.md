@@ -6,16 +6,21 @@ It is not part of the default launcher profile and must be started explicitly.
 
 ## Current boundary
 
-`DummyDirector` composes Vision, Speech and Robot Service into a long-running personality and person-follow loop. It is application-level orchestration, not a device service or a one-shot Skill.
+`PersonFollowRuntime` composes Vision, final Speech transcripts and Robot Service
+into a single motion scheduler. It is application-level orchestration, not a
+device service or a one-shot Skill. `DummyDirector` remains legacy library code;
+the production entrypoints no longer launch its parallel motion loops.
 
 All Dummy motion goes through `TouchR1Adapter` directly to Robot Service `/ws`
 on port 3000. There is no Dummy relay server, ownership lease, lease heartbeat
 or lease-based authorization. `request_id` remains a command/reply correlation
 ID, not a lease or permission token. Robot Service remains the only CAN/SDK owner.
 
-The production person-follow runtime is still an observation-validation scaffold;
-it does not generate or execute motions by itself. The working follow loop is
-`apps/run_head_body_follow.py` (also wrapped by `run_dume_follow_touch_r1.py`).
+`apps/run_head_body_follow.py`, `run_person_follow.py`, `run_dummy.py` and
+`run_dume_follow_touch_r1.py` use the same runtime. Blocking detection runs in
+an owned worker and replaces one latest observation slot. Motion is serialized:
+follow uses J1/J4, keyword gestures may use all six joints. No startup/loss/exit
+Home, search gesture or idle breathing is issued automatically.
 
 ## Run
 
@@ -56,17 +61,16 @@ cd $HOME/ThirdHand/UIEAclub_ThirdHand_VLA/apps/dummy
 ../../local/runtimes/vision-python/bin/python apps/test_find_person_window.py
 ```
 
-The `--enable-motion` flag is an intentional operator gate. Without it, the
-real-follow entrypoint exits before opening the robot connection. Only use the
+The `--enable-motion` flag is an intentional operator gate. Without it, these
+entrypoints run a visual dry-run without opening the robot connection. Only use the
 flag after the workspace is clear and the operator has explicitly approved
 physical motion.
 
-The generic personality loop is still available, but it uses the default
-runtime and startup gestures:
+The generic entrypoint is now another name for the same visual dry-run:
 
 ```bash
 cd $HOME/ThirdHand/UIEAclub_ThirdHand_VLA/apps/dummy
-../../local/runtimes/python/bin/python apps/run_dummy.py
+../../local/runtimes/vision-python/bin/python apps/run_dummy.py
 ```
 
 ## Resource paths
@@ -98,15 +102,57 @@ model assets and optional Mink/MuJoCo dependencies prepared before hardware use.
 ../../local/runtimes/python/bin/python apps/test_follow.py
 ```
 
-Wake word currently listens to the ThirdHand speech websocket when available and also accepts typing `ThirdHand` + Enter in the terminal as a deterministic fallback.
+Keywords subscribe to `ws://127.0.0.1:3004/v1/transcripts` with subprotocol
+`thirdhand.transcripts.v1`. This is a loopback-only read-only fan-out of final ASR
+results, not another microphone session. Deploy the Speech Service change with
+Dummy. `ThirdHand`, `nod`, `wiggle`, `tilt` and their configured Chinese equivalents
+are exact commands; partial transcripts and duplicate message IDs are ignored.
+On Ubuntu, the terminal also accepts these commands followed by Enter. Keyword
+events expire after three seconds instead of executing a backlog after motion.
 
 ## Safety
 
-The adapter retains joint limits, finite-value validation, relative-step
-clamping, command intervals, motion-busy checks, workspace geometry checks and
+The adapter retains joint limits, finite-value validation, timed speed
+limiting, command intervals, motion-busy checks, workspace geometry checks and
 request-matched completion/error handling. Robot Service's own readiness,
 fresh-feedback, joint-limit and speed checks are unchanged. The workspace guard
 checks targets against the base bottom plane; it is not full collision planning.
+
+## Follow speed and range
+
+The J1/J4 image servo uses `max_speed_deg_s: 10.0` and computes each correction
+budget as speed times control period. There is no fixed 0.55/0.08 degree step
+cap. J1 keeps its 85 degree excursion envelope; J4 has absolute limits of
+[-35, 35] degrees and a 35 degree excursion envelope around the startup pose.
+Their intersection with hardware limits remains enforced. A pose outside the
+follow envelope holds rather than snapping back into it.
+
+Dummy timed joint targets are no longer clipped to a fixed relative angle.
+Instead, the adapter extends the duration to at least `2 * max_joint_delta / 10`.
+The factor 2 conservatively covers the 1.875 peak/average ratio of a standard
+zero-endpoint-velocity quintic. It applies to all six joints, including gesture
+targets; keyword gestures are not restricted to J1/J4. Servo and zero-preset
+requests carry this duration through Robot Service, so deploy the application
+and the corresponding Robot Service change together. Explicit nonzero home
+targets use the same limiter; an unknown named home preset is rejected because
+its speed cannot be computed without its joint target.
+
+The minimum send interval is 0.10 seconds (at most 10 commands/second). The
+working hardware loop also caps its requested rate at 10 Hz. This is a rate
+ceiling, not a promise of 10 Hz physical retargeting: the current service still
+rejects motion replacement while a joint trajectory is active. Hardware speeds,
+especially after SDK waypoint adjustments, require feedback-based acceptance;
+offline quintic checks do not establish measured motor speeds.
+
+See [the follow speed and latency plan](docs/follow-speed-and-latency-plan.md)
+and [the runtime implementation guide](docs/runtime-stage-two.md) for the current
+implementation, remaining SDK work, lifecycle requirements and acceptance checks.
+
+Press Ctrl+C or send SIGTERM to the Dummy process to exit. New commands stop
+immediately; the current bounded command may finish before the process closes
+its own detection worker, MJPEG reader, transcript subscription and robot socket.
+This does not stop Robot/Vision/Speech/Web, disconnect SDK, disable motors or
+close CAN. Do not use `./thirdhand stop` when the intention is to stop only Dummy.
 
 The real follow entrypoint still holds a local process lock against duplicate
 Dummy follow loops. This is not an ownership lease and does not prevent the

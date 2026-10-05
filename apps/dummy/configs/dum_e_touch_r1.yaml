@@ -4,25 +4,22 @@ robot:
   # Source: History/source-snapshots/startouch-web-vla/web-control/server/config.js
   home_joints_deg: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
   home_preset_name: "zero"
-  go_home_on_start: true
-  go_home_on_lost: true
+  go_home_on_start: false
+  go_home_on_lost: false
   joint_limits_deg:
     - [-162, 162]
-    - [-13, 201]
+    - [-12, 201]
     - [-183, 0]
     - [-98, 98]
     - [-98, 98]
     - [-164, 164]
-  # Dummy only allows small per-command follow deltas; Robot Service 3000
-  # remains responsible for collision and hardware motion policy.
-  max_relative_move_deg: 0.8
-  min_command_interval_s: 0.04
-  # Match Robot Service's comfortable site speed: speedScale=0.05,
-  # commanded speeds J1-J3 ~=15 deg/s and J4-J6 ~=50 deg/s.
-  follow_speed_percent: 0.05
+  # Timed Dummy joint commands use a 10 deg/s limit, not a fixed angle step.
+  # Robot Service remains the sole CAN/SDK owner and enforces hardware limits.
+  max_speed_deg_s: 10.0
+  min_command_interval_s: 0.10
   follow_command: "move_joint"
+  follow_wait_complete: true
   servo_min_time_sec: 0.20
-  servo_max_speeds_deg_s: [300, 300, 300, 1000, 1000, 1000]
 motion:
   hz: 8
 director:
@@ -32,6 +29,7 @@ timing:
   search_s: 12.0
   sleep_after_s: 300.0
 idle:
+  enabled: false
   breath_deg: 0.08
 vision:
   camera_index: 0
@@ -49,6 +47,7 @@ vision_service:
   health_url: "http://127.0.0.1:3100/health"
   observation_url: "http://127.0.0.1:3100/api/vision/person-follow/observation"
   allow_health_fallback: false
+  rgbd_enabled: false
   prefer_labels: ["person", "face", "human", "bottle"]
   min_motion_area: 650
   target_hold_s: 1.2
@@ -126,11 +125,13 @@ visual_servo_gaze:
   lost_hold_frames: 3
 image_jacobian_servo:
   # Product-style fast path. Treat Touch R1 as a camera gimbal first:
-  # J1 centers horizontal error, J4 only gives tiny vertical assistance.
+  # J1 centers horizontal error and J4 corrects vertical error.
   enabled: true
   deadzone_px: 24
   gain: 0.35
-  max_step_deg: 0.55
+  max_speed_deg_s: 10.0
+  control_period_s: 0.10
+  max_control_dt_s: 0.25
   max_excursion_deg: 45.0
   damping: 0.01
   divergence_px: 9999
@@ -139,10 +140,10 @@ image_jacobian_servo:
   # Values are image-center error changes in pixels for +1 degree joint motion.
   # J2/J3/J5/J6 stay disabled for the fast product-style follow path.
   axes:
-    - {name: "J1_yaw_gimbal", joint_index: 0, px_per_deg: [4.0, -0.4], max_step_deg: 0.55, max_excursion_deg: 85.0, weight: 1.0}
+    - {name: "J1_yaw_gimbal", joint_index: 0, px_per_deg: [4.0, -0.4], max_speed_deg_s: 10.0, max_excursion_deg: 85.0, weight: 1.0}
     - {name: "J2_body", joint_index: 1, px_per_deg: [0.0, 0.0], enabled: false}
     - {name: "J3_body", joint_index: 2, px_per_deg: [0.0, 0.0], enabled: false}
-    - {name: "J4_tilt_micro", joint_index: 3, px_per_deg: [0.9, -3.7], max_step_deg: 0.08, max_excursion_deg: 4.0, min_deg: -1.5, max_deg: 4.0, weight: 0.25}
+    - {name: "J4_tilt", joint_index: 3, px_per_deg: [0.9, -3.7], max_speed_deg_s: 10.0, max_excursion_deg: 35.0, min_deg: -35.0, max_deg: 35.0, weight: 0.25}
     - {name: "J5_yaw_assist", joint_index: 4, px_per_deg: [0.0, 0.0], enabled: false}
     - {name: "J6_roll", joint_index: 5, px_per_deg: [0.0, 0.0], enabled: false}
 distance_follow:
@@ -239,7 +240,7 @@ mink_lookat:
   max_velocity_rad_s: 0.8726646259971648
 wake_word:
   phrase: "ThirdHand"
-  speech_ws_url: "ws://127.0.0.1:3004/v1/voice"
+  speech_ws_url: "ws://127.0.0.1:3004/v1/transcripts"
   enable_stdin: true
 gestures:
   idle_breathe:

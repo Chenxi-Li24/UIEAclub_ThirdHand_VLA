@@ -56,7 +56,8 @@ def test_production_config_uses_adapter_robot_contract():
     config = yaml.safe_load((APP_DIR / "configs/person_follow_production.yaml").read_text())
     adapter = TouchR1Adapter(config)
     assert adapter.client.url == "ws://127.0.0.1:3000/ws"
-    assert adapter.max_delta == 0.75
+    assert adapter.max_speed_deg_s == 10.0
+    assert adapter.min_command_interval == 0.10
 
 
 @pytest.mark.parametrize("target", [
@@ -73,17 +74,17 @@ def test_invalid_joint_target_is_not_sent(target):
     adapter.client.command_wait.assert_not_awaited()
 
 
-def test_direct_motion_retains_relative_step_interval_and_request_id(monkeypatch):
+def test_direct_motion_retains_full_target_and_limits_speed_and_interval(monkeypatch):
     adapter = adapter_with_fake_client()
-    adapter._last_send = time.time()
+    adapter._last_send = time.monotonic()
     sleep = AsyncMock()
     monkeypatch.setattr(asyncio, "sleep", sleep)
     assert asyncio.run(adapter.send_joint_target([5, 0, -10, 0, 0, 0]))
     sleep.assert_awaited_once()
     args, payload = adapter.client.command_wait.call_args
     assert args == ("move_joint",)
-    assert payload["joints_deg"] == [1, 0, -10, 0, 0, 0]
-    assert payload["time_sec"] >= adapter.servo_min_time_sec
+    assert payload["joints_deg"] == [5, 0, -10, 0, 0, 0]
+    assert payload["time_sec"] == 1.0
     assert payload["request_id"].startswith("dummy-follow-")
     assert payload["terminal_only"] is True
     assert payload["source"] == "dummy_follow"
@@ -196,7 +197,7 @@ def test_stack_launches_follow_with_direct_endpoint(monkeypatch):
     stack = load_stack()
     args = stack.parse_args(["--robot-ws", "ws://ubuntu:3000/ws", "--robot-health", "http://ubuntu:3000/health"])
     launched = []
-    monkeypatch.setattr(stack, "start_background", lambda name, command, *a, **k: launched.append((name, command)) or type("Process", (), {"pid": 1})())
+    monkeypatch.setattr(stack, "start_background", lambda name, command, *a, **k: launched.append((name, command)) or type("Process", (), {"pid": 1, "wait": lambda self: 0})())
     stack.run_follow(args)
     assert len(launched) == 1
     command = launched[0][1]
@@ -222,3 +223,24 @@ def test_stack_closes_adapter_on_connection_failure(monkeypatch):
     with pytest.raises(TimeoutError):
         asyncio.run(stack._connect_robot("ws://127.0.0.1:3000/ws", "http://127.0.0.1:3000/health"))
     adapter.close.assert_awaited_once()
+
+
+def test_stack_exit_signals_only_its_dummy_child(monkeypatch):
+    stack = load_stack()
+    args = stack.parse_args(["--enable-motion"])
+    calls = []
+    class Process:
+        pid = 1
+        def wait(self, timeout=None):
+            calls.append(("wait", timeout))
+            if timeout is None:
+                raise KeyboardInterrupt
+            return 0
+        def poll(self):
+            return None
+        def send_signal(self, signum):
+            calls.append(("signal", signum))
+    monkeypatch.setattr(stack, "start_background", lambda *_args, **_kwargs: Process())
+    with pytest.raises(KeyboardInterrupt):
+        stack.run_follow(args)
+    assert calls == [("wait", None), ("signal", stack.signal.SIGTERM), ("wait", 40)]

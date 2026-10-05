@@ -32,8 +32,7 @@ async def main(args):
     cfg["robot"]["health_url"] = args.robot_health
     cfg["robot"]["home_joints_deg"] = None
     cfg["robot"]["home_preset_name"] = "zero"
-    cfg["robot"]["max_relative_move_deg"] = max(abs(args.delta_deg), 0.75)
-    cfg["robot"]["follow_speed_percent"] = 0.05
+    cfg["robot"]["max_speed_deg_s"] = 10.0
     cfg["robot"]["servo_min_time_sec"] = 0.50
     adapter = TouchR1Adapter(cfg)
     await adapter.connect()

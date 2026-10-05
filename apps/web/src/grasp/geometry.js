@@ -47,15 +47,16 @@ function buildGraspGeometry({observation,stableId,robot,config,now=Date.now()}){
  const currentGrip=getGripPosition(robot,config);
  const currentFlange=gripTargetToFlangePose({positionM:robot.flange_position_m,eulerRad:robot.flange_euler_rad},translation(config.sdkToolOffsetM)).positionM;
  const axis=sdk.positionM.map((x,i)=>(x-flange.positionM[i])/config.sdkToolOffsetM);
+ const waypoint=(position,flangeM,gripM)=>({position:position.map(rounded),euler:[...sdk.eulerRad],flangeM:flangeM.map(rounded),gripM:gripM.map(rounded)});
+ // Keep the already-verified visibility checkpoint; shortening contact travel must not move it closer to the base.
+ const preapproach=waypoint(sdk.positionM.map((x,i)=>x-axis[i]*config.preapproachM),flange.positionM.map((x,i)=>x-axis[i]*config.preapproachM),targetM.map((x,i)=>x-axis[i]*config.preapproachM));
  const backoff=config.forwardBackoffM??0,horizontal=Math.hypot(axis[0],axis[1]);
  if(backoff>0&&horizontal<0.2)fail('forward_axis_invalid');
  // Operator-observed forward overshoot is a horizontal motion correction, not a new TCP or hand-eye calibration.
  const correction=backoff>0?[axis[0]*backoff/horizontal,axis[1]*backoff/horizontal,0]:[0,0,0];
  const gripM=targetM.map((x,i)=>x-correction[i]);
  flange.positionM=flange.positionM.map((x,i)=>x-correction[i]);sdk.positionM=sdk.positionM.map((x,i)=>x-correction[i]);
- const waypoint=(position,flangeM,gripM)=>({position:position.map(rounded),euler:[...sdk.eulerRad],flangeM:flangeM.map(rounded),gripM:gripM.map(rounded)});
  const contact=waypoint(sdk.positionM,flange.positionM,gripM);
- const preapproach=waypoint(sdk.positionM.map((x,i)=>x-axis[i]*config.preapproachM),flange.positionM.map((x,i)=>x-axis[i]*config.preapproachM),gripM.map((x,i)=>x-axis[i]*config.preapproachM));
  if(config.keepPreapproachSdkHeight===true){
   const dz=robot.flange_position_m[2]-preapproach.position[2];
   for(const point of [preapproach.position,preapproach.flangeM,preapproach.gripM])point[2]=rounded(point[2]+dz);

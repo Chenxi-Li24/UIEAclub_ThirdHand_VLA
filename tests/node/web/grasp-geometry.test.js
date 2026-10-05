@@ -72,7 +72,7 @@ test('operator forward overshoot compensation backs contact off 60mm without cha
  assert.deepEqual(g.contact.gripM,[0.34,0,0.2]);
  assert.deepEqual(g.contact.flangeM,[0.28,0,0.2]);
  assert.deepEqual(g.contact.position,[0.45334,0,0.2]);
- assert.deepEqual(g.preapproach.position,[0.35334,0,0.2]);
+ assert.deepEqual(g.preapproach.position,[0.41334,0,0.2]);
  assert.deepEqual(g.lift.position,[0.45334,0,0.25]);
  const repeated=buildGraspGeometry(f);assert.deepEqual(repeated.contact,g.contact);
  assert.equal(f.config.gripOffsetM,0.06);
@@ -90,4 +90,12 @@ test('invalid forward compensation or vertical ambiguous forward axis rejects pl
  for(const value of [-0.01,NaN,0.101]){const f=fixture();f.config.forwardBackoffM=value;assert.throws(()=>buildGraspGeometry(f),/grasp_config_invalid/);}
  const f=fixture();f.config.forwardBackoffM=0.06;f.robot.flange_euler_rad=[0,Math.PI/2,0];
  assert.throws(()=>buildGraspGeometry(f),/forward_axis_invalid/);
+});
+test('forward contact correction does not shift the visibility checkpoint toward the base',()=>{
+ const f=fixture();f.config.preapproachM=0.2;f.config.keepPreapproachSdkHeight=true;f.config.forwardBackoffM=0.06;
+ const g=buildGraspGeometry(f);
+ assert.deepEqual(g.preapproach.position,[0.31334,0,0.2]);
+ assert.deepEqual(g.preapproach.gripM,[0.2,0,0.2]);
+ assert.deepEqual(g.contact.position,[0.45334,0,0.2]);
+ assert.deepEqual(g.paths.approach.at(-1).position,[0.45334,0,0.2]);
 });

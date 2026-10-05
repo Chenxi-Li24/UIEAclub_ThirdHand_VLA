@@ -49,8 +49,9 @@ checkpoint, not the 60 mm TCP, desired contact point, SDK configuration or limit
 The first completed approach/closure missed the bottle with only 1.8 mm gripper
 width; the operator confirmed correct height but approximately 60 mm forward
 overshoot. Preserve the nominal 60 mm TCP and hand-eye artifacts. Apply a separate
-forwardBackoffM=0.060 once to contact and its derived waypoints, along normalized
-horizontal flange +X, with zero base-Z correction. Keep the raw depth target in
+forwardBackoffM=0.060 once to contact and lift, along normalized horizontal flange
++X, with zero base-Z correction. Leave the verified visibility checkpoint unshifted
+to avoid moving it toward unreachable near-base poses. Keep the raw depth target in
 the audit; this trial correction is not measured TCP/hand-eye qualification.
 Reject nonfinite/negative/>100 mm correction or a near-vertical ambiguous axis.
 

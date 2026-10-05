@@ -16,7 +16,9 @@ Normalize at the independent branch's read-only consumer boundary:
 
 Together these preserve `T_base_camera`. Do not subtract the offset in fixed
 base axes, convert twice, or feed canonical flange targets directly to the
-SDK's tool-frame motion API. No motion/API target changes are part of this work.
+SDK's tool-frame motion API. No active motion/API target changes are part of
+this work. The later optional command adapter is dormant and tested with
+synthetic transports.
 
 The shared Robot HTTP/WebSocket service remains a legacy SDK-tool endpoint;
 it was not overwritten. Canonical states are produced by
@@ -90,6 +92,109 @@ original live camera bridge hash remains
 
 Physical handeye approval, measured grip TCP, Home/limit recovery, collision
 corridors, path execution and gripper closure remain unapproved. Numerical
-normalization does not unlock physical movement. Geometry and display still
-query projection independently; shared frame freezing remains required before
-any later motion authorization.
+normalization does not unlock physical movement.
+
+## Frame snapshots and optional command adapter — 2026-10-06
+
+The independent bridge now freezes one immutable projection before inference.
+Geometry receives a separate numpy copy. The same original frame consumes the
+single-slot snapshot for displayed base coordinates; publication never queries
+a newer pose to replace it. Snapshot identity includes frame sequence, timestamp,
+camera serial, exact frame object, projector owner, calibration and policy IDs.
+An invalid feedback update increments an invalidation epoch; recovery cannot
+revive an earlier snapshot. Failed inference clears the pending snapshot.
+
+Final freshness/identity/epoch validation and the detection-event write share
+the feedback lock. Invalidations therefore linearize before the write (base
+coordinates, the top-level grasp pose and its old evidence ID are cleared;
+ready status becomes uncertain with a rejection reason), or after it.
+The lock is held during output, so slow
+consumers can delay feedback processing. Downstream consumers must still check
+timestamps; this is not a guarantee of physical accuracy or freshness at use.
+The optional `frame_projection` detection metadata exposes the exact captured
+matrix and its provenance for read-only replay. It is not a motion approval.
+
+`tools/frames/canonical_robot_client.js` provides an OPT-IN WebSocket client for
+future supervised action integration. It requires `framePolicyPath` and the
+existing WebSocket dependencies. Construction does not connect. It normalizes
+raw SDK-tool feedback to flange poses and converts canonical `move_l` targets
+back with `T_base_sdk_tool_target = T_base_flange_target @ T_flange_sdk_tool`.
+Cartesian targets require fresh, healthy, stationary canonical feedback;
+malformed/replayed/double-converted feedback clears its cached state. Non-
+Cartesian low-level commands retain the original adapter semantics and require
+the existing external execution/controller approvals.
+
+This client is NOT installed into an active action runner or the default
+factory. No executable bottle trajectory has been generated; no grip TCP is
+assumed equal to the SDK's nominal tool. The original shared Robot service,
+default process backend and CAN owner have not been changed or started.
+
+Regression records are under `artifacts/diagnostics/readonly-followup-xfRuW1/`.
+The original same-frame 5mm synthetic mismatch and publication/identity issues
+were observed RED before implementation. Canonical-client RED initially
+revealed an invalid test handshake timestamp; the corrected fixture was rerun
+against the old transport and failed for actual missing conversion/validation,
+then passed against the new opt-in client. Full-suite and deployment results
+must be read from the fresh logs; numerical tests do not imply physical approval.
+
+Initial frame-freeze deployment capture:
+`artifacts/diagnostics/readonly-followup-8jddl6/`.
+The restarted independent Vision/state-relay pair produced30 distinct frames,
+all30 with ready projection and selected-bottle depth/base coordinates;4 were
+detection-stability warmup frames and26 were ready. Every projection identity
+matched its detection frame, policy and calibration. Reprojecting the30 camera
+points with each recorded frozen matrix gave a maximum residual5.56e-17m.
+This verifies software consistency, not measured physical localization error.
+Selected depth ranged0.19785–0.21398m. No robot/gripper commands were sent;
+Robot reported moving=false before/after. Original calibration and shared
+camera-bridge hashes remained unchanged.
+
+A separate30-event local WebSocket timing capture observed frame-to-receipt
+ages87.28–247.63ms and feedback receipt gaps99.16–101.66ms, with no socket
+errors. These are observations, not a hard output-backpressure bound. The HTTP
+polling sample's receipt age includes its polling delay and is not publication
+latency. Downstream motion consumers must still enforce freshness at use.
+
+The current J3 margin is0.49178deg, below the configured3deg stop margin;
+the maximum configured-Home difference is32.6543deg. Actual grip TCP remains
+unmeasured, physical handeye approval remains pending, and action execution
+remains false. Do not generate an executable flange path by substituting the
+SDK's nominal173.34mm tool or the old base-axis offset for a measured grip TCP.
+
+Final fresh regression:87 focused tests pass (37 Node,31 Vision,4 migration,
+15 handeye), root Node132/132 pass, and root Python145 pass +49 subtests with
+the same2 baseline failures listed above. The portability failure reports9
+absolute-home-path findings; these include the already committed machine-bound
+policy and earlier documentation paths, not new paths introduced by this patch.
+An initial final-run invocation used a wrong migration test filename and omitted
+the root Python vision-module import path; both command errors were preserved
+separately and the corrected full commands were rerun. See `verified-final-*.log`
+and `verified-final-results.json` under `readonly-followup-xfRuW1`.
+
+The opt-in client's14 synthetic-transport tests include dormant construction,
+immutable policy identity/provenance, replay-cache invalidation, stale/moving/
+unhealthy/disconnected feedback rejection, wrong-policy/double-converted target
+rejection, and non-object/array container rejection before command reservation.
+Content bindings are checked at construction; this is not a live file-change
+monitor. It remains inactive pending measured geometry and supervised integration.
+
+Final deployment, including top-level pose invalidation, was captured in
+`artifacts/diagnostics/readonly-followup-Kf5JBw/`. Its30 distinct frames include
+one pre-selection frame and29 selected-bottle frames. All29 selected frames
+have valid filtered depth;28 have ready base coordinates and one correctly
+rejects nonstationary/unhealthy feedback. That rejected event has no top-level
+pose/evidence ID or target base coordinates, and is uncertain with the explicit
+rejection reason. Overall projection statuses are29 ready and one rejected;
+detection statuses are23 ready,6 uncertain,1 searching. No fail-closed violation
+was found. The29 projected target points have a maximum same-matrix residual
+5.56e-17m; depth spans0.19586–0.20901m. Robot reported moving=false before/after,
+but feedback had small joint changes; exact equality is not claimed.
+
+The final separate stream capture is
+`artifacts/diagnostics/readonly-final-stream-rMJm6j/`:30 events,57 feedback
+samples, frame-to-receipt age141.20–420.90ms, feedback gaps99.70–101.08ms, no
+socket errors. Some received images exceed250ms age despite fresh current
+feedback. This readonly display must NOT be treated as a freshness-qualified
+motion input; an eventual action consumer must reject old image evidence at
+use. Physical approval and actual TCP/path validation remain absent. The shared
+Robot service was not restarted, and no motion/gripper command was sent.

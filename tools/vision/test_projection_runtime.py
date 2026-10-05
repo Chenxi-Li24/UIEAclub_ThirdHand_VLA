@@ -40,6 +40,14 @@ class Projection:
     def __init__(self,transform):self.transform=transform
     def for_frame(self,stamp):
         return self.transform if stamp==100_000_000 else None
+    def snapshot_for_frame(self,stamp,*,frame_id=None,camera_serial=None,frame_token=None):
+        from handeye_projection_with_frames import FrameProjectionSnapshot
+        transform=self.for_frame(stamp) if self.projection_allowed else None
+        matrix=None if transform is None else tuple(tuple(float(v) for v in row) for row in transform)
+        status='physical_validation_pending' if not self.projection_allowed else (
+            'robot_state_missing' if matrix is None else 'ready')
+        return FrameProjectionSnapshot(stamp,stamp,'sha256:'+'a'*64,'sha256:'+'b'*64,
+                                       0,matrix,status,self,frame_id,camera_serial,frame_token)
 
 class RuntimeTests(unittest.TestCase):
     def runtime(self,transform):

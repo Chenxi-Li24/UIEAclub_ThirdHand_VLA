@@ -410,25 +410,50 @@ class UnifiedVisionRuntime:
         self.config = config
         self.projection = projection
         self.pipeline = VisionPipeline(config, backend)
+        self._snapshot_lock = threading.Lock()
+        self._pending_projection = None
 
     def process_frame(self, frame):
         from thirdhand_va.common.contracts import RgbdFrame
 
-        base_transform = None
-        if self.projection is not None and self.projection.projection_allowed:
-            base_transform = self.projection.for_frame(int(frame.monotonic_ns))
-        return self.pipeline.process(
-            RgbdFrame(
-                sequence=int(frame.sequence),
-                monotonic_ns=int(frame.monotonic_ns),
-                camera_serial=str(frame.camera_serial),
-                rgb=frame.rgb,
-                depth_m=frame.depth_m,
-                xyz_camera_m=frame.xyz_camera_m,
-            ),
-            now_ns=int(frame.monotonic_ns),
-            t_base_camera=base_transform,
-        )
+        import numpy as np
+
+        snapshot = None if self.projection is None else self.projection.snapshot_for_frame(
+            int(frame.monotonic_ns), frame_id=int(frame.sequence),
+            camera_serial=str(frame.camera_serial), frame_token=frame)
+        base_transform = None if snapshot is None or snapshot.matrix_4x4 is None else np.array(snapshot.matrix_4x4)
+        with self._snapshot_lock:
+            self._pending_projection = (frame, self._frame_key(frame), snapshot)
+        try:
+            return self.pipeline.process(
+                RgbdFrame(
+                    sequence=int(frame.sequence),
+                    monotonic_ns=int(frame.monotonic_ns),
+                    camera_serial=str(frame.camera_serial),
+                    rgb=frame.rgb,
+                    depth_m=frame.depth_m,
+                    xyz_camera_m=frame.xyz_camera_m,
+                ),
+                now_ns=int(frame.monotonic_ns),
+                t_base_camera=base_transform,
+            )
+        except BaseException:
+            with self._snapshot_lock:
+                self._pending_projection = None
+            raise
+
+    @staticmethod
+    def _frame_key(frame):
+        return (int(frame.sequence), int(frame.monotonic_ns), str(frame.camera_serial))
+
+    def take_projection_snapshot(self, frame):
+        """Consume only this exact frame's single-slot snapshot; never query again."""
+        with self._snapshot_lock:
+            pending = self._pending_projection
+            if pending is None or pending[0] is not frame or pending[1] != self._frame_key(frame):
+                return None
+            self._pending_projection = None
+            return pending[2]
 
     def select_target(self, stable_id: int, request_id: str) -> bool:
         return self.pipeline.select(stable_id, request_id)
@@ -455,23 +480,41 @@ def model_provenance(config) -> dict[str, str]:
     }
 
 
-def attach_depth_evidence(event, decision, frame, config, projection=None) -> None:
+def attach_depth_evidence(event, decision, frame, config, projection=None, *, snapshot=None, now_ns=None) -> None:
     """Attach metric depth and fail-closed base projection when approved."""
 
     import numpy as np
     from handeye_projection import project_point
     from geometry_quality.pointcloud import robust_mask_points
+    from handeye_projection_with_frames import FrameProjectionSnapshot
 
     base_transform = None
     base_status = "handeye_not_configured"
     if projection is not None:
-        if not projection.projection_allowed:
-            base_status = "physical_validation_pending"
+        if snapshot is None:
+            base_status = "frame_projection_missing"
         else:
-            base_transform = projection.for_frame(int(frame.monotonic_ns))
-            base_status = "ready" if base_transform is not None else (
-                projection.last_rejection or "robot_state_unavailable"
-            )
+            rejection = projection.validate_snapshot(snapshot, int(frame.monotonic_ns),
+                time.monotonic_ns() if now_ns is None else now_ns,
+                frame_id=int(frame.sequence), camera_serial=str(frame.camera_serial), frame_token=frame)
+            base_status = rejection or "ready"
+            if rejection is None:
+                base_transform = np.array(snapshot.matrix_4x4)
+
+    # Diagnostic provenance accompanies the existing v3 detection event. It is
+    # numerical/read-only evidence, not physical calibration or path approval.
+    provenance = snapshot if isinstance(snapshot, FrameProjectionSnapshot) else None
+    event["frame_projection"] = {
+        "schema": "thirdhand-frame-projection-v1",
+        "frame_id": int(frame.sequence),
+        "frame_monotonic_ns": int(frame.monotonic_ns),
+        "robot_observed_monotonic_ns": None if provenance is None else provenance.robot_observed_monotonic_ns,
+        "robot_frame_policy_id": None if provenance is None else provenance.policy_id,
+        "calibration_id": None if provenance is None else provenance.calibration_id,
+        "status": base_status,
+        "T_base_camera": None if base_transform is None else base_transform.tolist(),
+        "physically_validated": False if projection is None else projection.physically_validated,
+    }
 
     tracks = {track.candidate.detection_id: track for track in decision.tracks}
     for target in event.get("targets", []):
@@ -537,6 +580,29 @@ def attach_depth_evidence(event, decision, frame, config, projection=None) -> No
             target["position_std_m"] = [float(value) for value in spread]
             target["depth_m"] = float(center[2])
     event["selectedStableId"] = event.get("selected_stable_id")
+
+
+def publish_detection_event(writer, event, frame, projection, snapshot, *, clock=time.monotonic_ns):
+    """Publish or clear base evidence atomically with feedback invalidation."""
+    if projection is None:
+        writer.write(event)
+        return
+    with projection.publication_guard(snapshot, int(frame.monotonic_ns), clock=clock,
+            frame_id=int(frame.sequence), camera_serial=str(frame.camera_serial), frame_token=frame) as rejection:
+        if rejection is not None:
+            for target in event.get("targets", []):
+                target["base_xyz_m"] = None
+                target["base_pose_status"] = rejection
+            event["frame_projection"]["status"] = rejection
+            event["frame_projection"]["T_base_camera"] = None
+            # Geometry also serialized a top-level base grasp pose before this
+            # final guard. Never leave it or its old ready evidence on rejection.
+            event["pose"] = None
+            event["evidence_id"] = None
+            if event.get("status") == "ready":
+                event["status"] = "uncertain"
+            event["reasons"] = list(dict.fromkeys([*event.get("reasons", []), rejection]))
+        writer.write(event)
 
 
 def mjpeg_part(jpeg: bytes, *, sequence: int) -> bytes:
@@ -736,12 +802,16 @@ def run_bridge(args: argparse.Namespace) -> int:
             last_frame_at = time.monotonic()
             yield frame
 
+    inference_ref: dict[str, UnifiedVisionRuntime] = {}
+
     def model_factory():
         from thirdhand_va.vision.perception.grounded_sam import GroundedSamBackend
 
         backend = GroundedSamBackend(vision_config, local_files_only=True)
         backend._load_models()
-        return UnifiedVisionRuntime(vision_config, backend, projection=projection)
+        model = UnifiedVisionRuntime(vision_config, backend, projection=projection)
+        inference_ref["model"] = model
+        return model
 
     runtime_ref: dict[str, CameraRuntime] = {}
     export_dir = Path(os.environ.get(
@@ -820,8 +890,10 @@ def run_bridge(args: argparse.Namespace) -> int:
             encoded,
             model_provenance=model_provenance(vision_config),
         )
-        attach_depth_evidence(event, decision, frame, vision_config, projection)
-        events.write(event)
+        model = inference_ref.get("model")
+        snapshot = None if model is None else model.take_projection_snapshot(frame)
+        attach_depth_evidence(event, decision, frame, vision_config, projection, snapshot=snapshot)
+        publish_detection_event(events, event, frame, projection, snapshot)
         with export_lock:
             request_id = pending_export.pop("requestId", None)
         if request_id is not None:

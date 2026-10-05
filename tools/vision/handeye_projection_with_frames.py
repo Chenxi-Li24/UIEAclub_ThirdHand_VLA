@@ -6,10 +6,27 @@ import hashlib
 import json
 import math
 import re
+from dataclasses import dataclass, field
+from contextlib import contextmanager
 from pathlib import Path
 from threading import Lock
 
 import numpy as np
+
+
+@dataclass(frozen=True)
+class FrameProjectionSnapshot:
+    frame_monotonic_ns: int
+    robot_observed_monotonic_ns: int | None
+    policy_id: str
+    calibration_id: str
+    invalidation_epoch: int
+    matrix_4x4: tuple | None
+    status: str
+    owner: object = field(repr=False, compare=False)
+    frame_id: int | None = None
+    camera_serial: str | None = None
+    frame_token: object | None = field(default=None, repr=False, compare=False)
 
 
 def rigid_matrix(value):
@@ -78,21 +95,25 @@ class HandEyeProjection:
         self.chain = Chain(parsed.links[:7], active_links_mask=[False] + [True] * 6)
         self._lock = Lock()
         self._state = None
+        self._invalidation_epoch = 0
+        self._snapshot_owner = object()
         self.last_rejection = "robot_state_missing"
+
+    def _invalidate(self, reason):
+        with self._lock:
+            self._state = None
+            self._invalidation_epoch += 1
+            self.last_rejection = reason
 
     def update(self, message, received_ns):
         marker = message.get("frame_normalization") if isinstance(message, dict) else None
         if not isinstance(marker, dict) or marker.get("policy_id") != self.frame_policy_id:
-            with self._lock:
-                self._state = None
-                self.last_rejection = "robot_frame_policy_mismatch"
+            self._invalidate("robot_frame_policy_mismatch")
             return False
         if (message.get("type") != "arm_state" or message.get("pose_frame") != "robot_flange"
                 or message.get("connected") is not True or message.get("healthy") is not True
                 or message.get("stationary") is not True):
-            with self._lock:
-                self._state = None
-                self.last_rejection = "robot_not_stationary_or_healthy"
+            self._invalidate("robot_not_stationary_or_healthy")
             return False
         try:
             pose = flange_transform(message["flange_position_m"], message["flange_euler_rad"])
@@ -112,15 +133,68 @@ class HandEyeProjection:
                     or orientation_error > 0.10):
                 raise ValueError("robot_urdf_fk_mismatch")
         except (ValueError, TypeError, KeyError) as error:
-            with self._lock:
-                self._state = None
-                self.last_rejection = (str(error) if isinstance(error, ValueError)
-                                       else "robot_pose_invalid")
+            self._invalidate(str(error) if isinstance(error, ValueError) else "robot_pose_invalid")
             return False
         with self._lock:
             self._state = (pose, observed_ns, joints.tolist())
             self.last_rejection = None
         return True
+
+    def snapshot_for_frame(self, frame_ns, *, frame_id=None, camera_serial=None, frame_token=None):
+        """Freeze one transform and its identities atomically, before inference."""
+        frame_ns = int(frame_ns)
+        with self._lock:
+            state = self._state
+            status = "ready"
+            matrix = None
+            observed_ns = None if state is None else state[1]
+            if not self.projection_allowed:
+                status = "physical_validation_pending"
+            elif state is None:
+                status = self.last_rejection or "robot_state_unavailable"
+            elif abs(frame_ns - observed_ns) > 250_000_000:
+                status = "robot_state_stale"
+            else:
+                # Tuples prevent downstream numpy consumers from mutating the snapshot.
+                matrix = tuple(tuple(float(v) for v in row) for row in state[0] @ self.flange_camera)
+            return FrameProjectionSnapshot(frame_ns, observed_ns, self.frame_policy_id,
+                self.calibration_id, self._invalidation_epoch, matrix, status, self._snapshot_owner,
+                frame_id, camera_serial, frame_token)
+
+    def _snapshot_rejection(self, snapshot, frame_ns, now_ns, frame_id, camera_serial, frame_token):
+        """Caller owns _lock; never substitute a newer pose for captured geometry."""
+        if snapshot is None:
+            return "frame_projection_missing"
+        if not isinstance(snapshot, FrameProjectionSnapshot) or snapshot.owner is not self._snapshot_owner:
+            return "frame_projection_owner_mismatch"
+        if (snapshot.frame_monotonic_ns != int(frame_ns) or snapshot.frame_id != frame_id
+                or snapshot.camera_serial != camera_serial or snapshot.frame_token is not frame_token):
+            return "frame_projection_frame_mismatch"
+        if snapshot.policy_id != self.frame_policy_id or snapshot.calibration_id != self.calibration_id:
+            return "frame_projection_identity_mismatch"
+        if snapshot.invalidation_epoch != self._invalidation_epoch:
+            return "frame_projection_invalidated"
+        if snapshot.status != "ready" or snapshot.matrix_4x4 is None:
+            return snapshot.status
+        if not self.projection_allowed:
+            return "physical_validation_pending"
+        if self._state is None:
+            return self.last_rejection or "robot_state_unavailable"
+        if not 0 <= int(now_ns) - self._state[1] <= 250_000_000:
+            return "robot_state_stale"
+        return None
+
+    def validate_snapshot(self, snapshot, frame_ns, now_ns, *, frame_id=None, camera_serial=None, frame_token=None):
+        with self._lock:
+            return self._snapshot_rejection(snapshot, frame_ns, now_ns, frame_id, camera_serial, frame_token)
+
+    @contextmanager
+    def publication_guard(self, snapshot, frame_ns, *, clock, frame_id, camera_serial, frame_token):
+        # Evaluate the clock AFTER acquiring the lock. Feedback invalidation and
+        # the final event write share this linearization boundary.
+        with self._lock:
+            rejection = self._snapshot_rejection(snapshot, frame_ns, clock(), frame_id, camera_serial, frame_token)
+            yield rejection
 
     def for_frame(self, frame_ns):
         with self._lock:

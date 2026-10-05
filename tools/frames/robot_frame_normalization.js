@@ -1,7 +1,7 @@
 'use strict';
 // Pure pose conversion plus a content-bound configuration loader. No robot API.
 const fs=require('node:fs'),crypto=require('node:crypto'),YAML=require('yaml');
-const {validateRigidTransform,gripTargetToFlangePose}=require('../../skills/manipulation/bottlegrasp/src/thirdhand_va/action/grasp/grip_transform');
+const {validateRigidTransform,gripTargetToFlangePose,flangeToGripPose}=require('../../skills/manipulation/bottlegrasp/src/thirdhand_va/action/grasp/grip_transform');
 const hash=bytes=>crypto.createHash('sha256').update(bytes).digest('hex');
 function validatePolicy(policy){
   if(policy?.schema!=='thirdhand-robot-frame-policy-v1'||
@@ -38,4 +38,16 @@ function normalizeRobotState(message,policy){
   delete output.tcpPos;delete output.tcpEuler;
   return output;
 }
-module.exports={loadPolicy,normalizeRobotState};
+function canonicalMoveToSdkTool(command,policy){
+  validatePolicy(policy);
+  if(!command||typeof command!=='object'||Array.isArray(command)||command.cmd!=='move_l'||
+      !Number.isFinite(command.time_sec)||command.time_sec<=0||command.time_sec>30||
+      (Object.hasOwn(command,'pose_frame')&&command.pose_frame!=='robot_flange')||
+      (Object.hasOwn(command,'frame_policy_id')&&command.frame_policy_id!==policy.id)||
+      Object.hasOwn(command,'frame_normalization'))throw Error('canonical_move_invalid');
+  const pose=flangeToGripPose({positionM:command.position,eulerRad:command.euler},policy.T_flange_sdk_tool);
+  const output={...command,position:pose.positionM,euler:pose.eulerRad};
+  delete output.pose_frame;delete output.frame_policy_id;
+  return output;
+}
+module.exports={loadPolicy,normalizeRobotState,canonicalMoveToSdkTool};

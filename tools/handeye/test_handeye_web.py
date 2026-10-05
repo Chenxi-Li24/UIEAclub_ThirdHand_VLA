@@ -20,7 +20,8 @@ class WebTests(unittest.TestCase):
     def state(self):
         return dict(type='robot_state',connected=True,healthy=True,moving=False,pose_frame='robot_flange',
                     state_sequence=1,producer_monotonic_ns=1000000000,flange_position_m=[0,0,.3],
-                    flange_euler_rad=[0,0,0],joints_deg=[0]*6,velocities_deg_s=[0]*6)
+                    flange_euler_rad=[0,0,0],joints_deg=[0]*6,velocities_deg_s=[0]*6,
+                    frame_normalization={'policy_id':'sha256:'+'a'*64})
 
     def history(self):
         s=self.state()
@@ -75,5 +76,19 @@ class WebTests(unittest.TestCase):
             resumed=CalibrationSession(Path(d))
             self.assertEqual(len(resumed.samples),1)
             with self.assertRaises(ValueError):resumed.capture(self.bundle(),self.history(),1050000000)
+
+    def test_rejects_feedback_without_canonical_frame_marker(self):
+        with tempfile.TemporaryDirectory() as d:
+            session=CalibrationSession(Path(d))
+            history=[{k:v for k,v in s.items() if k!='frame_normalization'} for s in self.history()]
+            with self.assertRaisesRegex(ValueError,'canonical_flange_required'):
+                session.capture(self.bundle(),history,1050000000)
+
+    def test_rejects_mixed_policy_in_the_stationary_bracket(self):
+        with tempfile.TemporaryDirectory() as d:
+            session=CalibrationSession(Path(d));history=self.history()
+            history[-1]['frame_normalization']={'policy_id':'sha256:'+'b'*64}
+            with self.assertRaisesRegex(ValueError,'canonical_flange_required'):
+                session.capture(self.bundle(),history,1050000000)
 
 if __name__=='__main__':unittest.main()

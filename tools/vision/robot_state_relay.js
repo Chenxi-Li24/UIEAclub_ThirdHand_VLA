@@ -1,11 +1,13 @@
 'use strict';
 const { WebSocket } = require('ws');
+const {loadPolicy,normalizeRobotState}=require('../frames/robot_frame_normalization');
 const clock = () => Number(process.hrtime.bigint());
 const MAX_AGE_NS = 250000000;
 const finiteVector = (value,length) => Array.isArray(value) && value.length===length &&
   Array.from(value).every(Number.isFinite);
 
-function mapState(message,now=clock()) {
+function mapState(message,now=clock(),policy=null) {
+  try{message=normalizeRobotState(message,policy);}catch{return null;}
   if (message?.type!=='robot_state' || message.connected!==true || message.healthy!==true ||
       message.pose_frame!=='robot_flange' || typeof message.moving!=='boolean' ||
       !Number.isSafeInteger(message.state_sequence) || message.state_sequence<0 ||
@@ -16,10 +18,11 @@ function mapState(message,now=clock()) {
   return {type:'arm_state',pose_frame:'robot_flange',connected:true,healthy:true,
     stationary:message.moving===false && message.velocities_deg_s.every(v=>Math.abs(v)<=2),
     flange_position_m:[...message.flange_position_m],flange_euler_rad:[...message.flange_euler_rad],
+    frame_normalization:{...message.frame_normalization},
     joints_deg:[...message.joints_deg],observed_monotonic_ns:message.producer_monotonic_ns};
 }
 
-function startRelay({robotUrl='ws://127.0.0.1:3000/ws',visionUrl='ws://127.0.0.1:3100/ws'}={}) {
+function startRelay({robotUrl='ws://127.0.0.1:3000/ws',visionUrl='ws://127.0.0.1:3100/ws',policy=loadPolicy(process.env.THIRDHAND_ROBOT_FRAME_POLICY)}={}) {
   let stopped=false,robot=null,vision=null,last=null,sequence=-1,producer=-1,invalidated=true;
   const timers=new Set();
   const stats={forwarded:0,rejected:0,invalidations:0};
@@ -54,7 +57,7 @@ function startRelay({robotUrl='ws://127.0.0.1:3000/ws',visionUrl='ws://127.0.0.1
         stats.rejected++;invalidate();return;
       }
       if(message.type!=='robot_state')return;
-      const mapped=mapState(message);
+      const mapped=mapState(message,clock(),policy);
       if(!mapped || message.state_sequence<=sequence || message.producer_monotonic_ns<=producer) {
         stats.rejected++;invalidate();return;
       }

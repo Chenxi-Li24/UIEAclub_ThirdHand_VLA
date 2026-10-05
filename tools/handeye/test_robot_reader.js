@@ -17,7 +17,10 @@ test('read-only subscriber forwards state and sends no command',async()=>{
   const reader=startReader(`ws://127.0.0.1:${server.address().port}`,x=>received.push(x));
   try {
     await new Promise(resolve=>setTimeout(resolve,100));
-    assert.deepEqual(received,[state]);
+    assert.equal(received.length,1);
+    assert.equal(received[0].connected,false);
+    assert.equal(received[0].healthy,false);
+    assert.equal(received[0].frame_error,'frame_policy_invalid');
     assert.equal(commands,0);
   } finally {reader.close();for(const s of server.clients)s.terminate();await new Promise(r=>server.close(r));}
 });

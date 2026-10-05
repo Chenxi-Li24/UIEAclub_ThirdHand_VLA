@@ -4,16 +4,20 @@ const assert = require('node:assert/strict');
 const { once } = require('node:events');
 const { WebSocketServer } = require('ws');
 const { mapState, startRelay } = require('./robot_state_relay');
+const policy={schema:'thirdhand-robot-frame-policy-v1',id:'sha256:'+'a'.repeat(64),
+  source_semantics:'sdk_tool_mislabeled_as_robot_flange',
+  T_flange_sdk_tool:[[1,0,0,.17334],[0,1,0,0],[0,0,1,0],[0,0,0,1]]};
 
 const state = (now,sequence=1) => ({type:'robot_state',connected:true,healthy:true,
   moving:false,pose_frame:'robot_flange',state_sequence:sequence,
   producer_monotonic_ns:now,flange_position_m:[0.3,0,0.18],flange_euler_rad:[0,0,0],
   joints_deg:[0,0,0,0,0,0],velocities_deg_s:[0,0,0,0,0,0]});
 
-test('maps fresh measured flange telemetry without changing timestamp or units', () => {
-  assert.deepEqual(mapState(state(1000000000),1000000010),{
+test('maps fresh SDK tool telemetry into canonical flange without changing timestamp or units', () => {
+  assert.deepEqual(mapState(state(1000000000),1000000010,policy),{
     type:'arm_state',pose_frame:'robot_flange',connected:true,healthy:true,stationary:true,
-    flange_position_m:[0.3,0,0.18],flange_euler_rad:[0,0,0],joints_deg:[0,0,0,0,0,0],
+    flange_position_m:[0.12666,0,0.18],flange_euler_rad:[0,0,0],joints_deg:[0,0,0,0,0,0],
+    frame_normalization:{policy_id:policy.id,source_pose_frame:'sdk_tool',destination_pose_frame:'robot_flange'},
     observed_monotonic_ns:1000000000});
 });
 test('rejects invalid stale future and unmeasured telemetry', () => {
@@ -22,12 +26,12 @@ test('rejects invalid stale future and unmeasured telemetry', () => {
     {producer_monotonic_ns:now-250000001},{producer_monotonic_ns:now+1},
     {producer_monotonic_ns:null},{state_sequence:NaN},{flange_position_m:new Array(3)},
     {joints_deg:[0,0,0,0,0,Infinity]},{velocities_deg_s:null},{moving:null}]) {
-    assert.equal(mapState({...state(now),...patch},now),null);
+    assert.equal(mapState({...state(now),...patch},now,policy),null);
   }
 });
 test('moving or nonstationary telemetry cannot establish stationary geometry', () => {
-  assert.equal(mapState({...state(100),moving:true},100).stationary,false);
-  assert.equal(mapState({...state(100),velocities_deg_s:[0,0,3,0,0,0]},100).stationary,false);
+  assert.equal(mapState({...state(100),moving:true},100,policy).stationary,false);
+  assert.equal(mapState({...state(100),velocities_deg_s:[0,0,3,0,0,0]},100,policy).stationary,false);
 });
 
 test('real sockets forward only state, reject replay and invalidate on source disconnect', async t => {
@@ -36,7 +40,7 @@ test('real sockets forward only state, reject replay and invalidate on source di
   await Promise.all([once(robot,'listening'),once(vision,'listening')]);
   const robotConnection=once(robot,'connection'), visionConnection=once(vision,'connection');
   const relay=startRelay({robotUrl:`ws://127.0.0.1:${robot.address().port}`,
-    visionUrl:`ws://127.0.0.1:${vision.address().port}`});
+    visionUrl:`ws://127.0.0.1:${vision.address().port}`,policy});
   t.after(async()=>{relay.close(); for(const server of [robot,vision]) {
     for(const socket of server.clients)socket.terminate();
     await new Promise(resolve=>server.close(resolve));

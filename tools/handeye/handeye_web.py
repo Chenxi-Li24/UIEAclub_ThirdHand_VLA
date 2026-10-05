@@ -24,8 +24,9 @@ BOARD={'squares_x':12,'squares_y':9,'square_length_m':.015,'marker_length_m':.01
 
 
 class CalibrationSession:
-    def __init__(self, root):
+    def __init__(self, root, frame_policy_id=None):
         self.root=Path(root);self.root.mkdir(parents=True,exist_ok=True)
+        self.frame_policy_id=frame_policy_id
         self.samples=[];self.last_frame=-1;self.overlay=None;self.result=None
         self.dictionary=cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_5X5_100)
         self.board=cv2.aruco.CharucoBoard((BOARD['squares_x'],BOARD['squares_y']),BOARD['square_length_m'],BOARD['marker_length_m'],self.dictionary)
@@ -35,6 +36,10 @@ class CalibrationSession:
             samples=json.loads(manifest.read_text())
             if not isinstance(samples,list):raise ValueError('invalid_saved_session')
             for i,sample in enumerate(samples,1):
+                marker=sample.get('frame_normalization',{}).get('policy_id')
+                if not marker or (self.frame_policy_id and marker!=self.frame_policy_id):
+                    raise ValueError('legacy_or_mixed_frame_session_requires_migration')
+                self.frame_policy_id=marker
                 with np.load(self.root/f'sample-{i:04d}.npz',allow_pickle=False) as bundle:
                     if json.loads(str(bundle['metadata_json']))!=sample:raise ValueError('saved_sample_manifest_mismatch')
             self.samples=samples
@@ -51,6 +56,17 @@ class CalibrationSession:
         frame=metadata.get('frame_id')
         if type(frame) is not int or frame<=self.last_frame:raise ValueError('duplicate_or_replayed_camera_frame')
         state=match_state(states,metadata.get('monotonic_ns'),now_ns)
+        marker=state.get('frame_normalization',{}).get('policy_id')
+        if (not isinstance(marker,str) or len(marker)!=71 or not marker.startswith('sha256:')
+            or any(c not in '0123456789abcdef' for c in marker[7:])
+            or (self.frame_policy_id and marker!=self.frame_policy_id)):
+            raise ValueError('canonical_flange_required')
+        for feedback in states:
+            stamp=feedback.get('producer_monotonic_ns')
+            if type(stamp) is int and metadata['monotonic_ns']-120_000_000<=stamp<=now_ns:
+                provenance=feedback.get('frame_normalization')
+                if not isinstance(provenance,dict) or provenance.get('policy_id')!=marker:
+                    raise ValueError('canonical_flange_required')
         if not states or validate_state(states[-1],now_ns) is None:raise ValueError('robot_not_stationary_now')
         flange=flange_transform(state['flange_position_m'],state['flange_euler_rad'])
         for sample in self.samples:
@@ -71,6 +87,7 @@ class CalibrationSession:
         extent=np.ptp(obj,axis=0)
         if extent[0]<.5*BOARD['squares_x']*BOARD['square_length_m'] or extent[1]<.5*BOARD['squares_y']*BOARD['square_length_m']:raise ValueError('board_coverage_too_small')
         sample={'frame':metadata,'robot_state':state,'T_base_flange':flange.tolist(),
+                'frame_normalization':dict(state['frame_normalization']),
                 'sync_delta_ms':(state['producer_monotonic_ns']-metadata['monotonic_ns'])/1e6,
                 'object_points':obj.tolist(),'image_points':charuco.reshape(-1,2).tolist(),
                 'corner_ids':corner_ids.ravel().tolist(),'image_size':[640,480]}
@@ -82,6 +99,7 @@ class CalibrationSession:
         cv2.aruco.drawDetectedCornersCharuco(overlay,charuco,corner_ids)
         self.overlay=cv2.imencode('.jpg',overlay)[1].tobytes()
         self.samples.append(sample);self.last_frame=frame
+        self.frame_policy_id=marker
         self._save('samples.json',self.samples,replace=True)
         return {'pairs':number,'corners':int(count),'markers':len(ids),'sync_delta_ms':sample['sync_delta_ms']}
 
@@ -100,6 +118,7 @@ class CalibrationSession:
                       extrinsic_semantics='T_flange_camera',robot_state_semantics='T_base_flange',
                       board=BOARD,camera_model=camera,robot_source=ROBOT,vision_source=VISION,
                       samples_manifest=manifest,
+                      frame_normalization={'policy_id':self.frame_policy_id},
                       warnings=['candidate_only_not_grasp_approved','TCP_and_path_not_validated',
                                 'fisheye_model_is_fitted_not_factory_SEUCM','operator_must_keep_board_fixed',
                                 'RGB_ToF_hardware_synchronization_not_independently_validated'])
@@ -134,7 +153,8 @@ async function act(name){document.getElementById(name).disabled=true;document.ge
 
 def main():
     root=Path(os.environ['HANDEYE_SESSION_DIR'])
-    session=CalibrationSession(root)
+    policy_id='sha256:'+hashlib.sha256(Path(os.environ['THIRDHAND_ROBOT_FRAME_POLICY']).read_bytes()).hexdigest()
+    session=CalibrationSession(root,frame_policy_id=policy_id)
     token=secrets.token_urlsafe(32)
     states=collections.deque(maxlen=300);state_lock=threading.Lock();operation_lock=threading.Lock()
     node=str(LIVE/'local/runtimes/node/bin/node')

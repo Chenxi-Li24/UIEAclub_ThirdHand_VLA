@@ -75,3 +75,15 @@ test('failed stop confirmation keeps uncertain motion owned and interlocked',asy
  assert.equal(c.status().phase,'uncertain');assert.equal(c.status().active,true);assert.ok(robot.ownerTag);
  await assert.rejects(c.start(2,'no-reentry'),/grasp_active/);
 });
+test('motion epoch clears transient visual evidence and waits idle for the next correlated frame',async()=>{
+ const {c,events}=await setup();const snapshot=c.visionClient.snapshot;let missing=2;
+ c.visionClient.snapshot=async id=>{if(c.status().phase==='preapproach'&&missing-->0){const e=new Error('status detection is updating');e.code='vision_evidence_mismatch';throw e;}return snapshot(id);};
+ await c.start(2,'epoch-switch');const s=await finish(c);assert.equal(s.phase,'complete',s.reason);
+ assert.equal(events.some(e=>e.cmd==='software_stop'),false);
+});
+test('persistent missing visual evidence expires before preapproach motion without dropping SDK',async()=>{
+ const {c,events}=await setup();const snapshot=c.visionClient.snapshot;
+ c.visionClient.snapshot=async id=>{if(c.status().phase==='preapproach'){const e=new Error('status detection is updating');e.code='vision_evidence_mismatch';throw e;}return snapshot(id);};
+ await c.start(2,'epoch-expired');const s=await finish(c);assert.equal(s.reason,'vision_evidence_timeout');
+ assert.equal(events.some(e=>e.cmd==='move_l'||e.cmd==='software_stop'),false);
+});

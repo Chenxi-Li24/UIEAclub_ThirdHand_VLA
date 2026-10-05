@@ -35,10 +35,21 @@ class GraspCoordinator extends EventEmitter{
   if(s.terminal)return;s.terminal=true;
   this._publish({phase,active:phase==='uncertain',interlocked:phase==='uncertain',reason,holding:s.holding,result});s.result=this.status();if(phase!=='uncertain')this.robotClient.ownerTag=null;
  }
+ async _snapshot(s){
+  for(let i=0;i<20;i++){
+   this._alive(s);
+   try{return await this.visionClient.snapshot(s.stableId);}
+   catch(e){
+    if(!['vision_evidence_mismatch','vision_projection_mismatch'].includes(e.code))throw e;
+    this._record('vision_wait',{attempt:i+1,reason:e.code});
+    await this.sleep(100);
+   }
+  }throw fault('vision_evidence_timeout');
+ }
  async _depth(s){
   let count=0,lastFrame=-1,aligned=false;const until=this.now()+95000;
   while(this.now()<until){
-   this._alive(s);const {observation}=await this.visionClient.snapshot(s.stableId);
+   this._alive(s);const {observation}=await this._snapshot(s);
    this._alive(s);const id=Number(observation.frameId??observation.frame_id);
    const ts=Number(observation.observedAtMs??observation.ts);
    if(!Number.isSafeInteger(id)||!Number.isFinite(ts)||this.now()-ts>this.config.visionMaxAgeMs)throw fault('vision_stale');
@@ -105,7 +116,7 @@ class GraspCoordinator extends EventEmitter{
   }
  }
  async _target(s){
-  this._alive(s);const {observation}=await this.visionClient.snapshot(s.stableId);this._alive(s);
+  this._alive(s);const {observation}=await this._snapshot(s);this._alive(s);
   const ts=Number(observation.observedAtMs??observation.ts),target=(observation.targets||[]).find(t=>Number(t.stable_id??t.stableId)===s.stableId);
   if(!Number.isFinite(ts)||this.now()-ts>this.config.visionMaxAgeMs||ts-this.now()>500)throw fault('vision_stale');
   if(Number(observation.selectedStableId??observation.selected_stable_id)!==s.stableId||!target||target.track_state!=='confirmed')throw fault('target_lost');

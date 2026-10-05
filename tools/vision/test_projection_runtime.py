@@ -9,7 +9,7 @@ from thirdhand_va.common.contracts import RgbdFrame
 from thirdhand_va.vision.perception.interfaces import RawCandidate
 
 HERE=Path(__file__).resolve().parent
-spec=importlib.util.spec_from_file_location('projection_bridge',HERE/'camera_bridge_with_projection.py')
+spec=importlib.util.spec_from_file_location('projection_bridge',HERE/os.environ.get('TEST_BRIDGE_FILE','camera_bridge_with_projection.py'))
 bridge=importlib.util.module_from_spec(spec);spec.loader.exec_module(bridge)
 
 class Backend:

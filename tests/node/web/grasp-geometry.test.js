@@ -65,3 +65,29 @@ test('valid target depth stays usable when legacy bottle-plane qualification wit
  const f=fixture();f.observation.pose=null;f.observation.reasons=['table_plane_ransac_failed'];
  const g=buildGraspGeometry(f);assert.deepEqual(g.targetM,[0.4,0,0.2]);assert.equal(g.widthM,null);
 });
+test('operator forward overshoot compensation backs contact off 60mm without changing height or calibration',()=>{
+ const f=fixture();f.config.forwardBackoffM=0.06;
+ const g=buildGraspGeometry(f);
+ assert.deepEqual(g.targetM,[0.4,0,0.2]);
+ assert.deepEqual(g.contact.gripM,[0.34,0,0.2]);
+ assert.deepEqual(g.contact.flangeM,[0.28,0,0.2]);
+ assert.deepEqual(g.contact.position,[0.45334,0,0.2]);
+ assert.deepEqual(g.preapproach.position,[0.35334,0,0.2]);
+ assert.deepEqual(g.lift.position,[0.45334,0,0.25]);
+ const repeated=buildGraspGeometry(f);assert.deepEqual(repeated.contact,g.contact);
+ assert.equal(f.config.gripOffsetM,0.06);
+});
+test('forward backoff follows horizontal wrist forward direction while preserving pitched contact Z',()=>{
+ const f=fixture();f.config.forwardBackoffM=0.06;f.robot.flange_euler_rad=[0,Math.PI/6,Math.PI/2];
+ const g=buildGraspGeometry(f);
+ assert.ok(Math.abs(g.contact.gripM[0]-0.4)<1e-12);
+ assert.ok(Math.abs(g.contact.gripM[1]+0.06)<1e-12);
+ assert.equal(g.contact.gripM[2],0.2);
+ assert.ok(Math.abs(g.contact.position[2]-0.14333)<1e-12);
+ assert.ok(Math.abs(g.contact.position[1]-0.038154)+0<1e-5);
+});
+test('invalid forward compensation or vertical ambiguous forward axis rejects planning',()=>{
+ for(const value of [-0.01,NaN,0.101]){const f=fixture();f.config.forwardBackoffM=value;assert.throws(()=>buildGraspGeometry(f),/grasp_config_invalid/);}
+ const f=fixture();f.config.forwardBackoffM=0.06;f.robot.flange_euler_rad=[0,Math.PI/2,0];
+ assert.throws(()=>buildGraspGeometry(f),/forward_axis_invalid/);
+});

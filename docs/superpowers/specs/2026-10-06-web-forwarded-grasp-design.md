@@ -46,6 +46,14 @@ checkpoint, then lock the bounded final approach (maximum 0.220 m diagonal,
 still <=0.005 m segments). Lift is +0.050 m in base Z. This changes the visibility
 checkpoint, not the 60 mm TCP, desired contact point, SDK configuration or limits.
 
+The first completed approach/closure missed the bottle with only 1.8 mm gripper
+width; the operator confirmed correct height but approximately 60 mm forward
+overshoot. Preserve the nominal 60 mm TCP and hand-eye artifacts. Apply a separate
+forwardBackoffM=0.060 once to contact and its derived waypoints, along normalized
+horizontal flange +X, with zero base-Z correction. Keep the raw depth target in
+the audit; this trial correction is not measured TCP/hand-eye qualification.
+Reject nonfinite/negative/>100 mm correction or a near-vertical ambiguous axis.
+
 Use short Cartesian segments of at most 0.005 m, preview every segment through
 9983/ws, reject nonfinite or out-of-hard-limit IK and discontinuous joint
 solutions. Segment start/end and requested grip/flange/SDK points must remain

@@ -9,6 +9,7 @@ function validateConfig(c){
  for(const k of ['gripOffsetM','sdkToolOffsetM','preapproachM','liftM','segmentM','visionMaxAgeMs'])if(!Number.isFinite(c?.[k])||c[k]<=0)fail('grasp_config_invalid');
  if(c.segmentM>0.005||c.gripOffsetM>0.3||c.sdkToolOffsetM>0.3||c.preapproachM>0.2||c.liftM>0.1)fail('grasp_config_invalid');
  if(c.maxApproachM!==undefined&&(!Number.isFinite(c.maxApproachM)||c.maxApproachM<c.preapproachM||c.maxApproachM>0.25))fail('grasp_config_invalid');
+ if(c.forwardBackoffM!==undefined&&(!Number.isFinite(c.forwardBackoffM)||c.forwardBackoffM<0||c.forwardBackoffM>0.1))fail('grasp_config_invalid');
  for(const k of ['framePolicyId','calibrationId'])if(!/^sha256:[a-f0-9]{64}$/.test(c[k]))fail('grasp_config_invalid');
  for(const k of ['x','y','z'])if(!vector(c.workspace?.[k],2)||c.workspace[k][0]>=c.workspace[k][1])fail('grasp_config_invalid');
  if(!Array.isArray(c.jointLimits)||c.jointLimits.length!==6||c.jointLimits.some(x=>!vector(x,2)||x[0]>=x[1]))fail('grasp_config_invalid');
@@ -46,16 +47,22 @@ function buildGraspGeometry({observation,stableId,robot,config,now=Date.now()}){
  const currentGrip=getGripPosition(robot,config);
  const currentFlange=gripTargetToFlangePose({positionM:robot.flange_position_m,eulerRad:robot.flange_euler_rad},translation(config.sdkToolOffsetM)).positionM;
  const axis=sdk.positionM.map((x,i)=>(x-flange.positionM[i])/config.sdkToolOffsetM);
+ const backoff=config.forwardBackoffM??0,horizontal=Math.hypot(axis[0],axis[1]);
+ if(backoff>0&&horizontal<0.2)fail('forward_axis_invalid');
+ // Operator-observed forward overshoot is a horizontal motion correction, not a new TCP or hand-eye calibration.
+ const correction=backoff>0?[axis[0]*backoff/horizontal,axis[1]*backoff/horizontal,0]:[0,0,0];
+ const gripM=targetM.map((x,i)=>x-correction[i]);
+ flange.positionM=flange.positionM.map((x,i)=>x-correction[i]);sdk.positionM=sdk.positionM.map((x,i)=>x-correction[i]);
  const waypoint=(position,flangeM,gripM)=>({position:position.map(rounded),euler:[...sdk.eulerRad],flangeM:flangeM.map(rounded),gripM:gripM.map(rounded)});
- const contact=waypoint(sdk.positionM,flange.positionM,targetM);
- const preapproach=waypoint(sdk.positionM.map((x,i)=>x-axis[i]*config.preapproachM),flange.positionM.map((x,i)=>x-axis[i]*config.preapproachM),targetM.map((x,i)=>x-axis[i]*config.preapproachM));
+ const contact=waypoint(sdk.positionM,flange.positionM,gripM);
+ const preapproach=waypoint(sdk.positionM.map((x,i)=>x-axis[i]*config.preapproachM),flange.positionM.map((x,i)=>x-axis[i]*config.preapproachM),gripM.map((x,i)=>x-axis[i]*config.preapproachM));
  if(config.keepPreapproachSdkHeight===true){
   const dz=robot.flange_position_m[2]-preapproach.position[2];
   for(const point of [preapproach.position,preapproach.flangeM,preapproach.gripM])point[2]=rounded(point[2]+dz);
  }
- const lift=waypoint(sdk.positionM.map((x,i)=>x+(i===2?config.liftM:0)),flange.positionM.map((x,i)=>x+(i===2?config.liftM:0)),targetM.map((x,i)=>x+(i===2?config.liftM:0)));
+ const lift=waypoint(sdk.positionM.map((x,i)=>x+(i===2?config.liftM:0)),flange.positionM.map((x,i)=>x+(i===2?config.liftM:0)),gripM.map((x,i)=>x+(i===2?config.liftM:0)));
  for(const point of [currentGrip,currentFlange,robot.flange_position_m,targetM,...[contact,preapproach,lift].flatMap(w=>[w.position,w.flangeM,w.gripM])])if(!inside(point,config))fail('workspace_limit');
- return {targetM,widthM,frameId:observation.frameId??observation.frame_id,contact,preapproach,lift,
+ return {targetM,widthM,forwardBackoffM:backoff,frameId:observation.frameId??observation.frame_id,contact,preapproach,lift,
   paths:{preapproach:segments(robot.flange_position_m,preapproach,config),approach:segments(preapproach.position,contact,config),lift:segments(contact.position,lift,config)}};
 }
 module.exports={buildGraspGeometry,getGripPosition,validateConfig,validateJoints,vector};

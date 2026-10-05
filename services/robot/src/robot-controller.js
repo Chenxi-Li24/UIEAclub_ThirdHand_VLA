@@ -9,7 +9,6 @@ const {
   DEFAULT_MAX_SPEEDS_DEG_S,
   validateJointTarget,
   isAccidentalZeroTarget,
-  moveTimeFor,
 } = require('./motion-policy');
 
 const ALLOWED_COMMANDS = new Set([
@@ -188,9 +187,10 @@ class RobotController extends EventEmitter {
       connection: this.bridge.getInfo(),
       motion: {
         jointMaxSpeedsDegS: DEFAULT_MAX_SPEEDS_DEG_S,
-        speedScale: this.config.speedScale,
+        planningMode: 'sdk_joint_speed',
+        speedScale: Math.min(0.05, this.config.speedScale ?? 0.05),
         commandedSpeedsDegS: DEFAULT_MAX_SPEEDS_DEG_S.map(
-          speed => speed * this.config.speedScale,
+          speed => speed * Math.min(0.05, this.config.speedScale ?? 0.05),
         ),
         minMoveTimeSec: this.config.minMoveTimeSec,
         maxMoveTimeSec: this.config.maxMoveTimeSec,
@@ -420,15 +420,11 @@ class RobotController extends EventEmitter {
 
   _executeAlignmentPrimitive(primitive, alignment, reply) {
     const pending = this._beginExecution(primitive, reply, 'alignment');
-    const timeSec = moveTimeFor(
-      alignment.joints, this.latestJointsDeg,
-      DEFAULT_MAX_SPEEDS_DEG_S, this.config,
-    );
     this.pendingLowLevel.set(pending.requestId, 'move_joint');
     const sent = this.bridge.send({
       cmd: 'move_joint',
       joints_rad: alignment.joints.map(value => value * Math.PI / 180),
-      time_sec: timeSec,
+      speed_percent: Math.min(0.05, this.config.speedScale ?? 0.05),
       request_id: pending.requestId,
       source: `vision-align:${primitive.parameters.tier}`,
     });
@@ -508,19 +504,11 @@ class RobotController extends EventEmitter {
 
     const requestId = typeof suppliedRequestId === 'string' && suppliedRequestId
       ? suppliedRequestId : randomUUID();
-    const timeSec = Number.isFinite(suppliedTimeSec)
-      ? Math.max(0.2, Math.min(this.config.maxMoveTimeSec, suppliedTimeSec))
-      : moveTimeFor(
-        validation.joints,
-        this.latestJointsDeg,
-        DEFAULT_MAX_SPEEDS_DEG_S,
-        this.config,
-      );
     this.pendingLowLevel.set(requestId, command);
     const sent = this.bridge.send({
       cmd: 'move_joint',
       joints_rad: validation.joints.map(value => value * Math.PI / 180),
-      time_sec: timeSec,
+      speed_percent: Math.min(0.05, this.config.speedScale ?? 0.05),
       request_id: requestId,
       source,
     });
@@ -561,14 +549,6 @@ class RobotController extends EventEmitter {
       });
       return;
     }
-    const timeSec = Number(message.time_sec);
-    if (!Number.isFinite(timeSec) || timeSec < 0.2
-        || timeSec > this.config.maxMoveTimeSec) {
-      reply({
-        type: 'error', code: 'move_time_invalid', msg: 'move_l time is invalid',
-      });
-      return;
-    }
     const readinessError = this._motionReadinessError();
     if (readinessError) {
       reply(readinessError);
@@ -581,7 +561,7 @@ class RobotController extends EventEmitter {
       cmd: 'move_l',
       position: [...message.position],
       euler: [...message.euler],
-      time_sec: timeSec,
+      speed_percent: Math.min(0.05, this.config.speedScale ?? 0.05),
       request_id: requestId,
       source: message.source || 'robot-service',
     });

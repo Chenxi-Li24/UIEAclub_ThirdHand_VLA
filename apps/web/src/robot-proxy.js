@@ -183,7 +183,6 @@ class RobotProxy {
       originEulerRad: state.flangeEulerRad,
       targetPositionM: plan.position,
       targetEulerRad: plan.euler,
-      timeSec: plan.timeSec,
       jointsDeg: ik.jointsDeg,
     });
     if (!bound) return reply({ ok: false, reason: '候选已失效，请重新输入末端目标' });

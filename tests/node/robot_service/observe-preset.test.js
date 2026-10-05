@@ -43,5 +43,6 @@ test('observe preset sends the exact joint target through guarded motion', () =>
   assert.equal(sent[0].source, 'preset:observe');
   assert.equal(sent[0].request_id, 'observe-test-1');
   assert.deepEqual(sent[0].joints_rad, [0, Math.PI / 2, -Math.PI / 2, Math.PI / 2, 0, 0]);
-  assert.ok(sent[0].time_sec >= ROBOT_CONFIG.minMoveTimeSec);
+  assert.equal(sent[0].speed_percent, 0.05);
+  assert.equal('time_sec' in sent[0], false);
 });

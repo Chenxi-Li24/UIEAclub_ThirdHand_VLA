@@ -168,9 +168,9 @@ class ManualJointOrchestrator {
     this.jointToleranceDeg = Number(options.jointToleranceDeg ?? 1);
     this.gripperOpenTarget = Number(options.gripperOpenTarget ?? 1);
     this.gripperCloseTarget = Number(options.gripperCloseTarget ?? 0);
-    this.maxJointTimeoutMs = Number(options.maxJointTimeoutMs ?? 10_000);
-    this.maxMultiTimeoutMs = Number(options.maxMultiTimeoutMs ?? 35_000);
-    this.maxHomeTimeoutMs = Number(options.maxHomeTimeoutMs ?? 30_000);
+    this.maxJointTimeoutMs = Number(options.maxJointTimeoutMs ?? 45_000);
+    this.maxMultiTimeoutMs = Number(options.maxMultiTimeoutMs ?? 45_000);
+    this.maxHomeTimeoutMs = Number(options.maxHomeTimeoutMs ?? 45_000);
     this.gripperTimeoutMs = Number(options.gripperTimeoutMs ?? 5_000);
     this.skillExecutors = options.skillExecutors || null;
     this.planCameraX = options.planCameraX || (() => ({ ok: false, reason: '镜头标定未配置' }));
@@ -270,8 +270,7 @@ class ManualJointOrchestrator {
         !finitePose(preview?.targetPositionM) ||
         !finitePose(preview?.targetEulerRad) ||
         !Array.isArray(preview?.jointsDeg) || preview.jointsDeg.length !== 6 ||
-        !preview.jointsDeg.every(Number.isFinite) ||
-        !Number.isFinite(preview?.timeSec)) return false;
+        !preview.jointsDeg.every(Number.isFinite)) return false;
     pending.cameraPreview = clone(preview);
     return true;
   }
@@ -534,7 +533,7 @@ class ManualJointOrchestrator {
         targetEulerRad: targetEuler,
         distanceM: params.distanceCm / 100,
         label: `镜头 X 轴向${params.direction === 'left' ? '左' : '右'}平移`,
-        timeoutMs: Math.max(10_000, (plan.timeSec + 8) * 1000),
+        timeoutMs: 45_000,
       });
       Promise.resolve(this.previewPose(targetPosition, targetEuler)).then(preview => {
         if (this.active?.requestId !== requestId ||
@@ -565,7 +564,7 @@ class ManualJointOrchestrator {
         }
         const sent = this.sendRobot({
           cmd: 'move_l', position: targetPosition, euler: targetEuler,
-          time_sec: plan.timeSec, request_id: requestId,
+          request_id: requestId,
           source: `language:${candidate.traceId}`,
         });
         if (!sent) this._finish(false, 'failed', 'Startouch bridge 拒绝接收末端平移命令');
@@ -596,11 +595,7 @@ class ManualJointOrchestrator {
         return this._blocked(session, candidate, `Home 机械限位禁止执行：${outsideLimits.join('；')}`);
       }
       const requestId = this.makeRequestId();
-      const timeSec = this.moveTimeFor(target);
-      const timeoutMs = Math.min(
-        this.maxHomeTimeoutMs,
-        Math.max(1000, (timeSec + 5) * 1000)
-      );
+      const timeoutMs = this.maxHomeTimeoutMs;
       this._begin({
         session,
         candidate,
@@ -614,7 +609,6 @@ class ManualJointOrchestrator {
         cmd: 'preset_home',
         name: 'home',
         request_id: requestId,
-        time_sec: timeSec,
         source: `language:${candidate.traceId}`,
       });
       if (!sent) this._finish(false, 'failed', 'Startouch bridge 拒绝接收 Home 预设命令');
@@ -654,10 +648,7 @@ class ManualJointOrchestrator {
         return this._blocked(session, candidate, '多轴目标与当前姿态相同，未发送运动命令');
       }
       const requestId = this.makeRequestId();
-      const timeSec = this.moveTimeFor(target);
-      const timeoutMs = Math.min(
-        this.maxMultiTimeoutMs, Math.max(1000, (timeSec + 3) * 1000)
-      );
+      const timeoutMs = this.maxMultiTimeoutMs;
       this._begin({
         session, candidate, requestId, kind: 'multi',
         targetJointsDeg: target, changedJointIndices,
@@ -666,7 +657,6 @@ class ManualJointOrchestrator {
       const sent = this.sendRobot({
         cmd: 'move_joint',
         joints_rad: target.map(value => value * Math.PI / 180),
-        time_sec: timeSec,
         request_id: requestId,
         source: `language:${candidate.traceId}`,
         speed_scale: this.speedScale,
@@ -702,8 +692,7 @@ class ManualJointOrchestrator {
       const target = [...current];
       target[jointIndex] = targetDeg;
       const requestId = this.makeRequestId();
-      const timeSec = this.moveTimeFor(target);
-      const timeoutMs = Math.min(this.maxJointTimeoutMs, Math.max(1000, (timeSec + 3) * 1000));
+      const timeoutMs = this.maxJointTimeoutMs;
       this._begin({
         session,
         candidate,
@@ -717,7 +706,6 @@ class ManualJointOrchestrator {
       const sent = this.sendRobot({
         cmd: 'move_joint',
         joints_rad: target.map(value => value * Math.PI / 180),
-        time_sec: timeSec,
         request_id: requestId,
         source: `language:${candidate.traceId}`,
         speed_scale: this.speedScale,

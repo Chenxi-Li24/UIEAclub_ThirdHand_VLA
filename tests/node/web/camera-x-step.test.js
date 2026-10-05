@@ -22,7 +22,7 @@ test('camera image left and right translate by signed centimetres', () => {
   assert.ok(Math.abs(left.position[0] - 0.38) < 1e-12);
   assert.ok(Math.abs(right.position[0] - 0.42) < 1e-12);
   assert.deepEqual(left.euler, [0, 0, 0]);
-  assert.equal(left.timeSec, 2);
+  assert.equal(left.timeSec, undefined, "target geometry must not choose Cartesian speed");
 });
 
 test('camera image X is rotated into the current base frame', () => {

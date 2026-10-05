@@ -9,7 +9,7 @@ class Socket extends EventEmitter{
   send(value){this.sent.push(JSON.parse(value));}
   close(){this.readyState=3;this.emit('close');}
 }
-function fixture(t,{connect=true}={}){
+function fixture(t,{connect=true,capability={}}={}){
   const root=fs.mkdtempSync(path.join(os.tmpdir(),'canonical-client-test-'));
   t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
   const sdk=path.join(root,'sdk.yaml'),filename=path.join(root,'policy.json');
@@ -32,7 +32,7 @@ function fixture(t,{connect=true}={}){
     correlated_completions:true,software_stop_ack:true,software_stop_state_boundary:true,
     state_units:{position:'m',orientation:'rad',joints:'deg',joint_velocity:'deg/s',gripper:'m'},
     state_stream:{sequence:'uint53',producer_monotonic_ns:'uint53',strictly_increasing:true},
-    state_sequence:0,producer_monotonic_ns:999_999_900})));
+    state_sequence:0,producer_monotonic_ns:999_999_900,...capability})));
   const state={type:'robot_state',connected:true,healthy:true,moving:false,
     state_sequence:1,producer_monotonic_ns:1_000_000_000,pose_frame:'robot_flange',
     flange_position_m:[.37334,.3,.4],flange_euler_rad:[0,0,0],
@@ -127,4 +127,34 @@ test('non-object and array command containers cannot bypass the base contract',t
     assert.equal(client.send(command),false);
   }
   assert.equal(socket.sent.length,count);assert.equal(client.inFlight,null);
+});
+test('live service readonly IK capability does not prevent canonical feedback',t=>{
+  const {client,socket}=fixture(t,{capability:{commands:
+    ['move_l','preview_ik','move_joint','gripper','preset','software_stop','get_state']}});
+  assert.equal(client.protocolReady,true);
+  assert.deepEqual(client.getRobotState()?.flangePositionM,[.2,.3,.4]);
+  const count=socket.sent.length;
+  assert.equal(client.send({cmd:'preview_ik',position:[.2,.3,.4],euler:[0,0,0]}),false);
+  assert.equal(socket.sent.length,count);
+  assert.equal(client.send({cmd:'get_state'}),true);
+});
+test('optional readonly IK does not admit unknown duplicate or missing capabilities',t=>{
+  for(const commands of [
+    ['move_l','preview_ik','move_joint','gripper','preset','software_stop','get_state','unknown_motion'],
+    ['move_l','preview_ik','move_joint','gripper','preset','software_stop','preview_ik'],
+    ['move_l','preview_ik','move_joint','gripper','preset','software_stop','unknown_motion'],
+  ]){
+    const {client,socket}=fixture(t,{capability:{commands}}),count=socket.sent.length;
+    assert.equal(client.protocolReady,false);assert.equal(client.getRobotState(),null);
+    assert.equal(client.send({cmd:'get_state'}),false);assert.equal(socket.sent.length,count);
+  }
+});
+test('optional readonly IK never weakens identity correlation or stop proof',t=>{
+  const commands=['move_l','preview_ik','move_joint','gripper','preset','software_stop','get_state'];
+  for(const change of [{nonce:'wrong'},{pose_frame:'sdk_tool'},{protocol_version:'unknown'},
+    {correlated_completions:false},{software_stop_ack:false},{software_stop_state_boundary:false}]){
+    const {client,socket}=fixture(t,{capability:{commands,...change}}),count=socket.sent.length;
+    assert.equal(client.protocolReady,false);assert.equal(client.getRobotState(),null);
+    assert.equal(client.send({cmd:'get_state'}),false);assert.equal(socket.sent.length,count);
+  }
 });

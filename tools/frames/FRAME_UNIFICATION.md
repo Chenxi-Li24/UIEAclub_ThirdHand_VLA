@@ -198,3 +198,40 @@ feedback. This readonly display must NOT be treated as a freshness-qualified
 motion input; an eventual action consumer must reject old image evidence at
 use. Physical approval and actual TCP/path validation remain absent. The shared
 Robot service was not restarted, and no motion/gripper command was sent.
+
+## Home/grasp request preflight and live capability compatibility
+
+The operator explicitly requested return-Home and bottle grasp. A real
+read-only connection exposed an additional `preview_ik` capability in the live
+service's handshake. The original strict six-command client rejected that
+seven-command response, leaving protocol readiness false. The opt-in client
+now permits exactly this known read-only extension: seven unique advertised
+commands including `preview_ik` are passed to the original handshake validator
+with that extension removed. All required command, nonce, version, frame,
+units, replay, completion-correlation and software-stop-boundary checks remain.
+Unknown, duplicate or missing capabilities still reject the handshake, and
+`send()` still cannot dispatch `preview_ik` or other additional commands.
+
+The regression was observed RED (16/17 tests) then GREEN (17/17). The live
+read-only retry obtained fresh healthy stationary canonical feedback. Its
+no-write Home preflight returned `startup_home_not_validated`, because the
+current pose is not Home and no approved startup corridor/joint range exists.
+J3 remains0.49178deg from the upper limit, below the configured3deg margin.
+Grasp preview remains non-executable with no verified grip transform, no
+physically approved handeye and no executable supervised plan. Physical action
+authorization does not substitute for these missing measurements/path evidence.
+
+Artifacts: `artifacts/diagnostics/home-grasp-preflight-1RUhiV/` (initial failed
+handshake, RED/Green and baseline logs) and
+`artifacts/diagnostics/home-grasp-preflight-fixed-2AQZfc/` (live retry and final
+regression). No Home/movement/gripper command was dispatched. The shared Robot
+service, local checkout, active Vision processes and CAN owner were unchanged.
+The shared service currently ignores `time_sec` and uses configured SDK speed;
+this frame adapter is NOT a qualification of real trajectory timing or a bypass
+of Home, physical calibration, grip geometry or collision-path approval.
+
+Fresh final regression after the compatibility fix:90 focused tests pass
+(40 Node,31 Vision,4 migration,15 handeye), root Node132/132 pass, and root
+Python145 pass +49 subtests with the same2 baseline failures named earlier.
+The capability change was reviewed without finding an important regression;
+no reviewer or test result constitutes approval for a physical Home/grasp path.

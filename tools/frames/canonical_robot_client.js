@@ -19,6 +19,21 @@ class CanonicalRobotWebSocketClient extends RobotWebSocketClient{
     this.#policy=policy;
     Object.defineProperty(this,'framePolicyId',{enumerable:true,get:()=>this.#policy.id});
   }
+  _onMessage(raw){
+    let message;
+    try{message=JSON.parse(raw.toString());}
+    catch{return super._onMessage(raw);}
+    // The live service additionally advertises a read-only IK preview. Keep
+    // the original six-command client contract and every identity/stop check;
+    // do not expose preview_ik (or any unknown command) through send().
+    if(message?.type==='capability_response'&&Array.isArray(message.commands)&&
+        message.commands.length===7&&new Set(message.commands).size===7&&
+        message.commands.includes('preview_ik')){
+      return super._onMessage(Buffer.from(JSON.stringify({...message,
+        commands:message.commands.filter(command=>command!=='preview_ik')})));
+    }
+    return super._onMessage(raw);
+  }
   _normalizeState(message){
     let normalized;
     try{normalized=normalizeRobotState(message,this.#policy);}

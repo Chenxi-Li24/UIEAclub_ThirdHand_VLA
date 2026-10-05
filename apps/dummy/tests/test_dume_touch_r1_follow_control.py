@@ -1,6 +1,7 @@
 import sys
 from pathlib import Path
 import tempfile
+import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
@@ -239,8 +240,8 @@ def test_image_jacobian_servo_loads_axis_response_calibration_file():
         command = servo.update([0, 0, 0, 0, 0, 0], target(220, 300))
 
     assert command.ok
-    assert 0.0 < command.joints_deg[0] <= 2.0
-    assert 0.0 < command.joints_deg[3] <= 2.0
+    assert command.joints_deg[0] == pytest.approx(0.5 * 100 * 8 / (64 + 1e-3))
+    assert command.joints_deg[3] == pytest.approx(0.5 * 60 * 8 / (64 + 1e-3))
 
 
 def test_dume_touch_r1_follow_controller_uses_mink_when_3d_target_is_available():

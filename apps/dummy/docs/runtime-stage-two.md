@@ -15,15 +15,18 @@
 5. The single motion scheduler waits for fresh idle feedback, reads the latest
    observation, then computes J1/J4 correction. Immediately before sending it
    rechecks the latest target against the freshly measured joints.
-6. The controller caps each correction at 10 degrees/second times its period;
+6. The controller computes geometric correction without a Dummy speed/step cap;
    J1 retains the startup-relative 85 degree envelope, J4 uses the intersection
    of absolute [-35,35] and startup-relative +/-35 degree bounds.
 7. Workspace checks use the identical rigid-transform Z result without allocating
    all XYZ/homogeneous results. A 128-entry exact-input cache avoids rechecking
    identical poses. This is a base-plane guard, not full-path collision planning.
-8. TouchR1Adapter applies joint limits and speed-limited segment duration, then
+8. TouchR1Adapter applies joint limits without setting speed or segment duration, then
    sends one correlated command directly to Robot Service on 3000. SDK/CAN stays
    in Robot Service. Acceptance is distinct from terminal completion.
+   Robot Service uses SDK speed mode (default J1-J3: 15 deg/s, J4-J6: 50 deg/s).
+   The adapter completion deadline defaults to 45 seconds. Keyword keyframe
+   timestamps validate ordering only; SDK speed mode determines segment time.
 9. Request-ID futures dispatch replies independently of the 200-event log ring.
    Service and bridge validation errors now retain the request ID. Unmatched
    errors cannot complete another request. Failed/ambiguous sends are not retried.
@@ -78,7 +81,7 @@ already-issued motion can continue independently of the Dummy process.
 ## Remaining Continuous-Trajectory Work
 
 Ordinary Robot Service motion remains serial and busy-gated. A 10 Hz scheduler
-does not imply 10 physical retargets/second: the timed SDK segment and feedback
+does not imply 10 physical retargets/second: the SDK segment and feedback
 round-trip still impose pauses. This stage reduces stale targets, blocking work
 and unnecessary depth traffic, not every source of stop-start motion.
 
@@ -86,8 +89,8 @@ Inspected Startouch SDK exposes `update_joint_waypoint_chunk(waypoints,
 time_sec=None, speed_percent=None, switch_delay_sec=0.05)`. It updates future
 samples nonblockingly. The wrapper lacks an explicit whole-chunk completion
 signal. Its planner reports rows containing relative time, six joint angles,
-TCP pose, gripper and planning time. SDK maximum velocities exceed Dummy's
-10 degrees/second setting; timed duration alone cannot certify an active splice.
+TCP pose, gripper and planning time. Any future streaming route must retain the
+shared Robot Service speed policy, including at an active splice.
 
 Before enabling a dedicated continuous-follow command:
 
@@ -96,7 +99,7 @@ Before enabling a dedicated continuous-follow command:
 - Keep continuous stream state separate from ordinary motion; ordinary commands
   must not replace an active stream, and unrelated clients must not retarget it.
 - Check planned sample timestamps and all six per-sample velocities against
-  10 degrees/second, including the preserved prefix and new splice, not only
+  the service's effective per-joint caps, including the preserved prefix and new splice, not only
   an isolated rest-to-rest segment.
 - Confirm completion using fresh measured position/velocity and bounded timeouts.
   Closing Dummy must finish only its last bounded tail without depowering shared
@@ -111,7 +114,7 @@ shortcut in this phase. There is no claim that deployed hardware is now smooth.
 
 The CI Dummy test step includes request correlation, latest-target scheduling,
 keyword arbitration, stale/duplicate frames, receive/decode cleanup, geometry
-equivalence and range/speed constraints. Speech tests run an actual loopback
+equivalence, range constraints and shared speed policy. Speech tests run an actual loopback
 WebSocket server with fake ASR. Robot tests use `STARTOUCH_SIMULATE=1` only.
 No SDK import, real camera or CAN is required by these added tests.
 
@@ -129,4 +132,27 @@ No SDK import, real camera or CAN is required by these added tests.
   its Linux run above provides the complete platform regression result.
 - No real motor, camera or ASR-model acceptance test was performed. The deployed
   Ubuntu project and running services were not changed. Temporary test snapshots
-  are disposable; no backup, Git commit or push is part of this phase.
+  are disposable. These counts describe the pre-merge runtime stage, not the
+  subsequent shared-speed-policy regression.
+
+## Shared Speed Policy Update
+
+The former Dummy 10 deg/s budget and duration formula were removed after
+integrating the remote SDK speed-mode changes. Legacy speed settings are no
+longer consumed by the image controller/adapter; production configurations no
+longer advertise them. Requests use the Robot Service policy, including its
+lower configured scales, with no per-command Dummy override. SDK configuration
+requirements are documented in `services/robot/config/README.md`.
+The follow-stack supervisor gives its child 60 seconds to finish a bounded
+45-second completion wait and close readers/workers. Neither change modifies
+the deployed Ubuntu SDK or starts real hardware. Hardware acceptance remains
+separate, especially for larger follow targets and faster J4 movements.
+
+Shared-policy regression used a disposable Ubuntu source snapshot, not the
+deployed project. The final results were 171 full Node tests passed; 148 full
+Python tests and 58 subtests passed; 133 Dummy adapter/controller/legacy tests
+passed with the existing URDF/meshes read-only; 25 Robot Service tests passed
+again after removing redundant legacy duration arguments. CI source-boundary
+audit also passed. Simulation confirmed follow/keyword completion and that a
+separate robot client remains usable after Dummy exits. No real motor speed
+or camera/ASR acceptance was performed.

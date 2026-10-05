@@ -3,19 +3,14 @@ from __future__ import annotations
 from dataclasses import dataclass
 import json
 import math
-import time
 from pathlib import Path
 
 import numpy as np
-
-from .filters import clamp
-
 
 @dataclass(frozen=True)
 class ImageAxis:
     joint_index: int
     px_per_deg: tuple[float, float]
-    max_speed_deg_s: float
     max_excursion_deg: float | None
     min_deg: float | None
     max_deg: float | None
@@ -38,7 +33,8 @@ class ImageJacobianServo:
 
     Each enabled axis declares how a +1 degree motion changes image-center error
     in pixels. The controller solves a damped least-squares step, then clamps it
-    through joint limits and a base-pose excursion envelope.
+    through joint limits and a base-pose excursion envelope. Robot Service owns
+    trajectory speed; this controller computes geometry, not a per-cycle speed.
     """
 
     def __init__(self, config):
@@ -47,12 +43,6 @@ class ImageJacobianServo:
         self.enabled = bool(options.get("enabled", False))
         self.deadzone = float(options.get("deadzone_px", 12.0))
         self.gain = float(options.get("gain", 0.45))
-        self.max_speed = float(options.get("max_speed_deg_s", 10.0))
-        self.control_period_s = float(options.get("control_period_s", 0.2))
-        self.max_control_dt_s = float(options.get("max_control_dt_s", 0.25))
-        for value in (self.max_speed, self.control_period_s, self.max_control_dt_s):
-            if not math.isfinite(value) or value <= 0:
-                raise ValueError("image servo speed and control periods must be finite and positive")
         self.damping = float(options.get("damping", 1e-3))
         self.divergence_px = float(options.get("divergence_px", 10.0))
         self.min_response_norm = float(options.get("min_response_norm_px_per_deg", 0.2))
@@ -61,14 +51,12 @@ class ImageJacobianServo:
         self._last_delta = [0.0] * 6
         self._base_joints = None
         self.last_debug = {}
-        self._last_update_at = None
 
     @property
     def available(self):
         return self.enabled and bool(self.axes)
 
     def reset(self, joints=None):
-        self._last_update_at = None
         self._last_error = None
         self._last_delta = [0.0] * 6
         self.last_debug = {}
@@ -76,18 +64,11 @@ class ImageJacobianServo:
             self._base_joints = [float(value) for value in joints]
 
     def update(self, joints, target, *, dt_s=None):
+        # Legacy callers may pass dt; trajectory speed belongs to Robot Service.
+        del dt_s
         current = [float(value) for value in joints]
         if len(current) != 6 or not all(math.isfinite(value) for value in current):
             raise ValueError("image servo requires six finite joint positions")
-        now = time.monotonic()
-        if dt_s is None:
-            dt_s = self.control_period_s if self._last_update_at is None else now - self._last_update_at
-        dt_s = float(dt_s)
-        if not math.isfinite(dt_s) or dt_s <= 0:
-            raise ValueError("image servo control dt must be finite and positive")
-        self._last_update_at = now
-        # A detector stall must not accumulate a large catch-up movement.
-        dt_s = min(dt_s, self.max_control_dt_s)
         if not self.available:
             return self._command(False, current, reason="disabled")
         if not getattr(target, "found", False):
@@ -136,14 +117,8 @@ class ImageJacobianServo:
             raw_delta = self.gain * np.linalg.pinv(matrix) @ desired
 
         delta = [0.0] * 6
-        clipped_axes = []
         for value, axis in zip(raw_delta, self.axes):
-            joint_delta = float(value) * axis.weight
-            angle_budget = axis.max_speed_deg_s * dt_s
-            limited = clamp(joint_delta, -angle_budget, angle_budget)
-            if abs(limited - joint_delta) > 1e-6:
-                clipped_axes.append(axis.name)
-            delta[axis.joint_index] = limited
+            delta[axis.joint_index] = float(value) * axis.weight
 
         reason = "image_jacobian"
         if self._last_error is not None:
@@ -161,12 +136,10 @@ class ImageJacobianServo:
         applied_delta = [out[index] - current[index] for index in range(6)]
         self._last_delta = applied_delta
         debug = {
-            "control_dt_s": dt_s,
-            "max_speeds_deg_s": [axis.max_speed_deg_s for axis in self.axes],
+            "speed_policy": "robot_service",
             "active_axes": [axis.name for axis in self.axes],
             "desired_px": desired.tolist(),
             "raw_delta_deg": [float(value) for value in raw_delta],
-            "clipped_axes": clipped_axes,
             "output_clamps": clamp_debug,
         }
         return self._command(True, out, (ex, ey), reason, applied_delta, debug)
@@ -228,13 +201,9 @@ class ImageJacobianServo:
             limits = (max(limits[0], item_min) if limits[0] is not None else item_min, limits[1])
         if item_max is not None:
             limits = (limits[0], min(limits[1], item_max) if limits[1] is not None else item_max)
-        max_speed = float(item.get("max_speed_deg_s", self.max_speed))
-        if not math.isfinite(max_speed) or max_speed <= 0:
-            raise ValueError("image axis max speed must be finite and positive")
         return ImageAxis(
             joint_index=joint_index,
             px_per_deg=(response[0], response[1]),
-            max_speed_deg_s=max_speed,
             max_excursion_deg=self._maybe_float(item.get("max_excursion_deg", options.get("max_excursion_deg"))),
             min_deg=limits[0],
             max_deg=limits[1],

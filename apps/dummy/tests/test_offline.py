@@ -280,7 +280,7 @@ def test_vision_service_tracker_does_not_redetect_the_same_camera_frame():
 
     assert first.kind == "mediapipe_face"
     # Repeated source frames are stale evidence and must never authorize motion.
-    assert second.kind == "vision_frame_stale"
+    assert second.kind == "vision_frame_duplicate"
     assert len(calls) == 1
     assert len(calls) == 1
 
@@ -498,7 +498,7 @@ def test_director_recovers_when_a_search_command_hits_a_joint_limit():
     assert director.follow.base == joints
 
 
-def test_touch_r1_adapter_sends_timed_move_joint_for_follow_speed():
+def test_touch_r1_adapter_sends_target_without_local_speed_override():
     class FakeRobotClient:
         def __init__(self):
             self.snapshot = RobotSnapshot(
@@ -530,10 +530,10 @@ def test_touch_r1_adapter_sends_timed_move_joint_for_follow_speed():
 
     assert command == "move_joint"
     assert kwargs["joints_deg"] == [4.0, 0.0, -4.0, 37.0, 0.0, 0.0]
-    assert kwargs["time_sec"] == 0.8
+    assert "time_sec" not in kwargs
 
 
-def test_touch_r1_adapter_refreshes_joint_state_before_speed_calculation():
+def test_touch_r1_adapter_refreshes_joint_state_before_sending():
     class FreshStateClient:
         def __init__(self):
             self.snapshot = RobotSnapshot(
@@ -567,7 +567,7 @@ def test_touch_r1_adapter_refreshes_joint_state_before_speed_calculation():
     assert command == "move_joint"
     assert kwargs["joints_deg"][0] == 8.0
     assert kwargs["joints_deg"][3] == 41.0
-    assert kwargs["time_sec"] == 0.8
+    assert "time_sec" not in kwargs
 
 
 def test_touch_r1_adapter_can_send_servo_targets_for_follow_mode():

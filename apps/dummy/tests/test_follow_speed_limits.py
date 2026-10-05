@@ -26,23 +26,29 @@ def far_target():
 
 
 @pytest.mark.parametrize("dt_s", [0.05, 0.10, 0.20])
-def test_j1_j4_angle_budget_scales_with_control_time(dt_s):
+def test_j1_j4_geometry_is_not_clipped_to_ten_degrees_per_second(dt_s):
     servo = ImageJacobianServo(servo_config())
     measured = [0, 0, -10, 0, 0, 0]
     servo.reset(measured)
     command = servo.update(measured, far_target(), dt_s=dt_s)
     assert command.ok
-    assert abs(command.delta_deg[0]) == pytest.approx(10 * dt_s)
-    assert abs(command.delta_deg[3]) == pytest.approx(10 * dt_s)
+    reference = ImageJacobianServo(servo_config())
+    reference.reset(measured)
+    assert command.joints_deg == pytest.approx(reference.update(measured, far_target(), dt_s=1).joints_deg)
+    assert abs(command.delta_deg[0]) > 10 * dt_s
+    assert abs(command.delta_deg[3]) > 10 * dt_s
+    assert command.debug["speed_policy"] == "robot_service"
     assert all(command.delta_deg[i] == 0 for i in [1, 2, 4, 5])
 
 
-def test_stall_does_not_accumulate_a_large_angle_budget():
+def test_stall_cannot_accumulate_a_dt_based_angle_budget():
     servo = ImageJacobianServo(servo_config())
     measured = [0, 0, -10, 0, 0, 0]
     servo.reset(measured)
     command = servo.update(measured, far_target(), dt_s=20)
-    assert max(abs(value) for value in command.delta_deg) <= 2.5
+    assert command.joints_deg == pytest.approx(servo.update(measured, far_target(), dt_s=0.1).joints_deg)
+    assert abs(command.joints_deg[0]) <= 85
+    assert abs(command.joints_deg[3]) <= 35
 
 
 @pytest.mark.parametrize("current_j4,target_v,expected", [(34.8, 480, 35), (-34.8, 0, -35)])
@@ -66,8 +72,10 @@ def test_config_keeps_j1_excursion_and_replaces_fixed_angle_limits():
     assert axes[0]["max_excursion_deg"] == 85
     assert axes[3]["max_excursion_deg"] == 35
     for index in (0, 3):
-        assert axes[index]["max_speed_deg_s"] == 10
+        assert "max_speed_deg_s" not in axes[index]
         assert "max_step_deg" not in axes[index]
+    assert "max_speed_deg_s" not in robot
+    assert "max_speed_deg_s" not in options
 
 
 def adapter():
@@ -82,47 +90,52 @@ def adapter():
 
 
 @pytest.mark.parametrize("joint", range(6))
-def test_adapter_preserves_target_and_extends_short_duration_for_every_joint(joint):
+def test_adapter_preserves_every_joint_target_and_defers_speed_to_service(joint):
     instance = adapter()
     target = list(instance.client.snapshot.joints_deg)
     target[joint] += -20 if joint == 2 else 20
     asyncio.run(instance.send_joint_target(target, time_sec=0.1, allow_large=True))
     payload = instance.client.command_wait.call_args.kwargs
     assert payload["joints_deg"] == target
-    assert payload["time_sec"] == 4.0
-    # Sample the standard zero-velocity-endpoint quintic used by the SDK.
-    peak_speed = max(30 * u**2 * (1 - u)**2 * 20 / payload["time_sec"] for u in [i / 1000 for i in range(1001)])
-    assert peak_speed <= 10.0
+    assert "time_sec" not in payload
+    assert "speed_percent" not in payload
+    assert payload["timeout"] == 45.0
 
 
-def test_adapter_rejects_duration_that_server_would_shorten():
+def test_large_valid_target_is_not_rejected_by_removed_duration_formula():
     instance = adapter()
-    with pytest.raises(ValueError, match="30 second"):
-        asyncio.run(instance.send_joint_target([160, 0, -10, 0, 0, 0]))
-    instance.client.command_wait.assert_not_awaited()
+    assert asyncio.run(instance.send_joint_target([160, 0, -10, 0, 0, 0]))
+    assert instance.client.command_wait.call_args.kwargs["joints_deg"][0] == 160
 
 
 @pytest.mark.parametrize("value", [0, -1, math.nan, math.inf])
-def test_adapter_rejects_invalid_speed(value):
-    with pytest.raises(ValueError, match="speed"):
-        TouchR1Adapter({"robot": {"max_speed_deg_s": value}, "workspace_guard": {"enabled": False}})
+def test_adapter_rejects_invalid_completion_timeout(value):
+    with pytest.raises(ValueError, match="timeout"):
+        TouchR1Adapter({"robot": {"motion_completion_timeout_s": value}, "workspace_guard": {"enabled": False}})
 
 
-def test_servo_transport_carries_the_speed_limited_duration():
+def test_servo_transport_does_not_override_upstream_speed():
     instance = adapter()
     instance.follow_command = "servo"
     asyncio.run(instance.send_joint_target([20, 0, -10, 0, 0, 0], time_sec=0.1))
     args, payload = instance.client.command_wait.call_args
     assert args == ("servo",)
-    assert payload["time_sec"] == 4.0
+    assert "time_sec" not in payload
+    assert payload["timeout"] == 45.0
 
 
-def test_zero_preset_carries_the_speed_limited_duration():
+def test_zero_preset_waits_for_correlated_upstream_completion():
     instance = adapter()
     instance.wait_idle = AsyncMock(return_value=instance.client.snapshot)
     instance.client.open = AsyncMock()
     asyncio.run(instance.go_home())
-    instance.client.command.assert_awaited_once_with("preset", name="zero", time_sec=2.0)
+    args, payload = instance.client.command_wait.call_args
+    assert args == ("preset",)
+    assert payload["name"] == "zero"
+    assert payload["request_id"].startswith("dummy-home-")
+    assert payload["terminal_only"] is True
+    assert payload["timeout"] == 45.0
+    assert "time_sec" not in payload
 
 
 def test_missing_joint_feedback_refuses_speed_limited_motion():

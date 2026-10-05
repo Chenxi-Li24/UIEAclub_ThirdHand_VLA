@@ -221,7 +221,7 @@ class DirectionalJointOrchestrator {
     this.speedScale = Number(options.speedScale ?? 0.05);
     this.stateMaxAgeMs = Number(options.stateMaxAgeMs ?? 500);
     this.jointToleranceDeg = Number(options.jointToleranceDeg ?? 1);
-    this.maxJointTimeoutMs = Number(options.maxJointTimeoutMs ?? 35_000);
+    this.maxJointTimeoutMs = Number(options.maxJointTimeoutMs ?? 45_000);
     this.sessions = new Map();
     this.consumed = new Map();
     this.active = null;
@@ -397,11 +397,7 @@ class DirectionalJointOrchestrator {
     }
 
     const requestId = this.makeRequestId();
-    const timeSec = this.moveTimeFor(planned.targetJointsDeg);
-    const timeoutMs = Math.min(
-      this.maxJointTimeoutMs,
-      Math.max(1000, (timeSec + 3) * 1000)
-    );
+    const timeoutMs = this.maxJointTimeoutMs;
     const normalized = normalizeDirectionalMoves(params);
     const label = normalized.moves.map(move => `${move.action} ${move.deltaDeg}°`).join(' + ');
     this._begin({
@@ -417,7 +413,6 @@ class DirectionalJointOrchestrator {
     const sent = this.sendRobot({
       cmd: 'move_joint',
       joints_rad: planned.targetJointsDeg.map(value => value * Math.PI / 180),
-      time_sec: timeSec,
       request_id: requestId,
       source: `language:${candidate.traceId}`,
       speed_scale: this.speedScale,

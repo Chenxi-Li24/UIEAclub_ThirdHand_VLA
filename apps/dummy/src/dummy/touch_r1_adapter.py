@@ -20,14 +20,12 @@ class TouchR1Adapter:
             "joint_limits_deg",
             [[-162, 162], [-12, 201], [-183, 0], [-98, 98], [-98, 98], [-164, 164]],
         )
-        self.max_speed_deg_s = float(robot.get("max_speed_deg_s", 10.0))
-        if not math.isfinite(self.max_speed_deg_s) or self.max_speed_deg_s <= 0:
-            raise ValueError("robot max speed must be finite and positive")
         self.min_command_interval = float(robot.get("min_command_interval_s", 0.10))
-        self.servo_min_time_sec = float(robot.get("servo_min_time_sec", 0.20))
         self.follow_command = str(robot.get("follow_command", "move_joint") or "move_joint")
         self.follow_wait_complete = bool(robot.get("follow_wait_complete", True))
-        self.follow_ack_timeout = float(robot.get("follow_ack_timeout_s", 1.0))
+        self.completion_timeout = float(robot.get("motion_completion_timeout_s", 45.0))
+        if not math.isfinite(self.completion_timeout) or self.completion_timeout <= 0:
+            raise ValueError("motion completion timeout must be finite and positive")
         self.home_joints = robot.get("home_joints_deg")
         self.home_preset_name = str(robot.get("home_preset_name", "zero") or "zero")
         self.workspace_guard = workspace_guard if workspace_guard is not None else WorkspaceGuard(config)
@@ -57,16 +55,16 @@ class TouchR1Adapter:
             target = self._validate(self.home_joints)
             if len(start) == 6:
                 await self.send_joint_target(target, allow_large=True)
-                await self.wait_idle(timeout=35.0)
+                await self.wait_idle()
                 return await self.get_state()
         if self.home_preset_name != "zero":
-            raise ValueError("speed-limited home requires zero or explicit home_joints_deg")
-        state = await self.get_state()
-        duration = self._time_for_speed_limit([0.0] * 6, state.joints_deg)
-        if duration > 30.0:
-            raise ValueError("speed-limited home exceeds Robot Service's 30 second duration limit")
-        await self.client.command("preset", name="zero", time_sec=duration)
-        return await self.wait_idle(timeout=35.0)
+            raise ValueError("home requires zero or explicit home_joints_deg")
+        await self.get_state()
+        await self._command_wait(
+            "preset", name="zero", request_id=f"dummy-home-{uuid4()}",
+            timeout=self.completion_timeout, terminal_only=True,
+        )
+        return await self.wait_idle()
 
     async def close(self):
         try:
@@ -113,6 +111,8 @@ class TouchR1Adapter:
         return out
 
     async def send_joint_target(self, joints_deg, *, allow_large=False, time_sec=None, skip_if_busy=False, before_send=None):
+        # Retain the legacy keyword without overriding SDK speed-mode planning.
+        del time_sec
         if self.client.snapshot.moving or self.client.snapshot.state_name == "MOVING":
             if skip_if_busy:
                 return False
@@ -136,51 +136,43 @@ class TouchR1Adapter:
             allowed, reason = self.workspace_guard.check(target)
             if not allowed:
                 raise RuntimeError(f"workspace guard rejected target: {reason}")
-        required_time = self._time_for_speed_limit(target, state.joints_deg)
-        if time_sec is None:
-            time_sec = required_time
-        else:
-            time_sec = float(time_sec)
-            if not math.isfinite(time_sec) or time_sec <= 0:
-                raise ValueError("motion duration must be finite and positive")
-            time_sec = max(required_time, time_sec)
-        if time_sec > 30.0:
-            raise ValueError("speed-limited motion exceeds Robot Service's 30 second duration limit")
         request_id = f"dummy-follow-{uuid4()}"
         self.last_request_id = request_id
         if not self.follow_wait_complete:
             if self.follow_command == "servo":
-                await self.client.command("servo", joints=target, time_sec=time_sec, request_id=request_id)
+                await self.client.command("servo", joints=target, request_id=request_id)
             else:
                 await self.client.command(
                     "move_joint",
                     joints_deg=target,
-                    time_sec=max(self.servo_min_time_sec, float(time_sec)),
                     source="dummy_follow",
                     request_id=request_id,
                 )
             self._last_send = time.monotonic()
             return True
         if self.follow_command == "servo":
-            waiter = self.client.command_wait(
+            await self._command_wait(
                 "servo",
                 joints=target,
-                time_sec=time_sec,
                 request_id=request_id,
-                timeout=max(self.follow_ack_timeout, float(time_sec) + 1.0),
+                timeout=self.completion_timeout,
                 terminal_only=self.follow_wait_complete,
             )
         else:
-            waiter = self.client.command_wait(
+            await self._command_wait(
                 "move_joint",
                 joints_deg=target,
-                time_sec=max(self.servo_min_time_sec, float(time_sec)),
                 source="dummy_follow",
                 request_id=request_id,
-                timeout=max(self.follow_ack_timeout, float(time_sec) + 1.0) if self.follow_wait_complete else self.follow_ack_timeout,
+                timeout=self.completion_timeout,
                 terminal_only=self.follow_wait_complete,
             )
-        self._inflight = asyncio.create_task(waiter)
+        self._last_send = time.monotonic()
+        return True
+
+    async def _command_wait(self, command, **payload):
+        request_id = payload.get("request_id")
+        self._inflight = asyncio.create_task(self.client.command_wait(command, **payload))
         try:
             ack = await asyncio.shield(self._inflight)
         finally:
@@ -194,16 +186,7 @@ class TouchR1Adapter:
             raise RuntimeError(f"robot command {ack['status']}: {ack.get('msg', ack)}")
         if ack.get("reached") is False:
             raise RuntimeError("robot command completed without reaching its target")
-        self._last_send = time.monotonic()
-        return True
-
-    def _time_for_speed_limit(self, target, current):
-        if not current or len(current) != 6 or not all(math.isfinite(float(value)) for value in current):
-            raise ValueError("speed-limited motion requires six finite measured joints")
-        delta = max(abs(float(dst) - float(src)) for dst, src in zip(target, current))
-        # A zero-endpoint-velocity quintic peaks at 1.875 * delta / duration.
-        # Use 2.0 conservatively; do not mistake average speed for peak speed.
-        return max(self.servo_min_time_sec, 2.0 * delta / self.max_speed_deg_s)
+        return ack
 
     async def set_gripper(self, position):
         if self.client.snapshot.moving or self.client.snapshot.state_name == "MOVING":
@@ -216,7 +199,8 @@ class TouchR1Adapter:
     async def software_stop(self):
         await self.client.command("software_stop")
 
-    async def wait_idle(self, timeout=8.0):
+    async def wait_idle(self, timeout=None):
+        timeout = self.completion_timeout if timeout is None else timeout
         deadline = time.time() + timeout
         while time.time() < deadline:
             state = await self.get_state()

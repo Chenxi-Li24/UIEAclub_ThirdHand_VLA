@@ -112,37 +112,41 @@ events expire after three seconds instead of executing a backlog after motion.
 
 ## Safety
 
-The adapter retains joint limits, finite-value validation, timed speed
-limiting, command intervals, motion-busy checks, workspace geometry checks and
+The adapter retains joint limits, finite-value validation,
+command intervals, motion-busy checks, workspace geometry checks and
 request-matched completion/error handling. Robot Service's own readiness,
 fresh-feedback, joint-limit and speed checks are unchanged. The workspace guard
 checks targets against the base bottom plane; it is not full collision planning.
 
 ## Follow speed and range
 
-The J1/J4 image servo uses `max_speed_deg_s: 10.0` and computes each correction
-budget as speed times control period. There is no fixed 0.55/0.08 degree step
-cap. J1 keeps its 85 degree excursion envelope; J4 has absolute limits of
+The J1/J4 image servo computes a geometric correction from pixel error, gain
+and calibrated axis response. Dummy no longer clips it to a local 10 deg/s
+budget or a fixed step size. J1 keeps its 85 degree excursion envelope; J4 has absolute limits of
 [-35, 35] degrees and a 35 degree excursion envelope around the startup pose.
 Their intersection with hardware limits remains enforced. A pose outside the
 follow envelope holds rather than snapping back into it.
 
-Dummy timed joint targets are no longer clipped to a fixed relative angle.
-Instead, the adapter extends the duration to at least `2 * max_joint_delta / 10`.
-The factor 2 conservatively covers the 1.875 peak/average ratio of a standard
-zero-endpoint-velocity quintic. It applies to all six joints, including gesture
-targets; keyword gestures are not restricted to J1/J4. Servo and zero-preset
-requests carry this duration through Robot Service, so deploy the application
-and the corresponding Robot Service change together. Explicit nonzero home
-targets use the same limiter; an unknown named home preset is rejected because
-its speed cannot be computed without its joint target.
+Dummy sends joint targets without `time_sec` or a speed override. Robot Service
+uses the shared SDK speed-mode policy: default maximum J1-J3 15 deg/s and J4-J6
+50 deg/s; a lower service speed scale stays lower. This applies to following,
+all six gesture axes, explicit zero and calibration scripts. Keyword keyframe
+timestamps retain ordering, but no longer prescribe segment duration or easing.
+The SDK plans segment time. The adapter uses a separate bounded completion
+deadline, `robot.motion_completion_timeout_s: 45.0`, not an endpoint-duration
+estimate. Legacy adapter `time_sec` arguments are accepted but ignored.
+See [Robot speed policy and SDK prerequisite](../../services/robot/config/README.md)
+before deployment; Robot Service refuses hardware connection if the local SDK's
+velocity reference does not match. No SDK runtime file is patched by this change.
 
 The minimum send interval is 0.10 seconds (at most 10 commands/second). The
 working hardware loop also caps its requested rate at 10 Hz. This is a rate
 ceiling, not a promise of 10 Hz physical retargeting: the current service still
 rejects motion replacement while a joint trajectory is active. Hardware speeds,
 especially after SDK waypoint adjustments, require feedback-based acceptance;
-offline quintic checks do not establish measured motor speeds.
+offline policy tests do not establish measured motor speeds. Removing the local
+step budget permits larger follow corrections; validate gains and axis signs
+before running hardware. Following still waits for each trajectory to finish.
 
 See [the follow speed and latency plan](docs/follow-speed-and-latency-plan.md)
 and [the runtime implementation guide](docs/runtime-stage-two.md) for the current

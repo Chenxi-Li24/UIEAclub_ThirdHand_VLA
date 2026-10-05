@@ -8,7 +8,7 @@ for (const command of [
   { cmd: 'servo', joints: [20, 0, -10, 0, 0, 0] },
   { cmd: 'preset', name: 'zero' },
 ]) {
-  test(`${command.cmd} forwards an explicit speed-limited duration`, () => {
+  test(`${command.cmd} retains remote SDK speed policy despite legacy duration`, () => {
     const controller = new RobotController({ speedScale: 0.05, minMoveTimeSec: 0.5, maxMoveTimeSec: 30 });
     controller.bridge.connected = true;
     controller.stateReady = true;
@@ -20,7 +20,8 @@ for (const command of [
     controller.handleCommand({ ...command, time_sec: 4, request_id: 'dummy-timed' }, reply => replies.push(reply));
     assert.deepEqual(replies, []);
     assert.equal(sent.length, 1);
-    assert.equal(sent[0].time_sec, 4);
+    assert.equal('time_sec' in sent[0], false);
+    assert.equal(sent[0].speed_percent, 0.05);
     assert.equal(sent[0].request_id, 'dummy-timed');
     assert.equal(sent[0].cmd, 'move_joint');
   });

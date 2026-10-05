@@ -109,11 +109,11 @@ class PersonFollowRuntime:
     async def _measured_joints(self):
         if self.adapter is not None:
             # Finish busy work before reading the latest observation, not after.
-            state = await self.adapter.wait_idle(timeout=35.0)
+            state = await self.adapter.wait_idle(timeout=45.0)
             self.joints = list(state.joints_deg)
         return list(self.joints)
 
-    async def _send(self, target, *, time_sec=None, before_send=None):
+    async def _send(self, target, *, before_send=None):
         if self.stopping.is_set():
             return False
         if self.guard is not None:
@@ -122,7 +122,7 @@ class PersonFollowRuntime:
                 self.last_reason = reason
                 return False
         if self.adapter is not None:
-            sent = await self.adapter.send_joint_target(target, time_sec=time_sec, skip_if_busy=True, before_send=before_send)
+            sent = await self.adapter.send_joint_target(target, skip_if_busy=True, before_send=before_send)
             self.metrics["request_id"] = getattr(self.adapter, "last_request_id", None)
             self.metrics["completed"] = sent
             return sent
@@ -212,17 +212,17 @@ class PersonFollowRuntime:
             if self.guard is not None and not self.guard.check(target)[0]:
                 self.last_reason = "gesture_workspace_rejected"
                 return False
-            targets.append((target, timestamp - previous_t))
+            targets.append(target)
             previous_t = timestamp
         self.mode = "GESTURE"
         try:
-            for target, duration in targets:
+            for target in targets:
                 if self.stopping.is_set():
                     break
                 measured = await self._measured_joints()
                 if max(abs(a - b) for a, b in zip(measured, target)) < 1e-5:
                     continue
-                if not await self._send(target, time_sec=max(0.2, duration)):
+                if not await self._send(target):
                     self.last_reason = "gesture_interrupted_or_rejected"
                     return False
             return True

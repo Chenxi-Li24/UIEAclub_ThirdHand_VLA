@@ -436,12 +436,10 @@ class LanguageUpstreamBridge extends EventEmitter {
     const state = this.getRobotState();
     const position = finiteArray(command.position, 3);
     const euler = finiteArray(command.euler, 3);
-    const timeSec = Number(command.time_sec);
     if (!this._canStart(state) || !position || !euler ||
         !finiteArray(state.flangePositionM, 3) ||
         position.some((value, index) =>
           value < WORKSPACE_M[index][0] || value > WORKSPACE_M[index][1]) ||
-        !Number.isFinite(timeSec) || timeSec < 2 || timeSec > 30 ||
         typeof command.request_id !== 'string' || !command.request_id) return false;
     this._beginCorrelation({
       kind: 'cartesian', command: 'move_l',
@@ -451,7 +449,7 @@ class LanguageUpstreamBridge extends EventEmitter {
         value - state.flangePositionM[index])),
       sentAtMs: this.now(),
     });
-    this._sendJson({ cmd: 'move_l', position, euler, time_sec: timeSec });
+    this._sendJson({ cmd: 'move_l', position, euler });
     return true;
   }
 

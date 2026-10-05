@@ -12,36 +12,33 @@
 
 | Layer | Previous policy | Current policy |
 | --- | --- | --- |
-| J1 image servo | 0.55 degrees/correction | 10 degrees/second times control dt |
-| J4 image servo | 0.08 degrees/correction | 10 degrees/second times control dt |
+| J1 image servo | Local fixed step / 10 deg/s budget | Geometric target; SDK speed mode |
+| J4 image servo | Local fixed step / 10 deg/s budget | Geometric target; SDK speed mode |
 | J4 range | -1.5 to 4 degrees; 4 degree excursion | -35 to 35 degrees; 35 degree excursion |
-| Adapter | Fixed relative-angle clipping | Full target; speed-limited duration |
+| Adapter | Fixed relative-angle clipping / timed 10 deg/s | Full target; no time or speed override |
 | Send interval | 0.22 seconds in hardware entrypoint | 0.10 seconds |
 
 J1 retains its 85 degree startup-relative envelope and hardware limits. J4
 uses the intersection of its absolute and startup-relative envelopes. Out-of-range
 starting poses hold; they do not trigger an immediate return into the envelope.
 
-The controller uses degrees, seconds and a speed budget `abs(delta) <= speed * dt`.
-Detector stalls cannot accumulate unlimited dt: the default maximum control dt is
-0.25 seconds. The current hardware loop passes its requested period explicitly;
-actual command throughput is still reduced by detection and busy waits.
+The controller uses geometric pixel-to-joint corrections, damping and gain.
+It no longer consumes the previous 10 deg/s or dt-based correction budget;
+detector stalls do not accumulate dt. Stale/held observations remain rejected.
+Actual command throughput is still reduced by detection and busy waits.
 
-The adapter requires six finite measured joints, preserves the requested target,
-and computes `duration >= 2 * max(abs(target - measured)) / max_speed_deg_s`.
-For the SDK's documented single-segment quintic with zero endpoint velocity,
-the peak/average speed ratio is 1.875; factor 2 is conservative. Explicit durations
-can lengthen but never shorten this value. Requests exceeding the server's 30
-second ceiling are refused rather than silently accelerated by server clipping.
-SDK waypoint modification or motion outside the expected single-segment shape
-requires trajectory/feedback verification; a duration calculation alone does not
-certify measured motor peak speed.
+The adapter requires six finite measured joints and preserves the requested
+target. It sends neither `time_sec` nor a speed override. Robot Service applies
+SDK speed-mode planning: default J1-J3 15 deg/s and J4-J6 50 deg/s, or a lower
+configured service scale. Completion uses a separate 45-second deadline,
+not a motion-duration estimate. Explicit zero and calibration scripts share
+this policy. Gesture keyframe timestamps validate ordering, not execution time.
+See `services/robot/config/README.md` for the runtime SDK reference prerequisite.
+No local SDK or deployed services are modified by this source change.
 
 The 0.10 second interval caps request traffic at 10 Hz. It provides a 100 ms
 target-update budget without encouraging overlapping calls into a busy SDK.
-It does not remove Robot Service's motion-active gate or the configured minimum
-motion duration (0.20 seconds in the adapter, with service constraints also
-applying). This parameter change alone does not eliminate
+It does not remove Robot Service's motion-active gate. This parameter change alone does not eliminate
 stop-start following.
 
 ## Phase Status
@@ -88,8 +85,8 @@ The following list retains the roadmap and acceptance requirements:
    acceleration and interruption behavior offline first. Add a dedicated Robot
    Service command for bounded follow updates; do not globally remove the busy
    check for ordinary webpage, gesture or grasp commands. All SDK/CAN access
-   stays inside Robot Service. Validate planned samples against 10 degrees/second
-   for each joint and verify measured motion before enabling hardware use.
+   stays inside Robot Service. Validate planned samples against the service's
+   effective per-joint speed caps and verify measured motion before enabling hardware use.
 8. Implement graceful exit: inhibit producers, discard unsent Dummy targets,
    finish the current request by request ID, cancel and await owned tasks, close
    owned sockets/readers/models/windows/logs, and release the process lock.
@@ -99,14 +96,16 @@ The following list retains the roadmap and acceptance requirements:
 
 ## Acceptance And Risk
 
-- Offline: vary dt, exercise both J4 range boundaries, preserve J1 excursion,
+- Offline: ensure geometric targets do not depend on dt, exercise both J4 range boundaries, preserve J1 excursion,
   check all six gesture axes, refuse nonfinite input/missing feedback, verify
-  duration forwarding through move_joint/servo/zero-preset, and reject server
-  duration truncation. Test long event streams, stale frames and shutdown races.
+  absence of duration/speed overrides through move_joint/servo/zero-preset,
+  shared SDK caps and bounded completion waits. Test long event streams,
+  stale frames and shutdown races.
 - Hardware (separate authorization): clear the workspace, validate axis-response
   signs, measure J1/J4 speeds, loss/reacquisition, keyword arbitration and exit.
   Test that webpage control remains functional after Dummy has exited.
-- Increasing J4 range increases physical travel. Retain hardware limits, fresh
+- Removing the local 10 deg/s/step budget permits larger corrections and faster
+  J4 travel. Retain hardware limits, fresh
   feedback, workspace checks and independent hardware stop access.
 - Default keyword mappings and the integrated runtime are implemented. Local
   offline tests do not establish real ASR quality, axis-response signs, physical

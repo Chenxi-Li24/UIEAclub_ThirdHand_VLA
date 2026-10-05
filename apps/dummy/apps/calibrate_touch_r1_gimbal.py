@@ -32,8 +32,6 @@ async def main(args):
     cfg["robot"]["health_url"] = args.robot_health
     cfg["robot"]["home_joints_deg"] = None
     cfg["robot"]["home_preset_name"] = "zero"
-    cfg["robot"]["max_speed_deg_s"] = 10.0
-    cfg["robot"]["servo_min_time_sec"] = 0.50
     adapter = TouchR1Adapter(cfg)
     await adapter.connect()
     try:
@@ -43,7 +41,7 @@ async def main(args):
             raise RuntimeError("robot state does not contain six joints")
         joints[args.joint - 1] += float(args.delta_deg)
         print(f"[calibrate] nudging J{args.joint} by {args.delta_deg:.2f} deg", flush=True)
-        await adapter.send_joint_target(joints, time_sec=0.8)
+        await adapter.send_joint_target(joints)
         await adapter.wait_idle(timeout=10.0)
         print("[calibrate] observe visualizer: target moved left/right/up/down/roll?", flush=True)
         if args.return_zero:

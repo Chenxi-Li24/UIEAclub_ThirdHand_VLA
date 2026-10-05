@@ -9,7 +9,7 @@ person_follow:
 robot:
   ws_url: "ws://127.0.0.1:3000/ws"
   health_url: "http://127.0.0.1:3000/health"
-  max_speed_deg_s: 10.0
+  motion_completion_timeout_s: 45.0
   min_command_interval_s: 0.10
 vision:
   service_port: 3100

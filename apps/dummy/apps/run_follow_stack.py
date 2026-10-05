@@ -180,7 +180,7 @@ def run_follow(args):
         if process.poll() is None:
             process.send_signal(signal.SIGTERM)
             try:
-                process.wait(timeout=40)
+                process.wait(timeout=60)
             except subprocess.TimeoutExpired:
                 print("[stack] Dummy cleanup timed out; terminating Dummy only; shared motion may still be finishing", flush=True)
                 process.kill()

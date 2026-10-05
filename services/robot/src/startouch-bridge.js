@@ -38,6 +38,7 @@ class StartouchBridge extends EventEmitter {
       STARTOUCH_INIT_SETTLE_SEC: String(this.config.initSettleSec),
       STARTOUCH_INIT_SAMPLE_COUNT: String(this.config.initSampleCount),
       STARTOUCH_INIT_MAX_DRIFT_DEG: String(this.config.initMaxDriftDeg),
+      STARTOUCH_SPEED_SCALE: String(Math.min(0.05, this.config.speedScale ?? 0.05)),
       STARTOUCH_EVENT_FD: '3',
     };
 

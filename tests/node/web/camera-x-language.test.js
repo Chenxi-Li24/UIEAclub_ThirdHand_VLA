@@ -321,3 +321,14 @@ test('web proxy binds successful camera IK preview to the pending candidate', as
   assert.deepEqual(bound.jointsDeg, [1, 2, 3, 4, 5, 6]);
   proxy.close();
 });
+
+test('confirmed camera-X move uses shared upstream speed rather than local duration',async()=>{
+  const {orchestrator,sent}=fixture({real:true});
+  const item=candidate(2);
+  orchestrator.register('browser',item);
+  orchestrator.decide('browser',{candidateId:item.candidateId,traceId:item.traceId,decision:'approve'});
+  await new Promise(resolve=>setImmediate(resolve));
+  const move=sent.find(c=>c.cmd==='move_l');
+  assert.ok(move);
+  assert.equal('time_sec' in move,false);
+});

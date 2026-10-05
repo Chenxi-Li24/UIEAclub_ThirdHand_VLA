@@ -84,9 +84,7 @@ async def main(argv=None):
     robot["ws_url"] = args.robot_ws
     robot["health_url"] = args.robot_health
     robot["follow_command"] = "move_joint"
-    robot["max_speed_deg_s"] = 10.0
     robot["min_command_interval_s"] = 0.15
-    robot["servo_min_time_sec"] = 0.60
     robot["home_joints_deg"] = None
     robot["home_preset_name"] = "zero"
 
@@ -114,7 +112,7 @@ async def main(argv=None):
                 target = list(base)
                 target[joint] += step
                 print(f"[axis-cal] J{joint + 1} step {step:+.2f} deg", flush=True)
-                await adapter.send_joint_target(target, time_sec=0.8, allow_large=True)
+                await adapter.send_joint_target(target, allow_large=True)
                 await wait_motion_settled(adapter, timeout=8.0)
                 await asyncio.sleep(max(0.1, float(args.settle_s)))
                 after = await sample_target(tracker, samples=args.samples, sample_s=args.sample_s)
@@ -136,7 +134,7 @@ async def main(argv=None):
                     f"delta={_fmt(delta)} px_per_deg={_fmt(row['px_per_deg'])}",
                     flush=True,
                 )
-                await adapter.send_joint_target(base, time_sec=0.8, allow_large=True)
+                await adapter.send_joint_target(base, allow_large=True)
                 await wait_motion_settled(adapter, timeout=8.0)
                 await asyncio.sleep(max(0.1, float(args.settle_s)))
                 before = await sample_target(tracker, samples=args.samples, sample_s=args.sample_s)

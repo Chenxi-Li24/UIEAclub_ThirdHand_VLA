@@ -2035,19 +2035,9 @@ class UIControls {
       this._tcpError('实时末端位姿缺失或过期，请等待机器人反馈');
       return;
     }
-    const distanceM = Math.hypot(...target.position.map(
-      (value, index) => value - currentPosition[index] / 1000));
-    const rotationRad = Math.max(...target.euler.map((value, index) =>
-      Math.abs(value - currentEuler[index] * Math.PI / 180)));
-    const timeSec = Math.max(2, distanceM / 0.02, rotationRad / 0.2);
-    if (timeSec > 30) {
-      this._tcpError('目标距离过大，请分步移动');
-      return;
-    }
     this.clearVoicePreview({ restore: true, reason: '发送手动末端目标' });
     this.ws.send({
       cmd: 'move_l', position: target.position, euler: target.euler,
-      time_sec: timeSec,
     });
     this._setRealtimeSync(true, { applyLatest: true });
     this._tcpError('');

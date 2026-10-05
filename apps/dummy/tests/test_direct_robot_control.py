@@ -56,7 +56,7 @@ def test_production_config_uses_adapter_robot_contract():
     config = yaml.safe_load((APP_DIR / "configs/person_follow_production.yaml").read_text())
     adapter = TouchR1Adapter(config)
     assert adapter.client.url == "ws://127.0.0.1:3000/ws"
-    assert adapter.max_speed_deg_s == 10.0
+    assert adapter.completion_timeout == 45.0
     assert adapter.min_command_interval == 0.10
 
 
@@ -74,7 +74,7 @@ def test_invalid_joint_target_is_not_sent(target):
     adapter.client.command_wait.assert_not_awaited()
 
 
-def test_direct_motion_retains_full_target_and_limits_speed_and_interval(monkeypatch):
+def test_direct_motion_retains_full_target_and_interval_without_speed_override(monkeypatch):
     adapter = adapter_with_fake_client()
     adapter._last_send = time.monotonic()
     sleep = AsyncMock()
@@ -84,7 +84,8 @@ def test_direct_motion_retains_full_target_and_limits_speed_and_interval(monkeyp
     args, payload = adapter.client.command_wait.call_args
     assert args == ("move_joint",)
     assert payload["joints_deg"] == [5, 0, -10, 0, 0, 0]
-    assert payload["time_sec"] == 1.0
+    assert "time_sec" not in payload
+    assert payload["timeout"] == 45.0
     assert payload["request_id"].startswith("dummy-follow-")
     assert payload["terminal_only"] is True
     assert payload["source"] == "dummy_follow"
@@ -243,4 +244,4 @@ def test_stack_exit_signals_only_its_dummy_child(monkeypatch):
     monkeypatch.setattr(stack, "start_background", lambda *_args, **_kwargs: Process())
     with pytest.raises(KeyboardInterrupt):
         stack.run_follow(args)
-    assert calls == [("wait", None), ("signal", stack.signal.SIGTERM), ("wait", 40)]
+    assert calls == [("wait", None), ("signal", stack.signal.SIGTERM), ("wait", 60)]

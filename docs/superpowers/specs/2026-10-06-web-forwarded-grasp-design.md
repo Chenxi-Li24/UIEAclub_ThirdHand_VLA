@@ -40,7 +40,7 @@ T_base_flange_desired = T_base_grip_desired * inverse(T_flange_grip).
 T_base_sdk_desired = T_base_flange_desired * T_flange_sdk_tool.
 Apply each compensation once, rotating it with the flange. The live eye-in-hand
 camera lost the bottle below its image edge during the original rising 0.100 m
-preapproach. The corrected checkpoint is 0.180 m opposite the flange +X direction,
+preapproach. The corrected checkpoint is 0.200 m opposite the flange +X direction,
 preserving current SDK height during preapproach. Refresh depth at that farther
 checkpoint, then lock the bounded final approach (maximum 0.220 m diagonal,
 still <=0.005 m segments). Lift is +0.050 m in base Z. This changes the visibility
@@ -83,7 +83,9 @@ approach and closure, expected camera occlusion is not replaced by another
 target; use the locked point and fresh robot feedback. Gripper closure to zero
 may stop against the bottle rather than reach zero: infer contact only from
 fresh stable nonzero width in the physical bottle-width range, never acceptance
-alone. Do not claim measured force or verified grip strength. If contact is not
+alone. The image-derived width is approximate and is not an additional contact
+qualification gate; valid contact remains 8..70 mm, excluding empty/full-open.
+Do not claim measured force or verified grip strength. If contact is not
 observed, do not lift. A complete motion sequence is not proof of bottle success;
 inspect the resulting camera view and report the observed physical outcome.
 

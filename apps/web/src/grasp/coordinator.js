@@ -136,7 +136,7 @@ class GraspCoordinator extends EventEmitter{
   await this._check([...approach,...g.paths.lift],s);await this._move(approach,'approach',s);
   this._publish({phase:'closing'});await this._command({cmd:'gripper',position:0},s);
   const contact=await this._stable(s);
-  if(contact.gripper_width_m<this.config.contactMinM||contact.gripper_width_m>this.config.contactMaxM||contact.gripper_width_m>g.widthM+0.025)throw fault('contact_not_observed');
+  if(contact.gripper_width_m<this.config.contactMinM||contact.gripper_width_m>this.config.contactMaxM)throw fault('contact_not_observed');
   s.holding=true;this._publish({holding:true});await this._move(this._path(contact.flange_position_m,g.lift),'lifting',s);
   const final=this.robotClient.state({idle:true});
   if(final.gripper_width_m<this.config.contactMinM||final.gripper_width_m>this.config.contactMaxM){s.holding=false;throw fault('contact_lost');}

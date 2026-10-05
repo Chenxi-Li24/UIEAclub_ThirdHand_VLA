@@ -91,3 +91,7 @@ test('visibility-preserving farther checkpoint executes its bounded final approa
  const {c}=await setup({config:{preapproachM:0.18,maxApproachM:0.22,keepPreapproachSdkHeight:true}});
  await c.start(2,'farther-checkpoint');const s=await finish(c);assert.equal(s.phase,'complete',s.reason);
 });
+test('fresh 60mm bottle contact is usable even when visual width underestimates it',async()=>{
+ const {c}=await setup({contactWidth:0.060});await c.start(2,'wide-contact');const s=await finish(c);
+ assert.equal(s.phase,'complete',s.reason);assert.equal(s.result.gripperWidthM,0.060);
+});

@@ -14,7 +14,7 @@
 
 - T_flange_grip: [0.060,0,0] m, approximate/user-specified, not measured.
 - T_flange_sdk_tool: [0.17334,0,0] m; SDK and hand-eye unchanged.
-- Preapproach 0.180 m preserving current SDK height; bounded final approach <=0.220 m; lift +0.050 m base Z; segments <=0.005 m. Updated after live rising-approach camera truncation; see spec.
+- Preapproach 0.200 m preserving current SDK height; bounded final approach <=0.220 m; lift +0.050 m base Z; segments <=0.005 m. Updated after live rising-approach camera truncation; see spec.
 - Surface point, no half-width advance; no placement or automatic release.
 - Imported autonomy stays false; perception robotControlEnabled remains false.
 - All actuation uses 9983/ws; no direct CAN, protected execution route or reconnect.

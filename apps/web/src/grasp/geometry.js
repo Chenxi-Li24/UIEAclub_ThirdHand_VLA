@@ -38,8 +38,8 @@ function buildGraspGeometry({observation,stableId,robot,config,now=Date.now()}){
  const targetM=m.slice(0,3).map(row=>rounded(row[3]+row.slice(0,3).reduce((sum,x,j)=>sum+x*target.camera_xyz_m[j],0)));
  if(!vector(target.base_xyz_m)||Math.hypot(...target.base_xyz_m.map((x,i)=>x-targetM[i]))>0.0001)fail('base_point_corrupt');
  if(!vector(robot?.flange_position_m)||!vector(robot?.flange_euler_rad)||!validateJoints(robot.joints_deg,config.jointLimits))fail('robot_pose_invalid');
- const widthM=observation.pose?.width_m;
- if(!Number.isFinite(widthM)||widthM<0.008||widthM>0.072)fail('bottle_width_invalid');
+ const width=observation.pose?.width_m;
+ const widthM=Number.isFinite(width)&&width>=0.008&&width<=0.072?width:null;
  const desired={positionM:targetM,eulerRad:[...robot.flange_euler_rad]};
  const flange=gripTargetToFlangePose(desired,translation(config.gripOffsetM));
  const sdk=flangeToGripPose(flange,translation(config.sdkToolOffsetM));

@@ -61,3 +61,7 @@ test('farther preapproach preserves current SDK height for eye-in-hand visibilit
  assert.ok(g.paths.preapproach.every(p=>p.position[2]===0.15));
  const distance=Math.hypot(...g.contact.position.map((x,i)=>x-g.preapproach.position[i]));assert.ok(distance<0.22);
 });
+test('valid target depth stays usable when legacy bottle-plane qualification withholds pose width',()=>{
+ const f=fixture();f.observation.pose=null;f.observation.reasons=['table_plane_ransac_failed'];
+ const g=buildGraspGeometry(f);assert.deepEqual(g.targetM,[0.4,0,0.2]);assert.equal(g.widthM,null);
+});

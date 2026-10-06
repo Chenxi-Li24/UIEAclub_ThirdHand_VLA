@@ -34,6 +34,13 @@ def observation_snapshot(runtime):
              "face_scores": debug.get("face_scores", []), "face_detector": debug.get("face_detector"),
              "auto_reacquire": debug.get("auto_reacquire"),
              "selection_generation": debug.get("selection_generation"),
+             "control_source": (debug.get("control_source") if usable else "LOST")
+                               if debug.get("follow_target") == "face_person" else debug.get("control_source"),
+             "person_track_id": debug.get("person_track_id"),
+             "person_tracks": debug.get("person_tracks", []),
+             "head_anchor": debug.get("head_anchor"),
+             "association_reason": debug.get("rejected"),
+             "person_detection_ms": debug.get("person_detection_ms"),
              "frame_id": observation.frame_id, "observation_sequence": observation.sequence,
              "target": asdict(target), "bbox_xywh": list(bbox) if bbox is not None else None,
              "receive_age_ms": age * 1000, "detection_ms": observation.detection_ms,
@@ -51,6 +58,13 @@ def encode_frame(frame, state):
     out = frame.copy()
     h, w = out.shape[:2]
     color = (0, 255, 0) if state["status"] == "locked" else (0, 165, 255)
+    for person in state.get("person_tracks", []):
+        x, y, bw, bh = map(int, person["bbox"])
+        selected = person["track_id"] == state.get("person_track_id")
+        body_color = (255, 200, 0) if selected else (110, 110, 110)
+        cv2.rectangle(out, (x, y), (x+bw, y+bh), body_color, 1)
+        cv2.putText(out, f'person {person["track_id"]}', (x, max(12, y-4)),
+                    cv2.FONT_HERSHEY_SIMPLEX, .4, body_color, 1)
     for face_bbox in state.get("face_boxes_xywh", []):
         x, y, bw, bh = map(int, face_bbox)
         cv2.rectangle(out, (x, y), (x + bw, y + bh), (150, 150, 150), 1)
@@ -64,7 +78,8 @@ def encode_frame(frame, state):
                    (0, 255, 255) if state["status"] == "locked" else (160, 160, 160), 2)
     cv2.drawMarker(out, (w // 2, h // 2), (255, 255, 255), cv2.MARKER_CROSS, 24, 1)
     mode = state["mode"] if state.get("motion_enabled") else "DRY RUN"
-    text = f'{mode} | {target["kind"]} | seq={state["observation_sequence"]} | frame={state["frame_id"]}'
+    source = state.get("control_source") or target["kind"]
+    text = f'{mode} | {source} | person={state.get("person_track_id")} | frame={state["frame_id"]}'
     cv2.putText(out, text, (10, 24), cv2.FONT_HERSHEY_SIMPLEX, .5, color, 1)
     ok, jpeg = cv2.imencode(".jpg", out, [cv2.IMWRITE_JPEG_QUALITY, 80])
     return jpeg.tobytes() if ok else None

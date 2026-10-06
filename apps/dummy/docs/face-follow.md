@@ -1,8 +1,13 @@
-# Face-only Dummy Follow
+# Face Detection and Face-Only Mode
+
+The current configuration also enables bound person tracking. See
+[Face-first person tracking](face-person-follow.md) for FACE/BODY/LOST behavior,
+activation and test results. The face-only behavior below applies when
+`person_tracking.enabled` is false and remains available as a fallback mode.
 
 ## Model and Scope
 
-The default Dummy configuration now sets `vision_service.follow_target: face`.
+Dummy configuration sets `vision_service.follow_target: face`.
 OpenCV YuNet is the default face-box detector (`face_detector: yunet`). It does
 not recognize names or biometric identities. The previous short-range BlazeFace
 backend remains selectable explicitly. No HaGRID or OK gesture recognition has

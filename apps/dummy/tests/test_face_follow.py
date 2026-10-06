@@ -154,13 +154,14 @@ def test_loss_pauses_continuous_follow_and_telemetry_reports_waiting():
     assert state["lock_state"] == "waiting_for_ok" and state["follow_target"] == "face"
 
 
-def test_shipped_config_uses_face_only_and_disables_wave_and_body():
+def test_shipped_config_uses_face_first_with_bound_person_tracking():
     config = load_config()
     assert config["vision_service"]["follow_target"] == "face"
     assert config["vision_service"]["yolo_person_enabled"] is False
     assert config["vision_service"]["wave_lock_enabled"] is False
     assert config["vision_service"]["face_detector"] == "yunet"
     assert config["face_lock"]["auto_reacquire"] is True
+    assert config["person_tracking"]["enabled"] is True
 
 
 def test_auto_reacquire_confirms_a_new_face_after_loss():

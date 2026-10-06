@@ -1,0 +1,10 @@
+torch>=2.0
+funasr
+websockets>=12.0
+regex
+numpy
+soundfile
+
+# Optional: for Python client microphone mode
+# sounddevice
+# librosa

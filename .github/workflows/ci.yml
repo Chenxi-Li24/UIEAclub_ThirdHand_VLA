@@ -10,6 +10,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Restore geometry and face assets for offline tests
+        run: git lfs pull --include="assets/robot/startouch-v3/meshes/**,apps/dummy/models/*.tflite,local/models/vision/*.onnx" --exclude=""
+
       - uses: actions/setup-node@v4
         with:
           node-version: "24"

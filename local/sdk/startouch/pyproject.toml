@@ -1,0 +1,76 @@
+[build-system]
+requires = ["scikit-build-core", "pybind11", "packaging>=24"]
+build-backend = "scikit_build_core.build"
+
+
+
+[project]
+name = "fastouch_sdk"
+# SDK version note: 2026-06-05, author Charlie.
+version = "0.1.7"
+description = "Precompiled Fastouch robot SDK"
+readme = "README.md"
+authors = [
+]
+maintainers = [
+]
+classifiers = [
+    # TODO
+]
+license = {text = "MIT"}
+dependencies = [
+  "typer",
+  "numpy",
+  "scipy",
+  "PyYAML",
+  "python-can>=4.3.1",
+  "tqdm",
+  "matplotlib",
+  "opencv-python",
+  "pillow",
+  "h5py",
+  "jinja2",
+  "typeguard",
+]
+requires-python = ">= 3.8"
+
+[project.optional-dependencies]
+test = [
+    "coverage",  # testing
+    "pytest",  # testing
+    "ruff",  # linting
+    "ty", # checking types
+    "ipdb", # debugging
+]
+
+[project.urls]
+bugs = "https://github.com/lumos-open/startouch_sdk/issues"
+changelog = "https://github.com/lumos-open/startouch_sdk/blob/main/CHANGELOG.md"
+homepage = "https://github.com/lumos-open/startouch_sdk"
+
+[tool.scikit-build]
+cmake.args = ["-DCMAKE_BUILD_TYPE=Release"]
+
+
+
+
+[tool.ty]
+# All rules are enabled as "error" by default; no need to specify unless overriding.
+# Example override: relax a rule for the entire project (uncomment if needed).
+# rules.TY015 = "warn"  # For invalid-argument-type, warn instead of error.
+
+[tool.ruff]
+line-length = 120
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # Pyflakes
+    "I",   # isort
+    "B",   # flake8-bugbear
+    "UP",  # pyupgrade
+]
+
+[tool.uv]
+package = true

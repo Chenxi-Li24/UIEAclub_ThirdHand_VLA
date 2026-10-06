@@ -24,6 +24,13 @@ Home, search gesture or idle breathing is issued automatically.
 
 ## Run
 
+The default follow target is now a selected **face center**, using the existing
+OpenCV YuNet model rather than a torso/body/motion box. Startup selects one face
+automatically; short loss pauses, and confirmed loss automatically selects a new
+visible face. Prepare its verified local model with `apps/prepare_face_model.py`.
+OK-based explicit switching is not connected yet.
+See [face-follow.md](docs/face-follow.md) for detection limitations and verification.
+
 The J1/J4 path now uses Robot Service continuous follow, not repeated blocking
 waypoint moves. Keyword gestures still use waypoint planning. The live recognition
 window subscribes to the running Dummy's observations and performs no detection.
@@ -35,8 +42,8 @@ through the same adapter used by the follow loop:
 
 ```bash
 cd $HOME/ThirdHand/UIEAclub_ThirdHand_VLA/apps/dummy
-../../local/runtimes/vision-python/bin/python apps/run_follow_stack.py --no-start
-../../local/runtimes/vision-python/bin/python apps/run_follow_stack.py --enable-motion
+../../local/runtimes/dummy-python/bin/python apps/run_follow_stack.py --no-start
+../../local/runtimes/dummy-python/bin/python apps/run_follow_stack.py --enable-motion
 ```
 
 The first command checks an existing service and connects the SDK; connecting
@@ -52,19 +59,19 @@ personality loop, configure `robot.ws_url` and `robot.health_url` in
 `configs/dum_e_touch_r1.yaml`. The `robot` section in
 `configs/person_follow_production.yaml` uses the same adapter contract.
 
-For the real camera/person-follow demo, use the `vision-python` runtime. It
-contains the OpenCV cascade runtime used for face/upper-body locking.
+For the real camera/person-follow demo, use the `dummy-python` runtime. It
+contains OpenCV 5 for the default YuNet face detector.
 
 ```bash
 cd $HOME/ThirdHand/UIEAclub_ThirdHand_VLA/apps/dummy
-../../local/runtimes/vision-python/bin/python apps/run_person_follow.py --enable-motion
+../../local/runtimes/dummy-python/bin/python apps/run_person_follow.py --enable-motion
 ```
 
 To open only the color camera + algorithm overlay window on the Ubuntu desktop:
 
 ```bash
 cd $HOME/ThirdHand/UIEAclub_ThirdHand_VLA/apps/dummy
-../../local/runtimes/vision-python/bin/python apps/test_find_person_window.py
+../../local/runtimes/dummy-python/bin/python apps/test_find_person_window.py
 ```
 
 The `--enable-motion` flag is an intentional operator gate. Without it, these
@@ -76,7 +83,7 @@ The generic entrypoint is now another name for the same visual dry-run:
 
 ```bash
 cd $HOME/ThirdHand/UIEAclub_ThirdHand_VLA/apps/dummy
-../../local/runtimes/vision-python/bin/python apps/run_dummy.py
+../../local/runtimes/dummy-python/bin/python apps/run_dummy.py
 ```
 
 ## Resource paths
@@ -86,11 +93,13 @@ not the process working directory or the original Ubuntu checkout. Mink resolves
 its model path before loading. MediaPipe's `models/...` path remains relative to
 `apps/dummy`, as before.
 
-Prepare YOLO person weights at `local/models/vision/yolov8n.pt`, or set
-`vision_service.yolo_person_model_path` to an explicit local path. Weights are
-not committed to Git; a missing file reports an unavailable detector rather
-than automatically downloading a model. A fresh clone still needs its local
-model assets and optional Mink/MuJoCo dependencies prepared before hardware use.
+The default YuNet weights, optional BlazeFace weights and URDF/STL are delivered through
+Git/Git LFS. Run `bash tools/assets/setup_clone.sh` after cloning to verify assets
+and prepare dependencies; see [fresh-clone instructions](../../docs/assets/FRESH_CLONE_CN.md).
+The optional YOLO body detector still needs `local/models/vision/yolov8n.pt` or an
+explicit `vision_service.yolo_person_model_path`; it is not the default face
+tracking path. Missing optional weights report an unavailable detector rather
+than downloading a model during startup.
 
 ## Individual checks
 

@@ -16,6 +16,7 @@ import asyncio
 import json
 import os
 import signal
+import shutil
 import subprocess
 import sys
 import time
@@ -30,8 +31,12 @@ from dummy.config import load_config
 from dummy.touch_r1_adapter import TouchR1Adapter
 
 ROOT = APP_DIR.parents[1]
-PYTHON = ROOT / "local" / "runtimes" / "vision-python" / "bin" / "python"
+PYTHON = ROOT / "local" / "runtimes" / "dummy-python" / "bin" / "python"
+if not PYTHON.is_file():
+    PYTHON = ROOT / "local" / "runtimes" / "vision-python" / "bin" / "python"
 NODE = ROOT / "local" / "runtimes" / "node" / "bin" / "node"
+if not NODE.is_file():
+    NODE = shutil.which("node") or "node"
 LOG_DIR = APP_DIR / "logs"
 RUN_DIR = ROOT / "runtime" / "run"
 

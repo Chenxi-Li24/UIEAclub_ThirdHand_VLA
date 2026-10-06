@@ -1,0 +1,5 @@
+{
+  "point_pad_value": -10,
+  "processor_class": "Sam2VideoProcessor",
+  "target_size": 1024
+}

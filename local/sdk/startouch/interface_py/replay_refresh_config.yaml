@@ -1,0 +1,34 @@
+DATA_ROOT: "/home/lumos/code/FastTouchV2/fnl/fnl/fastumi/DATA"
+dual_multi_session_dir: "/home/lumos/code/FastTouchV2/fnl/fnl/fastumi/DATA/multi_session_20260430"
+speed_rate: 1
+pose_topic: "/vive/LHR_FBDADDB4/pose"
+clamp_topic: "/xv_sdk/250801DR48FP25002352/clamp/Data"
+initial_joints: [0, 0.1, -0.1, 0.1, 0, 0]
+StarTouch:
+    enable: true
+SingleArm:
+    single_port: "can0"
+    T_base2local:  [ [ 1.0, 0.0, 0.0, 0.300 ],
+                    [ 0.0, 1.0, 0.0, 0.040 ],
+                    [ 0.0, 0.0, 1.0, 0.180 ],
+                    [ 0.0, 0.0, 0.0, 1.000 ]]
+DualArm:
+    left_can_port: "can0"
+    right_can_port: "can1"
+    left_T_base2local:  [ [ 1.0, 0.0, 0.0, 0.300 ],
+                         [ 0.0, 1.0, 0.0, 0.040 ],
+                         [ 0.0, 0.0, 1.0, 0.180 ],
+                         [ 0.0, 0.0, 0.0, 1.000 ]]
+    right_T_base2local: [ [ 1.0, 0.0, 0.0, 0.300 ],
+                         [ 0.0, 1.0, 0.0, -0.040 ],
+                         [ 0.0, 0.0, 1.0, 0.180 ],
+                         [ 0.0, 0.0, 0.0, 1.000 ]]
+
+    # left_T_base2local:  [ [ 1.0, 0.0, 0.0, 0.300 ],
+    #                         [ 0.0, 1.0, 0.0, 0.040 ],
+    #                         [ 0.0, 0.0, 1.0, 0.160 ],
+    #                         [ 0.0, 0.0, 0.0, 1.000 ]]
+    # right_T_base2local: [ [ 1.0, 0.0, 0.0, 0.300 ],
+    #                      [ 0.0, 1.0, 0.0, -0.040 ],
+    #                      [ 0.0, 0.0, 1.0, 0.160 ],
+    #                      [ 0.0, 0.0, 0.0, 1.000 ]]

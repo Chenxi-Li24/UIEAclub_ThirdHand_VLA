@@ -2,7 +2,12 @@
 
 Recorded: 2026-09-10
 
-The physical payloads listed here exist only below `local/` in the isolated Ubuntu checkout. GitHub receives this provenance, the measured sizes and hashes in `configs/assets/ubuntu20.manifest.json`, and the import/verification tools. It does not receive SDK binaries, model weights, copied runtimes, calibration captures, or vendor payloads.
+This table records the historical Ubuntu deployment. Runtime delivery now follows
+`configs/assets/runtime-assets.json`: user-authorized SDKs, models and FunASR
+source are tracked, with large binaries stored in Git LFS. Copied environments,
+credentials, calibration captures and runtime state remain excluded. See
+[fresh-clone instructions](FRESH_CLONE_CN.md). License labels below retain their
+original provenance and do not assert a new third-party license.
 
 | Asset | Read-only source | Destination | License status | Notes |
 |---|---|---|---|---|

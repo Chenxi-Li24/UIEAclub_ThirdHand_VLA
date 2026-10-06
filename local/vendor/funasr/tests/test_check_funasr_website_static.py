@@ -1,0 +1,968 @@
+import importlib.util
+import sys
+import urllib.error
+from pathlib import Path
+
+import pytest
+
+
+ROOT = Path(__file__).resolve().parents[1]
+SCRIPT = ROOT / "scripts" / "check_funasr_website_static.py"
+
+
+def _load_module():
+    spec = importlib.util.spec_from_file_location("check_funasr_website_static", SCRIPT)
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+def _load_product_site_builder():
+    site_root = ROOT / "web-pages" / "product-site"
+    spec = importlib.util.spec_from_file_location(
+        "funasr_product_site_build", site_root / "build.py"
+    )
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    sys.path.insert(0, str(site_root))
+    try:
+        spec.loader.exec_module(module)
+    finally:
+        sys.path.remove(str(site_root))
+    return module
+
+
+def test_website_contract_accepts_current_public_copy():
+    checker = _load_module()
+
+    pages = {
+        "https://www.funasr.com/": """
+            可私有化部署的语音智能基础设施
+            /v1/audio/transcriptions
+            vLLM 加速
+            <a href="/donors.html">功德榜</a>
+        """,
+        "https://www.funasr.com/en/": """
+            Private-deployment speech infrastructure
+            OpenAI-compatible
+            /v1/audio/transcriptions
+            vLLM Acceleration
+        """,
+        "https://www.funasr.com/ecosystem.html": """
+            <div class="stat-num">36K+</div>
+            <a href="/donors.html">功德榜</a>
+            <a href="https://github.com/BerriAI/litellm">LiteLLM</a>
+            <a href="https://github.com/modelscope/FunClip/releases/tag/v2.1.1">FunClip v2.1.1</a>
+            <a href="https://github.com/0xShug0/audio.cpp">audio.cpp</a>
+            <a href="https://github.com/0xShug0/audio.cpp/pull/155">merged PR</a>
+            <a href="https://github.com/0xShug0/audio.cpp/blob/1778b23a5f6a4951c788e4bb0e7baa04f20012a2/docs/models/fun_asr_nano.md">pinned guide</a>
+            <div>custom_openai</div>
+            <div>54.3K stars</div>
+            <a href="https://marketplace.dify.ai/plugin/langgenius/funasr">
+                FunASR 官方插件 0.1.1
+            </a>
+            <div>支持最大 25 MB 音频上传</div>
+        """,
+        "https://www.funasr.com/en/ecosystem.html": """
+            <div class="stat-num">36K+</div>
+            <a href="/en/donors.html">Thanks</a>
+            <a href="https://github.com/BerriAI/litellm">LiteLLM</a>
+            <a href="https://github.com/modelscope/FunClip/releases/tag/v2.1.1">FunClip v2.1.1</a>
+            <a href="https://github.com/0xShug0/audio.cpp">audio.cpp</a>
+            <a href="https://github.com/0xShug0/audio.cpp/pull/155">merged PR</a>
+            <a href="https://github.com/0xShug0/audio.cpp/blob/1778b23a5f6a4951c788e4bb0e7baa04f20012a2/docs/models/fun_asr_nano.md">pinned guide</a>
+            <div>custom_openai</div>
+            <div>54.3K stars</div>
+            <a href="https://marketplace.dify.ai/plugin/langgenius/funasr">
+                FunASR plugin 0.1.1
+            </a>
+            <div>supports 25 MB uploads</div>
+        """,
+        "https://www.funasr.com/donors.html": """
+            捐赠资金用于社区基础设施建设，包括购买和维护服务器，以及购买、续费和维护
+            <a href="https://www.funasr.com/">www.funasr.com</a> 域名。
+        """,
+        "https://www.funasr.com/en/donors.html": """
+            Donations fund community infrastructure, including server purchase and maintenance,
+            as well as the purchase, renewal, and maintenance of the
+            <a href="https://www.funasr.com/">www.funasr.com</a> domain.
+        """,
+        "https://www.funasr.com/blog/funasr-cli-transcribe-command-line.html": """
+            pip install -U funasr   # 推荐 funasr ≥ 1.3.26
+            <a href="/donors.html">功德榜</a>
+        """,
+        "https://www.funasr.com/en/blog/funasr-cli-transcribe-command-line.html": """
+            pip install -U funasr   # recommended funasr &gt;= 1.3.26
+            <a href="/en/donors.html">Thanks</a>
+        """,
+        "https://www.funasr.com/llama-cpp.html": """
+            runtime-llamacpp-v0.1.9
+            funasr-llamacpp-linux-x64-vulkan.tar.gz
+            funasr-llamacpp-windows-x64-vulkan.zip
+            funasr-llamacpp-windows-x64-cuda.zip
+            Fun-ASR-Nano
+            GGUF
+        """,
+        "https://www.funasr.com/en/llama-cpp.html": """
+            runtime-llamacpp-v0.1.9
+            funasr-llamacpp-linux-x64-vulkan.tar.gz
+            funasr-llamacpp-windows-x64-vulkan.zip
+            funasr-llamacpp-windows-x64-cuda.zip
+            Fun-ASR-Nano
+            GGUF
+        """,
+        "https://www.funasr.com/blog/funasr-llama-cpp-whisper-cpp-alternative.html": """
+            runtime-llamacpp-v0.2.0
+            funasr-llamacpp-linux-x64-vulkan.tar.gz
+            funasr-llamacpp-windows-x64-vulkan.zip
+            Fun-ASR-Nano-GGUF
+            Linux/Windows Vulkan 与 Windows CUDA
+            <a href="/donors.html">功德榜</a>
+        """,
+        "https://www.funasr.com/en/blog/funasr-llama-cpp-whisper-cpp-alternative.html": """
+            runtime-llamacpp-v0.2.0
+            funasr-llamacpp-linux-x64-vulkan.tar.gz
+            funasr-llamacpp-windows-x64-vulkan.zip
+            Fun-ASR-Nano-GGUF
+            Linux/Windows Vulkan and Windows CUDA
+            <a href="/en/donors.html">Thanks</a>
+        """,
+        "https://www.funasr.com/blog/funasr-v1-3-26-openai-vllm-llama-cpp.html": """
+            funasr==1.3.26
+            /v1/audio/transcriptions
+            RTFx 340
+            runtime-llamacpp-v0.1.9
+            funasr-llamacpp-windows-x64-vulkan.zip
+            https://github.com/modelscope/FunASR
+            https://github.com/QwenAudio/Fun-ASR
+            https://github.com/QwenAudio/SenseVoice
+            https://github.com/modelscope/FunClip
+            <a href="/donors.html">功德榜</a>
+        """,
+        "https://www.funasr.com/en/blog/funasr-v1-3-26-openai-vllm-llama-cpp.html": """
+            funasr==1.3.26
+            /v1/audio/transcriptions
+            RTFx 340
+            runtime-llamacpp-v0.1.9
+            funasr-llamacpp-windows-x64-vulkan.zip
+            https://github.com/modelscope/FunASR
+            https://github.com/QwenAudio/Fun-ASR
+            https://github.com/QwenAudio/SenseVoice
+            https://github.com/modelscope/FunClip
+            <a href="/en/donors.html">Thanks</a>
+        """,
+        "https://www.funasr.com/blog/funasr-v1-3-27-language-metadata-vllm-fallback.html": """
+            funasr==1.3.27
+            /v1/audio/transcriptions
+            verbose_json.language
+            language":"en
+            AutoModel
+            runtime-llamacpp-v0.1.9
+            https://github.com/modelscope/FunASR/releases/tag/v1.3.27
+            https://github.com/modelscope/FunASR
+            https://github.com/QwenAudio/Fun-ASR
+            https://github.com/QwenAudio/SenseVoice
+            https://github.com/modelscope/FunClip
+            <a href="/donors.html">功德榜</a>
+        """,
+        "https://www.funasr.com/en/blog/funasr-v1-3-27-language-metadata-vllm-fallback.html": """
+            funasr==1.3.27
+            /v1/audio/transcriptions
+            verbose_json.language
+            language":"en
+            AutoModel
+            runtime-llamacpp-v0.1.9
+            https://github.com/modelscope/FunASR/releases/tag/v1.3.27
+            https://github.com/modelscope/FunASR
+            https://github.com/QwenAudio/Fun-ASR
+            https://github.com/QwenAudio/SenseVoice
+            https://github.com/modelscope/FunClip
+            <a href="/en/donors.html">Thanks</a>
+        """,
+        "https://www.funasr.com/blog/funasr-v1-3-28-realtime-websocket-subtitles.html": """
+            funasr==1.3.28
+            funasr-realtime-server
+            VAD STOP SenseVoice
+            精确合并源码通过 118 项聚焦回归测试
+            实时 WebSocket 文件还独立通过 60 项测试
+            覆盖 STOP 最终解码
+            SenseVoice 用户通过同一次包升级获得字幕对齐修复
+            runtime-llamacpp-v0.1.9
+            https://github.com/modelscope/FunASR/releases/tag/v1.3.28
+            <a href="https://github.com/modelscope/FunASR">FunASR</a>
+            <a href="https://github.com/QwenAudio/Fun-ASR">Fun-ASR</a>
+            <a href="https://github.com/QwenAudio/SenseVoice">SenseVoice</a>
+            <a href="https://github.com/modelscope/FunClip">FunClip</a>
+            <a href="/donors.html">功德榜</a>
+        """,
+        "https://www.funasr.com/en/blog/funasr-v1-3-28-realtime-websocket-subtitles.html": """
+            funasr==1.3.28
+            funasr-realtime-server
+            VAD STOP SenseVoice
+            The exact merged source passed 118 focused regression tests.
+            The realtime WebSocket file also passed all 60 tests independently
+            including STOP final decode
+            SenseVoice users receive the subtitle alignment fix
+            runtime-llamacpp-v0.1.9
+            https://github.com/modelscope/FunASR/releases/tag/v1.3.28
+            <a href="https://github.com/modelscope/FunASR">FunASR</a>
+            <a href="https://github.com/QwenAudio/Fun-ASR">Fun-ASR</a>
+            <a href="https://github.com/QwenAudio/SenseVoice">SenseVoice</a>
+            <a href="https://github.com/modelscope/FunClip">FunClip</a>
+            <a href="/en/donors.html">Thanks</a>
+        """,
+        "https://www.funasr.com/blog/funclip-v2-1-0-video-clipping-release.html": """
+            <body>
+            FunClip v2.1.0
+            FunClip-2.1.0.tar.gz FunClip-2.1.0.zip SHA256SUMS
+            funasr>=1.3.29 TwelveLabs Pegasus
+            <img src="/img/funclip-v2-1-0-interface.jpg">
+            为什么发布的是源码归档，而不是 wheel
+            v2.1.0 的精确合并源码通过 50 项测试，另有 1 项跳过
+            干净 Python 3.12 环境中的 6 项发布契约测试
+            GitHub Actions 首次发布和主动重跑均成功
+            Star <a href="https://github.com/modelscope/FunClip">FunClip 仓库</a>
+            <a href="https://github.com/modelscope/FunClip/releases/tag/v2.1.0">Release</a>
+            <a href="https://github.com/modelscope/FunClip/releases/download/v2.1.0/FunClip-2.1.0.tar.gz">tar.gz</a>
+            <a href="https://github.com/modelscope/FunClip/releases/download/v2.1.0/FunClip-2.1.0.zip">zip</a>
+            <a href="https://github.com/modelscope/FunClip/releases/download/v2.1.0/SHA256SUMS">SHA256SUMS</a>
+            <a href="https://huggingface.co/spaces/FunAudioLLM/FunClip">Space</a>
+            <a href="https://github.com/modelscope/FunASR/releases/tag/v1.3.29">FunASR v1.3.29</a>
+            <a href="/donors.html">功德榜</a>
+            </body>
+        """,
+        "https://www.funasr.com/en/blog/funclip-v2-1-0-video-clipping-release.html": """
+            <body>
+            FunClip v2.1.0
+            FunClip-2.1.0.tar.gz FunClip-2.1.0.zip SHA256SUMS
+            funasr>=1.3.29 TwelveLabs Pegasus
+            <img src="/img/funclip-v2-1-0-interface.jpg">
+            Why these are source archives, not a wheel
+            The exact v2.1.0 merge passed 50 tests with 1 skipped
+            Six release-contract tests also passed in a clean Python 3.12 environment
+            Both the initial GitHub Actions release and a deliberate rerun succeeded
+            star the <a href="https://github.com/modelscope/FunClip">FunClip repository</a>
+            <a href="https://github.com/modelscope/FunClip/releases/tag/v2.1.0">Release</a>
+            <a href="https://github.com/modelscope/FunClip/releases/download/v2.1.0/FunClip-2.1.0.tar.gz">tar.gz</a>
+            <a href="https://github.com/modelscope/FunClip/releases/download/v2.1.0/FunClip-2.1.0.zip">zip</a>
+            <a href="https://github.com/modelscope/FunClip/releases/download/v2.1.0/SHA256SUMS">SHA256SUMS</a>
+            <a href="https://huggingface.co/spaces/FunAudioLLM/FunClip">Space</a>
+            <a href="https://github.com/modelscope/FunASR/releases/tag/v1.3.29">FunASR v1.3.29</a>
+            <a href="/en/donors.html">Thanks</a>
+            </body>
+        """,
+    }
+
+    assert checker.validate_pages(pages) == []
+
+
+def test_homepage_contract_accepts_current_product_site_build(tmp_path, monkeypatch):
+    checker = _load_module()
+    builder = _load_product_site_builder()
+    builder.build(tmp_path)
+    urls = ("https://www.funasr.com/", "https://www.funasr.com/en/")
+    pages = {
+        urls[0]: (tmp_path / "index.html").read_text(encoding="utf-8"),
+        urls[1]: (tmp_path / "en" / "index.html").read_text(encoding="utf-8"),
+    }
+    monkeypatch.setattr(
+        checker,
+        "PAGE_CONTRACTS",
+        {url: checker.PAGE_CONTRACTS[url] for url in urls},
+    )
+
+    assert checker.validate_pages(pages) == []
+
+
+def test_llamacpp_comparison_contract_accepts_current_product_site_build(
+    tmp_path, monkeypatch
+):
+    checker = _load_module()
+    builder = _load_product_site_builder()
+    builder.build(tmp_path)
+    routes = (
+        "blog/funasr-llama-cpp-whisper-cpp-alternative.html",
+        "en/blog/funasr-llama-cpp-whisper-cpp-alternative.html",
+    )
+    pages = {
+        f"https://www.funasr.com/{route}": (tmp_path / route).read_text(
+            encoding="utf-8"
+        )
+        for route in routes
+    }
+    monkeypatch.setattr(
+        checker,
+        "PAGE_CONTRACTS",
+        {url: checker.PAGE_CONTRACTS[url] for url in pages},
+    )
+
+    assert checker.validate_pages(pages) == []
+
+
+def test_website_contract_includes_homepage_entrypoints():
+    checker = _load_module()
+
+    assert "https://www.funasr.com/" in checker.PAGE_CONTRACTS
+    assert "https://www.funasr.com/en/" in checker.PAGE_CONTRACTS
+    assert "https://www.funasr.com/llama-cpp.html" in checker.PAGE_CONTRACTS
+    assert "https://www.funasr.com/en/llama-cpp.html" in checker.PAGE_CONTRACTS
+
+
+def test_ecosystem_contract_requires_current_release_and_native_runtime():
+    checker = _load_module()
+    evidence_links = {
+        "https://github.com/modelscope/FunClip/releases/tag/v2.1.1",
+        "https://github.com/0xShug0/audio.cpp",
+        "https://github.com/0xShug0/audio.cpp/pull/155",
+        "https://github.com/0xShug0/audio.cpp/blob/1778b23a5f6a4951c788e4bb0e7baa04f20012a2/docs/models/fun_asr_nano.md",
+    }
+
+    for url in (
+        "https://www.funasr.com/ecosystem.html",
+        "https://www.funasr.com/en/ecosystem.html",
+    ):
+        contract = checker.PAGE_CONTRACTS[url]
+        assert "36K+" in contract.required
+        assert evidence_links <= set(contract.required_links)
+
+
+def test_ecosystem_contract_requires_live_dify_marketplace():
+    checker = _load_module()
+    url = "https://www.funasr.com/en/ecosystem.html"
+    pages = {
+        url: """
+            <body>
+            <div class="stat-num">36K+</div>
+            <a href="/en/donors.html">Thanks</a>
+            <a href="https://github.com/BerriAI/litellm">LiteLLM</a>
+            <div>custom_openai</div>
+            <div>54.3K stars</div>
+            <a href="https://github.com/langgenius/dify">Dify</a>
+            </body>
+        """
+    }
+
+    failures = checker.validate_pages(pages)
+
+    assert any(
+        url in failure
+        and "missing link `https://marketplace.dify.ai/plugin/langgenius/funasr`"
+        in failure
+        for failure in failures
+    )
+    assert any(
+        url in failure and "visible text missing `FunASR plugin 0.1.1`" in failure
+        for failure in failures
+    )
+    assert any(
+        url in failure and "visible text missing `25 MB uploads`" in failure
+        for failure in failures
+    )
+
+
+def _valid_english_ecosystem_html():
+    return """
+        <body>
+        <div class="stat-num">36K+</div>
+        <a href="/en/donors.html">Thanks</a>
+        <a href="https://github.com/BerriAI/litellm">LiteLLM</a>
+        <a href="https://github.com/modelscope/FunClip/releases/tag/v2.1.1">FunClip v2.1.1</a>
+        <a href="https://github.com/0xShug0/audio.cpp">audio.cpp</a>
+        <a href="https://github.com/0xShug0/audio.cpp/pull/155">merged PR</a>
+        <a href="https://github.com/0xShug0/audio.cpp/blob/1778b23a5f6a4951c788e4bb0e7baa04f20012a2/docs/models/fun_asr_nano.md">pinned guide</a>
+        <div>custom_openai</div>
+        <div>54.3K stars</div>
+        <a href="https://marketplace.dify.ai/plugin/langgenius/funasr">
+            FunASR plugin 0.1.1
+        </a>
+        <div>supports 25 MB uploads</div>
+        </body>
+    """
+
+
+def test_ecosystem_contract_rejects_longer_dify_version():
+    checker = _load_module()
+    url = "https://www.funasr.com/en/ecosystem.html"
+    pages = {url: _valid_english_ecosystem_html()}
+    pages[url] = pages[url].replace("FunASR plugin 0.1.1", "FunASR plugin 0.1.10")
+
+    failures = checker.validate_pages(pages)
+
+    assert any(
+        url in failure and "FunASR plugin 0.1.1" in failure for failure in failures
+    )
+
+
+def test_ecosystem_contract_rejects_dify_version_suffixes():
+    checker = _load_module()
+    url = "https://www.funasr.com/en/ecosystem.html"
+
+    for version in ("0.1.1-beta", "0.1.1+build"):
+        pages = {url: _valid_english_ecosystem_html()}
+        pages[url] = pages[url].replace("0.1.1", version)
+
+        failures = checker.validate_pages(pages)
+
+        assert any(
+            url in failure and "FunASR plugin 0.1.1" in failure for failure in failures
+        )
+
+
+def test_ecosystem_contract_rejects_larger_dify_upload_limit():
+    checker = _load_module()
+    url = "https://www.funasr.com/en/ecosystem.html"
+    pages = {url: _valid_english_ecosystem_html()}
+    pages[url] = pages[url].replace("25 MB uploads", "125 MB uploads")
+
+    failures = checker.validate_pages(pages)
+
+    assert any(url in failure and "25 MB uploads" in failure for failure in failures)
+
+
+def test_website_contract_includes_v1326_launch_articles():
+    checker = _load_module()
+
+    assert (
+        "https://www.funasr.com/blog/funasr-v1-3-26-openai-vllm-llama-cpp.html"
+        in checker.PAGE_CONTRACTS
+    )
+    assert (
+        "https://www.funasr.com/en/blog/funasr-v1-3-26-openai-vllm-llama-cpp.html"
+        in checker.PAGE_CONTRACTS
+    )
+
+
+def test_website_contract_includes_v1327_launch_articles():
+    checker = _load_module()
+
+    assert (
+        "https://www.funasr.com/blog/funasr-v1-3-27-language-metadata-vllm-fallback.html"
+        in checker.PAGE_CONTRACTS
+    )
+    assert (
+        "https://www.funasr.com/en/blog/funasr-v1-3-27-language-metadata-vllm-fallback.html"
+        in checker.PAGE_CONTRACTS
+    )
+
+
+def test_website_contract_includes_v1328_launch_articles():
+    checker = _load_module()
+
+    assert (
+        "https://www.funasr.com/blog/funasr-v1-3-28-realtime-websocket-subtitles.html"
+        in checker.PAGE_CONTRACTS
+    )
+    assert (
+        "https://www.funasr.com/en/blog/funasr-v1-3-28-realtime-websocket-subtitles.html"
+        in checker.PAGE_CONTRACTS
+    )
+
+
+def test_website_contract_includes_funclip_v210_launch():
+    checker = _load_module()
+
+    assert (
+        "https://www.funasr.com/blog/funclip-v2-1-0-video-clipping-release.html"
+        in checker.PAGE_CONTRACTS
+    )
+    assert (
+        "https://www.funasr.com/en/blog/funclip-v2-1-0-video-clipping-release.html"
+        in checker.PAGE_CONTRACTS
+    )
+    assert (
+        "https://www.funasr.com/img/funclip-v2-1-0-interface.jpg"
+        in checker.STATIC_ASSET_CONTRACTS
+    )
+
+
+def test_funclip_v210_contract_rejects_hidden_evidence_and_wrong_routes():
+    checker = _load_module()
+    url = "https://www.funasr.com/en/blog/funclip-v2-1-0-video-clipping-release.html"
+    pages = {
+        url: """
+            <body>
+            <meta name="release-copy" content="FunClip v2.1.0 FunClip-2.1.0.tar.gz
+                FunClip-2.1.0.zip SHA256SUMS funasr>=1.3.29 TwelveLabs Pegasus
+                /img/funclip-v2-1-0-interface.jpg /en/donors.html">
+            <div style="display: none">
+                Why these are source archives, not a wheel
+                The exact v2.1.0 merge passed 50 tests with 1 skipped
+                Six release-contract tests also passed in a clean Python 3.12 environment
+                Both the initial GitHub Actions release and a deliberate rerun succeeded
+                star the FunClip repository
+            </div>
+            <div hidden>
+                <a href="https://github.com/modelscope/FunClip"></a>
+                <a href="https://github.com/modelscope/FunClip/releases/tag/v2.1.0"></a>
+                <a href="https://github.com/modelscope/FunClip/releases/download/v2.1.0/FunClip-2.1.0.tar.gz"></a>
+                <a href="https://github.com/modelscope/FunClip/releases/download/v2.1.0/FunClip-2.1.0.zip"></a>
+                <a href="https://github.com/modelscope/FunClip/releases/download/v2.1.0/SHA256SUMS"></a>
+                <a href="https://huggingface.co/spaces/FunAudioLLM/FunClip"></a>
+                <a href="https://github.com/modelscope/FunASR/releases/tag/v1.3.29"></a>
+                <a href="/en/donors.html"></a>
+                <img src="/img/funclip-v2-1-0-interface.jpg">
+            </div>
+            <p>Unrelated visible article copy.</p>
+            <a href="/wrong-donor.html">Thanks</a>
+            <img src="/img/wrong-interface.jpg">
+            </body>
+        """
+    }
+
+    failures = checker.validate_pages(pages)
+
+    assert any(
+        url in failure
+        and "visible text missing `The exact v2.1.0 merge passed 50 tests with 1 skipped`"
+        in failure
+        for failure in failures
+    )
+    assert any(
+        url in failure
+        and "missing link `https://github.com/modelscope/FunClip`" in failure
+        for failure in failures
+    )
+    assert any(
+        url in failure and "missing link `/en/donors.html`" in failure
+        for failure in failures
+    )
+    assert any(
+        url in failure
+        and "missing image `/img/funclip-v2-1-0-interface.jpg`" in failure
+        for failure in failures
+    )
+
+
+def test_funclip_v210_contract_rejects_zero_area_links():
+    checker = _load_module()
+    url = "https://www.funasr.com/en/blog/funclip-v2-1-0-video-clipping-release.html"
+    hidden_content_link = '<a href="{href}"><span hidden>placeholder</span></a>'
+    required_links = (
+        "https://github.com/modelscope/FunClip",
+        "https://github.com/modelscope/FunClip/releases/tag/v2.1.0",
+        "https://github.com/modelscope/FunClip/releases/download/v2.1.0/FunClip-2.1.0.tar.gz",
+        "https://github.com/modelscope/FunClip/releases/download/v2.1.0/FunClip-2.1.0.zip",
+        "https://github.com/modelscope/FunClip/releases/download/v2.1.0/SHA256SUMS",
+        "https://huggingface.co/spaces/FunAudioLLM/FunClip",
+        "https://github.com/modelscope/FunASR/releases/tag/v1.3.29",
+        "/en/donors.html",
+    )
+    links = "".join(hidden_content_link.format(href=href) for href in required_links)
+    pages = {
+        url: f"""
+            <body>
+            FunClip v2.1.0
+            FunClip-2.1.0.tar.gz FunClip-2.1.0.zip SHA256SUMS
+            funasr>=1.3.29 TwelveLabs Pegasus
+            Why these are source archives, not a wheel
+            The exact v2.1.0 merge passed 50 tests with 1 skipped
+            Six release-contract tests also passed in a clean Python 3.12 environment
+            Both the initial GitHub Actions release and a deliberate rerun succeeded
+            star the FunClip repository
+            <img src="/img/funclip-v2-1-0-interface.jpg">
+            {links}
+            </body>
+        """
+    }
+
+    failures = checker.validate_pages(pages)
+
+    assert any(
+        url in failure
+        and "missing link `https://github.com/modelscope/FunClip`" in failure
+        for failure in failures
+    )
+    assert any(
+        url in failure and "missing link `/en/donors.html`" in failure
+        for failure in failures
+    )
+
+
+def test_v1328_contract_rejects_language_swapped_body():
+    checker = _load_module()
+    url = "https://www.funasr.com/blog/funasr-v1-3-28-realtime-websocket-subtitles.html"
+    pages = {
+        url: """
+            <body>
+            funasr==1.3.28 funasr-realtime-server VAD STOP SenseVoice
+            The exact merged source passed 118 focused regression tests.
+            The realtime WebSocket file also passed all 60 tests independently.
+            runtime-llamacpp-v0.1.9
+            https://github.com/modelscope/FunASR/releases/tag/v1.3.28
+            <a href="https://github.com/modelscope/FunASR">FunASR</a>
+            <a href="https://github.com/QwenAudio/Fun-ASR">Fun-ASR</a>
+            <a href="https://github.com/QwenAudio/SenseVoice">SenseVoice</a>
+            <a href="https://github.com/modelscope/FunClip">FunClip</a>
+            <a href="/donors.html">Thanks</a>
+            </body>
+        """
+    }
+
+    failures = checker.validate_pages(pages)
+
+    assert any(
+        url in failure
+        and "visible text missing `精确合并源码通过 118 项聚焦回归测试`" in failure
+        for failure in failures
+    )
+
+
+def test_v1328_contract_rejects_css_test_count_and_indirect_repo_link():
+    checker = _load_module()
+    url = "https://www.funasr.com/en/blog/funasr-v1-3-28-realtime-websocket-subtitles.html"
+    pages = {
+        url: """
+            <style>.proof { font-weight: 600; }</style>
+            <body>
+            funasr==1.3.28 funasr-realtime-server VAD STOP SenseVoice
+            The exact merged source passed 118 focused regression tests.
+            runtime-llamacpp-v0.1.9
+            <a href="https://github.com/modelscope/FunASR/releases/tag/v1.3.28">Release</a>
+            <a href="https://github.com/QwenAudio/Fun-ASR">Fun-ASR</a>
+            <a href="https://github.com/QwenAudio/SenseVoice">SenseVoice</a>
+            <a href="https://github.com/modelscope/FunClip">FunClip</a>
+            <a href="/en/donors.html">Thanks</a>
+            </body>
+        """
+    }
+
+    failures = checker.validate_pages(pages)
+
+    assert any(
+        url in failure
+        and "visible text missing `The realtime WebSocket file also passed all 60 tests independently`"
+        in failure
+        for failure in failures
+    )
+    assert any(
+        url in failure
+        and "missing link `https://github.com/modelscope/FunASR`" in failure
+        for failure in failures
+    )
+
+
+def test_v1328_contract_requires_visible_stop_and_sensevoice_copy():
+    checker = _load_module()
+    url = "https://www.funasr.com/en/blog/funasr-v1-3-28-realtime-websocket-subtitles.html"
+    pages = {
+        url: """
+            <head><meta name="keywords" content="STOP"></head>
+            <body>
+            funasr==1.3.28 funasr-realtime-server VAD
+            The exact merged source passed 118 focused regression tests.
+            The realtime WebSocket file also passed all 60 tests independently.
+            runtime-llamacpp-v0.1.9
+            https://github.com/modelscope/FunASR/releases/tag/v1.3.28
+            <a href="https://github.com/modelscope/FunASR">FunASR</a>
+            <a href="https://github.com/QwenAudio/Fun-ASR">Fun-ASR</a>
+            <a href="https://github.com/QwenAudio/SenseVoice">Repository</a>
+            <a href="https://github.com/modelscope/FunClip">FunClip</a>
+            <a href="/en/donors.html">Thanks</a>
+            </body>
+        """
+    }
+
+    failures = checker.validate_pages(pages)
+
+    assert any(
+        url in failure
+        and "visible text missing `including STOP final decode`" in failure
+        for failure in failures
+    )
+    assert any(
+        url in failure
+        and "visible text missing `SenseVoice users receive the subtitle alignment fix`"
+        in failure
+        for failure in failures
+    )
+
+
+def test_static_asset_contract_rejects_non_png_payloads():
+    checker = _load_module()
+    banner_url = "https://www.funasr.com/img/banner.4f436d19.png"
+    logo_url = "https://www.funasr.com/logo.png"
+    funclip_url = "https://www.funasr.com/img/funclip-v2-1-0-interface.jpg"
+
+    assert banner_url in checker.STATIC_ASSET_CONTRACTS
+    assert logo_url in checker.STATIC_ASSET_CONTRACTS
+    assert funclip_url in checker.STATIC_ASSET_CONTRACTS
+
+    failures = checker.validate_assets(
+        {
+            banner_url: b"<html>not an image</html>",
+            logo_url: b"\x89PNG\r\n\x1a\n" + b"x" * 200,
+            funclip_url: b"\xff\xd8\xff" + b"x" * 100_000,
+        }
+    )
+
+    assert failures == [f"{banner_url}: response is not a valid PNG"]
+
+
+def test_static_asset_contract_rejects_invalid_funclip_jpeg():
+    checker = _load_module()
+    banner_url = "https://www.funasr.com/img/banner.4f436d19.png"
+    logo_url = "https://www.funasr.com/logo.png"
+    funclip_url = "https://www.funasr.com/img/funclip-v2-1-0-interface.jpg"
+
+    failures = checker.validate_assets(
+        {
+            banner_url: b"\x89PNG\r\n\x1a\n" + b"x" * 200,
+            logo_url: b"\x89PNG\r\n\x1a\n" + b"x" * 200,
+            funclip_url: b"<html>not an image</html>",
+        }
+    )
+
+    assert failures == [f"{funclip_url}: response is not a valid JPEG"]
+
+
+def test_website_contract_reports_stale_runtime_and_star_copy():
+    checker = _load_module()
+
+    pages = {url: "" for url in checker.PAGE_CONTRACTS}
+    pages["https://www.funasr.com/ecosystem.html"] = "16K+"
+    pages[
+        "https://www.funasr.com/blog/funasr-llama-cpp-whisper-cpp-alternative.html"
+    ] = "runtime-llamacpp-v0.1.1"
+    pages["https://www.funasr.com/llama-cpp.html"] = "runtime-llamacpp-v0.1.1"
+
+    failures = checker.validate_pages(pages)
+
+    assert any(
+        "ecosystem.html" in failure and "forbidden `16K+`" in failure
+        for failure in failures
+    )
+    assert any(
+        "funasr-llama-cpp-whisper-cpp-alternative.html" in failure
+        and "forbidden `runtime-llamacpp-v0.1.1`" in failure
+        for failure in failures
+    )
+    assert any(
+        "llama-cpp.html" in failure and "forbidden `runtime-llamacpp-v0.1.1`" in failure
+        for failure in failures
+    )
+
+
+def test_website_contract_requires_visible_donor_usage_copy():
+    checker = _load_module()
+
+    pages = {url: "ok" for url in checker.PAGE_CONTRACTS}
+    pages[
+        "https://www.funasr.com/donors.html"
+    ] = """
+        <head>
+            <meta name="description" content="捐赠资金用于社区基础设施建设，包括购买和维护服务器，以及购买、续费和维护 www.funasr.com 域名。">
+        </head>
+        <body>FunASR 社区功德榜</body>
+    """
+    pages[
+        "https://www.funasr.com/en/donors.html"
+    ] = """
+        <head>
+            <meta name="description" content="Donations fund community infrastructure, including server purchase and maintenance, plus the purchase, renewal, and maintenance of the www.funasr.com domain.">
+        </head>
+        <body>FunASR Community Thanks</body>
+    """
+
+    failures = checker.validate_pages(pages)
+
+    assert any(
+        "donors.html" in failure
+        and "visible text missing `购买和维护服务器`" in failure
+        for failure in failures
+    )
+    assert any(
+        "en/donors.html" in failure
+        and "visible text missing `server purchase and maintenance`" in failure
+        for failure in failures
+    )
+
+
+def test_fetch_pages_retries_transient_url_errors(monkeypatch):
+    checker = _load_module()
+    calls = []
+
+    class FakeResponse:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def read(self):
+            return b"ok"
+
+    def fake_urlopen(url, timeout):
+        calls.append((url, timeout))
+        if len(calls) == 1:
+            raise urllib.error.URLError("temporary SSL handshake timeout")
+        return FakeResponse()
+
+    monkeypatch.setattr(checker.urllib.request, "urlopen", fake_urlopen)
+    monkeypatch.setattr(
+        checker,
+        "PAGE_CONTRACTS",
+        {"https://www.funasr.com/example.html": checker.PageContract(required=("ok",))},
+    )
+
+    pages = checker.fetch_pages(timeout=3, retries=2)
+
+    assert pages == {"https://www.funasr.com/example.html": "ok"}
+    assert calls == [
+        ("https://www.funasr.com/example.html", 3),
+        ("https://www.funasr.com/example.html", 3),
+    ]
+
+
+def test_navigation_contract_requires_donors_as_last_directory_link():
+    checker = _load_module()
+    pages = {
+        "https://www.funasr.com/blog/ok.html": """
+            <nav><div class="nav-links">
+                <a href="/blog/">技术博客</a>
+                <a href="/vs-whisper.html">对比 Whisper</a>
+                <a href="/donors.html">功德榜</a>
+                <a href="/en/blog/ok.html">EN</a>
+                <a class="nav-btn" href="https://github.com/modelscope/FunASR">GitHub</a>
+            </div></nav>
+        """,
+        "https://www.funasr.com/en/blog/missing.html": """
+            <nav><div class="nav-links">
+                <a href="/en/blog/">Blog</a>
+                <a href="/en/vs-whisper.html">vs Whisper</a>
+            </div></nav>
+        """,
+        "https://www.funasr.com/blog/not-last.html": """
+            <nav><div class="nav-links">
+                <a href="/donors.html">功德榜</a>
+                <a href="/blog/">技术博客</a>
+            </div></nav>
+        """,
+        "https://www.funasr.com/en/blog/wrong-language.html": """
+            <nav><div class="nav-links">
+                <a href="/en/blog/">Blog</a>
+                <a href="/donors.html">功德榜</a>
+            </div></nav>
+        """,
+        "https://www.funasr.com/plain.html": "<main>No directory navigation</main>",
+    }
+
+    failures = checker.validate_navigation(pages)
+
+    assert not any("ok.html" in failure for failure in failures)
+    assert any(
+        "missing.html" in failure and "missing `/en/donors.html`" in failure
+        for failure in failures
+    )
+    assert any(
+        "not-last.html" in failure and "must be the last directory link" in failure
+        for failure in failures
+    )
+    assert any(
+        "wrong-language.html" in failure and "missing `/en/donors.html`" in failure
+        for failure in failures
+    )
+    assert any(
+        "wrong-language.html" in failure
+        and "contains wrong-language `/donors.html`" in failure
+        for failure in failures
+    )
+    assert not any("plain.html" in failure for failure in failures)
+
+
+def test_navigation_contract_requires_visible_correctly_labeled_donor_link():
+    checker = _load_module()
+    pages = {
+        "https://www.funasr.com/blog/hidden.html": """
+            <nav><div class="nav-links">
+                <a href="/blog/">技术博客</a>
+                <a hidden href="/donors.html">功德榜</a>
+            </div></nav>
+        """,
+        "https://www.funasr.com/blog/wrong-label.html": """
+            <nav><div class="nav-links">
+                <a href="/blog/">技术博客</a>
+                <a href="/donors.html">社区</a>
+            </div></nav>
+        """,
+        "https://www.funasr.com/blog/hidden-label.html": """
+            <nav><div class="nav-links">
+                <a href="/blog/">技术博客</a>
+                <a href="/donors.html"><template>功德榜</template></a>
+            </div></nav>
+        """,
+        "https://www.funasr.com/en/blog/empty.html": """
+            <nav><div class="nav-links"></div></nav>
+        """,
+    }
+
+    failures = checker.validate_navigation(pages)
+
+    assert any(
+        "hidden.html" in failure
+        and "missing `/donors.html`; link must be visible" in failure
+        for failure in failures
+    )
+    assert any(
+        "wrong-label.html" in failure
+        and "must use visible label `功德榜`" in failure
+        for failure in failures
+    )
+    assert any(
+        "hidden-label.html" in failure
+        and "missing `/donors.html`; link must be visible" in failure
+        for failure in failures
+    )
+    assert any(
+        "empty.html" in failure
+        and "missing `/en/donors.html`; link must be visible" in failure
+        for failure in failures
+    )
+
+
+def test_fetch_pages_rejects_redirected_donor_page(monkeypatch):
+    checker = _load_module()
+    donor_url = "https://www.funasr.com/donors.html"
+
+    class FakeResponse:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def read(self):
+            return b"redirected donor copy"
+
+        def geturl(self):
+            return "https://www.funasr.com/community.html"
+
+    monkeypatch.setattr(checker.urllib.request, "urlopen", lambda url, timeout: FakeResponse())
+    monkeypatch.setattr(
+        checker,
+        "PAGE_CONTRACTS",
+        {donor_url: checker.PageContract(required=("donor copy",))},
+    )
+
+    with pytest.raises(RuntimeError, match="redirected"):
+        checker.fetch_pages(timeout=3, retries=0)
+
+
+def test_extract_sitemap_page_urls_keeps_unique_same_origin_html_pages():
+    checker = _load_module()
+    sitemap = """<?xml version="1.0" encoding="UTF-8"?>
+        <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+            <url><loc>https://www.funasr.com/</loc></url>
+            <url><loc>https://www.funasr.com/blog/</loc></url>
+            <url><loc>https://www.funasr.com/blog/guide.html</loc></url>
+            <url><loc>https://www.funasr.com/blog/guide.html</loc></url>
+            <url><loc>https://www.funasr.com/logo.png</loc></url>
+            <url><loc>https://example.com/foreign.html</loc></url>
+        </urlset>
+    """
+
+    assert checker.extract_sitemap_page_urls(sitemap) == [
+        "https://www.funasr.com/",
+        "https://www.funasr.com/blog/",
+        "https://www.funasr.com/blog/guide.html",
+    ]

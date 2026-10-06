@@ -52,7 +52,7 @@ function loadConfig(env = process.env) {
       canRxStaleSec: numberFrom(env, 'STARTOUCH_CAN_RX_STALE_SEC', 1, 0.25, 30),
       simulate: boolFrom(env, 'STARTOUCH_SIMULATE', false),
       dryRun: boolFrom(env, 'STARTOUCH_DRY_RUN', false),
-      pollIntervalMs: numberFrom(env, 'STARTOUCH_POLL_INTERVAL_MS', 100, 20, 5000),
+      pollIntervalMs: numberFrom(env, 'STARTOUCH_POLL_INTERVAL_MS', 50, 20, 5000),
       jointLogIntervalMs: numberFrom(env, 'STARTOUCH_JOINT_LOG_INTERVAL_MS', 1000, 50, 60000),
       initSettleSec: numberFrom(env, 'STARTOUCH_INIT_SETTLE_SEC', 2, 0, 30),
       initSampleCount: numberFrom(env, 'STARTOUCH_INIT_SAMPLE_COUNT', 3, 2, 20),

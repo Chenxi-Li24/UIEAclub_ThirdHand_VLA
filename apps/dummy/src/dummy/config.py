@@ -1,4 +1,5 @@
 from pathlib import Path
+import os
 import yaml
 
 
@@ -23,5 +24,17 @@ def load_config(path=None):
         resolved = Path(model_path)
         if not resolved.is_absolute():
             vision["mediapipe_face_model_path"] = str(APP_ROOT / resolved)
+
+    urdf = os.environ.get("DUMMY_URDF_PATH")
+    if urdf:
+        for section, key in (("workspace_guard", "urdf_path"), ("follow_handeye", "urdf_path"),
+                             ("mink_lookat", "model_path")):
+            config.setdefault(section, {})[key] = urdf
+    for variable, key in (("DUMMY_FACE_MODEL", "mediapipe_face_model_path"),
+                          ("DUMMY_YOLO_MODEL", "yolo_person_model_path")):
+        if variable in os.environ:
+            vision[key] = os.environ[variable]
+    if "DUMMY_SPEECH_WS" in os.environ:
+        config.setdefault("wake_word", {})["speech_ws_url"] = os.environ["DUMMY_SPEECH_WS"]
 
     return config

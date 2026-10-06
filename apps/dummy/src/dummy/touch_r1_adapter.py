@@ -32,6 +32,40 @@ class TouchR1Adapter:
         self._last_send = 0.0
         self.last_request_id = None
         self._inflight = None
+        self.continuous_follow = bool(robot.get("continuous_follow", True))
+        self.follow_active = False
+        self.follow_stream_id = f"dummy-stream-{uuid4()}"
+        self.follow_hold_joints = None
+        self.last_follow_target = None
+        self.client.listeners.append(self._follow_event)
+
+    def _follow_event(self, message):
+        if message.get("type") == "follow_state" and message.get("stream_id") == self.follow_stream_id:
+            self.follow_active = message.get("active") is True
+            if message.get("hold_joints_deg") is not None:
+                self.follow_hold_joints = list(message["hold_joints_deg"])
+
+    async def send_follow_target(self, joints_deg, sequence, observed_at_ms):
+        if not self.follow_active:
+            await self._command_wait("follow_start", stream_id=self.follow_stream_id,
+                                     request_id=f"dummy-start-{uuid4()}", terminal_only=False, timeout=2)
+        if not self.follow_active or self.follow_hold_joints is None:
+            raise RuntimeError("Robot did not activate continuous follow")
+        target = list(joints_deg)
+        for index in (1, 2, 4, 5):
+            target[index] = self.follow_hold_joints[index]
+        target = self._validate(target)
+        self.last_request_id = f"dummy-target-{uuid4()}"
+        await self._command_wait("follow_target", joints_deg=target, sequence=sequence,
+                                 observed_at_ms=observed_at_ms, stream_id=self.follow_stream_id,
+                                 request_id=self.last_request_id, terminal_only=False, timeout=1)
+        self.last_follow_target = list(target)
+        return True
+
+    async def pause_follow(self):
+        if self.follow_active:
+            await self._command_wait("follow_stop", stream_id=self.follow_stream_id,
+                                     request_id=f"dummy-stop-{uuid4()}", terminal_only=True, timeout=5)
 
     async def connect(self):
         await self.client.open()
@@ -68,6 +102,7 @@ class TouchR1Adapter:
 
     async def close(self):
         try:
+            await self.pause_follow()
             if self._inflight is not None:
                 # Cancellation of Dummy must not orphan its completion waiter.
                 await asyncio.shield(self._inflight)
@@ -76,7 +111,9 @@ class TouchR1Adapter:
             await self.client.close()
 
     async def get_state(self):
-        state = await self.client.refresh_state(timeout=2.0)
+        state = self.client.snapshot
+        if not state.state_ready or time.time() - state.last_event_at > 0.25:
+            state = await self.client.refresh_state(timeout=2.0)
         if not state.connected or not state.state_ready or len(state.joints_deg) != 6:
             raise RuntimeError("fresh valid robot feedback is unavailable")
         return state

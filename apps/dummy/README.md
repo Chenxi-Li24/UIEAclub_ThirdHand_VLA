@@ -24,6 +24,12 @@ Home, search gesture or idle breathing is issued automatically.
 
 ## Run
 
+The J1/J4 path now uses Robot Service continuous follow, not repeated blocking
+waypoint moves. Keyword gestures still use waypoint planning. The live recognition
+window subscribes to the running Dummy's observations and performs no detection.
+See [continuous-follow.md](docs/continuous-follow.md) for protocol, limits,
+resource overrides, startup and exit checks.
+
 The follow-stack launcher now starts/checks only Robot Service, then connects
 through the same adapter used by the follow loop:
 

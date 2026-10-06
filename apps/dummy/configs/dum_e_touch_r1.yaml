@@ -17,6 +17,8 @@ robot:
   min_command_interval_s: 0.10
   follow_command: "move_joint"
   follow_wait_complete: true
+  # Continuous J1/J4 targets; wait_complete still governs keyword waypoints.
+  continuous_follow: true
   motion_completion_timeout_s: 45.0
 motion:
   hz: 8

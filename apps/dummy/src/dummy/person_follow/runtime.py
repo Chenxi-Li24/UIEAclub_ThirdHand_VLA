@@ -17,6 +17,9 @@ class Observation:
     sequence: int
     target: Target
     detection_ms: float = 0.0
+    frame: object = None
+    frame_id: object = None
+    debug: object = None
 
 
 class TrackerWorker:
@@ -40,10 +43,15 @@ class TrackerWorker:
             while not self.stop.is_set():
                 started = time.monotonic()
                 if hasattr(self.tracker, "reader"):
-                    target, _frame, _error = self.tracker.read_frame()
+                    target, frame, _error = self.tracker.read_frame()
                 else:
                     target = self.tracker.read()
-                self.publish(target, detection_ms=(time.monotonic() - started) * 1000)
+                    frame = None
+                options = {"detection_ms": (time.monotonic() - started) * 1000}
+                if frame is not None:
+                    options.update(frame=frame, frame_id=getattr(self.tracker, "_last_frame_sequence", None),
+                                   debug=dict(getattr(self.tracker, "last_debug", {}) or {}))
+                self.publish(target, **options)
                 self.stop.wait(max(0, self.period_s - (time.monotonic() - started)))
         except Exception as exc:
             self.error = exc
@@ -90,12 +98,15 @@ class PersonFollowRuntime:
         self.mode = "IDLE"
         self.last_reason = "waiting_for_observation"
         self.metrics = {}
+        self.continuous = bool(getattr(adapter, "continuous_follow", False))
         self.servo.reset(self.joints)
 
-    def publish(self, target, *, detection_ms=0.0):
+    def publish(self, target, *, detection_ms=0.0, frame=None, frame_id=None, debug=None):
+        if target.kind == "vision_frame_duplicate":
+            return
         with self._lock:
             self._sequence += 1
-            self._latest = Observation(self._sequence, target, detection_ms)
+            self._latest = Observation(self._sequence, target, detection_ms, frame, frame_id, debug)
 
     def queue_keyword(self, name, *, received_at=None):
         if name not in self.config.get("gestures", {}):
@@ -109,7 +120,8 @@ class PersonFollowRuntime:
     async def _measured_joints(self):
         if self.adapter is not None:
             # Finish busy work before reading the latest observation, not after.
-            state = await self.adapter.wait_idle(timeout=45.0)
+            state = (await self.adapter.get_state() if self.continuous
+                     else await self.adapter.wait_idle(timeout=45.0))
             self.joints = list(state.joints_deg)
         return list(self.joints)
 
@@ -164,10 +176,15 @@ class PersonFollowRuntime:
         while self._keywords:
             name, received_at = self._keywords.popleft()
             if time.monotonic() - received_at <= 3.0:
+                if self.continuous:
+                    await self.adapter.pause_follow()
+                    current = list((await self.adapter.wait_idle()).joints_deg)
                 return await self._gesture(name, current)
         with self._lock:
             observation = self._latest
         if observation is None or observation.sequence <= self._consumed:
+            if self.continuous and observation is not None and time.time() - observation.target.ts > self.max_observation_age_s:
+                await self.adapter.pause_follow()
             self.last_reason = "no_new_observation"
             return False
         self._consumed = observation.sequence
@@ -177,18 +194,34 @@ class PersonFollowRuntime:
                 or age < -0.05 or age > self.max_observation_age_s):
             self.last_reason = "target_stale_or_held"
             self.mode = "HOLDING"
+            if self.continuous:
+                await self.adapter.pause_follow()
             return False
         command = self.servo.update(current, target, dt_s=self.period_s)
         self.last_reason = command.reason
         if not command.ok or max(abs(a - b) for a, b in zip(current, command.joints_deg)) < 1e-5:
+            if self.continuous:
+                await self.adapter.pause_follow()
             return False
         desired = command.joints_deg
         if self.guard is not None:
             desired, _exact, reason = clamp_to_workspace_guard(current, desired, self.guard)
             if max(abs(a - b) for a, b in zip(current, desired)) < 1e-5:
                 self.last_reason = reason
+                if self.continuous:
+                    await self.adapter.pause_follow()
                 return False
         self.mode = "FOLLOWING"
+        if self.continuous:
+            self.metrics.update(observation_sequence=observation.sequence, frame_id=observation.frame_id,
+                                receive_age_ms=age * 1000, detection_ms=observation.detection_ms,
+                                error_px=list(command.error_px))
+            started = time.monotonic()
+            sent = await self.adapter.send_follow_target(desired, observation.sequence, target.ts * 1000)
+            self.metrics.update(request_id=self.adapter.last_request_id, accepted=sent,
+                                target_update_ms=(time.monotonic() - started) * 1000,
+                                target_joints_deg=list(getattr(self.adapter, "last_follow_target", None) or desired))
+            return sent
         # A final state request or send-rate wait can outlive the selected frame.
         # Re-read the single latest slot immediately before sending to 3000.
         return await self._send(desired, before_send=lambda state: (
@@ -219,7 +252,7 @@ class PersonFollowRuntime:
             for target in targets:
                 if self.stopping.is_set():
                     break
-                measured = await self._measured_joints()
+                measured = list((await self.adapter.wait_idle()).joints_deg) if self.adapter else list(self.joints)
                 if max(abs(a - b) for a, b in zip(measured, target)) < 1e-5:
                     continue
                 if not await self._send(target):
@@ -227,7 +260,7 @@ class PersonFollowRuntime:
                     return False
             return True
         finally:
-            self.servo.reset(await self._measured_joints())
+            self.servo.reset()
             # Images collected during a gesture may now be old. step() checks age.
             self.mode = "IDLE"
 
@@ -276,6 +309,8 @@ class PersonFollowRuntime:
                 producer.cancel()
                 await asyncio.gather(producer, return_exceptions=True)
             try:
+                if self.continuous:
+                    await self.adapter.pause_follow()
                 if worker is not None:
                     await asyncio.to_thread(worker.close)
             finally:

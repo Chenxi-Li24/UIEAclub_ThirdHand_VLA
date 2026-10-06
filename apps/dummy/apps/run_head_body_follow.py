@@ -16,6 +16,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from dummy.config import load_config
 from dummy.motion_gate import require_motion_enable
 from dummy.person_follow.runtime import PersonFollowRuntime
+from dummy.person_follow.telemetry import FollowTelemetryServer
 from dummy.single_instance import SingleInstanceLock
 from dummy.touch_r1_adapter import TouchR1Adapter
 from dummy.tracker import HumanTracker
@@ -41,6 +42,8 @@ def parse_args(argv=None):
     parser.add_argument("--robot-health", default="http://127.0.0.1:3000/health")
     parser.add_argument("--skip-home", action="store_true", help="compatibility flag; no automatic Home is issued")
     parser.add_argument("--no-keywords", action="store_true")
+    parser.add_argument("--telemetry-port", type=int, default=31024,
+                        help="local read-only same-source recognition view; 0 disables it")
     args = parser.parse_args(argv)
     if not math.isfinite(args.hz) or args.hz <= 0:
         parser.error("--hz must be finite and positive")
@@ -62,6 +65,8 @@ async def run_loop(config, args):
     tracker, tracker_mode = build_tracker(config)
     adapter = TouchR1Adapter(config, workspace_guard=guard) if args.enable_motion else None
     runtime = None
+    telemetry = None
+    run_started = False
     loop = asyncio.get_running_loop()
     registered = []
     previous_handlers = {}
@@ -75,6 +80,9 @@ async def run_loop(config, args):
             joints = args.joints or [0.0] * 6
         runtime = PersonFollowRuntime(adapter, config=config, guard=guard, joints=joints,
                                      period_s=1.0 / max(0.5, args.hz))
+        if args.telemetry_port:
+            telemetry = FollowTelemetryServer(runtime, port=args.telemetry_port)
+            telemetry.start()
         for signum in (signal.SIGINT, signal.SIGTERM):
             try:
                 loop.add_signal_handler(signum, runtime.request_stop)
@@ -84,14 +92,18 @@ async def run_loop(config, args):
                 signal.signal(signum, lambda _signum, _frame: loop.call_soon_threadsafe(runtime.request_stop))
         print(f"[dummy] unified runtime tracker={tracker_mode} motion={args.enable_motion} "
               "follow=J1/J4 keywords=all-joints idle-breathing=off; Ctrl+C exits Dummy only", flush=True)
-        await runtime.run(tracker=tracker, keywords=None if args.no_keywords else WakeWordDetector(config),
+        keywords = None if args.no_keywords else WakeWordDetector(config)
+        run_started = True
+        await runtime.run(tracker=tracker, keywords=keywords,
                           max_steps=args.max_frames)
     finally:
+        if telemetry is not None:
+            telemetry.close()
         for signum in registered:
             loop.remove_signal_handler(signum)
         for signum, handler in previous_handlers.items():
             signal.signal(signum, handler)
-        if runtime is None:
+        if not run_started:
             tracker.close()
             if adapter is not None:
                 await adapter.close()

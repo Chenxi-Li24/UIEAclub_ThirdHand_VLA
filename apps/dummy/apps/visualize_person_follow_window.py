@@ -1,28 +1,83 @@
 #!/usr/bin/env python3
 """Native Ubuntu window for the read-only person-follow overlay."""
-import argparse,json,sys,time,urllib.request
-from pathlib import Path
-import cv2
-from PIL import Image,ImageTk
+import argparse
+import base64
+import json
+import time
+import urllib.request
+from io import BytesIO
+from PIL import Image, ImageTk
 import tkinter as tk
-sys.path.insert(0,str(Path(__file__).resolve().parents[1]/"src"))
-from dummy.vision_service_tracker import MjpegReader
-from dummy.person_follow.visualization import render_overlay
 
 class Window:
- def __init__(self,args):
-  self.args=args; self.reader=MjpegReader(args.stream); self.reader.start(); self.root=tk.Tk(); self.root.title("ThirdHand Person Follow — READ ONLY"); self.root.configure(bg="#090d12"); self.label=tk.Label(self.root,bg="#090d12"); self.label.pack(); self.status=tk.Label(self.root,text="starting",fg="#9ff",bg="#090d12",font=("monospace",11)); self.status.pack(fill="x"); self.root.protocol("WM_DELETE_WINDOW",self.close); self.root.after(30,self.tick)
- def observation(self):
-  try: return json.load(urllib.request.urlopen(self.args.observation,timeout=.25))
-  except Exception as e: return {"identity_state":"LOST","robot":{"reason_code":f"OBSERVATION_UNAVAILABLE:{e}"}}
- def tick(self):
-  frame,error=self.reader.latest(); state=self.observation()
-  if frame is not None:
-   out=render_overlay(frame,state); rgb=cv2.cvtColor(out,cv2.COLOR_BGR2RGB); image=ImageTk.PhotoImage(Image.fromarray(rgb)); self.label.configure(image=image); self.label.image=image
-  self.status.configure(text=f"READ ONLY | vision 3100 | {state.get('identity_state',state.get('status','searching'))} | {error or 'stream ok'}")
-  self.root.after(40,self.tick)
- def close(self): self.reader.close(); self.root.destroy()
- def run(self): self.root.mainloop()
+    def __init__(self, args):
+        self.args = args
+        self.seen_runtime = False
+        self.offline_since = None
+        self.root = tk.Tk()
+        self.root.title("ThirdHand Person Follow - SAME SOURCE / READ ONLY")
+        self.root.configure(bg="#090d12")
+        frame = tk.Frame(self.root, width=640, height=480, bg="#090d12")
+        frame.pack()
+        frame.pack_propagate(False)
+        self.label = tk.Label(frame, bg="#090d12")
+        self.label.pack(expand=True)
+        self.status = tk.Label(self.root, text="starting", fg="#9ff", bg="#090d12",
+                               font=("monospace", 11), wraplength=620, height=4)
+        self.status.pack(fill="x")
+        self.root.protocol("WM_DELETE_WINDOW", self.close)
+        self.root.after(30, self.tick)
+
+    def observation(self):
+        try:
+            with urllib.request.urlopen(self.args.observation, timeout=.3) as response:
+                return json.load(response)
+        except Exception as exc:
+            return {"state": {"status": "offline", "reason": str(exc)}}
+
+    def tick(self):
+        packet = self.observation()
+        state = packet.get("state", {})
+        jpeg = packet.get("jpeg_base64")
+        if state.get("status") == "offline":
+            if self.offline_since is None:
+                self.offline_since = time.monotonic()
+            if self.seen_runtime and time.monotonic() - self.offline_since >= 2:
+                self.close()
+                return
+        else:
+            self.seen_runtime = True
+            self.offline_since = None
+        if jpeg:
+            image = Image.open(BytesIO(base64.b64decode(jpeg)))
+            image.thumbnail((640, 480))
+            photo = ImageTk.PhotoImage(image)
+            self.label.configure(image=photo)
+            self.label.image = photo
+        elif state.get("status") == "offline":
+            self.label.configure(image="")
+            self.label.image = None
+        control = state.get("control", {})
+        mode = state.get("mode", "-") if state.get("motion_enabled") else "DRY RUN"
+        self.status.configure(text=(
+            f"{mode} | {state.get('status')} | frame={state.get('frame_id')} | "
+            f"used={state.get('used_by_last_command')}\n"
+            f"{control.get('request_id', '-')} | {state.get('reason', '-')}"
+        ))
+        self.root.after(200, self.tick)
+
+    def close(self):
+        self.root.destroy()
+
+    def run(self):
+        self.root.mainloop()
+
+
 def main():
- p=argparse.ArgumentParser(); p.add_argument("--stream",default="http://127.0.0.1:3100/camera/xvisio/vision"); p.add_argument("--observation",default="http://127.0.0.1:3100/api/vision/person-follow/observation"); a=p.parse_args(); Window(a).run()
-if __name__=="__main__": main()
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--observation", default="http://127.0.0.1:31024/api/frame")
+    Window(parser.parse_args()).run()
+
+
+if __name__ == "__main__":
+    main()

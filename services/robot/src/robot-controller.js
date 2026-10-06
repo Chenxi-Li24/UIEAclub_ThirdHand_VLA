@@ -25,6 +25,9 @@ const ALLOWED_COMMANDS = new Set([
   'software_stop',
   'estop',
   'ping',
+  'follow_start',
+  'follow_target',
+  'follow_stop',
 ]);
 
 const DEFAULT_HOME_PRESET_DEG = Object.freeze([
@@ -96,6 +99,9 @@ class RobotController extends EventEmitter {
     this.stateSequence = 0;
     this.latestProducerMonotonicNs = Number(process.hrtime.bigint());
     this.pendingStopRequestId = null;
+    this.followOwner = null;
+    this.followStream = null;
+    this.followActive = false;
     this._bindBridge();
   }
 
@@ -205,7 +211,8 @@ class RobotController extends EventEmitter {
       nonce,
       protocol_version: 'thirdhand-robot-lowlevel-v1',
       pose_frame: 'robot_flange',
-      commands: ['move_l', 'preview_ik', 'move_joint', 'gripper', 'preset', 'software_stop', 'get_state'],
+      commands: ['move_l', 'preview_ik', 'move_joint', 'gripper', 'preset', 'software_stop', 'get_state',
+        'follow_start', 'follow_target', 'follow_stop'],
       correlated_completions: true,
       software_stop_ack: true,
       software_stop_state_boundary: true,
@@ -236,7 +243,7 @@ class RobotController extends EventEmitter {
     };
   }
 
-  handleCommand(message, reply) {
+  handleCommand(message, reply, owner = 'local') {
     const originalReply = reply;
     reply = response => originalReply({
       ...response,
@@ -249,6 +256,11 @@ class RobotController extends EventEmitter {
     }
 
     switch (message.cmd) {
+      case 'follow_start':
+      case 'follow_target':
+      case 'follow_stop':
+        this._sendFollow(message, reply, owner);
+        return;
       case 'ping':
         reply({ type: 'pong', ts: Date.now() });
         return;
@@ -604,6 +616,50 @@ class RobotController extends EventEmitter {
     }
   }
 
+  _sendFollow(message, reply, owner) {
+    if (typeof message.stream_id !== 'string' || !message.stream_id || message.stream_id.length > 128) {
+      reply({ type: 'error', code: 'follow_stream_invalid', msg: 'Follow stream ID required' });
+      return;
+    }
+    if (message.cmd === 'follow_start') {
+      const error = this._motionReadinessError();
+      if (error) { reply(error); return; }
+      this.followOwner = owner;
+      this.followStream = message.stream_id;
+    } else if (this.followOwner !== owner || this.followStream !== message.stream_id) {
+      reply({ type: 'error', code: 'follow_stream_mismatch', msg: 'Not the active follow connection' });
+      return;
+    }
+    let joints;
+    if (message.cmd === 'follow_target') {
+      const validation = validateJointTarget(message.joints_deg);
+      if (!validation.ok || !Number.isSafeInteger(message.sequence) || message.sequence < 0
+          || !Number.isFinite(message.observed_at_ms)
+          || Date.now() - message.observed_at_ms > 500
+          || Date.now() - message.observed_at_ms < -50
+          || !this.stateReady || Date.now() - this.latestRobotStateAtMs > 500) {
+        reply({ type: 'error', code: 'follow_target_invalid', msg: 'Fresh bounded follow target required' });
+        return;
+      }
+      joints = validation.joints.map(value => value * Math.PI / 180);
+    }
+    const requestId = message.request_id || randomUUID();
+    this.pendingLowLevel.set(requestId, message.cmd);
+    if (!this.bridge.send({
+      cmd: message.cmd, request_id: requestId, stream_id: message.stream_id,
+      joints_rad: joints, sequence: message.sequence, observed_at_ms: message.observed_at_ms,
+    })) {
+      this.pendingLowLevel.delete(requestId);
+      if (message.cmd === 'follow_start') this.followOwner = this.followStream = null;
+      reply({ type: 'error', code: 'bridge_unavailable', msg: 'Robot bridge unavailable' });
+    }
+  }
+
+  releaseFollow(owner) {
+    if (this.followOwner !== owner || this.followStream === null) return;
+    this.bridge.send({ cmd: 'follow_stop', stream_id: this.followStream });
+  }
+
   _motionReadinessError() {
     if (!this.bridge.connected) {
       return { type: 'error', code: 'robot_not_connected', msg: 'Startouch SDK is not connected' };
@@ -612,7 +668,7 @@ class RobotController extends EventEmitter {
       || Date.now() - this.latestRobotStateAtMs > 500) {
       return { type: 'error', code: 'robot_state_stale', msg: 'Robot state is not fresh' };
     }
-    if (this.motionActive) {
+    if (this.motionActive || this.followOwner !== null) {
       return { type: 'error', code: 'motion_active', msg: 'Previous motion is still active' };
     }
     return null;
@@ -641,12 +697,24 @@ class RobotController extends EventEmitter {
   }
 
   _handleBridgeMessage(message) {
+    if (message.type === 'follow_state') {
+      this.followActive = message.active === true;
+      this.motionActive = this.followActive;
+      if (!this.followActive) this.followOwner = this.followStream = null;
+      this.emit('message', {
+        ...message,
+        hold_joints_deg: message.hold_joints_rad ? degrees(message.hold_joints_rad) : undefined,
+      });
+      return;
+    }
     if (message.type === 'connection') {
       this.connectPending = false;
       this.stateReady = false;
       this.latestJointsDeg = null;
       this.latestRobotStateAtMs = null;
       this.motionActive = false;
+      this.followOwner = this.followStream = null;
+      this.followActive = false;
       this.emit('message', {
         ...message,
         mode: 'startouch',
@@ -716,6 +784,9 @@ class RobotController extends EventEmitter {
     }
     if (message.type === 'command_accepted') {
       const command = this.pendingLowLevel.get(message.request_id) || message.command;
+      if (command === 'follow_start' || command === 'follow_target') {
+        this.pendingLowLevel.delete(message.request_id);
+      }
       this.emit('message', {
         ...message, command, type: 'command_status', status: 'accepted',
       });
@@ -757,7 +828,8 @@ class RobotController extends EventEmitter {
       this.emit('message', {
         ...message, command, type: 'command_status', status: 'complete',
         reached: message.reached !== false,
-        actual_joints_deg: [...(this.latestJointsDeg || [])],
+        actual_joints_deg: message.actual_joints_rad
+          ? degrees(message.actual_joints_rad) : [...(this.latestJointsDeg || [])],
         actual_width_m: Number.isFinite(message.actual_position)
           ? message.actual_position * 0.080 : undefined,
         robot_healthy: this.stateReady,
@@ -777,6 +849,10 @@ class RobotController extends EventEmitter {
       }
       const command = this.pendingLowLevel.get(message.request_id)
         || message.command || null;
+      if (command === 'follow_start') {
+        this.followOwner = this.followStream = null;
+        this.followActive = false;
+      }
       this.pendingLowLevel.delete(message.request_id);
       this.emit('message', {
         ...message, type: 'error', command,

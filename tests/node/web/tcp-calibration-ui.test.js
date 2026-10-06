@@ -76,3 +76,12 @@ test('derive finalize activate and rollback require explicit confirmations',()=>
  wizard.render(state({stage:'ready_to_finalize',derivedTcp:{},validationReport:{accepted:true}}));
  assert.equal(element('finalize').disabled,true);assert.equal(element('activate').disabled,true);assert.equal(element('rollback').disabled,true);
 });
+
+test('restored artifact status keeps rollback available after a page reload',()=>{
+ const {wizard,element}=browser([state()]);
+ const previousActiveId=`sha256:${'a'.repeat(64)}`;
+ wizard.render(state({artifacts:{pendingId:`sha256:${'c'.repeat(64)}`,activeId:`sha256:${'b'.repeat(64)}`,previousActiveId}}));
+ assert.equal(element('rollback').disabled,true);
+ element('confirm-rollback').checked=true;wizard.render(wizard.state);
+ assert.equal(element('rollback').disabled,false);
+});

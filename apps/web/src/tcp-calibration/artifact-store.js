@@ -157,6 +157,28 @@ class TcpCalibrationArtifactStore {
     return value;
   }
 
+  status() {
+    let pending = null;
+    try {
+      pending = this._readJson(this._path('gripper-tcp.pending.json'));
+      if (pending?.schema !== 'thirdhand-gripper-tcp-pending-v1'
+          || pending.contentHash !== pending.candidateId) throw codedError('artifact_corrupt');
+      this._candidate(pending.candidateId);
+    } catch (error) {
+      if (error.code !== 'ENOENT') throw error;
+    }
+    const active = this._active();
+    if (active) {
+      this._candidate(active.activeId);
+      if (active.previousActiveId) this._candidate(active.previousActiveId);
+    }
+    return {
+      pendingId: pending?.candidateId || null,
+      activeId: active?.activeId || null,
+      previousActiveId: active?.previousActiveId || null,
+    };
+  }
+
   activate({candidateId,expectedActiveId}) {
     this._candidate(candidateId);
     const active=this._active();

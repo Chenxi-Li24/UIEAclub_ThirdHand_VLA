@@ -19,15 +19,17 @@ class TcpCalibrationWizard{
   on('derive',()=>this.mutate('/api/tcp-calibration/derive'));on('finalize',async()=>{this.pending=await this.mutate('/api/tcp-calibration/finalize');this.render(this.state);});
   on('activate',async()=>{this.active=await this.mutate('/api/tcp-calibration/activate',{candidateId:this.pending.candidateId,expectedActiveId:this.active?.activeId||null,confirm:true});this.render(this.state);});
   on('rollback',async()=>{this.active=await this.mutate('/api/tcp-calibration/rollback',{expectedActiveId:this.active.activeId,confirm:true});this.render(this.state);});
-  on('software-stop',()=>this.mutate('/api/tcp-calibration/software-stop'));
+  on('software-stop',()=>this.stop());
   this.document.querySelectorAll('input[type=checkbox]').forEach(node=>node.onchange=()=>this.render(this.state));
  }
+ async stop(){return this.json('/api/tcp-calibration/software-stop',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({requestId:this.requestId()})});}
  async start(){const axis=this.el('tool-axis').value.split(',').map(Number);const body={requestId:this.requestId(),operator:this.el('operator').value,
   measurement:{distanceM:Number(this.el('distance-mm').value)/1000,uncertaintyM:Number(this.el('uncertainty-mm').value)/1000,toolAxisFlange:axis},
   confirmations:{probeCentered:this.el('probe-centered').checked,pivotFixed:this.el('pivot-fixed').checked,estopReady:this.el('estop-ready').checked,manualTeachOnly:this.el('manual-only').checked}};
   const result=await this.json('/api/tcp-calibration/sessions',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)});this.render(result);return result;}
  message(text){const node=this.el('message');if(node)node.textContent=text;}
  render(state){if(!state)return;this.state=state;const robot=state.robot||{};this.el('session-status').textContent=`${state.stage} · revision ${state.revision}`;
+  if(state.artifacts){this.pending=state.artifacts.pendingId?{candidateId:state.artifacts.pendingId}:null;this.active=state.artifacts.activeId?{activeId:state.artifacts.activeId,previousActiveId:state.artifacts.previousActiveId}:null;}
   this.el('robot-status').textContent=robot.connected?`已连接 · ${robot.stationary?'静止':'运动中'} · ${robot.stateFresh?'状态新鲜':'状态过期'}`:'3000 未连接';
   this.el('frame-status').textContent=`${robot.poseFrame||'坐标未知'} · ${robot.framePolicyId||'policy 未知'}`;
   const unlocked=robot.locked===false;this.el('record-fit').disabled=!(state.stage==='collecting_fit'&&unlocked);this.el('solve').disabled=!(state.stage==='collecting_fit'&&state.fitSamples?.length>=8);

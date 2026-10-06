@@ -28,6 +28,7 @@ async function setup(t,{connected=true}={}){
  const temp=fs.mkdtempSync(path.join(os.tmpdir(),'tcp-api-'));
  const session=fakeSession(),storeCalls=[];
  const store={saveSession:s=>storeCalls.push(['save',structuredClone(s)]),
+  status:()=>({pendingId:`sha256:${'c'.repeat(64)}`,activeId:`sha256:${'b'.repeat(64)}`,previousActiveId:`sha256:${'a'.repeat(64)}`}),
   finalizePending:s=>{storeCalls.push(['finalize',structuredClone(s)]);return {candidateId:`sha256:${'c'.repeat(64)}`};},
   activate:x=>{storeCalls.push(['activate',structuredClone(x)]);return {activeId:x.candidateId,previousActiveId:x.expectedActiveId};},
   rollback:x=>{storeCalls.push(['rollback',structuredClone(x)]);return {activeId:`sha256:${'a'.repeat(64)}`,previousActiveId:x.expectedActiveId};}};
@@ -38,7 +39,7 @@ async function setup(t,{connected=true}={}){
   robotProxy:noOp,visionProxy:noOp,voiceProxy:noOp,
   coordinator:{on(){},status(){return {active:false};},async close(){}},tcpCalibrationRoutes:routes,env:{}});
  const address=await gateway.start();t.after(async()=>{await gateway.close();fs.rmSync(temp,{recursive:true,force:true});});
- return {url:`http://127.0.0.1:${address.port}`,session,storeCalls,stops};
+ return {url:`http://127.0.0.1:${address.port}`,session,store,storeCalls,stops};
 }
 const mutation=(url,route,body,{method='POST',origin}={})=>fetch(url+route,{method,
  headers:{'content-type':'application/json',...(origin?{origin}:{})},body:JSON.stringify(body)});
@@ -51,6 +52,7 @@ test('runtime config exposes injected calibration and current status',async t=>{
  const current=await (await fetch(url+'/api/tcp-calibration/sessions/current')).json();
  assert.equal(current.stage,'idle');
  assert.equal(current.robot.connected,true);
+ assert.equal(current.artifacts.previousActiveId,`sha256:${'a'.repeat(64)}`);
 });
 
 test('same-origin start validates exact body and body limit',async t=>{
@@ -93,7 +95,15 @@ test('request replay is idempotent and conflicting reuse returns conflict',async
  const first=await mutation(url,'/api/tcp-calibration/sessions',body);assert.equal(first.status,201);
  const replay=await mutation(url,'/api/tcp-calibration/sessions',body);assert.equal(replay.status,201);
  const conflict=await mutation(url,'/api/tcp-calibration/sessions',{...body,operator:'other'});assert.equal(conflict.status,409);
+ const nestedConflict=await mutation(url,'/api/tcp-calibration/sessions',{...body,measurement:{...body.measurement,distanceM:.03}});assert.equal(nestedConflict.status,409);
  assert.equal(session.calls.length,1);
+});
+
+test('mutation bodies reject unknown fields instead of silently accepting them',async t=>{
+ const {url}=await setup(t);
+ const start={requestId:'start',operator:'op',measurement:{distanceM:.02,uncertaintyM:.001,toolAxisFlange:[1,0,0]},confirmations:{probeCentered:true,pivotFixed:true,estopReady:true,manualTeachOnly:true}};
+ await mutation(url,'/api/tcp-calibration/sessions',start);
+ assert.equal((await mutation(url,'/api/tcp-calibration/solve',{...envelope(1,'solve-extra'),unexpected:true})).status,400);
 });
 
 test('finalize defaults to pending while activation and rollback are explicit',async t=>{
@@ -108,11 +118,18 @@ test('finalize defaults to pending while activation and rollback are explicit',a
  response=await mutation(url,'/api/tcp-calibration/rollback',{...envelope(7,'rollback'),expectedActiveId:candidateId,confirm:true});assert.equal(response.status,200);
 });
 
+test('artifact conflicts return a bounded response instead of rejecting the request handler',async t=>{
+ const {url,session,store}=await setup(t);
+ session.status=()=>({schema:'thirdhand-tcp-calibration-session-v1',sessionId:'session-1',revision:7,stage:'ready_to_finalize',fitSamples:[],validationSamples:[],validationReport:{accepted:true},solveReport:{accepted:true},derivedTcp:{schema:'thirdhand-grasp-tcp-derived-v1'}});
+ store.activate=()=>{const error=new Error('active_version_conflict');error.code='active_version_conflict';throw error;};
+ const response=await mutation(url,'/api/tcp-calibration/activate',{...envelope(7,'conflict'),candidateId:`sha256:${'c'.repeat(64)}`,expectedActiveId:null,confirm:true});
+ assert.equal(response.status,409);
+ assert.deepEqual(await response.json(),{error:'active_version_conflict'});
+});
+
 test('software stop remains available while disconnected and unknown methods fail',async t=>{
  const {url,stops}=await setup(t,{connected:false});
- const start={requestId:'start',operator:'op',measurement:{distanceM:.02,uncertaintyM:.001,toolAxisFlange:[1,0,0]},confirmations:{probeCentered:true,pivotFixed:true,estopReady:true,manualTeachOnly:true}};
- await mutation(url,'/api/tcp-calibration/sessions',start);
- assert.equal((await mutation(url,'/api/tcp-calibration/software-stop',envelope(1,'stop'))).status,200);
+ assert.equal((await mutation(url,'/api/tcp-calibration/software-stop',{requestId:'stop'})).status,200);
  assert.deepEqual(stops,['stop']);
  assert.equal((await fetch(url+'/api/tcp-calibration/solve',{method:'GET'})).status,405);
 });

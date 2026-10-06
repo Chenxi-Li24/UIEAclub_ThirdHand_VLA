@@ -51,6 +51,14 @@ test('incoming SDK tool coordinates become true flange coordinates',t=>{
   assert.deepEqual(state.frameNormalization,{policyId:state.framePolicyId,
     sourcePoseFrame:'sdk_tool',destinationPoseFrame:'robot_flange'});
 });
+test('known server capability extensions keep canonical state read-only',t=>{
+  const commands=['move_l','preview_ik','move_joint','gripper','preset','software_stop','get_state',
+    'follow_start','follow_target','follow_stop'];
+  const {client,socket}=fixture(t,{capability:{commands}}),count=socket.sent.length;
+  assert.deepEqual(client.getRobotState().flangePositionM,[.2,.3,.4]);
+  assert.equal(client.send({cmd:'follow_start',request_id:'forbidden'}),false);
+  assert.equal(socket.sent.length,count);
+});
 test('outgoing flange target is converted to the configured SDK tool',t=>{
   const {client,socket}=fixture(t);
   assert.equal(client.send({cmd:'move_l',request_id:'one',position:[.2,.3,.4],euler:[0,0,0],time_sec:1}),true);

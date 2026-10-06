@@ -3,6 +3,7 @@
 // only connect() subscribes/handshakes. Tests use local synthetic transports.
 const {RobotWebSocketClient}=require('../../skills/manipulation/bottlegrasp/src/thirdhand_va/action/adapters/robot_ws_client');
 const {loadPolicy,normalizeRobotState,canonicalMoveToSdkTool}=require('./robot_frame_normalization');
+const SERVER_ONLY_COMMANDS=new Set(['preview_ik','follow_start','follow_target','follow_stop']);
 
 function freeze(value){
   if(value&&typeof value==='object'){
@@ -27,10 +28,9 @@ class CanonicalRobotWebSocketClient extends RobotWebSocketClient{
     // the original six-command client contract and every identity/stop check;
     // do not expose preview_ik (or any unknown command) through send().
     if(message?.type==='capability_response'&&Array.isArray(message.commands)&&
-        message.commands.length===7&&new Set(message.commands).size===7&&
-        message.commands.includes('preview_ik')){
+        message.commands.some(command=>SERVER_ONLY_COMMANDS.has(command))){
       return super._onMessage(Buffer.from(JSON.stringify({...message,
-        commands:message.commands.filter(command=>command!=='preview_ik')})));
+        commands:message.commands.filter(command=>!SERVER_ONLY_COMMANDS.has(command))})));
     }
     return super._onMessage(raw);
   }

@@ -11,7 +11,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Restore geometry and face assets for offline tests
-        run: git lfs pull --include="assets/robot/startouch-v3/meshes/**,apps/dummy/models/*.tflite,local/models/vision/*.onnx" --exclude=""
+        run: git lfs pull --include="assets/robot/startouch-v3/meshes/**,apps/dummy/models/*.tflite,local/models/vision/*.onnx,local/models/vision/yolov8n.pt" --exclude=""
 
       - uses: actions/setup-node@v4
         with:

@@ -20482,6 +20482,11 @@
       "path": "local/models/vision/face_detection_yunet_2026may.onnx",
       "size": 229738,
       "sha256": "ebafce4e3c118d6554634be5c27ab333b4c047a9a8c3faf1d7cf93101c22f0f0"
+    },
+    {
+      "path": "local/models/vision/yolov8n.pt",
+      "size": 6549796,
+      "sha256": "f59b3d833e2ff32e194b5bb8e08d211dc7c5bdf144b90d2c8412c47ccfc83b36"
     }
   ],
   "assembledFiles": [

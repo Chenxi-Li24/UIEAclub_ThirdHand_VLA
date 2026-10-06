@@ -13,7 +13,8 @@ robot:
     - [-98, 98]
     - [-98, 98]
     - [-164, 164]
-  # Robot Service alone selects SDK speed mode (default J1-J3: 15, J4-J6: 50 deg/s).
+  # Robot Service selects speed: continuous J1/J4 = 50/50 deg/s;
+  # ordinary waypoints still use J1-J3 = 15, J4-J6 = 50 deg/s.
   min_command_interval_s: 0.10
   follow_command: "move_joint"
   follow_wait_complete: true

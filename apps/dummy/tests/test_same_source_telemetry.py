@@ -1,5 +1,6 @@
 import base64
 import json
+import os
 from pathlib import Path
 import sys
 import time
@@ -34,8 +35,23 @@ def test_window_packet_is_the_controller_observation_and_server_closes():
         with urllib.request.urlopen(f'http://127.0.0.1:{server.server.server_port}/api/frame') as response:
             packet = json.load(response)
         assert packet["state"]["frame_id"] == 7
+        assert packet["state"]["pid"] == os.getpid()
+        assert packet["state"]["project_root"] == str(Path(__file__).resolve().parents[3])
         assert packet["state"]["control"]["request_id"] == "control-1"
         assert base64.b64decode(packet["jpeg_base64"]).startswith(b'\xff\xd8')
     finally:
         server.close()
     assert not server.thread.is_alive()
+
+
+def test_waiting_telemetry_has_owner_identity_before_first_frame():
+    server = FollowTelemetryServer(PersonFollowRuntime(None), port=0)
+    server.start()
+    try:
+        with urllib.request.urlopen(f'http://127.0.0.1:{server.server.server_port}/api/status') as response:
+            state = json.load(response)
+        assert state["schema"] == "thirdhand-dummy-live-observation-v1"
+        assert state["pid"] == os.getpid()
+        assert state["status"] == "waiting"
+    finally:
+        server.close()

@@ -239,6 +239,10 @@ class RobotController extends EventEmitter {
         stateReady: this.stateReady,
         moving: this.motionActive,
         lastStateAt: this.latestRobotStateAtMs,
+        continuousFollow: {
+          j1MaxSpeedDegS: this.config.followJ1MaxSpeedDegS ?? 50,
+          j4MaxSpeedDegS: 1000 * Math.min(0.05, this.config.speedScale ?? 0.05),
+        },
       },
     };
   }

@@ -5,11 +5,16 @@ from joint_speed_policy import REFERENCE_DEG_S, bounded_speed_percent
 
 
 class ContinuousFollow:
-    def __init__(self, guard, speed_percent=0.05, watchdog_s=0.5):
+    def __init__(self, guard, speed_percent=0.05, watchdog_s=0.5, j1_speed_deg_s=50):
         self.guard = guard
         self.speed = [math.radians(v * bounded_speed_percent(speed_percent)) for v in REFERENCE_DEG_S]
         self.acceleration = [v / 0.3 for v in self.speed]
         self.jerk = [a / 0.1 for a in self.acceleration]
+        j1_speed = float(j1_speed_deg_s)
+        if not math.isfinite(j1_speed) or not 0 < j1_speed <= 50:
+            raise ValueError("J1 follow speed must be within (0, 50] deg/s")
+        # Raising the follow velocity must not also raise acceleration or jerk.
+        self.speed[0] = math.radians(j1_speed)
         self.watchdog_s = watchdog_s
         self.active = False
         self.session_id = None

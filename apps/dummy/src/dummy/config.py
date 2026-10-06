@@ -1,6 +1,7 @@
 from pathlib import Path
 import os
 import yaml
+from urllib.parse import urljoin
 
 
 APP_ROOT = Path(__file__).resolve().parents[2]
@@ -36,5 +37,10 @@ def load_config(path=None):
             vision[key] = os.environ[variable]
     if "DUMMY_SPEECH_WS" in os.environ:
         config.setdefault("wake_word", {})["speech_ws_url"] = os.environ["DUMMY_SPEECH_WS"]
+    if "DUMMY_VISION_HTTP_URL" in os.environ:
+        base = os.environ["DUMMY_VISION_HTTP_URL"]
+        for key, route in (("mjpeg_url", "/camera/xvisio/raw"), ("health_url", "/health"),
+                           ("observation_url", "/api/vision/person-follow/observation")):
+            vision[key] = urljoin(base, route)
 
     return config

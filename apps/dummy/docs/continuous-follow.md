@@ -39,8 +39,12 @@ at the last follow activation pose. Target and every interpolation sample pass t
 shared URDF base-plane guard with 40 mm clearance. Missing geometry fails closed.
 Simulation disables physical geometry only for explicitly simulated services.
 
-The interpolator caps speed using the existing shared 300/1000 degrees/s reference
-and maximum 0.05 scale: J1 15 degrees/s and J4 50 degrees/s. Acceleration ramps
+The interpolator uses a separate continuous-follow J1 cap of 50 degrees/s.
+`STARTOUCH_FOLLOW_J1_MAX_SPEED_DEG_S` can lower this cap (1..50); the web-managed
+mode requires the default 50. J4 keeps the shared maximum 0.05 scale, 50 degrees/s.
+Ordinary waypoints remain J1-J3 15 and J4-J6 50 degrees/s. J1 acceleration and jerk
+remain 50 degrees/s^2 and 500 degrees/s^3; raising velocity does not raise them.
+50 degrees/s is an upper bound, not a constant speed. Acceleration ramps
 and jerk limiting prevent sudden direction changes. The backend ticks nominally
 at 100 Hz; expensive geometry checks may reduce actual frequency, and dt is
 capped at 25 ms to prevent a scheduling pause from creating a position jump.
@@ -130,6 +134,9 @@ Deploying this change requires upgrading Robot Service and Dummy together.
    Distinguish receive-age metrics from actual end-to-end camera latency.
 
 ## Deployment Measurements (2026-10-06)
+
+The following live measurements were taken with the earlier 15 degrees/s J1 cap,
+not the later 50 degrees/s setting. The latter needs separate supervised validation.
 
 Offline acceptance passed 173 Node tests and 216 Python tests. Python checks used
 the original checkout's existing URDF payload through test-process-only overrides

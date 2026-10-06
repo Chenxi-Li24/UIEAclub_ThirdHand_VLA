@@ -60,3 +60,11 @@ def test_missing_yolo_weights_do_not_trigger_download(monkeypatch, tmp_path):
     }})
     assert not detector.available
     assert "YOLO model not found" in detector.error
+
+
+def test_web_vision_override_uses_one_shared_service(monkeypatch):
+    monkeypatch.setenv("DUMMY_VISION_HTTP_URL", "http://127.0.0.1:13100")
+    vision = load_config()["vision_service"]
+    assert vision["mjpeg_url"] == "http://127.0.0.1:13100/camera/xvisio/raw"
+    assert vision["health_url"] == "http://127.0.0.1:13100/health"
+    assert vision["observation_url"] == "http://127.0.0.1:13100/api/vision/person-follow/observation"

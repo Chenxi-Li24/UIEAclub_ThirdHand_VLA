@@ -224,7 +224,8 @@ class RobotBridge:
                         Path(__file__).resolve().parents[3] / "assets/robot/startouch-v3/FastTouchV3.SLDASM.urdf")
                     guard = WorkspaceGuard({"workspace_guard": {
                         "enabled": not SIMULATE, "urdf_path": path, "clearance_m": 0.04}})
-                    self.follow = ContinuousFollow(guard, SPEED_PERCENT)
+                    self.follow = ContinuousFollow(guard, SPEED_PERCENT,
+                        j1_speed_deg_s=float(os.environ.get("STARTOUCH_FOLLOW_J1_MAX_SPEED_DEG_S", "50")))
                 measured = self._finite_values(self.arm.get_joint_positions(), 6, "follow start feedback")
                 self.follow.begin(command.get("stream_id"), measured, time.monotonic())
                 self.motion_active = True

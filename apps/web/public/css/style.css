@@ -732,6 +732,23 @@ html, body {
 
 .action-row { display: flex; gap: 8px; }
 
+.dummy-body { display: grid; gap: 10px; }
+.dummy-status { display: flex; flex-wrap: wrap; gap: 6px 12px; justify-content: space-between; }
+.dummy-status strong { color: var(--accent); }
+#dummy-limits, #dummy-tracking, #dummy-preview-status { font-size: 0.75rem; color: var(--text-secondary); }
+#dummy-reason { margin: 0; color: var(--warning); font-size: 0.8rem; overflow-wrap: anywhere; }
+.dummy-body .action-primary, #dummy-confirm .action-primary { margin-bottom: 0; }
+.dummy-body .action-row > button, #dummy-confirm .action-row > button { flex: 1; min-width: 0; }
+.dummy-body output { font-variant-numeric: tabular-nums; font-size: 0.8rem; }
+.dummy-preview { width: 100%; aspect-ratio: 4 / 3; background: #080c12; border-radius: 4px; overflow: hidden; }
+.dummy-preview[hidden] { display: none; }
+.dummy-preview img { display: block; width: 100%; height: 100%; object-fit: contain; }
+#dummy-confirm { box-sizing: border-box; width: min(460px, calc(100% - 32px)); max-height: calc(100% - 32px); overflow: auto;
+  margin: auto; border: 1px solid var(--border); border-radius: 8px; padding: 20px; background: var(--bg-card); color: var(--text-primary); }
+#dummy-confirm::backdrop { background: rgba(0, 0, 0, 0.65); }
+#dummy-confirm h2 { margin: 0 0 16px; font-size: 1.1rem; }
+#dummy-confirm p { font-size: 0.85rem; line-height: 1.6; }
+
 .action-secondary {
   flex: 1;
   background: var(--bg-card);

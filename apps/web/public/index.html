@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>ThirdHand - Startouch 机械臂控制</title>
-  <link rel="stylesheet" href="css/style.css?v=6">
+  <link rel="stylesheet" href="css/style.css?v=7">
 </head>
 <body>
   <!-- 软件停止提示 -->
@@ -220,6 +220,26 @@
             <span class="axis-y">Y 左</span>
             <span class="axis-z">Z 上</span>
           </div>
+        </div>
+      </div>
+      <div class="drawer-section collapsed" id="sec-dummy">
+        <div class="sec-header">
+          <span>Dummy 人物跟随</span>
+          <button class="sec-toggle" aria-label="展开 Dummy 控制" aria-expanded="false">▾</button>
+        </div>
+        <div class="sec-body dummy-body">
+          <div class="dummy-status"><strong id="dummy-phase">检查中</strong><span id="dummy-limits">J1 ≤ 50°/s</span></div>
+          <p id="dummy-reason" role="status"></p>
+          <label class="toggle-label"><input type="checkbox" id="dummy-keywords" checked>关键词动作（全部关节）</label>
+          <div class="action-row">
+            <button type="button" class="action-btn action-primary" id="dummy-start" disabled>启动跟随</button>
+            <button type="button" class="action-btn action-secondary" id="dummy-stop" disabled>停止 Dummy</button>
+          </div>
+          <output id="dummy-measured">J1 — / J4 —</output>
+          <div id="dummy-tracking">等待识别</div>
+          <label class="toggle-label"><input type="checkbox" id="dummy-preview-enabled">识别画面</label>
+          <div class="dummy-preview" id="dummy-preview" hidden><img id="dummy-frame" alt="Dummy 同源人物识别画面"></div>
+          <div id="dummy-preview-status" role="status"></div>
         </div>
       </div>
       <!-- XVisio 视觉 -->
@@ -468,6 +488,16 @@
     <div class="log-area" id="log-area"></div>
   </div>
 
+  <dialog id="dummy-confirm" aria-labelledby="dummy-confirm-title">
+    <h2 id="dummy-confirm-title">启动实机人物跟随</h2>
+    <p>J1/J4 将跟随人物运动，J1 速度上限为 50°/s。</p>
+    <p id="dummy-keyword-warning">关键词动作可能驱动全部关节。</p>
+    <p>请确认运动范围已清空、现场有人看护，且独立硬件急停可用。停止 Dummy 不等于硬件急停。</p>
+    <div class="action-row">
+      <button type="button" class="action-btn action-secondary" id="dummy-confirm-cancel">取消</button>
+      <button type="button" class="action-btn action-primary" id="dummy-confirm-start">确认启动</button>
+    </div>
+  </dialog>
   <script type="importmap">
   {
     "imports": {
@@ -477,6 +507,7 @@
   }
   </script>
   <script src="js/runtime-endpoints.js?v=1"></script>
+  <script src="js/dummy-control.js?v=1" defer></script>
   <script type="module" src="js/main.js?v=12"></script>
 </body>
 </html>

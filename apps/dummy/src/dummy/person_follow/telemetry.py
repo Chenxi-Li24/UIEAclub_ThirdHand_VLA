@@ -3,6 +3,8 @@ from dataclasses import asdict
 import base64
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
+import os
+from pathlib import Path
 import threading
 import time
 
@@ -70,6 +72,8 @@ class FollowTelemetryServer:
                     self.send_error(404)
                     return
                 frame, state = observation_snapshot(runtime)
+                state.update(schema="thirdhand-dummy-live-observation-v1", pid=os.getpid(),
+                             project_root=str(Path(__file__).resolve().parents[5]))
                 body = state
                 if self.path == "/api/frame":
                     jpeg = encode_frame(frame, state)

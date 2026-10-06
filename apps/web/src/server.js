@@ -14,6 +14,7 @@ const { WebSocketProxy } = require('./websocket-proxy');
 const { ActiveDepthCoordinator } = require('./active-depth/coordinator');
 const { ExecutionClient } = require('./active-depth/execution-client');
 const { VisionClient } = require('./active-depth/vision-client');
+const { DummyController } = require('./dummy-controller');
 const VOICE_PROTOCOL = 'thirdhand.voice.v1';
 
 function writeJson(response, status, payload) {
@@ -72,6 +73,7 @@ function exactKeys(body, keys) {
 
 function createWebGateway(options = {}) {
   const config = { ...loadConfig(options.env), ...options };
+  const dummyController = options.dummyController || new DummyController(config);
   const robotProxy = options.robotProxy || new RobotProxy(config.robotWsUrl, config.language);
   const visionProxy = options.visionProxy || new VisionProxy(config.visionWsUrl);
   const voiceProxy = options.voiceProxy || new WebSocketProxy(config.voiceWsUrl, {
@@ -108,6 +110,8 @@ function createWebGateway(options = {}) {
         voice: { endpoint: '/voice', protocol: VOICE_PROTOCOL },
         vision: { endpoint: '/vision' },
         activeDepth: { ready: activeDepthReady, startEndpoint: '/api/active-depth/start' },
+        dummy: { statusEndpoint: '/api/dummy/status', startEndpoint: '/api/dummy/start',
+          stopEndpoint: '/api/dummy/stop', frameEndpoint: '/api/dummy/frame' },
         language: {
           executionBackend: 'formal-3000-upstream',
           directional: {
@@ -130,6 +134,60 @@ function createWebGateway(options = {}) {
           activeDepth: { ready: activeDepthReady, reason: activeDepthReason },
         },
       });
+      return;
+    }
+    if (pathname.startsWith('/api/dummy/')) {
+      try {
+        if (request.method === 'GET' && pathname === '/api/dummy/status') {
+          writeJson(response, 200, await dummyController.status());
+          return;
+        }
+        if (request.method === 'GET' && pathname === '/api/dummy/frame') {
+          writeJson(response, 200, await dummyController.frame());
+          return;
+        }
+        if (request.method !== 'POST' || !['/api/dummy/start', '/api/dummy/stop'].includes(pathname)) {
+          writeJson(response, 404, { error: 'not_found' });
+          return;
+        }
+        let sameOrigin = true;
+        try {
+          if (request.headers.origin) {
+            const origin = new URL(request.headers.origin);
+            sameOrigin = ['http:', 'https:'].includes(origin.protocol) && origin.host === request.headers.host;
+          }
+        } catch { sameOrigin = false; }
+        if (!sameOrigin || request.headers['sec-fetch-site'] === 'cross-site') {
+          writeJson(response, 403, { error: 'dummy_origin_rejected' });
+          return;
+        }
+        if (!String(request.headers['content-type'] || '').startsWith('application/json')) {
+          writeJson(response, 415, { error: 'json_required' });
+          return;
+        }
+        const body = await readJson(request);
+        if (pathname.endsWith('/start')) {
+          if (!exactKeys(body, ['authorized', 'keywords']) || typeof body.authorized !== 'boolean'
+              || typeof body.keywords !== 'boolean') {
+            writeJson(response, 400, { error: 'request_invalid' });
+            return;
+          }
+          writeJson(response, 202, await dummyController.start(body));
+        } else {
+          if (!exactKeys(body, [])) {
+            writeJson(response, 400, { error: 'request_invalid' });
+            return;
+          }
+          writeJson(response, 202, dummyController.stop());
+        }
+      } catch (error) {
+        const code = error.code || 'dummy_request_failed';
+        const status = code === 'body_too_large' ? 413 : code === 'invalid_json' ? 400
+          : code === 'dummy_authorization_required' ? 403
+            : ['dummy_already_running', 'dummy_external_process', 'dummy_robot_busy',
+              'dummy_start_pending', 'dummy_backend_upgrade_required'].includes(code) ? 409 : 503;
+        if (!response.headersSent) writeJson(response, status, { error: code });
+      }
       return;
     }
     if (request.method === 'GET' && pathname === '/api/active-depth/status') {
@@ -269,6 +327,7 @@ function createWebGateway(options = {}) {
     async close() {
       if (closing) return;
       closing = true;
+      await dummyController.close();
       if (coordinator) await coordinator.close();
       robotProxy.close();
       visionProxy.close();

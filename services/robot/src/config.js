@@ -58,6 +58,7 @@ function loadConfig(env = process.env) {
       initSampleCount: numberFrom(env, 'STARTOUCH_INIT_SAMPLE_COUNT', 3, 2, 20),
       initMaxDriftDeg: numberFrom(env, 'STARTOUCH_INIT_MAX_DRIFT_DEG', 2, 0.1, 20),
       speedScale: numberFrom(env, 'STARTOUCH_SPEED_SCALE', 0.05, 0.01, 1),
+      followJ1MaxSpeedDegS: numberFrom(env, 'STARTOUCH_FOLLOW_J1_MAX_SPEED_DEG_S', 50, 1, 50),
       minMoveTimeSec: numberFrom(env, 'STARTOUCH_MIN_MOVE_TIME_SEC', 0.5, 0.05, 30),
       maxMoveTimeSec: numberFrom(env, 'STARTOUCH_MAX_MOVE_TIME_SEC', 30, 0.1, 120),
       homePresetDeg: vectorFrom(

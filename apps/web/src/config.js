@@ -22,6 +22,13 @@ function portFrom(env, name, fallback) {
 }
 
 function loadConfig(env = process.env) {
+  if (env.DUMMY_TELEMETRY_PORT != null && Number(env.DUMMY_TELEMETRY_PORT) === 0) {
+    throw new Error('DUMMY_TELEMETRY_PORT must not be zero for managed Dummy');
+  }
+  const resourceRoot = env.DUMMY_RESOURCE_ROOT || ROOT;
+  const speech = new URL(env.VOICE_WS_URL || 'ws://127.0.0.1:3004/v1/voice');
+  speech.pathname = '/v1/transcripts';
+  speech.search = '';
   return {
     host: env.WEB_HOST || '0.0.0.0',
     port: portFrom(env, 'WEB_PORT', 9983),
@@ -38,6 +45,17 @@ function loadConfig(env = process.env) {
     voiceWsUrl: env.VOICE_WS_URL || 'ws://127.0.0.1:3004/v1/voice',
     visionHttpUrl: env.VISION_HTTP_URL || 'http://127.0.0.1:3100',
     visionWsUrl: env.VISION_WS_URL || 'ws://127.0.0.1:3100/ws',
+    dummy: {
+      root: ROOT,
+      python: env.DUMMY_PYTHON || path.join(resourceRoot, 'local/runtimes/vision-python/bin/python'),
+      entry: path.join(ROOT, 'apps/dummy/apps/run_head_body_follow.py'),
+      urdf: env.DUMMY_URDF_PATH || path.join(resourceRoot, 'assets/robot/startouch-v3/FastTouchV3.SLDASM.urdf'),
+      faceModel: env.DUMMY_FACE_MODEL || path.join(resourceRoot, 'apps/dummy/models/blaze_face_short_range.tflite'),
+      yoloModel: env.DUMMY_YOLO_MODEL || path.join(resourceRoot, 'local/models/vision/yolov8n.pt'),
+      speechWs: env.DUMMY_SPEECH_WS || speech.href,
+      telemetryPort: portFrom(env, 'DUMMY_TELEMETRY_PORT', 31024),
+      logFile: path.join(ROOT, 'runtime/logs/dummy-web.log'),
+    },
     language: {
       realControlEnabled: env.LANGUAGE_REAL_CONTROL === '1',
       visionHttpUrl: env.VISION_HTTP_URL || 'http://127.0.0.1:3100',

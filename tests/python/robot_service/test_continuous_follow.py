@@ -33,7 +33,20 @@ def test_interpolated_samples_preserve_shared_speed_and_other_joints():
         assert all(q[i] == 0 for i in (1, 2, 4, 5))
         previous = q
     assert math.degrees(q[0]) > 20
-    assert math.degrees(s.speed[0]) == pytest.approx(15)
+    assert math.degrees(s.speed[0]) == pytest.approx(50)
+    assert math.degrees(s.speed[3]) == pytest.approx(50)
+    assert math.degrees(s.acceleration[0]) == pytest.approx(50)
+    assert math.degrees(s.jerk[0]) == pytest.approx(500)
+
+
+def test_j1_follow_speed_override_does_not_raise_shared_motion_policy():
+    s = ContinuousFollow(Guard(), j1_speed_deg_s=20)
+    assert math.degrees(s.speed[0]) == pytest.approx(20)
+    assert math.degrees(s.speed[1]) == pytest.approx(15)
+    assert math.degrees(s.acceleration[0]) == pytest.approx(50)
+    for bad in (0, -1, 51, float("nan")):
+        with pytest.raises(ValueError, match="J1 follow speed"):
+            ContinuousFollow(Guard(), j1_speed_deg_s=bad)
 
 
 def test_new_target_changes_direction_without_finishing_old_target():

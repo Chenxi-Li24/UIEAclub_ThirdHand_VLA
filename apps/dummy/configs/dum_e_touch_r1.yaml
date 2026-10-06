@@ -44,7 +44,7 @@ vision:
   filter_beta: 0.04
 vision_service:
   enabled: true
-  # Only a selected face center controls J1/J4. No body/motion fallback.
+  # Face-first J1/J4; person_tracking optionally provides a bound head anchor.
   follow_target: "face"
   face_detector: "yunet"
   yunet_face_model_path: "local/models/vision/face_detection_yunet_2026may.onnx"
@@ -91,6 +91,15 @@ rgbd_target:
   min_depth_ratio: 0.08
   min_depth_points: 150
   prefer_labels: ["person", "face", "human"]
+person_tracking:
+  # FACE/BODY association validated read-only; supervised activation approved.
+  # Only freshly observed bodies bound to the selected face can drive follow.
+  enabled: true
+  loss_timeout_s: 1.0
+  source_blend_s: 0.30
+  overlap_pause_iou: 0.35
+  # Suppress duplicate boxes for one person before BoT-SORT association.
+  detection_iou: 0.45
 face_lock:
   # Pause on missing/ambiguous frames. Confirmed loss can select another face.
   auto_reacquire: true

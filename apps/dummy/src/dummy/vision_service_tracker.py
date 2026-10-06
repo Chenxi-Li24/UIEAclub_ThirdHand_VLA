@@ -13,11 +13,13 @@ from PIL import Image
 
 from .filters import OneEuro
 from .face_lock_tracker import FaceLockTracker
+from .face_person_selector import FacePersonSelector
 from .mediapipe_face import MediaPipeFaceDetector
 from .person_lock_tracker import Candidate, PersonLockTracker
 from .rgbd_target import RgbdTargetBuilder
 from .tracker import Target
 from .yolo_person_detector import YoloPersonDetector
+from .yolo_person_tracker import YoloPersonTracker
 from .yunet_face import YuNetFaceDetector
 
 
@@ -111,6 +113,8 @@ class VisionServiceTracker:
     def __init__(self, config):
         v = config.get("vision_service", {})
         self.face_only = v.get("follow_target", "person") == "face"
+        self.person_tracking_enabled = self.face_only and bool(config.get("person_tracking", {}).get("enabled", False))
+        self.face_person = FacePersonSelector(config) if self.person_tracking_enabled else None
         self.face_detector_backend = v.get("face_detector", "mediapipe")
         if self.face_only and self.face_detector_backend not in ("mediapipe", "yunet"):
             raise ValueError("unknown face detector backend")
@@ -170,8 +174,9 @@ class VisionServiceTracker:
         self.last_target = Target(False)
         self.person_lock_enabled = bool(v.get("person_lock_enabled", True))
         self.person_lock = PersonLockTracker(config) if self.person_lock_enabled else None
-        person_config = {**config, "vision_service": {**v, "yolo_person_enabled": False}} if self.face_only else config
-        self.yolo_person = YoloPersonDetector(person_config)
+        person_config = {**config, "vision_service": {**v, "yolo_person_enabled": self.person_tracking_enabled}} if self.face_only else config
+        self.yolo_person = (YoloPersonTracker(person_config) if self.person_tracking_enabled
+                            else YoloPersonDetector(person_config))
         self._last_frame_sequence = None
         self.face = None
         self.upperbody = None
@@ -287,8 +292,14 @@ class VisionServiceTracker:
         for target, debug in detector.detect_all(rgb):
             bbox = debug["bbox"]
             candidates.append(Candidate(target.u, target.v, bbox[2], bbox[3], target.score, target.kind))
-        target = self.face_lock.update(candidates, now=received_at, frame_size=(w, h))
-        self.last_debug = dict(self.face_lock.last_debug)
+        if self.face_person is not None:
+            bodies = self.yolo_person.track(frame, received_at=received_at)
+            target = self.face_person.update(candidates, bodies, now=received_at, frame_size=(w, h))
+            self.last_debug = dict(self.face_person.last_debug)
+            self.last_debug["person_detection_ms"] = self.yolo_person.inference_ms
+        else:
+            target = self.face_lock.update(candidates, now=received_at, frame_size=(w, h))
+            self.last_debug = dict(self.face_lock.last_debug)
         self.last_debug["face_detector"] = self.face_detector_backend
         self.last_target = target
         return target

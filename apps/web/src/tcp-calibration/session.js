@@ -36,7 +36,7 @@ function validMatrix(value) {
 }
 
 class TcpCalibrationSession {
-  constructor({ stateSource, solver, thresholds, idFactory, now } = {}) {
+  constructor({ stateSource, solver, thresholds, idFactory, now, initialState = null } = {}) {
     if (!stateSource || typeof stateSource.snapshot !== 'function' || typeof solver !== 'function'
         || typeof idFactory !== 'function' || typeof now !== 'function') {
       throw new TypeError('tcp_calibration_session_invalid');
@@ -47,7 +47,7 @@ class TcpCalibrationSession {
     this.idFactory = idFactory;
     this.now = now;
     this.replays = new Map();
-    this.state = {
+    const emptyState = {
       schema: 'thirdhand-tcp-calibration-session-v1',
       sessionId: null,
       revision: 0,
@@ -62,8 +62,18 @@ class TcpCalibrationSession {
       derivedTcp: null,
       updatedAt: null,
     };
-    this.lastStateSequence = null;
-    this.lastProducerMonotonicNs = null;
+    if (initialState !== null && (!initialState || initialState.schema !== emptyState.schema
+        || typeof initialState.sessionId !== 'string' || !initialState.sessionId
+        || !Number.isSafeInteger(initialState.revision) || initialState.revision < 1
+        || !Array.isArray(initialState.fitSamples) || !Array.isArray(initialState.validationSamples))) {
+      throw new TypeError('tcp_calibration_session_snapshot_invalid');
+    }
+    this.state = clone(initialState || emptyState);
+    const samples = [...this.state.fitSamples, ...this.state.validationSamples];
+    this.lastStateSequence = samples.length
+      ? Math.max(...samples.map(sample => sample.state_sequence)) : null;
+    this.lastProducerMonotonicNs = samples.length
+      ? Math.max(...samples.map(sample => sample.producer_monotonic_ns)) : null;
   }
 
   status() { return freeze(clone(this.state)); }

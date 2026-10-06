@@ -88,12 +88,15 @@ function createWebGateway(options = {}) {
         framePolicyPath:config.tcpCalibrationFramePolicyFile});
       const stateSource=new TcpCalibrationRobotStateSource({client});
       const store=new TcpCalibrationArtifactStore({root:config.tcpCalibrationArtifactRoot});
+      let initialState=null;
+      try{initialState=store.restoreSession();}
+      catch(error){if(error.code!=='ENOENT')throw error;}
       const thresholds={fitRmsGreenM:.002,fitMaximumGreenM:.004,fitRmsMaximumM:.003,
         fitMaximumM:.005,validationMaximumM:.005};
       const solver=request=>runTcpSolver({python:config.tcpCalibrationPython,
         script:config.tcpCalibrationSolverScript,request});
       const session=new TcpCalibrationSession({stateSource,solver,thresholds,
-        idFactory:randomUUID,now:()=>new Date().toISOString()});
+        idFactory:randomUUID,now:()=>new Date().toISOString(),initialState});
       tcpCalibrationRoutes=createTcpCalibrationRoutes({session,store,stateSource});
       tcpCalibrationReason=null;
     }catch(error){tcpCalibrationReason=error.code||error.message||'tcp_calibration_configuration_invalid';}

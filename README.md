@@ -11,6 +11,7 @@ ThirdHand VLA 是面向 Startouch 六轴机械臂的统一网页控制、语音�
 | 理解目录职责 | [`docs/DIRECTORY_MAP.md`](docs/DIRECTORY_MAP.md) |
 | 接入网页网关 | [`docs/apps/WEB_GATEWAY.md`](docs/apps/WEB_GATEWAY.md) |
 | 查看机器人协议与安全边界 | [`docs/services/ROBOT_SERVICE_PROTOCOL.md`](docs/services/ROBOT_SERVICE_PROTOCOL.md) |
+| 使用 TCP 标定网页向导 | [`docs/hardware/tcp-calibration-web-wizard.md`](docs/hardware/tcp-calibration-web-wizard.md) |
 | 查看 Skill 协议 | [`docs/SKILL_PROTOCOL.md`](docs/SKILL_PROTOCOL.md) |
 | 准备本地 SDK、模型和运行时 | [`local/README.md`](local/README.md) |
 | 查找旧实现 | [`History/README.md`](History/README.md) |

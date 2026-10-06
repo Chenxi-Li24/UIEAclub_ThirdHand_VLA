@@ -116,6 +116,7 @@ test('web gateway serves UI and proxies only robot commands', async (t) => {
   const health = await fetch(`${origin}/health`).then(response => response.json());
   assert.equal(health.status, 'ready');
   assert.equal(health.dependencies.robot.url, robot.url);
+  assert.deepEqual(health.dependencies.tcpCalibration,{ready:false,reason:'tcp_calibration_disabled'});
   assert.equal(fs.existsSync(readyFile), true);
 
   const traversal = await fetch(`${origin}/%2e%2e/package.json`);

@@ -29,6 +29,12 @@ function loadConfig(env = process.env) {
     assetsDir: env.ROBOT_ASSETS_DIR || path.join(ROOT, 'assets', 'robot'),
     readyFile: env.THIRDHAND_READY_FILE || path.join(ROOT, 'runtime', 'run', 'web.ready'),
     robotWsUrl: env.ROBOT_WS_URL || 'ws://127.0.0.1:3000/ws',
+    tcpCalibrationEnabled: env.TCP_CALIBRATION_ENABLED === '1',
+    tcpCalibrationFramePolicyFile: env.TCP_CALIBRATION_FRAME_POLICY_FILE || path.join(
+      ROOT,'skills','manipulation','bottlegrasp','configs','calibration','sdk-tool-frame-policy-20261005.json'),
+    tcpCalibrationArtifactRoot: env.TCP_CALIBRATION_ARTIFACT_ROOT || path.join(ROOT,'runtime','tcp-calibration'),
+    tcpCalibrationPython: env.TCP_CALIBRATION_PYTHON || 'python',
+    tcpCalibrationSolverScript: env.TCP_CALIBRATION_SOLVER_SCRIPT || path.join(ROOT,'tools','tcp_calibration','solve_tcp.py'),
     robotExecutionWsUrl: env.ROBOT_EXECUTION_WS_URL || 'ws://127.0.0.1:3000/execution',
     robotExecutionTokenFile: env.ROBOT_EXECUTION_TOKEN_FILE || path.join(ROOT, 'runtime', 'run', 'robot-execution.token'),
     activeDepthMountFile: env.ACTIVE_DEPTH_MOUNT_FILE || path.join(

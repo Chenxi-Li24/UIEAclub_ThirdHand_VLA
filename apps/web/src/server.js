@@ -73,6 +73,31 @@ function exactKeys(body, keys) {
 
 function createWebGateway(options = {}) {
   const config = { ...loadConfig(options.env), ...options };
+  let tcpCalibrationRoutes=options.tcpCalibrationRoutes||null;
+  let tcpCalibrationReason=tcpCalibrationRoutes?null:'tcp_calibration_disabled';
+  if(!tcpCalibrationRoutes&&config.tcpCalibrationEnabled){
+    try{
+      const {WebSocket}=require('ws');
+      const {CanonicalRobotWebSocketClient}=require('../../../tools/frames/canonical_robot_client');
+      const {TcpCalibrationRobotStateSource}=require('./tcp-calibration/robot-state-source');
+      const {TcpCalibrationSession}=require('./tcp-calibration/session');
+      const {TcpCalibrationArtifactStore}=require('./tcp-calibration/artifact-store');
+      const {runTcpSolver}=require('./tcp-calibration/solver-adapter');
+      const {createTcpCalibrationRoutes}=require('./tcp-calibration/routes');
+      const client=new CanonicalRobotWebSocketClient({WebSocketImpl:WebSocket,url:config.robotWsUrl,
+        framePolicyPath:config.tcpCalibrationFramePolicyFile});
+      const stateSource=new TcpCalibrationRobotStateSource({client});
+      const store=new TcpCalibrationArtifactStore({root:config.tcpCalibrationArtifactRoot});
+      const thresholds={fitRmsGreenM:.002,fitMaximumGreenM:.004,fitRmsMaximumM:.003,
+        fitMaximumM:.005,validationMaximumM:.005};
+      const solver=request=>runTcpSolver({python:config.tcpCalibrationPython,
+        script:config.tcpCalibrationSolverScript,request});
+      const session=new TcpCalibrationSession({stateSource,solver,thresholds,
+        idFactory:randomUUID,now:()=>new Date().toISOString()});
+      tcpCalibrationRoutes=createTcpCalibrationRoutes({session,store,stateSource});
+      tcpCalibrationReason=null;
+    }catch(error){tcpCalibrationReason=error.code||error.message||'tcp_calibration_configuration_invalid';}
+  }
   const robotProxy = options.robotProxy || new RobotProxy(config.robotWsUrl, config.language);
   const visionProxy = options.visionProxy || new VisionProxy(config.visionWsUrl);
   const voiceProxy = options.voiceProxy || new WebSocketProxy(config.voiceWsUrl, {
@@ -130,6 +155,7 @@ function createWebGateway(options = {}) {
         vision: { endpoint: '/vision' },
         activeDepth: { ready: activeDepthReady, startEndpoint: '/api/active-depth/start' },
         grasp: graspConfig,
+        tcpCalibration: tcpCalibrationRoutes?.config()||{ready:false,reason:tcpCalibrationReason},
         language: {
           executionBackend: 'formal-3000-upstream',
           directional: {
@@ -151,6 +177,7 @@ function createWebGateway(options = {}) {
           bottlePick: { url: config.language.vaHttpUrl },
           activeDepth: { ready: activeDepthReady, reason: activeDepthReason },
           grasp: graspConfig,
+          tcpCalibration: tcpCalibrationRoutes?.config()||{ready:false,reason:tcpCalibrationReason},
         },
       });
       return;
@@ -261,6 +288,7 @@ function createWebGateway(options = {}) {
       proxyHttpRequest(request, response, config.visionHttpUrl, pathname);
       return;
     }
+    if(await tcpCalibrationRoutes?.handle(request,response,pathname))return;
     if (serveStatic(request, response, config)) return;
     writeJson(response, 404, { error: 'not_found' });
   });
@@ -330,6 +358,7 @@ function createWebGateway(options = {}) {
 
   return {
     async start() {
+      tcpCalibrationRoutes?.connect?.();
       await new Promise((resolve, reject) => {
         server.once('error', reject);
         server.listen(config.port, config.host, resolve);
@@ -347,6 +376,7 @@ function createWebGateway(options = {}) {
       closing = true;
       if (graspController) await graspController.close();
       if (coordinator) await coordinator.close();
+      await tcpCalibrationRoutes?.close?.();
       robotProxy.close();
       visionProxy.close();
       voiceProxy.close();

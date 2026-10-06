@@ -50,6 +50,7 @@ test('runtime config exposes injected calibration and current status',async t=>{
  assert.deepEqual(runtime.tcpCalibration,{ready:true,page:'/tcp-calibration.html'});
  const current=await (await fetch(url+'/api/tcp-calibration/sessions/current')).json();
  assert.equal(current.stage,'idle');
+ assert.equal(current.robot.connected,true);
 });
 
 test('same-origin start validates exact body and body limit',async t=>{

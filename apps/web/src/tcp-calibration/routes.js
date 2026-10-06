@@ -28,7 +28,9 @@ function createTcpCalibrationRoutes({session,store,stateSource}={}){
  }
  async function handle(request,response,pathname){
   if(!pathname.startsWith('/api/tcp-calibration/'))return false;
-  if(request.method==='GET'&&pathname==='/api/tcp-calibration/sessions/current'){writeJson(response,200,session.status());return true;}
+  if(request.method==='GET'&&pathname==='/api/tcp-calibration/sessions/current'){
+   writeJson(response,200,{...session.status(),robot:stateSource.snapshot()});return true;
+  }
   const allowed=new Set([
    'POST /api/tcp-calibration/sessions','POST /api/tcp-calibration/samples','POST /api/tcp-calibration/solve',
    'POST /api/tcp-calibration/verification-samples','POST /api/tcp-calibration/derive','POST /api/tcp-calibration/finalize',

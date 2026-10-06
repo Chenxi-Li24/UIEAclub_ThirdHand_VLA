@@ -32,6 +32,7 @@ def load_config(path=None):
                              ("mink_lookat", "model_path")):
             config.setdefault(section, {})[key] = urdf
     for variable, key in (("DUMMY_FACE_MODEL", "mediapipe_face_model_path"),
+                          ("DUMMY_YUNET_MODEL", "yunet_face_model_path"),
                           ("DUMMY_YOLO_MODEL", "yolo_person_model_path")):
         if variable in os.environ:
             vision[key] = os.environ[variable]

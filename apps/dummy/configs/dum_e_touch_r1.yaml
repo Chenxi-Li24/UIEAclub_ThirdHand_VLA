@@ -44,6 +44,12 @@ vision:
   filter_beta: 0.04
 vision_service:
   enabled: true
+  # Only a selected face center controls J1/J4. No body/motion fallback.
+  follow_target: "face"
+  face_detector: "yunet"
+  yunet_face_model_path: "local/models/vision/face_detection_yunet_2026may.onnx"
+  yunet_face_min_score: 0.80
+  yolo_person_enabled: false
   mjpeg_url: "http://127.0.0.1:3100/camera/xvisio/raw"
   health_url: "http://127.0.0.1:3100/health"
   observation_url: "http://127.0.0.1:3100/api/vision/person-follow/observation"
@@ -56,7 +62,7 @@ vision_service:
   max_frame_age_s: 0.5
   motion_requires_face_lock: true
   motion_lock_radius_px: 95
-  wave_lock_enabled: true
+  wave_lock_enabled: false
   wave_lock_frames: 2
   wave_lock_min_score: 0.004
   wave_lock_center_radius_px: 280
@@ -85,6 +91,15 @@ rgbd_target:
   min_depth_ratio: 0.08
   min_depth_points: 150
   prefer_labels: ["person", "face", "human"]
+face_lock:
+  # Pause on missing/ambiguous frames. Confirmed loss can select another face.
+  auto_reacquire: true
+  loss_timeout_s: 1.0
+  confirm_frames: 2
+  max_distance_px: 120.0
+  ambiguity_margin_px: 30.0
+  filter_min_cutoff: 0.7
+  filter_beta: 0.08
 person_lock:
   # Product-style continuous follow: short detector dropouts should not stop
   # the arm while the operator is moving.

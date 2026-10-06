@@ -67,6 +67,9 @@ restarting the sole SDK for this backend update.
 
 ## Manual Verification
 
+Default tracking now uses a face-only target. See [face-follow.md](face-follow.md)
+for startup selection, automatic reacquisition and the not-yet-connected OK switch.
+
 1. Reload the test web page, expand Dummy. It must remain stopped without motion.
 2. With an old backend, start stays disabled and an upgrade reason appears.
 3. After a supervised backend upgrade, check reported J1/J4 caps and live Robot

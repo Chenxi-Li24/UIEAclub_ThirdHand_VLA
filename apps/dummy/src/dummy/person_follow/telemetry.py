@@ -28,6 +28,12 @@ def observation_snapshot(runtime):
         bbox = [candidate["u"] - candidate["w"] / 2, candidate["v"] - candidate["h"] / 2,
                 candidate["w"], candidate["h"]]
     state = {"schema": "thirdhand-dummy-live-observation-v1", "status": "locked" if usable else "holding",
+             "follow_target": debug.get("follow_target", "person"),
+             "lock_state": debug.get("lock_state"), "face_count": debug.get("face_count"),
+             "face_boxes_xywh": debug.get("face_boxes", []),
+             "face_scores": debug.get("face_scores", []), "face_detector": debug.get("face_detector"),
+             "auto_reacquire": debug.get("auto_reacquire"),
+             "selection_generation": debug.get("selection_generation"),
              "frame_id": observation.frame_id, "observation_sequence": observation.sequence,
              "target": asdict(target), "bbox_xywh": list(bbox) if bbox is not None else None,
              "receive_age_ms": age * 1000, "detection_ms": observation.detection_ms,
@@ -45,6 +51,9 @@ def encode_frame(frame, state):
     out = frame.copy()
     h, w = out.shape[:2]
     color = (0, 255, 0) if state["status"] == "locked" else (0, 165, 255)
+    for face_bbox in state.get("face_boxes_xywh", []):
+        x, y, bw, bh = map(int, face_bbox)
+        cv2.rectangle(out, (x, y), (x + bw, y + bh), (150, 150, 150), 1)
     bbox = state.get("bbox_xywh")
     if bbox:
         x, y, bw, bh = map(int, bbox)

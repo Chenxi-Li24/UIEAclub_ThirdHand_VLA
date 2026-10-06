@@ -12,11 +12,13 @@ import numpy as np
 from PIL import Image
 
 from .filters import OneEuro
+from .face_lock_tracker import FaceLockTracker
 from .mediapipe_face import MediaPipeFaceDetector
 from .person_lock_tracker import Candidate, PersonLockTracker
 from .rgbd_target import RgbdTargetBuilder
 from .tracker import Target
 from .yolo_person_detector import YoloPersonDetector
+from .yunet_face import YuNetFaceDetector
 
 
 class MjpegReader:
@@ -108,6 +110,15 @@ class MjpegReader:
 class VisionServiceTracker:
     def __init__(self, config):
         v = config.get("vision_service", {})
+        self.face_only = v.get("follow_target", "person") == "face"
+        self.face_detector_backend = v.get("face_detector", "mediapipe")
+        if self.face_only and self.face_detector_backend not in ("mediapipe", "yunet"):
+            raise ValueError("unknown face detector backend")
+        self.yunet_face = YuNetFaceDetector(
+            v.get("yunet_face_model_path", "local/models/vision/face_detection_yunet_2026may.onnx"),
+            min_confidence=float(v.get("yunet_face_min_score", .8)),
+        ) if self.face_only and self.face_detector_backend == "yunet" else None
+        self.face_lock = FaceLockTracker(config) if self.face_only else None
         self.url = v.get("mjpeg_url", "http://127.0.0.1:3100/camera/xvisio/vision")
         self.health_url = v.get("health_url", "http://127.0.0.1:3100/health")
         self.observation_url = v.get("observation_url", "http://127.0.0.1:3100/api/vision/person-follow/observation")
@@ -159,7 +170,8 @@ class VisionServiceTracker:
         self.last_target = Target(False)
         self.person_lock_enabled = bool(v.get("person_lock_enabled", True))
         self.person_lock = PersonLockTracker(config) if self.person_lock_enabled else None
-        self.yolo_person = YoloPersonDetector(config)
+        person_config = {**config, "vision_service": {**v, "yolo_person_enabled": False}} if self.face_only else config
+        self.yolo_person = YoloPersonDetector(person_config)
         self._last_frame_sequence = None
         self.face = None
         self.upperbody = None
@@ -211,8 +223,14 @@ class VisionServiceTracker:
 
     def close(self):
         self.reader.close()
+        if self.yunet_face is not None:
+            self.yunet_face.close()
         if self.mediapipe_face is not None:
             self.mediapipe_face.close()
+
+    @property
+    def face_detector(self):
+        return self.yunet_face if self.face_detector_backend == "yunet" else self.mediapipe_face
 
     def read_frame(self):
         if hasattr(self.reader, "latest_packet"):
@@ -221,7 +239,7 @@ class VisionServiceTracker:
             frame, error = self.reader.latest()
             sequence, received_at = None, time.time()
         if frame is None:
-            if self.allow_health_fallback:
+            if self.allow_health_fallback and not self.face_only:
                 target, health_error = self._read_health_target()
                 return target, None, error or health_error
             return Target(False, w=self.width, h=self.height, kind="vision_stream_unavailable", ts=time.time()), None, error
@@ -241,6 +259,9 @@ class VisionServiceTracker:
                 error,
             )
         self._last_frame_sequence = sequence
+        if self.face_only:
+            target = self._read_face_target(frame, float(received_at or now))
+            return target, frame, error
         yolo_candidates = self.yolo_person.detect(frame)
         target = self.detect(frame)
         if self.person_lock is not None:
@@ -255,6 +276,22 @@ class VisionServiceTracker:
             if health_target.found:
                 return health_target, frame, error
         return target, frame, error
+
+    def _read_face_target(self, frame, received_at):
+        detector = self.face_detector
+        if detector is None:
+            raise RuntimeError("face-only follow requires MediaPipe or YuNet face detection")
+        h, w = frame.shape[:2]
+        rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        candidates = []
+        for target, debug in detector.detect_all(rgb):
+            bbox = debug["bbox"]
+            candidates.append(Candidate(target.u, target.v, bbox[2], bbox[3], target.score, target.kind))
+        target = self.face_lock.update(candidates, now=received_at, frame_size=(w, h))
+        self.last_debug = dict(self.face_lock.last_debug)
+        self.last_debug["face_detector"] = self.face_detector_backend
+        self.last_target = target
+        return target
 
     def _merge_rgbd_target(self, fallback):
         rgbd = self._read_rgbd_target()

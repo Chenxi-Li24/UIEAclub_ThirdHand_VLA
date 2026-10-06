@@ -1,0 +1,12 @@
+{
+  "id": "opencv-yunet-2026may",
+  "repository": "https://github.com/opencv/opencv_zoo",
+  "revision": "47534e27c9851bb1128ccc0102f1145e27f23f98",
+  "url": "https://media.githubusercontent.com/media/opencv/opencv_zoo/47534e27c9851bb1128ccc0102f1145e27f23f98/models/face_detection_yunet/face_detection_yunet_2026may.onnx",
+  "sha256": "ebafce4e3c118d6554634be5c27ab333b4c047a9a8c3faf1d7cf93101c22f0f0",
+  "size_bytes": 229738,
+  "destination": "local/models/vision/face_detection_yunet_2026may.onnx",
+  "license": "MIT",
+  "license_url": "https://raw.githubusercontent.com/opencv/opencv_zoo/47534e27c9851bb1128ccc0102f1145e27f23f98/models/face_detection_yunet/LICENSE",
+  "runtime": "OpenCV 5.x FaceDetectorYN; dynamic input dimensions"
+}

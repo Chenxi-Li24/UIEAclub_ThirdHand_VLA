@@ -262,6 +262,7 @@ def test_vision_service_tracker_does_not_redetect_the_same_camera_frame():
             return self.frame.copy(), None, self.sequence, self.received_at
 
     cfg = load_config()
+    cfg.setdefault("vision_service", {})["follow_target"] = "person"
     cfg.setdefault("vision_service", {})["person_lock_enabled"] = False
     tracker = VisionServiceTracker(cfg)
     tracker.reader = RepeatingReader()

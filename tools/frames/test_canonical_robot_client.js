@@ -48,6 +48,8 @@ test('incoming SDK tool coordinates become true flange coordinates',t=>{
   const {client}=fixture(t),state=client.getRobotState();
   assert.deepEqual(state.flangePositionM,[.2,.3,.4]);
   assert.match(state.framePolicyId,/^sha256:[a-f0-9]{64}$/);
+  assert.deepEqual(state.frameNormalization,{policyId:state.framePolicyId,
+    sourcePoseFrame:'sdk_tool',destinationPoseFrame:'robot_flange'});
 });
 test('outgoing flange target is converted to the configured SDK tool',t=>{
   const {client,socket}=fixture(t);

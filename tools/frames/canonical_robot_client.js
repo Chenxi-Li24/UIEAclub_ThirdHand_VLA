@@ -41,6 +41,8 @@ class CanonicalRobotWebSocketClient extends RobotWebSocketClient{
     const state=super._normalizeState(normalized);
     if(state===null){this.robotState=null;return null;}
     return Object.freeze({...state,framePolicyId:this.#policy.id,
+      frameNormalization:freeze({policyId:this.#policy.id,sourcePoseFrame:'sdk_tool',
+        destinationPoseFrame:'robot_flange'}),
       sdkToolPose:freeze({positionM:[...normalized.sdk_tool_pose.position_m],
         eulerRad:[...normalized.sdk_tool_pose.euler_rad]})});
   }

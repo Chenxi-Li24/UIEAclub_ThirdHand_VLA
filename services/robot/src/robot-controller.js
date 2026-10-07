@@ -558,7 +558,7 @@ class RobotController extends EventEmitter {
       return;
     }
     const readinessError = this._motionReadinessError();
-    if (readinessError || this.pendingExecutions.size > 0 || this.pendingLowLevel.size > 0) {
+    if (readinessError || this.pendingExecutions.size > 0) {
       reply({ ...(readinessError || { type: 'error', code: 'execution_active' }), request_id: requestId });
       return;
     }

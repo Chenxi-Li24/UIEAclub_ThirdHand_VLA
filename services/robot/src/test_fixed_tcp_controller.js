@@ -34,4 +34,18 @@ send({ cmd: 'fixed_tcp_demo', request_id: 'bad', execute: true, max_cone_deg: 90
 assert.equal(reply.code, 'fixed_tcp_demo_invalid');
 assert.equal(sent, null);
 
+controller.pendingLowLevel.set('stale-gripper', 'gripper');
+reply = null;
+send({ cmd: 'fixed_tcp_demo', request_id: 'demo-3', execute: false });
+assert.equal(sent?.cmd, 'fixed_tcp_demo', 'an idle robot must not be blocked by a stale low-level entry');
+assert.equal(reply, null);
+controller._handleBridgeMessage({ type: 'command_complete', request_id: 'demo-3',
+  command: 'fixed_tcp_demo' });
+
+controller.pendingExecutions.set('protected', {});
+sent = null;
+send({ cmd: 'fixed_tcp_demo', request_id: 'demo-4', execute: false });
+assert.equal(reply.code, 'execution_active');
+assert.equal(sent, null);
+
 console.log('3000 fixed TCP command: OK');

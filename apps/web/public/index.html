@@ -131,7 +131,12 @@
           <button class="sec-toggle">▾</button>
         </div>
         <div class="sec-body">
-          <div class="preset-grid" id="preset-grid"></div>
+          <div class="preset-grid" id="preset-grid">
+            <button class="preset-btn" id="btn-fixed-tcp-demo" type="button" disabled>
+              <span class="preset-name">go around</span>
+              <span class="preset-joints" id="fixed-tcp-demo-status" role="status" aria-live="polite">固定 TCP 演示 · 待机</span>
+            </button>
+          </div>
         </div>
       </div>
 
@@ -143,8 +148,6 @@
         </div>
         <div class="sec-body">
           <button class="action-btn action-primary" id="btn-send">发送到机械臂</button>
-          <button class="action-btn" id="btn-fixed-tcp-demo" type="button" disabled>固定 TCP 演示</button>
-          <span id="fixed-tcp-demo-status" role="status" aria-live="polite">待机</span>
         </div>
       </div>
 

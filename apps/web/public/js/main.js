@@ -1884,17 +1884,16 @@ class UIControls {
   _setMotionControlsEnabled(enabled) {
     [
       'btn-send',
-      'btn-fixed-tcp-demo',
       'btn-gripper-send',
       'btn-gripper-close',
       'btn-gripper-open',
     ].forEach(id => {
       const button = document.getElementById(id);
-      if (button) button.disabled = !enabled ||
-        (id === 'btn-fixed-tcp-demo' && Boolean(this.fixedTcpDemoRequestId || this._motionWasActive));
+      if (button) button.disabled = !enabled;
     });
     document.querySelectorAll('.preset-btn').forEach(button => {
-      button.disabled = !enabled;
+      button.disabled = !enabled || (button.id === 'btn-fixed-tcp-demo' &&
+        Boolean(this.fixedTcpDemoRequestId || this._motionWasActive));
     });
   }
 
@@ -2158,6 +2157,7 @@ class UIControls {
     this.presets = presets;
     const grid = document.getElementById('preset-grid');
     if (!grid) return;
+    const demoButton = document.getElementById('btn-fixed-tcp-demo');
     grid.innerHTML = '';
     for (const [name, joints] of Object.entries(presets)) {
       if (!Array.isArray(joints) || joints.length !== 6 || !joints.every(Number.isFinite)) continue;
@@ -2183,6 +2183,7 @@ class UIControls {
       });
       grid.appendChild(btn);
     }
+    if (demoButton) grid.appendChild(demoButton);
   }
 
   _log(text) {

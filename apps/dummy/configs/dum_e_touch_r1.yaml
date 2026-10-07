@@ -3,6 +3,7 @@ robot:
   health_url: "http://127.0.0.1:3000/health"
   # Source: History/source-snapshots/startouch-web-vla/web-control/server/config.js
   home_joints_deg: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+  home_preset_name: "zero"
   go_home_on_start: true
   go_home_on_lost: true
   joint_limits_deg:
@@ -12,9 +13,14 @@ robot:
     - [-98, 98]
     - [-98, 98]
     - [-164, 164]
-  max_relative_move_deg: 5.0
+  # Dummy only allows small per-command follow deltas; Robot Service 3000
+  # remains responsible for collision and hardware motion policy.
+  max_relative_move_deg: 0.8
   min_command_interval_s: 0.04
-  follow_speed_percent: 0.50
+  # Match Robot Service's comfortable site speed: speedScale=0.05,
+  # commanded speeds J1-J3 ~=15 deg/s and J4-J6 ~=50 deg/s.
+  follow_speed_percent: 0.05
+  follow_command: "move_joint"
   servo_min_time_sec: 0.20
   servo_max_speeds_deg_s: [300, 300, 300, 1000, 1000, 1000]
 motion:
@@ -41,6 +47,7 @@ vision_service:
   enabled: true
   mjpeg_url: "http://127.0.0.1:3100/camera/xvisio/raw"
   health_url: "http://127.0.0.1:3100/health"
+  observation_url: "http://127.0.0.1:3100/api/vision/person-follow/observation"
   allow_health_fallback: false
   prefer_labels: ["person", "face", "human", "bottle"]
   min_motion_area: 650
@@ -71,6 +78,21 @@ vision_service:
   person_center_radius_px: 310
   person_min_score: 0.018
   person_max_v_ratio: 0.72
+rgbd_target:
+  max_observation_age_s: 0.30
+  min_depth_ratio: 0.08
+  min_depth_points: 150
+  prefer_labels: ["person", "face", "human"]
+person_lock:
+  # Product-style continuous follow: short detector dropouts should not stop
+  # the arm while the operator is moving.
+  hold_s: 2.5
+  jump_px: 190.0
+  relock_frames: 1
+  min_score: 0.08
+  filter_hz: 15.0
+  filter_min_cutoff: 0.7
+  filter_beta: 0.08
 follow:
   pan_joint_index: 0
   tilt_joint_index: 3
@@ -91,6 +113,128 @@ follow:
   search_max_deg: 5.0
   search_tilt_max_deg: 3.0
   search_scale: 1.00
+visual_servo_gaze:
+  deadzone_px: 10
+  pan_kp_deg_per_px: -0.024
+  tilt_kp_deg_per_px: 0.022
+  max_pan_step_deg: 0.72
+  max_tilt_step_deg: 0.45
+  tilt_enabled: true
+  divergence_px: 8
+  lost_hold_frames: 3
+image_jacobian_servo:
+  # Product-style fast path. Treat Touch R1 as a camera gimbal first:
+  # J1 centers horizontal error, J4 only gives tiny vertical assistance.
+  enabled: true
+  deadzone_px: 24
+  gain: 0.35
+  max_step_deg: 0.55
+  max_excursion_deg: 45.0
+  damping: 0.01
+  divergence_px: 9999
+  min_response_norm_px_per_deg: 0.2
+  calibration_path: ""
+  # Values are image-center error changes in pixels for +1 degree joint motion.
+  # J2/J3/J5/J6 stay disabled for the fast product-style follow path.
+  axes:
+    - {name: "J1_yaw_gimbal", joint_index: 0, px_per_deg: [4.0, -0.4], max_step_deg: 0.55, max_excursion_deg: 85.0, weight: 1.0}
+    - {name: "J2_body", joint_index: 1, px_per_deg: [0.0, 0.0], enabled: false}
+    - {name: "J3_body", joint_index: 2, px_per_deg: [0.0, 0.0], enabled: false}
+    - {name: "J4_tilt_micro", joint_index: 3, px_per_deg: [0.9, -3.7], max_step_deg: 0.08, max_excursion_deg: 4.0, min_deg: -1.5, max_deg: 4.0, weight: 0.25}
+    - {name: "J5_yaw_assist", joint_index: 4, px_per_deg: [0.0, 0.0], enabled: false}
+    - {name: "J6_roll", joint_index: 5, px_per_deg: [0.0, 0.0], enabled: false}
+distance_follow:
+  enabled: true
+  desired_depth_m: 0.30
+  deadband_m: 0.05
+  too_close_m: 0.30
+  far_depth_m: 1.15
+  curious_depth_m: 1.65
+  depth_lost_far_reach_after_s: 0.40
+  posture_step_deg: 0.35
+  # Body joints only. J1/J4 remain available to gaze/image centering; J6 stays roll-neutral.
+  # Keep body posture neutral during person follow. Earlier forward/curious
+  # postures made Mink solve downward toward the tabletop.
+  active_joint_indices: []
+  far_reach_pose_deg: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+  curious_reach_pose_deg: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+  hold_pose_deg: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+  retract_pose_deg: [0.0, -2.0, -4.0, -6.0, 0.0, 0.0]
+monocular_depth:
+  enabled: true
+  # Product-style fallback when RGB-D is missing/out of range: estimate rough
+  # distance from the locked person/face box size, then let Mink solve the arm.
+  focal_px: 520.0
+  # The XVisio fisheye view usually locks an upper-body/partial-person box in
+  # this desk setup, not a full standing body.  This makes mono depth usable
+  # instead of saturating at max_depth_m on every nearby person.
+  assumed_body_height_m: 0.45
+  assumed_face_height_m: 0.22
+  min_bbox_h_px: 35.0
+  min_depth_m: 0.45
+  max_depth_m: 2.50
+  default_depth_m: 1.50
+  smoothing_alpha: 0.30
+  rgbd_weight: 0.75
+  mono_weight: 0.25
+  rgbd_confidence: 1.0
+  bbox_confidence: 0.55
+  fallback_confidence: 0.15
+virtual_3d_target:
+  enabled: true
+  # Used when XVisio depth is unavailable/out of range. The 2D lock point is
+  # converted to a camera-frame ray at this virtual distance, then Mink solves
+  # the whole arm.
+  default_depth_m: 1.50
+  max_gaze_depth_m: 1.80
+  focal_px: 520.0
+  max_x_m: 0.65
+  max_y_m: 0.45
+  smoothing_alpha: 0.35
+follow_handeye:
+  enabled: true
+  # Reuse ThirdHand's existing eye-in-hand calibration. For follow/gaze this is
+  # allowed while physical grasp validation is pending; bottle-grasp remains
+  # fail-closed in its own service path.
+  calibration_path: "/home/nieqingcao/ThirdHand/UIEAclub_ThirdHand_VLA/skills/manipulation/bottlegrasp/configs/calibration/lumos-handeye.pending.json"
+  urdf_path: "/home/nieqingcao/ThirdHand/UIEAclub_ThirdHand_VLA/assets/robot/startouch-v3/FastTouchV3.SLDASM.urdf"
+  prefer_service_base: true
+  allow_pending_physical_validation: true
+  # Follow a safe eye-level virtual target instead of letting noisy/virtual
+  # depth create a look-at point down near the tabletop.
+  min_base_target_z_m: 0.35
+workspace_guard:
+  enabled: true
+  # Local dummy-side base-plane guard. The robot is mounted on a tabletop:
+  # no checked URDF mesh point may go below the base_link STL bottom face.
+  clearance_m: 0.04
+  urdf_path: "/home/nieqingcao/ThirdHand/UIEAclub_ThirdHand_VLA/assets/robot/startouch-v3/FastTouchV3.SLDASM.urdf"
+touch_r1_gimbal:
+  pan_joint_index: 0
+  tilt_joint_index: 3
+  roll_joint_index: 5
+  body_yaw_joint_index: 0
+  pan_sign: 1
+  tilt_sign: 1
+  roll_sign: 1
+  body_yaw_sign: 1
+  pan_comfort_deg: 999.0
+  body_follow_gain: 0.0
+  max_body_step_deg: 0.0
+  roll_neutral_deg: 0.0
+  max_roll_step_deg: 0.12
+mink_lookat:
+  enabled: true
+  model_path: "/home/nieqingcao/ThirdHand/UIEAclub_ThirdHand_VLA/assets/robot/startouch-v3/FastTouchV3.SLDASM.urdf"
+  camera_frame: "gripper_base"
+  frame_type: "body"
+  camera_axis: [0.0, 0.0, 1.0]
+  target_frame: "lookat_target"
+  dt: 0.10
+  solver: "daqp"
+  lookat_cost: 1.0
+  posture_cost: 0.05
+  max_velocity_rad_s: 0.8726646259971648
 wake_word:
   phrase: "ThirdHand"
   speech_ws_url: "ws://127.0.0.1:3004/v1/voice"

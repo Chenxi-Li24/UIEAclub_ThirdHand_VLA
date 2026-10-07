@@ -9,7 +9,6 @@ const {
   DEFAULT_MAX_SPEEDS_DEG_S,
   validateJointTarget,
   isAccidentalZeroTarget,
-  moveTimeFor,
 } = require('./motion-policy');
 
 const ALLOWED_COMMANDS = new Set([
@@ -20,6 +19,7 @@ const ALLOWED_COMMANDS = new Set([
   'servo',
   'move_joint',
   'move_l',
+  'preview_ik',
   'preset',
   'gripper',
   'software_stop',
@@ -32,6 +32,9 @@ const DEFAULT_HOME_PRESET_DEG = Object.freeze([
 ]);
 const DEFAULT_ZERO_PRESET_DEG = Object.freeze([
   0, 0, 0, 0, 0, 0,
+]);
+const DEFAULT_OBSERVE_PRESET_DEG = Object.freeze([
+  0, 90, -90, 90, 0, 0,
 ]);
 function degrees(values) {
   return values.map(value => Number(value) * 180 / Math.PI);
@@ -74,6 +77,32 @@ function validateAlignmentStep(parameters, latestJointsDeg) {
   return { ok: true, joints: target.joints };
 }
 
+function validatePregrasp(parameters, controller) {
+  if (!finiteVector(controller.latestJointsDeg, 6)) {
+    return { ok: false, code: 'robot_state_stale' };
+  }
+  if (controller.stateSequence < parameters.minimumStateSequence) {
+    return { ok: false, code: 'stale_state_sequence' };
+  }
+  if (controller.latestProducerMonotonicNs < parameters.minimumProducerMonotonicNs) {
+    return { ok: false, code: 'stale_producer_state' };
+  }
+  if (parameters.startJointsDeg.some(
+    (value, index) => Math.abs(value - controller.latestJointsDeg[index]) > 0.2,
+  )) return { ok: false, code: 'stale_start_joints' };
+  const target = validateJointTarget(parameters.targetJointsDeg);
+  if (!target.ok) return { ok: false, code: target.code };
+  if (!linearTargetAllowed(parameters.pregraspTcpPositionM)) {
+    return { ok: false, code: 'pregrasp_out_of_workspace' };
+  }
+  if (parameters.operationMode !== 'pregrasp_only'
+      || parameters.speedScale > 0.05
+      || parameters.speedScale > controller.config.speedScale) {
+    return { ok: false, code: 'pregrasp_safety_profile_invalid' };
+  }
+  return { ok: true, joints: target.joints };
+}
+
 class RobotController extends EventEmitter {
   constructor(config) {
     super();
@@ -102,7 +131,8 @@ class RobotController extends EventEmitter {
       this.emit('message', {
         type: 'error',
         code: 'bridge_error',
-        msg: message.message,
+        msg: message.message, request_id: message.request_id,
+        command: message.command || this.pendingLowLevel.get(message.request_id) || null,
       });
     });
     this.bridge.on('software_stop_complete', message => {
@@ -174,6 +204,7 @@ class RobotController extends EventEmitter {
       presets: {
         zero: [...(this.config.zeroPresetDeg || DEFAULT_ZERO_PRESET_DEG)],
         home: [...(this.config.homePresetDeg || DEFAULT_HOME_PRESET_DEG)],
+        observe: [...DEFAULT_OBSERVE_PRESET_DEG],
       },
       jointLimits: DEFAULT_JOINT_LIMITS_DEG,
       model: {
@@ -183,9 +214,10 @@ class RobotController extends EventEmitter {
       connection: this.bridge.getInfo(),
       motion: {
         jointMaxSpeedsDegS: DEFAULT_MAX_SPEEDS_DEG_S,
-        speedScale: this.config.speedScale,
+        planningMode: 'sdk_joint_speed',
+        speedScale: Math.min(0.05, this.config.speedScale ?? 0.05),
         commandedSpeedsDegS: DEFAULT_MAX_SPEEDS_DEG_S.map(
-          speed => speed * this.config.speedScale,
+          speed => speed * Math.min(0.05, this.config.speedScale ?? 0.05),
         ),
         minMoveTimeSec: this.config.minMoveTimeSec,
         maxMoveTimeSec: this.config.maxMoveTimeSec,
@@ -206,7 +238,7 @@ class RobotController extends EventEmitter {
       nonce,
       protocol_version: 'thirdhand-robot-lowlevel-v1',
       pose_frame: 'robot_flange',
-      commands: ['move_l', 'move_joint', 'gripper', 'preset', 'software_stop', 'get_state'],
+      commands: ['move_l', 'preview_ik', 'move_joint', 'gripper', 'preset', 'software_stop', 'get_state'],
       correlated_completions: true,
       software_stop_ack: true,
       software_stop_state_boundary: true,
@@ -282,6 +314,7 @@ class RobotController extends EventEmitter {
         const presets = {
           zero: this.config.zeroPresetDeg || DEFAULT_ZERO_PRESET_DEG,
           home: this.config.homePresetDeg || DEFAULT_HOME_PRESET_DEG,
+          observe: DEFAULT_OBSERVE_PRESET_DEG,
         };
         const target = presets[message.name];
         if (!target) {
@@ -308,8 +341,11 @@ class RobotController extends EventEmitter {
       case 'move_l':
         this._sendLinearMotion(message, reply);
         return;
+      case 'preview_ik':
+        this._sendIkPreview(message, reply);
+        return;
       case 'gripper':
-        this._sendGripper(message.position, reply, message.request_id);
+        this._sendGripper(message.position, reply, message.request_id, message.grasp_feedback_upper);
         return;
       default:
         reply({ type: 'error', code: 'unsupported_command', msg: 'Unsupported robot command' });
@@ -353,6 +389,18 @@ class RobotController extends EventEmitter {
         return;
       }
       this._executeAlignmentPrimitive(primitive, alignment, reply);
+      return;
+    }
+    if (primitive.operation === 'grasp.pregrasp') {
+      const pregrasp = validatePregrasp(primitive.parameters, this);
+      if (!pregrasp.ok) {
+        reply({
+          type: 'execution.status', status: 'failed', code: pregrasp.code,
+          primitiveId: primitive.primitiveId, taskId: primitive.taskId, traceId: primitive.traceId,
+        });
+        return;
+      }
+      this._executePregraspPrimitive(primitive, pregrasp, reply);
       return;
     }
     this._executeGripperPrimitive(primitive, reply);
@@ -411,17 +459,31 @@ class RobotController extends EventEmitter {
 
   _executeAlignmentPrimitive(primitive, alignment, reply) {
     const pending = this._beginExecution(primitive, reply, 'alignment');
-    const timeSec = moveTimeFor(
-      alignment.joints, this.latestJointsDeg,
-      DEFAULT_MAX_SPEEDS_DEG_S, this.config,
-    );
     this.pendingLowLevel.set(pending.requestId, 'move_joint');
     const sent = this.bridge.send({
       cmd: 'move_joint',
       joints_rad: alignment.joints.map(value => value * Math.PI / 180),
-      time_sec: timeSec,
+      speed_percent: Math.min(0.05, this.config.speedScale ?? 0.05),
       request_id: pending.requestId,
       source: `vision-align:${primitive.parameters.tier}`,
+    });
+    if (!sent) {
+      this.pendingLowLevel.delete(pending.requestId);
+      this._failExecutionSend(pending);
+      return;
+    }
+    this._acceptExecution(pending);
+  }
+
+  _executePregraspPrimitive(primitive, pregrasp, reply) {
+    const pending = this._beginExecution(primitive, reply, 'pregrasp');
+    this.pendingLowLevel.set(pending.requestId, 'move_joint');
+    const sent = this.bridge.send({
+      cmd: 'move_joint',
+      joints_rad: pregrasp.joints.map(value => value * Math.PI / 180),
+      speed_percent: Math.min(0.05, this.config.speedScale ?? 0.05, primitive.parameters.speedScale),
+      request_id: pending.requestId,
+      source: 'protected-grasp-pregrasp',
     });
     if (!sent) {
       this.pendingLowLevel.delete(pending.requestId);
@@ -499,19 +561,11 @@ class RobotController extends EventEmitter {
 
     const requestId = typeof suppliedRequestId === 'string' && suppliedRequestId
       ? suppliedRequestId : randomUUID();
-    const timeSec = Number.isFinite(suppliedTimeSec)
-      ? Math.max(0.2, Math.min(this.config.maxMoveTimeSec, suppliedTimeSec))
-      : moveTimeFor(
-        validation.joints,
-        this.latestJointsDeg,
-        DEFAULT_MAX_SPEEDS_DEG_S,
-        this.config,
-      );
     this.pendingLowLevel.set(requestId, command);
     const sent = this.bridge.send({
       cmd: 'move_joint',
       joints_rad: validation.joints.map(value => value * Math.PI / 180),
-      time_sec: timeSec,
+      speed_percent: Math.min(0.05, this.config.speedScale ?? 0.05),
       request_id: requestId,
       source,
     });
@@ -524,19 +578,41 @@ class RobotController extends EventEmitter {
     }
   }
 
+  _sendIkPreview(message, reply) {
+    const requestId = typeof message.request_id === 'string' && message.request_id
+      ? message.request_id : randomUUID();
+    if (!linearTargetAllowed(message.position) || !finiteVector(message.euler, 3)) {
+      reply({ type: 'error', code: 'linear_target_invalid', msg: 'Cartesian target is outside the approved workspace', request_id: requestId });
+      return;
+    }
+    const readinessError = this._motionReadinessError();
+    if (readinessError) {
+      reply({ ...readinessError, request_id: requestId });
+      return;
+    }
+    if (!this.bridge.send({
+      cmd: 'preview_ik', position: [...message.position], euler: [...message.euler],
+      request_id: requestId,
+    })) {
+      reply({ type: 'error', code: 'bridge_unavailable', msg: 'Robot bridge is unavailable', request_id: requestId });
+    }
+  }
+
   _sendLinearMotion(message, reply) {
+    const precision = {};
+    for (const [field, upper] of [['position_tolerance_m', 0.04], ['orientation_tolerance_rad', 0.4]]) {
+      if (message[field] === undefined) continue;
+      const value = message[field];
+      if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0 || value > upper) {
+        reply({type:'error',code:'linear_precision_invalid',msg:'Invalid '+field,request_id:message.request_id});
+        return;
+      }
+      precision[field] = value;
+    }
     if (!linearTargetAllowed(message.position) || !finiteVector(message.euler, 3)) {
       reply({
         type: 'error', code: 'linear_target_invalid',
         msg: 'Cartesian target is outside the approved workspace',
-      });
-      return;
-    }
-    const timeSec = Number(message.time_sec);
-    if (!Number.isFinite(timeSec) || timeSec < 0.2
-        || timeSec > this.config.maxMoveTimeSec) {
-      reply({
-        type: 'error', code: 'move_time_invalid', msg: 'move_l time is invalid',
       });
       return;
     }
@@ -552,9 +628,10 @@ class RobotController extends EventEmitter {
       cmd: 'move_l',
       position: [...message.position],
       euler: [...message.euler],
-      time_sec: timeSec,
+      speed_percent: Math.min(0.05, this.config.speedScale ?? 0.05),
       request_id: requestId,
       source: message.source || 'robot-service',
+      ...precision,
     });
     if (!sent) {
       this.pendingLowLevel.delete(requestId);
@@ -565,8 +642,12 @@ class RobotController extends EventEmitter {
     }
   }
 
-  _sendGripper(position, reply, suppliedRequestId = null) {
+  _sendGripper(position, reply, suppliedRequestId = null, graspFeedbackUpper = undefined) {
     const normalized = Number(position);
+    if (graspFeedbackUpper !== undefined && (normalized !== 0.35 || graspFeedbackUpper !== 0.4)) {
+      reply({type:'error',code:'gripper_contact_invalid',msg:'Contact policy requires target 35% and upper 40%'});
+      return;
+    }
     if (!Number.isFinite(normalized) || normalized < 0 || normalized > 1) {
       reply({
         type: 'error',
@@ -585,6 +666,7 @@ class RobotController extends EventEmitter {
     this.pendingLowLevel.set(requestId, 'gripper');
     const sent = this.bridge.send({
       cmd: 'gripper', position: normalized, request_id: requestId,
+      ...(graspFeedbackUpper === undefined ? {} : {grasp_feedback_upper:graspFeedbackUpper}),
     });
     if (!sent) {
       this.pendingLowLevel.delete(requestId);
@@ -689,13 +771,22 @@ class RobotController extends EventEmitter {
         ts: message.ts,
       });
       for (const pending of this.pendingExecutions.values()) {
-        if (pending.kind === 'alignment') this._completeAlignmentIfReady(pending);
+        if (pending.kind === 'alignment' || pending.kind === 'pregrasp') {
+          this._completeAlignmentIfReady(pending);
+        }
       }
       return;
     }
     if (message.type === 'motion_state') {
       this.motionActive = message.state === 'MOVING';
       this.emit('message', { type: 'motion_state', stateName: message.state, ts: message.ts });
+      return;
+    }
+    if (message.type === 'ik_preview') {
+      this.emit('message', {
+        type: 'ik_preview', request_id: message.request_id, ok: message.ok === true,
+        joints_deg: message.ok === true ? degrees(message.joints_rad || []) : [],
+      });
       return;
     }
     if (message.type === 'command_accepted') {
@@ -709,7 +800,7 @@ class RobotController extends EventEmitter {
       this.motionActive = false;
       const pending = this.pendingExecutions.get(message.request_id);
       if (pending) {
-        if (pending.kind === 'alignment') {
+        if (pending.kind === 'alignment' || pending.kind === 'pregrasp') {
           pending.commandComplete = true;
           pending.commandReached = message.reached !== false;
           this._completeAlignmentIfReady(pending);
@@ -785,4 +876,6 @@ class RobotController extends EventEmitter {
   }
 }
 
-module.exports = { ALLOWED_COMMANDS, RobotController, validateAlignmentStep };
+module.exports = {
+  ALLOWED_COMMANDS, RobotController, validateAlignmentStep, validatePregrasp,
+};

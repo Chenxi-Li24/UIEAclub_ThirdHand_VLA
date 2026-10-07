@@ -89,3 +89,37 @@ test('vision service adapter reconnects after the 3100 socket closes', async () 
 
   client.shutdown();
 });
+
+test('vision service adapter forwards health-qualified arm state for handeye projection', () => {
+  const client = new VisionServiceClient({
+    WebSocketImpl: FakeWebSocket,
+  });
+  assert.equal(client.start(), true);
+  const socket = FakeWebSocket.last;
+  socket.emit('open');
+
+  assert.equal(client.sendArmState(
+    [0.3, 0.0, 0.18],
+    [0.0, 0.0, 0.0],
+    [0, 0, 0, 0, 0, 0],
+    [0, 0, 0, 0, 0, 0],
+    true,
+    123456789,
+    { connected: true, healthy: true },
+  ), true);
+
+  assert.deepEqual(socket.sent.at(-1), {
+    type: 'arm_state',
+    pose_frame: 'robot_flange',
+    flange_position_m: [0.3, 0.0, 0.18],
+    flange_euler_rad: [0.0, 0.0, 0.0],
+    joints_deg: [0, 0, 0, 0, 0, 0],
+    velocities_deg_s: [0, 0, 0, 0, 0, 0],
+    stationary: true,
+    connected: true,
+    healthy: true,
+    observed_monotonic_ns: 123456789,
+  });
+
+  client.shutdown();
+});

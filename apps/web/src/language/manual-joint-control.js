@@ -1,6 +1,7 @@
 'use strict';
 
 const { randomUUID } = require('crypto');
+const { normalizeCameraXStep } = require('./camera-x-step');
 
 const MANUAL_SKILL = 'manual_joint_control@1';
 const PICK_SKILL = 'pick_and_place_bottle@1';
@@ -8,6 +9,7 @@ const ALLOWED_ACTIONS = new Set([
   'joint.set',
   'joint.step',
   'joint.multi',
+  'end_effector.step',
   'gripper.open',
   'gripper.close',
   'robot.status',
@@ -18,6 +20,19 @@ const ALLOWED_ACTIONS = new Set([
 function finiteNumber(value) {
   const number = Number(value);
   return Number.isFinite(number) ? number : null;
+}
+
+function finitePose(pose) {
+  return Array.isArray(pose) && pose.length === 3 && pose.every(Number.isFinite);
+}
+
+function positionErrorM(left, right) {
+  return Math.hypot(...left.map((value, index) => value - right[index]));
+}
+
+function orientationErrorRad(left, right) {
+  return Math.hypot(...left.map((value, index) =>
+    Math.atan2(Math.sin(value - right[index]), Math.cos(value - right[index]))));
 }
 
 function parseExpiry(value) {
@@ -98,6 +113,11 @@ function validateCandidate(candidate, nowMs) {
   } else if (candidate.requiresConfirmation !== true) {
     return { ok: false, reason: '动作候选必须标记 requiresConfirmation:true' };
   }
+  if (params.action === 'end_effector.step') {
+    const checked = normalizeCameraXStep(params);
+    if (!checked.ok || candidate.intent !== 'end_effector.step') return checked.ok
+      ? { ok: false, reason: '末端平移 intent 不匹配' } : checked;
+  }
   if (params.action === 'joint.set' || params.action === 'joint.step') {
     if (!Number.isInteger(params.joint) || params.joint < 1 || params.joint > 6) {
       return { ok: false, reason: 'joint 必须是 1 到 6 的整数' };
@@ -148,11 +168,17 @@ class ManualJointOrchestrator {
     this.jointToleranceDeg = Number(options.jointToleranceDeg ?? 1);
     this.gripperOpenTarget = Number(options.gripperOpenTarget ?? 1);
     this.gripperCloseTarget = Number(options.gripperCloseTarget ?? 0);
-    this.maxJointTimeoutMs = Number(options.maxJointTimeoutMs ?? 10_000);
-    this.maxMultiTimeoutMs = Number(options.maxMultiTimeoutMs ?? 35_000);
-    this.maxHomeTimeoutMs = Number(options.maxHomeTimeoutMs ?? 30_000);
+    this.maxJointTimeoutMs = Number(options.maxJointTimeoutMs ?? 45_000);
+    this.maxMultiTimeoutMs = Number(options.maxMultiTimeoutMs ?? 45_000);
+    this.maxHomeTimeoutMs = Number(options.maxHomeTimeoutMs ?? 45_000);
     this.gripperTimeoutMs = Number(options.gripperTimeoutMs ?? 5_000);
     this.skillExecutors = options.skillExecutors || null;
+    this.planCameraX = options.planCameraX || (() => ({ ok: false, reason: '镜头标定未配置' }));
+    this.previewPose = options.previewPose || (async () => ({ ok: false, reason: 'IK 预览未配置' }));
+    this.cameraProbeEnabled = options.cameraProbeEnabled === true;
+    this.cameraRealControlEnabled = options.cameraRealControlEnabled === true;
+    this.cameraPositionToleranceM = 0.005;
+    this.cameraOrientationToleranceRad = 0.05;
     this.sessions = new Map();
     this.consumed = new Map();
     this.active = null;
@@ -167,6 +193,12 @@ class ManualJointOrchestrator {
       maxDeltaDeg: this.maxDeltaDeg,
       speedScale: this.speedScale,
       jointToleranceDeg: this.jointToleranceDeg,
+      cameraX: {
+        probeEnabled: this.cameraProbeEnabled,
+        realControlEnabled: this.cameraRealControlEnabled,
+        maxDistanceCm: 10,
+        probeMaxDistanceCm: 1,
+      },
       gripper: {
         openTarget: this.gripperOpenTarget,
         closeTarget: this.gripperCloseTarget,
@@ -228,6 +260,21 @@ class ManualJointOrchestrator {
     });
   }
 
+  bindCameraPreview(session, candidate, preview) {
+    this._prune();
+    const pending = this.sessions.get(session)?.get(candidate?.candidateId);
+    if (!pending || pending.candidate.traceId !== candidate.traceId ||
+        pending.params?.action !== 'end_effector.step' ||
+        !finitePose(preview?.originPositionM) ||
+        !finitePose(preview?.originEulerRad) ||
+        !finitePose(preview?.targetPositionM) ||
+        !finitePose(preview?.targetEulerRad) ||
+        !Array.isArray(preview?.jointsDeg) || preview.jointsDeg.length !== 6 ||
+        !preview.jointsDeg.every(Number.isFinite)) return false;
+    pending.cameraPreview = clone(preview);
+    return true;
+  }
+
   decide(session, decision) {
     this._prune();
     const candidateId = decision?.candidateId;
@@ -265,7 +312,7 @@ class ManualJointOrchestrator {
       });
     }
     if (registered.externalSkill) return this._executeExternal(session, registered.candidate);
-    return this._execute(session, registered.candidate, registered.params);
+    return this._execute(session, registered.candidate, registered.params, registered.cameraPreview);
   }
 
   _executeExternal(session, candidate) {
@@ -327,9 +374,24 @@ class ManualJointOrchestrator {
         } else {
           this._finish(false, 'failed', `${active.label}未达到目标，夹爪反馈 reached:false`);
         }
-      } else if (active.kind === 'joint' || active.kind === 'multi' || active.kind === 'home') {
+      } else if (active.kind === 'joint' || active.kind === 'multi' || active.kind === 'home' || active.kind === 'cartesian') {
         active.completedAtMs = this.now();
       }
+      return true;
+    }
+    if (message.type === 'robot_state' && active.kind === 'cartesian' && active.completeReceived) {
+      const observedAtMs = finiteNumber(message.observedAtMs ?? message.ts ?? this.now());
+      const position = message.flangePositionM;
+      const euler = message.flangeEulerRad;
+      if (observedAtMs === null || observedAtMs < active.completedAtMs ||
+          !finitePose(position) || !finitePose(euler)) return false;
+      const errorM = positionErrorM(position, active.targetPositionM);
+      const orientationError = orientationErrorRad(euler, active.targetEulerRad);
+      const toleranceM = Math.min(this.cameraPositionToleranceM, active.distanceM / 2);
+      const success = errorM <= toleranceM &&
+        orientationError <= this.cameraOrientationToleranceRad;
+      this._finish(success, success ? 'success' : 'failed',
+        `镜头 X 轴平移反馈误差 ${(errorM * 1000).toFixed(1)} mm，姿态误差 ${(orientationError * 180 / Math.PI).toFixed(1)}°`);
       return true;
     }
     if (message.type === 'robot_state' &&
@@ -404,7 +466,7 @@ class ManualJointOrchestrator {
     return false;
   }
 
-  _execute(session, candidate, params) {
+  _execute(session, candidate, params, cameraPreview = null) {
     if (this.active) return this._blocked(session, candidate, '已有 Language 动作正在执行');
 
     const state = this.getRobotState() || {};
@@ -430,7 +492,91 @@ class ManualJointOrchestrator {
         hardware: clone(state),
       });
     }
-    if (!this.enabled) return this._blocked(session, candidate, 'LANGUAGE_REAL_CONTROL 未启用，未发送硬件命令');
+    if (!this.enabled && params.action !== 'end_effector.step') {
+      return this._blocked(session, candidate, 'LANGUAGE_REAL_CONTROL 未启用，未发送硬件命令');
+    }
+
+    if (params.action === 'end_effector.step') {
+      const probe = this.cameraProbeEnabled && params.distanceCm <= 1;
+      if (!this.cameraRealControlEnabled && !probe) {
+        return this._blocked(session, candidate,
+          '末端镜头方向尚未完成现场验证；仅允许经监督的 1 厘米以内探针动作');
+      }
+      if (!cameraPreview || !finitePose(cameraPreview.originPositionM) ||
+          !finitePose(cameraPreview.originEulerRad) ||
+          !finitePose(cameraPreview.targetPositionM) ||
+          !finitePose(cameraPreview.targetEulerRad) ||
+          !Array.isArray(cameraPreview.jointsDeg) ||
+          cameraPreview.jointsDeg.length !== 6 ||
+          !cameraPreview.jointsDeg.every(Number.isFinite)) {
+        return this._blocked(session, candidate, '缺少已显示的末端预览，请重新输入目标');
+      }
+      const origin = state.flangePositionM;
+      const originEuler = state.flangeEulerRad;
+      if (!finitePose(origin) || !finitePose(originEuler) ||
+          positionErrorM(origin, cameraPreview.originPositionM) > 0.002 ||
+          orientationErrorRad(originEuler, cameraPreview.originEulerRad) > 0.03) {
+        return this._blocked(session, candidate, '机械臂已离开预览起点，请重新输入并确认');
+      }
+      const plan = this.planCameraX(params);
+      if (!plan.ok) return this._blocked(session, candidate, plan.reason);
+      if (positionErrorM(plan.position, cameraPreview.targetPositionM) > 0.002 ||
+          orientationErrorRad(plan.euler, cameraPreview.targetEulerRad) > 0.03) {
+        return this._blocked(session, candidate, '末端目标与确认卡预览不同，请重新输入');
+      }
+      const targetPosition = [...cameraPreview.targetPositionM];
+      const targetEuler = [...cameraPreview.targetEulerRad];
+      const requestId = this.makeRequestId();
+      this._begin({
+        session, candidate, requestId, kind: 'cartesian',
+        targetPositionM: targetPosition,
+        targetEulerRad: targetEuler,
+        distanceM: params.distanceCm / 100,
+        label: `镜头 X 轴向${params.direction === 'left' ? '左' : '右'}平移`,
+        timeoutMs: 45_000,
+      });
+      Promise.resolve(this.previewPose(targetPosition, targetEuler)).then(preview => {
+        if (this.active?.requestId !== requestId ||
+            this.active.kind !== 'cartesian' ||
+            this.active.candidate.candidateId !== candidate.candidateId) return;
+        if (!preview?.ok || !Array.isArray(preview.jointsDeg) ||
+            preview.jointsDeg.length !== 6 || !preview.jointsDeg.every(Number.isFinite)) {
+          this._finish(false, 'blocked', preview?.reason || '末端 IK 复核失败，未发送运动命令');
+          return;
+        }
+        if (preview.jointsDeg.some((value, index) =>
+          Math.abs(value - cameraPreview.jointsDeg[index]) > 5)) {
+          this._finish(false, 'blocked', '末端逆解已偏离确认卡预览，请重新输入');
+          return;
+        }
+        const fresh = this.getRobotState();
+        const latest = fresh?.flangePositionM;
+        const latestEuler = fresh?.flangeEulerRad;
+        if (!fresh?.connected || !fresh.stateFresh ||
+            !Number.isFinite(fresh.ageMs) || fresh.ageMs > this.stateMaxAgeMs ||
+            fresh.stateName !== 'IDLE' || fresh.motionActive || fresh.moving ||
+            fresh.activeViewActive || fresh.graspActive ||
+            !finitePose(latest) || !finitePose(latestEuler) ||
+            positionErrorM(origin, latest) > 0.002 ||
+            orientationErrorRad(originEuler, latestEuler) > 0.03) {
+          this._finish(false, 'blocked', '预览后起点状态变化或过期，未发送运动命令');
+          return;
+        }
+        const sent = this.sendRobot({
+          cmd: 'move_l', position: targetPosition, euler: targetEuler,
+          request_id: requestId,
+          source: `language:${candidate.traceId}`,
+        });
+        if (!sent) this._finish(false, 'failed', 'Startouch bridge 拒绝接收末端平移命令');
+      }).catch(error => {
+        if (this.active?.requestId === requestId &&
+            this.active.kind === 'cartesian' &&
+            this.active.candidate.candidateId === candidate.candidateId) {
+          this._finish(false, 'failed', error.message || '末端平移预览失败');
+        }
+      });
+      return true;
+    }
 
     if (params.action === 'robot.home') {
       const target = this.getHomeTarget();
@@ -449,11 +595,7 @@ class ManualJointOrchestrator {
         return this._blocked(session, candidate, `Home 机械限位禁止执行：${outsideLimits.join('；')}`);
       }
       const requestId = this.makeRequestId();
-      const timeSec = this.moveTimeFor(target);
-      const timeoutMs = Math.min(
-        this.maxHomeTimeoutMs,
-        Math.max(1000, (timeSec + 5) * 1000)
-      );
+      const timeoutMs = this.maxHomeTimeoutMs;
       this._begin({
         session,
         candidate,
@@ -467,7 +609,6 @@ class ManualJointOrchestrator {
         cmd: 'preset_home',
         name: 'home',
         request_id: requestId,
-        time_sec: timeSec,
         source: `language:${candidate.traceId}`,
       });
       if (!sent) this._finish(false, 'failed', 'Startouch bridge 拒绝接收 Home 预设命令');
@@ -507,10 +648,7 @@ class ManualJointOrchestrator {
         return this._blocked(session, candidate, '多轴目标与当前姿态相同，未发送运动命令');
       }
       const requestId = this.makeRequestId();
-      const timeSec = this.moveTimeFor(target);
-      const timeoutMs = Math.min(
-        this.maxMultiTimeoutMs, Math.max(1000, (timeSec + 3) * 1000)
-      );
+      const timeoutMs = this.maxMultiTimeoutMs;
       this._begin({
         session, candidate, requestId, kind: 'multi',
         targetJointsDeg: target, changedJointIndices,
@@ -519,7 +657,6 @@ class ManualJointOrchestrator {
       const sent = this.sendRobot({
         cmd: 'move_joint',
         joints_rad: target.map(value => value * Math.PI / 180),
-        time_sec: timeSec,
         request_id: requestId,
         source: `language:${candidate.traceId}`,
         speed_scale: this.speedScale,
@@ -555,8 +692,7 @@ class ManualJointOrchestrator {
       const target = [...current];
       target[jointIndex] = targetDeg;
       const requestId = this.makeRequestId();
-      const timeSec = this.moveTimeFor(target);
-      const timeoutMs = Math.min(this.maxJointTimeoutMs, Math.max(1000, (timeSec + 3) * 1000));
+      const timeoutMs = this.maxJointTimeoutMs;
       this._begin({
         session,
         candidate,
@@ -570,7 +706,6 @@ class ManualJointOrchestrator {
       const sent = this.sendRobot({
         cmd: 'move_joint',
         joints_rad: target.map(value => value * Math.PI / 180),
-        time_sec: timeSec,
         request_id: requestId,
         source: `language:${candidate.traceId}`,
         speed_scale: this.speedScale,
@@ -591,8 +726,9 @@ class ManualJointOrchestrator {
   }
 
   _executeStop(session, candidate) {
-    if (!this.enabled) {
-      return this._blocked(session, candidate, 'LANGUAGE_REAL_CONTROL 未启用，软件停止未发送');
+    if (!this.enabled && !this.cameraProbeEnabled &&
+        !this.cameraRealControlEnabled && !this.active) {
+      return this._blocked(session, candidate, 'Language 实机控制未启用，软件停止未发送');
     }
     if (this.active) {
       this.softwareStop();

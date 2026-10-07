@@ -1,0 +1,20 @@
+diff --git a/services/robot/src/robot-controller.js b/services/robot/src/robot-controller.js
+--- a/services/robot/src/robot-controller.js
++++ b/services/robot/src/robot-controller.js
+@@ -482,15 +482,10 @@
+   _executePregraspPrimitive(primitive, pregrasp, reply) {
+     const pending = this._beginExecution(primitive, reply, 'pregrasp');
+-    const timeSec = moveTimeFor(
+-      pregrasp.joints, this.latestJointsDeg,
+-      DEFAULT_MAX_SPEEDS_DEG_S,
+-      { ...this.config, speedScale: primitive.parameters.speedScale },
+-    );
+     this.pendingLowLevel.set(pending.requestId, 'move_joint');
+     const sent = this.bridge.send({
+       cmd: 'move_joint',
+       joints_rad: pregrasp.joints.map(value => value * Math.PI / 180),
+-      time_sec: timeSec,
++      speed_percent: Math.min(0.05, this.config.speedScale ?? 0.05, primitive.parameters.speedScale),
+       request_id: pending.requestId,
+       source: 'protected-grasp-pregrasp',
+     });

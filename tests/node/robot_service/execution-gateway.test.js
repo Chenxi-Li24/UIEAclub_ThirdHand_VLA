@@ -352,3 +352,67 @@ test('exact session stop interrupts alignment and malformed control cannot move'
   }));
   assert.equal((await invalid).status, 'failed');
 });
+
+function pregraspPrimitive(service, joints, changes = {}) {
+  return {
+    schema: 'thirdhand.execution-primitive.v1', primitiveId: changes.primitiveId || 'pregrasp-1',
+    traceId: 'trace-pregrasp', taskId: 'grasp-pregrasp:test',
+    authorizationId: 'operator-approved:test', planDigest: `sha256:${'c'.repeat(64)}`,
+    operation: 'grasp.pregrasp',
+    parameters: {
+      sessionId: 'pregrasp-session', stableId: 1, frameId: 84416,
+      evidenceId: `sha256:${'d'.repeat(64)}`, motionEpoch: 0,
+      minimumStateSequence: service.controller.stateSequence,
+      minimumProducerMonotonicNs: service.controller.latestProducerMonotonicNs,
+      startJointsDeg: [...joints],
+      targetJointsDeg: joints.map((value, index) => value + (index === 0 ? 1 : 0)),
+      pregraspTcpPositionM: [0.36, -0.05, 0.10], operationMode: 'pregrasp_only',
+      speedScale: 0.01, timeoutMs: 3000,
+      ...(changes.parameters || {}),
+    },
+  };
+}
+
+test('protected pregrasp emits one minimum-speed joint move and completes from correlated feedback', async (t) => {
+  const { service, execution, joints } = await connectedExecutionService(t, 'pregrasp-valid');
+  const sent = [];
+  const originalSend = service.controller.bridge.send.bind(service.controller.bridge);
+  service.controller.bridge.send = message => {
+    if (message.cmd === 'move_joint') sent.push(message);
+    return originalSend(message);
+  };
+  const primitive = pregraspPrimitive(service, joints);
+  const done = nextMessage(execution, message => message.primitiveId === primitive.primitiveId
+    && message.status !== 'accepted');
+  execution.send(JSON.stringify(primitive));
+  const result = await done;
+  assert.equal(result.code, 'target_reached', JSON.stringify(result));
+  assert.equal(sent.length, 1);
+  assert.equal(sent[0].cmd, 'move_joint');
+  assert.ok(sent[0].time_sec >= 1 / 3 - 1e-6);
+});
+
+test('protected pregrasp rejects stale state and never sends motion', async (t) => {
+  const { service, execution, joints } = await connectedExecutionService(t, 'pregrasp-stale');
+  let moveCalls = 0;
+  const originalSend = service.controller.bridge.send.bind(service.controller.bridge);
+  service.controller.bridge.send = message => {
+    if (message.cmd === 'move_joint') moveCalls += 1;
+    return originalSend(message);
+  };
+  const cases = [
+    ['stale_start_joints', { startJointsDeg: joints.map((v, i) => v + (i === 0 ? 1 : 0)) }],
+    ['stale_state_sequence', { minimumStateSequence: service.controller.stateSequence + 1 }],
+    ['stale_producer_state', { minimumProducerMonotonicNs: service.controller.latestProducerMonotonicNs + 1 }],
+  ];
+  for (const [code, parameters] of cases) {
+    const primitive = pregraspPrimitive(service, joints, {
+      primitiveId: `pregrasp-${code}`, parameters,
+    });
+    const failed = nextMessage(execution, message => message.primitiveId === primitive.primitiveId
+      && message.status === 'failed');
+    execution.send(JSON.stringify(primitive));
+    assert.equal((await failed).code, code);
+  }
+  assert.equal(moveCalls, 0);
+});

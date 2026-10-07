@@ -3,8 +3,11 @@ from __future__ import annotations
 import asyncio
 import math
 import time
+from uuid import uuid4
 
 from .robot_ws_client import RobotWebSocketClient
+from .filters import clamp
+from .workspace_guard import WorkspaceGuard
 
 
 class TouchR1Adapter:
@@ -20,12 +23,17 @@ class TouchR1Adapter:
         )
         self.max_delta = float(robot.get("max_relative_move_deg", 1.0))
         self.min_command_interval = float(robot.get("min_command_interval_s", 0.10))
-        self.follow_speed_percent = float(robot.get("follow_speed_percent", 0.50))
+        self.follow_speed_percent = float(robot.get("follow_speed_percent", 0.05))
         self.servo_min_time_sec = float(robot.get("servo_min_time_sec", 0.20))
+        self.follow_command = str(robot.get("follow_command", "move_joint") or "move_joint")
+        self.follow_wait_complete = bool(robot.get("follow_wait_complete", True))
+        self.follow_ack_timeout = float(robot.get("follow_ack_timeout_s", 1.0))
         self.servo_max_speeds_deg_s = [
             float(x) for x in robot.get("servo_max_speeds_deg_s", [300, 300, 300, 1000, 1000, 1000])
         ]
         self.home_joints = robot.get("home_joints_deg")
+        self.home_preset_name = str(robot.get("home_preset_name", "zero") or "zero")
+        self.workspace_guard = WorkspaceGuard(config)
         self._last_send = 0.0
 
     async def connect(self):
@@ -57,7 +65,7 @@ class TouchR1Adapter:
                     await self.send_joint_target(waypoint, allow_large=True)
                     await self.wait_idle(timeout=20.0)
                 return await self.get_state()
-        await self.client.command("preset", name="home")
+        await self.client.command("preset", name=self.home_preset_name)
         return await self.wait_idle(timeout=20.0)
 
     async def close(self):
@@ -96,31 +104,74 @@ class TouchR1Adapter:
             out[index - 1] = min(max(value, lo), hi)
         return out
 
-    async def send_joint_target(self, joints_deg, *, allow_large=False, time_sec=None):
+    async def send_joint_target(self, joints_deg, *, allow_large=False, time_sec=None, skip_if_busy=False):
         if self.client.snapshot.moving or self.client.snapshot.state_name == "MOVING":
+            if skip_if_busy:
+                return False
             await self.wait_idle()
         target = self._validate(joints_deg)
         state = await self.get_state()
-        if state.joints_deg and not allow_large:
+        if skip_if_busy and (state.moving or state.state_name == "MOVING"):
+            return False
+        if state.joints_deg and not allow_large and self.max_delta > 0.0:
             delta = max(abs(a - b) for a, b in zip(target, state.joints_deg))
             if delta > self.max_delta:
-                raise ValueError(f"relative move {delta:.3f} deg exceeds {self.max_delta:.3f} deg")
+                target = self._clamp_relative_step(state.joints_deg, target)
+        if not allow_large:
+            allowed, reason = self.workspace_guard.check(target)
+            if not allowed:
+                raise RuntimeError(f"workspace guard rejected target: {reason}")
         elapsed = time.time() - self._last_send
         if elapsed < self.min_command_interval:
             await asyncio.sleep(self.min_command_interval - elapsed)
         if time_sec is None:
             time_sec = self._time_for_speed_percent(target, state.joints_deg)
-        # The robot service's legacy ``servo`` route ignores ``time_sec`` and
-        # falls back to its global speed scale.  ``move_joint`` carries the
-        # requested duration through to the Startouch bridge, so the configured
-        # follow speed is actually applied by the hardware.
-        await self.client.command(
-            "move_joint",
-            joints_deg=target,
-            time_sec=float(time_sec),
-            source="dummy_follow",
-        )
+        request_id = f"dummy-follow-{uuid4()}"
+        if not self.follow_wait_complete:
+            if self.follow_command == "servo":
+                await self.client.command("servo", joints=target, request_id=request_id)
+            else:
+                await self.client.command(
+                    "move_joint",
+                    joints_deg=target,
+                    time_sec=max(self.servo_min_time_sec, float(time_sec)),
+                    source="dummy_follow",
+                    request_id=request_id,
+                )
+            self._last_send = time.time()
+            return True
+        if self.follow_command == "servo":
+            ack = await self.client.command_wait(
+                "servo",
+                joints=target,
+                request_id=request_id,
+                timeout=self.follow_ack_timeout,
+                terminal_only=self.follow_wait_complete,
+            )
+        else:
+            ack = await self.client.command_wait(
+                "move_joint",
+                joints_deg=target,
+                time_sec=max(self.servo_min_time_sec, float(time_sec)),
+                source="dummy_follow",
+                request_id=request_id,
+                timeout=max(self.follow_ack_timeout, float(time_sec) + 1.0) if self.follow_wait_complete else self.follow_ack_timeout,
+                terminal_only=self.follow_wait_complete,
+            )
+        if ack is None:
+            raise RuntimeError(f"robot command timed out waiting for request_id={request_id}")
+        if isinstance(ack, dict) and ack.get("type") == "error":
+            raise RuntimeError(f"robot command rejected: {ack.get('code', '-')}: {ack.get('msg', ack)}")
         self._last_send = time.time()
+        return True
+
+    def _clamp_relative_step(self, current, target):
+        out = []
+        for src, dst in zip(current, target):
+            src = float(src)
+            dst = float(dst)
+            out.append(src + clamp(dst - src, -self.max_delta, self.max_delta))
+        return out
 
     def _time_for_speed_percent(self, target, current):
         if not current or len(current) != 6:

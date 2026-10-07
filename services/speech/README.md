@@ -48,6 +48,13 @@ tool sends an image to `deepseek-flash`; Pro never receives image input. Both
 requests reuse the same resolved Anthropic-compatible DeepSeek credential from
 `start-with-user-auth.sh`. There is no separate vision key by default.
 
+The formal `manual-control` profile sets `TEXT_LLM_MODEL=deepseek-v4-pro`,
+`VISION_LLM_MODEL=deepseek-flash`, and
+`VISION_STREAM_URL=http://127.0.0.1:3100/camera/xvisio/raw` in
+`configs/runtime/manual-control.json`. These are outbound API calls inside the
+3004 service, not additional local model listeners. The Web Gateway remains
+the LAN-facing 9983 entrypoint.
+
 The visual Skill reads one new JPEG from
 `http://127.0.0.1:3100/camera/xvisio/raw`. It never opens `/dev/video*`, starts
 or restarts the camera service, changes calibration, or moves the robot. If the

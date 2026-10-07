@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { STLLoader } from 'three/addons/loaders/STLLoader.js';
 import { ColladaLoader } from 'three/addons/loaders/ColladaLoader.js';
-import { VoiceControl } from './voice-control.js?v=10';
+import { VoiceControl } from './voice-control.js?v=11';
 console.log('[main.js] Modules imported, THREE keys:', Object.keys(THREE).length);
 
 function formatAgentTrace(payload) {
@@ -112,6 +112,31 @@ function boundedNumberValidation(rawValue, min, max, label) {
     return { valid: false, value, message: `${label}超出限位（${min}～${max}）` };
   }
   return { valid: true, value, message: '' };
+}
+
+const TCP_LIMITS = Object.freeze([
+  [150, 660], [-650, 450], [40, 650],
+  [-360, 360], [-360, 360], [-360, 360],
+]);
+
+function tcpTargetFromValues(values) {
+  if (!Array.isArray(values) || values.length !== 6) {
+    return { valid: false, message: '末端目标需要六个数值' };
+  }
+  const labels = ['X', 'Y', 'Z', 'Rx', 'Ry', 'Rz'];
+  const numbers = [];
+  for (let index = 0; index < 6; index++) {
+    const checked = boundedNumberValidation(
+      values[index], TCP_LIMITS[index][0], TCP_LIMITS[index][1], labels[index],
+    );
+    if (!checked.valid) return checked;
+    numbers.push(checked.value);
+  }
+  return {
+    valid: true, message: '',
+    position: numbers.slice(0, 3).map(value => value / 1000),
+    euler: numbers.slice(3).map(value => value * Math.PI / 180),
+  };
 }
 
 const BASE_TO_THREE_DIRECTIONS = Object.freeze({
@@ -513,6 +538,15 @@ class UIControls {
     this.sliders = [];
     this.inputs = [];
     this.inputErrors = [];
+    this.tcpInputs = [];
+    this.tcpDraftActive = false;
+    this.tcpPreviewOk = false;
+    this.tcpPreviewRequestId = null;
+    this.tcpPreviewSerial = 0;
+    this.tcpPreviewPrefix = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+    this.tcpPreviewTimer = null;
+    this.pendingCameraPreview = null;
+    this.activeManualTarget = 'joint';
     this.syncMode = true;
     this._draggingSlider = false;
     this.presets = {};
@@ -523,8 +557,10 @@ class UIControls {
     this.visionTargetExecutionEnabled = false;
     this.selectedVisionTarget = null;
     this.pendingVisionSelection = null;
-    this.graspMode = 'step';
+    this.graspMode = 'auto';
     this.graspPhase = 'idle';
+    this.webGraspEnabled = false;
+    this.webGraspStatus = {phase:'idle',active:false,sessionId:null};
     this.activeDepthStatus = { phase: 'idle', active: false, sessionId: null };
     this._drawerCollapsed = false;
     this.drawer = null;
@@ -632,8 +668,7 @@ class UIControls {
           return false;
         }
         slider.value = String(validation.value);
-        this._updateArm(i, validation.value);
-        return true;
+        return this._updateArm(i, validation.value) !== false;
       };
 
       slider.addEventListener('pointerdown', () => { this._draggingSlider = true; });
@@ -657,6 +692,8 @@ class UIControls {
         }
       });
     }
+
+    this._bindTcpInputs();
 
     // ── 绑定各 UI 事件 ─────────────────────────────────
 
@@ -682,7 +719,7 @@ class UIControls {
 
     // 发送按钮
     document.getElementById('btn-send').addEventListener('click', () => {
-      this._sendServo();
+      this._sendSelectedTarget();
     });
 
     // SDK software stop. A hardware E-stop remains a separate safety device.
@@ -843,7 +880,7 @@ class UIControls {
       console.log('[UI] config received, presets:', data.presets ? Object.keys(data.presets) : 'none');
       if (data.presets) this._setPresets(data.presets);
       if (data.jointLimits) this._setJointLimits(data.jointLimits);
-      this.visionConfigExecutionEnabled = data.visionSafety?.robotExecutionEnabled === true;
+      this.visionConfigExecutionEnabled = false;
       this._updateVisionControls();
       if (data.connection) {
         this.robotConnected = data.connection.connected === true;
@@ -942,6 +979,29 @@ class UIControls {
       }
     });
 
+    this.ws.on('ik_preview', data => this._applyTcpPreview(data));
+    this.ws.on('skill.candidate.preview', data => {
+      const pending = this.pendingCameraPreview;
+      if (!pending || data.candidateId !== pending.candidateId ||
+          data.traceId !== pending.traceId) return;
+      clearTimeout(pending.timer);
+      this.pendingCameraPreview = null;
+      if (data.ok !== true || !Array.isArray(data.jointsDeg) ||
+          data.jointsDeg.length !== 6 || !data.jointsDeg.every(Number.isFinite)) {
+        pending.resolve({ ok: false, message: data.reason || '镜头 X 轴 IK 预览失败' });
+        return;
+      }
+      const direction = data.direction === 'left' ? '左' : '右';
+      const mode = data.executionMode === 'real' ? '确认后可执行'
+        : data.executionMode === 'probe' ? '仅允许 1 厘米内监督探针'
+          : '镜头方向待现场验证，仅可预览';
+      const label = `镜头画面 X 轴向${direction}平移 ${data.distanceCm} 厘米 · ${mode}`;
+      this._startVoicePreview({ joints: data.jointsDeg }, label);
+      pending.resolve(data.executionMode === 'blocked'
+        ? { ok: false, message: label }
+        : { ok: true, message: label });
+    });
+
     this.ws.on('motion_state', data => {
       if (data.stateName) {
         this._updateStateBadge(data.stateName);
@@ -989,7 +1049,13 @@ class UIControls {
       }
       this._log(`← ${data.msg}`);
     });
-    this.ws.on('error', (data) => this._log('⚠ ' + data.msg));
+    this.ws.on('error', (data) => {
+      if (this.tcpDraftActive && data.request_id === this.tcpPreviewRequestId) {
+        this.tcpPreviewOk = false;
+        this._tcpError(data.msg || '末端预览失败');
+      }
+      this._log('⚠ ' + data.msg);
+    });
     this.ws.on('sdk_log', (data) => this._log(`SDK: ${data.msg}`));
 
     // ── XVisio vision and grasp controls ──────────────────
@@ -1155,7 +1221,7 @@ class UIControls {
       if (!objects.some(obj => obj.selected === true)) {
         this.selectedVisionTarget = null;
       }
-      this.visionTargetExecutionEnabled = data.robotExecutionEnabled === true;
+      this.visionTargetExecutionEnabled = false;
       this._updateVisionControls();
     });
 
@@ -1203,11 +1269,11 @@ class UIControls {
     });
     this.ws.on('camera_status', applyXVisionStatus);
 
-    this.ws.on('grasp_status', (data) => {
-      this.graspPhase = data.phase || 'idle';
+    this.ws.on('grasp.config', data => {
+      this.webGraspEnabled = data.enabled === true;
       this._updateVisionControls();
-      this._log(`视觉夹取: ${this.graspPhase}${data.reason ? ` (${data.reason})` : ''}`);
     });
+    this.ws.on('grasp.status', data => this._applyWebGraspStatus(data));
 
     this.visionWs.on("vision_warning", data => {
       this._log("⚠ Vision: " + (data.error || data.stage || "warning"));
@@ -1250,6 +1316,9 @@ class UIControls {
     // === End Active Depth Controls ===
 
     document.querySelectorAll('[data-grasp-mode]').forEach(button => {
+      button.disabled = true;
+      button.classList.toggle('active', button.dataset.graspMode === 'auto');
+      button.setAttribute('aria-pressed', String(button.dataset.graspMode === 'auto'));
       button.addEventListener('click', () => {
         this.graspMode = button.dataset.graspMode;
         document.querySelectorAll('[data-grasp-mode]').forEach(candidate => {
@@ -1261,16 +1330,14 @@ class UIControls {
       });
     });
     document.getElementById('btn-grasp-start')?.addEventListener('click', () => {
-      this.ws.send({ cmd: 'start_vision_grasp', mode: this.graspMode });
-      this._log(`→ ${this.graspMode === 'auto' ? '自动' : '分步'}视觉夹取`);
-    });
-    document.getElementById('btn-grasp-next')?.addEventListener('click', () => {
-      this.ws.send({ cmd: 'advance_vision_grasp' });
-      this._log('→ 执行夹取下一步');
+      const stableId = Number(this.selectedVisionTarget?.stableId);
+      if (!Number.isSafeInteger(stableId) || this.webGraspStatus.active) return;
+      const requestId = globalThis.crypto?.randomUUID?.() || `web-grasp-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+      this._requestWebGrasp('/api/grasp/start', {stableId,requestId});
     });
     document.getElementById('btn-grasp-cancel')?.addEventListener('click', () => {
-      this.ws.send({ cmd: 'cancel_vision_grasp' });
-      this._log('→ 取消视觉夹取');
+      const sessionId = this.webGraspStatus.sessionId;
+      if (sessionId && this.webGraspStatus.active) this._requestWebGrasp('/api/grasp/stop', {sessionId});
     });
 
     // 如有预设提前到达，补渲染
@@ -1284,17 +1351,40 @@ class UIControls {
     const start = document.getElementById('btn-grasp-start');
     const next = document.getElementById('btn-grasp-next');
     const cancel = document.getElementById('btn-grasp-cancel');
-    const active = !['idle', 'aborted'].includes(this.graspPhase);
-    const targetReady = this.selectedVisionTarget?.actionable === true;
+    const active = this.webGraspStatus?.active === true;
+    const targetReady = Number.isSafeInteger(Number(this.selectedVisionTarget?.stableId));
     if (start) {
       start.disabled = active || !this.robotStateReady || !targetReady ||
-        !this.visionConfigExecutionEnabled || !this.visionTargetExecutionEnabled;
+        !this.webGraspEnabled;
+      start.textContent = '一键抓取（TCP 60 mm）';
     }
     if (next) {
-      next.disabled = this.graspMode !== 'step' || this.graspPhase !== 'preview_ready';
+      next.disabled = true;
     }
     if (cancel) cancel.disabled = !active;
+    const lock = document.getElementById('vision-lock-reason');
+    if (lock && this.webGraspEnabled) {
+      lock.textContent = `${active ? '执行中' : '新抓取流程'}：${this.webGraspStatus.phase || 'idle'}${this.webGraspStatus.reason ? ' / '+this.webGraspStatus.reason : ''} · TCP 60 mm（近似）`;
+      lock.classList.toggle('ready', !active && targetReady);
+    }
     this._renderActiveDepthStatus();
+  }
+
+  _applyWebGraspStatus(data) {
+    const previous = this.webGraspStatus.phase;
+    this.webGraspStatus = data;
+    this.graspPhase = data.phase || 'idle';
+    if (previous !== this.graspPhase) this._log(`新抓取: ${this.graspPhase}${data.reason ? ' / '+data.reason : ''}`);
+    this._updateVisionControls();
+  }
+
+  async _requestWebGrasp(path, body) {
+    try {
+      const response = await fetch(path, {method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)});
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || `HTTP ${response.status}`);
+      this._applyWebGraspStatus(data);
+    } catch (error) { this._log(`抓取请求失败: ${error.message}`); }
   }
 
   async _requestActiveDepth(path, body) {
@@ -1422,6 +1512,13 @@ class UIControls {
     const intent = params.action || candidate?.intent;
     if (intent === 'robot.status') return true;
     if (!this.arm.loaded) return false;
+    if (intent === 'end_effector.step') return Boolean(
+      params.axis === 'camera_x' &&
+      ['left', 'right'].includes(params.direction) &&
+      Number.isFinite(params.distanceCm) &&
+      params.distanceCm > 0 && params.distanceCm <= 10 &&
+      Object.keys(params).sort().join(',') === 'action,axis,direction,distanceCm'
+    );
     if (intent === 'joint.multi') return Boolean(manualPreviewMoves(candidate));
     if (intent === 'robot.home') {
       const home = this.presets?.home;
@@ -1466,6 +1563,22 @@ class UIControls {
     }
 
     const params = candidate.payload?.params || {};
+    if (params.action === 'end_effector.step') {
+      if (this.pendingCameraPreview) {
+        clearTimeout(this.pendingCameraPreview.timer);
+        this.pendingCameraPreview.resolve({ ok: false, message: '已收到更新的候选' });
+      }
+      return new Promise(resolve => {
+        const timer = setTimeout(() => {
+          this.pendingCameraPreview = null;
+          resolve({ ok: false, message: '镜头 X 轴 3D 预览超时' });
+        }, 6500);
+        this.pendingCameraPreview = {
+          candidateId: candidate.candidateId, traceId: candidate.traceId,
+          resolve, timer,
+        };
+      });
+    }
     if (candidate.skill === 'pick_and_place_bottle@1') {
       const message = 'Skill 预览：coke_bottle → drop_zone_b；Language 未生成关节、轨迹或抓取动作';
       this.appendLocalLog(message);
@@ -1655,6 +1768,11 @@ class UIControls {
   }
 
   clearVoicePreview({ restore = true, reason = '' } = {}) {
+    if (this.pendingCameraPreview) {
+      clearTimeout(this.pendingCameraPreview.timer);
+      this.pendingCameraPreview.resolve({ ok: false, message: reason || '候选预览已取消' });
+      this.pendingCameraPreview = null;
+    }
     const hadPreview = this.localVoicePreview.joints || this.localVoicePreview.gripper;
     clearTimeout(this.localVoicePreview.timer);
     this.localVoicePreview.timer = 0;
@@ -1714,6 +1832,12 @@ class UIControls {
 
   _setRealtimeSync(enabled, { applyLatest = false } = {}) {
     this.syncMode = Boolean(enabled);
+    if (this.syncMode) {
+      this.tcpDraftActive = false;
+      this.tcpPreviewOk = false;
+      this.tcpPreviewRequestId = null;
+      clearTimeout(this.tcpPreviewTimer);
+    }
     const checkbox = document.getElementById('chk-sync');
     if (checkbox) checkbox.checked = this.syncMode;
     if (!this.syncMode || !applyLatest) return;
@@ -1794,18 +1918,17 @@ class UIControls {
   }
 
   _updateTCP(tcpPos, tcpEuler) {
+    if (this.tcpDraftActive) return;
     const modelPose = this.arm.getEndEffectorBasePose();
-    const pos = tcpPos || [
-      modelPose.positionMm.x,
-      modelPose.positionMm.y,
-      modelPose.positionMm.z,
-    ];
-    const euler = tcpEuler || [
-      modelPose.eulerDeg.rx,
-      modelPose.eulerDeg.ry,
-      modelPose.eulerDeg.rz,
-    ];
-    const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v.toFixed(1); };
+    const pos = tcpPos || (Array.isArray(this.lastRobotState?.tcpPos)
+      ? this.lastRobotState.tcpPos : [
+        modelPose.positionMm.x, modelPose.positionMm.y, modelPose.positionMm.z,
+      ]);
+    const euler = tcpEuler || (Array.isArray(this.lastRobotState?.tcpEuler)
+      ? this.lastRobotState.tcpEuler : [
+        modelPose.eulerDeg.rx, modelPose.eulerDeg.ry, modelPose.eulerDeg.rz,
+      ]);
+    const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = v.toFixed(1); };
     set('tcp-x', Number(pos[0] ?? pos.x)); set('tcp-y', Number(pos[1] ?? pos.y)); set('tcp-z', Number(pos[2] ?? pos.z));
     set('tcp-rx', Number(euler[0])); set('tcp-ry', Number(euler[1])); set('tcp-rz', Number(euler[2]));
     const stcp = document.getElementById('stcp');
@@ -1816,10 +1939,135 @@ class UIControls {
   }
 
   _updateArm(index, value) {
+    if (this.activeManualTarget === 'tcp') {
+      const measured = this.lastRobotState?.joints;
+      const baseline = Array.isArray(measured) && measured.length >= 6 &&
+        measured.slice(0, 6).every(Number.isFinite)
+        ? measured.slice(0, 6) : this.tcpJointBaseline;
+      if (!Array.isArray(baseline) || baseline.length !== 6 ||
+          !baseline.every(Number.isFinite)) {
+        this._tcpError('缺少可靠的关节起点，请等待实时反馈');
+        return false;
+      }
+      this.tcpDraftActive = false;
+      this.setJointValues(baseline);
+      if (this.sliders[index]) this.sliders[index].value = String(value);
+      if (this.inputs[index]) this.inputs[index].value = Number(value).toFixed(1);
+    }
+    this.activeManualTarget = 'joint';
+    this.tcpDraftActive = false;
+    this.tcpPreviewOk = false;
+    this.tcpPreviewRequestId = null;
+    clearTimeout(this.tcpPreviewTimer);
     const angles = this.arm.getJointAngles();
     angles[index] = value;
     this.arm.setJointAngles(angles);
     this._updateTCP();
+    return true;
+  }
+
+  _applyTcpPreview(data) {
+    if (!this.tcpDraftActive || data.request_id !== this.tcpPreviewRequestId) return;
+    if (data.ok === true && Array.isArray(data.joints_deg) &&
+        data.joints_deg.length === 6 && data.joints_deg.every(Number.isFinite)) {
+      this.tcpPreviewOk = true;
+      this._tcpError('');
+      this.setJointValues(data.joints_deg);
+    } else {
+      this.tcpPreviewOk = false;
+      this._tcpError('目标位姿不可达，未更新 3D 预览');
+      if (Array.isArray(this.lastRobotState.joints)) {
+        this.setJointValues(this.lastRobotState.joints);
+      }
+    }
+  }
+
+  _tcpError(message) {
+    const error = document.getElementById('tcp-error');
+    if (error) error.textContent = message;
+  }
+
+  _bindTcpInputs() {
+    this.tcpInputs = ['x', 'y', 'z', 'rx', 'ry', 'rz']
+      .map(axis => document.getElementById(`tcp-${axis}`));
+    for (const input of this.tcpInputs) {
+      input.addEventListener('input', () => {
+        this.clearVoicePreview({ restore: true, reason: '手动末端目标调整' });
+        if (this.activeManualTarget !== 'tcp') {
+          this.tcpJointBaseline = this.arm.getJointAngles();
+        }
+        this.activeManualTarget = 'tcp';
+        this.tcpDraftActive = true;
+        this._setRealtimeSync(false);
+        this._scheduleTcpPreview();
+      });
+      input.addEventListener('change', () => {
+        const value = Number(input.value);
+        if (Number.isFinite(value) && input.value.trim() !== '') {
+          input.value = value.toFixed(1);
+        }
+      });
+    }
+  }
+
+  _scheduleTcpPreview() {
+    clearTimeout(this.tcpPreviewTimer);
+    this.tcpPreviewOk = false;
+    this.tcpPreviewRequestId = null;
+    const target = tcpTargetFromValues(this.tcpInputs.map(input => input.value));
+    if (!target.valid) {
+      this._tcpError(target.message);
+      return;
+    }
+    if (!this.robotConnected || !this.robotStateReady) {
+      this._tcpError('请先连接机械臂以预览末端目标');
+      return;
+    }
+    this._tcpError('');
+    this.tcpPreviewTimer = setTimeout(() => {
+      const requestId = `tcp-preview-${this.tcpPreviewPrefix}-${++this.tcpPreviewSerial}`;
+      this.tcpPreviewRequestId = requestId;
+      this.ws.send({
+        cmd: 'preview_ik', position: target.position, euler: target.euler,
+        request_id: requestId,
+      });
+    }, 150);
+  }
+
+  _sendSelectedTarget() {
+    if (this.activeManualTarget === 'tcp') this._sendTcp();
+    else this._sendServo();
+  }
+
+  _sendTcp() {
+    const target = tcpTargetFromValues(this.tcpInputs.map(input => input.value));
+    if (!target.valid) {
+      this._tcpError(target.message);
+      this._log(`[拒绝] ${target.message}`);
+      return;
+    }
+    if (!this.tcpPreviewOk) {
+      this._tcpError('请等待 3D 预览完成，或修改不可达的目标位姿');
+      return;
+    }
+    const current = this.lastRobotState;
+    const currentPosition = current?.tcpPos;
+    const currentEuler = current?.tcpEuler;
+    if (!Array.isArray(currentPosition) || currentPosition.length !== 3 ||
+        !currentPosition.every(Number.isFinite) ||
+        !Array.isArray(currentEuler) || currentEuler.length !== 3 ||
+        !currentEuler.every(Number.isFinite) ||
+        !Number.isFinite(current.observedAt) || Date.now() - current.observedAt > 2000) {
+      this._tcpError('实时末端位姿缺失或过期，请等待机器人反馈');
+      return;
+    }
+    this.clearVoicePreview({ restore: true, reason: '发送手动末端目标' });
+    this.ws.send({
+      cmd: 'move_l', position: target.position, euler: target.euler,
+    });
+    this._setRealtimeSync(true, { applyLatest: true });
+    this._tcpError('');
+    this._log('→ move_l 末端目标已发送');
   }
 
   _sendServo() {

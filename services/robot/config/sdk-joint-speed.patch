@@ -1,0 +1,6 @@
+diff --git a/local/sdk/startouch/src/config/robot_kinematics.yaml b/local/sdk/startouch/src/config/robot_kinematics.yaml
+--- a/local/sdk/startouch/src/config/robot_kinematics.yaml
++++ b/local/sdk/startouch/src/config/robot_kinematics.yaml
+@@ -60 +60 @@
+-  max_vel_limits: [5.5, 5.5, 5.5, 20.9, 20.9, 20.9]
++  max_vel_limits: [5.235987755982989, 5.235987755982989, 5.235987755982989, 17.453292519943297, 17.453292519943297, 17.453292519943297]

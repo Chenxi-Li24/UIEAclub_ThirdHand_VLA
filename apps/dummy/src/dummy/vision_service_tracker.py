@@ -13,7 +13,10 @@ from PIL import Image
 
 from .filters import OneEuro
 from .mediapipe_face import MediaPipeFaceDetector
+from .person_lock_tracker import Candidate, PersonLockTracker
+from .rgbd_target import RgbdTargetBuilder
 from .tracker import Target
+from .yolo_person_detector import YoloPersonDetector
 
 
 class MjpegReader:
@@ -80,6 +83,7 @@ class VisionServiceTracker:
         v = config.get("vision_service", {})
         self.url = v.get("mjpeg_url", "http://127.0.0.1:3100/camera/xvisio/vision")
         self.health_url = v.get("health_url", "http://127.0.0.1:3100/health")
+        self.observation_url = v.get("observation_url", "http://127.0.0.1:3100/api/vision/person-follow/observation")
         self.allow_health_fallback = bool(v.get("allow_health_fallback", False))
         self.prefer_labels = tuple(v.get("prefer_labels", ["person", "face", "human", "bottle"]))
         self.width = int(config.get("vision", {}).get("frame_w", v.get("frame_w", 640)))
@@ -118,12 +122,16 @@ class VisionServiceTracker:
         self._person_candidate_count = 0
         self._wave_candidate_count = 0
         self.reader = MjpegReader(self.url)
+        self.rgbd_target = RgbdTargetBuilder(config)
         hz = float(config.get("vision", {}).get("hz", 15))
         self.fx = OneEuro(hz, config.get("vision", {}).get("filter_min_cutoff", 1.0), config.get("vision", {}).get("filter_beta", 0.04))
         self.fy = OneEuro(hz, config.get("vision", {}).get("filter_min_cutoff", 1.0), config.get("vision", {}).get("filter_beta", 0.04))
         self.bg = None
         self.last_debug = {}
         self.last_target = Target(False)
+        self.person_lock_enabled = bool(v.get("person_lock_enabled", True))
+        self.person_lock = PersonLockTracker(config) if self.person_lock_enabled else None
+        self.yolo_person = YoloPersonDetector(config)
         self._last_frame_sequence = None
         self.face = None
         self.upperbody = None
@@ -208,12 +216,99 @@ class VisionServiceTracker:
                 error,
             )
         self._last_frame_sequence = sequence
+        yolo_candidates = self.yolo_person.detect(frame)
         target = self.detect(frame)
+        if self.person_lock is not None:
+            target = self._lock_person_target(target, frame.shape[1], frame.shape[0], yolo_candidates)
+        target = self._merge_rgbd_target(target)
         if not target.found and self.allow_health_fallback:
             health_target, _health_error = self._read_health_target()
             if health_target.found:
                 return health_target, frame, error
         return target, frame, error
+
+    def _merge_rgbd_target(self, fallback):
+        rgbd = self._read_rgbd_target()
+        if rgbd is None:
+            return fallback
+        self.last_debug["rgbd_kind"] = rgbd.kind
+        self.last_debug["rgbd_depth_valid"] = rgbd.depth_valid
+        self.last_debug["rgbd_depth_ratio"] = rgbd.depth_valid_ratio
+        self.last_debug["rgbd_points"] = rgbd.valid_depth_points
+        if rgbd.depth_m is not None:
+            self.last_debug["rgbd_depth_m"] = rgbd.depth_m
+        if rgbd.xyz_m is not None:
+            self.last_debug["rgbd_xyz_m"] = rgbd.xyz_m
+        if not rgbd.found:
+            return fallback
+        if not str(rgbd.kind).startswith(("person", "face", "human")):
+            return fallback
+        if not getattr(fallback, "found", False):
+            return rgbd
+        if rgbd.xyz_m is None:
+            return fallback
+        rgbd.u = float(getattr(fallback, "u", rgbd.u))
+        rgbd.v = float(getattr(fallback, "v", rgbd.v))
+        rgbd.score = max(float(getattr(fallback, "score", 0.0) or 0.0), rgbd.score)
+        rgbd.kind = f"{getattr(fallback, 'kind', 'person')}_depth"
+        return rgbd
+
+    def _read_rgbd_target(self):
+        if not self.observation_url:
+            return None
+        try:
+            with urllib.request.urlopen(self.observation_url, timeout=0.25) as response:
+                observation = json.loads(response.read().decode("utf-8"))
+            return self.rgbd_target.from_observation(observation)
+        except Exception as exc:
+            self.last_debug["rgbd_error"] = str(exc)
+            return None
+
+    def _lock_person_target(self, target, width, height, extra_candidates=None):
+        candidates = list(extra_candidates or [])
+        raw = self.last_debug.get("raw_target")
+        bbox = self.last_debug.get("person_bbox") or self.last_debug.get("bbox")
+        if raw and bbox:
+            candidates.append(Candidate(
+                float(raw[0]),
+                float(raw[1]),
+                float(bbox[2]),
+                float(bbox[3]),
+                float(getattr(target, "score", 0.0) or 0.0),
+                str(getattr(target, "kind", "candidate")),
+            ))
+        elif target.found and str(target.kind).startswith(("face", "mediapipe_face", "front_person_lock", "wave_lock", "person_motion")):
+            candidates.append(Candidate(
+                float(target.u),
+                float(target.v),
+                80.0,
+                80.0,
+                float(target.score or 0.0),
+                str(target.kind),
+            ))
+        locked = self.person_lock.update(candidates, now=time.time(), frame_size=(width, height))
+        lock_debug = getattr(self.person_lock, "last_debug", {}) or {}
+        self.last_debug["candidate_count"] = len(candidates)
+        self.last_debug["yolo_available"] = bool(getattr(self.yolo_person, "available", False))
+        if getattr(self.yolo_person, "error", None):
+            self.last_debug["yolo_error"] = self.yolo_person.error
+        candidate = lock_debug.get("candidate")
+        if candidate is not None:
+            self.last_debug["lock_candidate"] = {
+                "u": candidate.u,
+                "v": candidate.v,
+                "w": candidate.w,
+                "h": candidate.h,
+                "score": candidate.score,
+                "kind": candidate.kind,
+            }
+        self.last_debug["lock_state"] = getattr(self.person_lock, "state", "unknown")
+        if lock_debug.get("rejected"):
+            self.last_debug["rejected"] = lock_debug["rejected"]
+            self.last_debug["pending_count"] = lock_debug.get("pending_count")
+        if locked.found:
+            self.last_target = locked
+        return locked
 
     def _read_health_target(self):
         try:

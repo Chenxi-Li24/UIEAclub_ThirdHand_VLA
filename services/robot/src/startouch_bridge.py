@@ -14,6 +14,7 @@ import sys
 import tempfile
 import threading
 import time
+from joint_speed_policy import bounded_speed_percent, validate_sdk_speed_reference
 from typing import Any
 
 try:
@@ -26,6 +27,7 @@ SDK_PATH = os.path.expanduser(os.environ.get("STARTOUCH_SDK_PATH", ""))
 MODULE_PATH = os.path.expanduser(os.environ.get("STARTOUCH_MODULE_PATH", ""))
 CAN_INTERFACE = os.environ.get("STARTOUCH_CAN_INTERFACE", "can0")
 SIMULATE = os.environ.get("STARTOUCH_SIMULATE", "0") == "1"
+SPEED_PERCENT = bounded_speed_percent(os.environ.get("STARTOUCH_SPEED_SCALE", "0.05"))
 DRY_RUN = os.environ.get("STARTOUCH_DRY_RUN", "0") == "1"
 GRIPPER_ENABLED = os.environ.get("STARTOUCH_GRIPPER", "1") != "0"
 GRIPPER_MAX_DISTANCE_M = min(
@@ -133,10 +135,19 @@ class SimulatedArm:
     def get_gripper_distance(self):
         return self.gripper * GRIPPER_MAX_DISTANCE_M
 
+    def solve_ik(self, pos, quat, q_seed=None):
+        same_pose = all(abs(a - b) < 1e-6 for a, b in zip(pos, [0.45, 0.0, 0.25]))
+        same_orientation = all(abs(a - b) < 1e-6 for a, b in zip(quat, [1.0, 0.0, 0.0, 0.0]))
+        return (list(self.joints), same_pose and same_orientation)
+
     def set_joint_waypoints(self, waypoints, time_sec=None, speed_percent=None):
-        del speed_percent
         target = list(waypoints[-1])
+        speed = bounded_speed_percent(speed_percent) if speed_percent is not None else None
         duration = max(0.05, float(time_sec or 0.5))
+        if speed is not None:
+            duration = max(0.05, max(
+                abs(a-b) / math.radians(ref * speed)
+                for a,b,ref in zip(self.joints,target,(300,300,300,1000,1000,1000))))
         start = list(self.joints)
         steps = max(1, int(duration / 0.02))
         for step in range(1, steps + 1):
@@ -174,6 +185,7 @@ class RobotBridge:
         self.control_lock_file = None
         self.last_joint_log_monotonic = 0.0
         self.gripper_target: float | None = None
+        self.grasp_feedback_upper: float | None = None
         self.gripper_request_id: str | None = None
         self.gripper_start_position: float | None = None
         self.gripper_started_monotonic = 0.0
@@ -501,7 +513,14 @@ class RobotBridge:
         else:
             self.gripper_stable_samples = 0
 
-        reached = self.gripper_stable_samples >= GRIPPER_STABLE_SAMPLES
+        # Optional policy belongs to this 35% Meituan grasp only. Snapshot is
+        # read after setGripperDistance under the same arm lock.
+        contact_reached = (
+            self.grasp_feedback_upper is not None
+            and math.isfinite(actual)
+            and 0.0 <= actual < self.grasp_feedback_upper
+        )
+        reached = contact_reached or self.gripper_stable_samples >= GRIPPER_STABLE_SAMPLES
         timed_out = elapsed >= GRIPPER_SETTLE_TIMEOUT_SEC
         should_log = (
             reached
@@ -540,6 +559,7 @@ class RobotBridge:
             "request_id": self.gripper_request_id,
         }
         self.gripper_target = None
+        self.grasp_feedback_upper = None
         self.gripper_request_id = None
         self.gripper_start_position = None
         self.gripper_started_monotonic = 0.0
@@ -595,6 +615,7 @@ class RobotBridge:
                     )
                 if module_path not in sys.path:
                     sys.path.insert(0, module_path)
+                validate_sdk_speed_reference(SDK_PATH)
                 from startouchclass import SingleArm
 
                 arm = SingleArm(
@@ -779,7 +800,7 @@ class RobotBridge:
             "start_joints_rad": start_joints,
             "joints_rad": target,
             "waypoints_rad": waypoints,
-            "time_sec": max(0.2, min(30.0, float(command.get("time_sec", 2.0)))),
+            "speed_percent": min(SPEED_PERCENT, bounded_speed_percent(command.get("speed_percent", SPEED_PERCENT))),
             "request_id": command.get("request_id"),
             "source": source,
             "command": command_name,
@@ -804,6 +825,7 @@ class RobotBridge:
         kp: Any = None,
         kd: Any = None,
         request_id: Any = None,
+        grasp_feedback_upper: Any = None,
     ) -> None:
         if not self.connected or self.arm is None:
             emit("error", message="Startouch SDK is not connected")
@@ -818,6 +840,12 @@ class RobotBridge:
             return
         if not math.isfinite(value) or value < 0.0 or value > 1.0:
             emit("error", message="gripper position must be between 0 and 1")
+            return
+        if grasp_feedback_upper is not None and (
+            grasp_feedback_upper != 0.4 or value != 0.35
+        ):
+            emit("error", message="contact feedback policy requires target 35% and upper 40%",
+                 request_id=request_id)
             return
         try:
             kp_value = GRIPPER_KP if kp is None else float(kp)
@@ -840,6 +868,7 @@ class RobotBridge:
                 target_distance = value * GRIPPER_MAX_DISTANCE_M
                 self.arm.setGripperDistance(target_distance, kp_value, kd_value)
                 self.gripper_target = value
+                self.grasp_feedback_upper = grasp_feedback_upper
                 self.gripper_request_id = None if request_id is None else str(request_id)
                 self.gripper_start_position = before_position
                 self.gripper_started_monotonic = time.monotonic()
@@ -869,6 +898,49 @@ class RobotBridge:
                 request_id=None if request_id is None else str(request_id),
             )
 
+    def preview_ik(self, command: dict[str, Any]) -> None:
+        """Solve a displayed flange target without commanding motion."""
+        request_id = command.get("request_id")
+        position = command.get("position")
+        euler = command.get("euler")
+        if not isinstance(position, list) or len(position) != 3 or not isinstance(euler, list) or len(euler) != 3:
+            emit("error", message="preview_ik requires three position and three Euler values", request_id=request_id)
+            return
+        try:
+            pos = [float(value) for value in position]
+            rot = [float(value) for value in euler]
+        except (TypeError, ValueError):
+            emit("error", message="preview_ik values must be numeric", request_id=request_id)
+            return
+        if not all(math.isfinite(value) for value in pos + rot):
+            emit("error", message="preview_ik values must be finite", request_id=request_id)
+            return
+        with self.arm_lock:
+            if not self.connected or not self.state_ready or self.motion_active or self.arm is None:
+                emit("error", message="robot state is not ready for IK preview", request_id=request_id)
+                return
+            roll, pitch, yaw = rot
+            cr, sr = math.cos(roll / 2), math.sin(roll / 2)
+            cp, sp = math.cos(pitch / 2), math.sin(pitch / 2)
+            cy, sy = math.cos(yaw / 2), math.sin(yaw / 2)
+            quat = [
+                cr * cp * cy + sr * sp * sy,
+                sr * cp * cy - cr * sp * sy,
+                cr * sp * cy + sr * cp * sy,
+                cr * cp * sy - sr * sp * cy,
+            ]
+            try:
+                joints, ok = self.arm.solve_ik(pos, quat, q_seed=self.last_valid_joints)
+                joints = self._finite_values(joints, 6, "IK joints") if ok else []
+                ok = bool(ok) and all(
+                    lower <= value <= upper
+                    for value, (lower, upper) in zip(joints, JOINT_LIMITS_RAD)
+                )
+            except Exception as exc:
+                emit("error", message=f"preview_ik failed: {exc}", request_id=request_id)
+                return
+        emit("ik_preview", request_id=request_id, ok=ok, joints_rad=joints if ok else [])
+
     def move_linear(self, command: dict[str, Any]) -> None:
         """Execute a Cartesian linear move (move_l)."""
         with self.arm_lock:
@@ -887,7 +959,7 @@ class RobotBridge:
 
         position = command.get("position")
         euler = command.get("euler")
-        time_sec = float(command.get("time_sec", 2.0))
+        speed_percent = min(SPEED_PERCENT, bounded_speed_percent(command.get("speed_percent", SPEED_PERCENT)))
         request_id = command.get("request_id")
 
         if not isinstance(position, list) or len(position) != 3:
@@ -906,18 +978,28 @@ class RobotBridge:
             emit("error", message="move_l position/euler contain non-finite values")
             return
 
-        time_sec = max(0.2, min(30.0, time_sec))
+        precision = {}
+        for field, default in (("position_tolerance_m", 0.04),
+                               ("orientation_tolerance_rad", 0.4)):
+            value = command.get(field, default)
+            if (not isinstance(value, (int, float)) or isinstance(value, bool)
+                    or not math.isfinite(value) or not 0 < value <= default):
+                emit("error", message=f"invalid {field}", request_id=request_id)
+                return
+            precision[field] = value
+
         # Use a fake joint target so enqueue_motion doesn't reject it
         fake_item = {
             "start_joints_rad": self.last_valid_joints or [0.0] * 6,
             "joints_rad": self.last_valid_joints or [0.0] * 6,
             "waypoints_rad": [self.last_valid_joints or [0.0] * 6],
-            "time_sec": time_sec,
+            "speed_percent": speed_percent,
             "request_id": request_id,
             "source": "move_l",
             "command": "move_l",
             "_move_l_pos": pos,
             "_move_l_euler": rot,
+            **precision,
         }
         self.motion_queue.put_nowait(fake_item)
         emit("command_accepted", command="move_l", request_id=request_id, source="move_l")
@@ -942,7 +1024,7 @@ class RobotBridge:
             "start_joints_rad": self.last_valid_joints or [0.0] * 6,
             "joints_rad": [0.0] * 6,
             "waypoints_rad": [[0.0] * 6],
-            "time_sec": 5.0,
+            "speed_percent": SPEED_PERCENT,
             "request_id": request_id,
             "source": "go_home",
             "command": "go_home",
@@ -1044,14 +1126,11 @@ class RobotBridge:
                     continue
 
                 if command.get("_go_home"):
-                    # go_home path
-                    if hasattr(arm, 'go_home'):
-                        arm.go_home()
-                    else:
-                        arm.set_joint_waypoints(
-                            [command["start_joints_rad"], [0.0] * 6],
-                            time_sec=5.0,
-                        )
+                    # Homing obeys the same policy; never use SDK default speed.
+                    duration = arm.set_joint_waypoints(
+                        [command["start_joints_rad"], [0.0] * 6],
+                        speed_percent=command["speed_percent"],
+                    )
                     # After homing, read actual joint state
                     try:
                         joints = self._finite_values(arm.get_joint_positions(), 6, "joint positions after home")
@@ -1064,20 +1143,19 @@ class RobotBridge:
                         emit(
                             "command_complete",
                             command="go_home",
-                            duration_sec=5.0,
+                            duration_sec=float(duration),
                             request_id=command["request_id"],
                         )
                 elif command.get("_move_l_pos"):
                     # move_l Cartesian path
                     pos = command["_move_l_pos"]
                     euler = command["_move_l_euler"]
-                    time_sec = command["time_sec"]
-                    arm.move_l(
+                    duration = arm.move_l(
                         [[pos[0], pos[1], pos[2], euler[0], euler[1], euler[2]]],
-                        time_sec=time_sec,
+                        speed_percent=command["speed_percent"],
                         blend_radius_m=0.0,
-                        position_tolerance_m=0.04,
-                        orientation_tolerance_rad=0.4,
+                        position_tolerance_m=command["position_tolerance_m"],
+                        orientation_tolerance_rad=command["orientation_tolerance_rad"],
                     )
                     # After move, read actual joint state
                     try:
@@ -1090,14 +1168,14 @@ class RobotBridge:
                         emit(
                             "command_complete",
                             command="move_l",
-                            duration_sec=float(time_sec),
+                            duration_sec=float(duration),
                             request_id=command["request_id"],
                         )
                 else:
                     # Joint waypoints path (existing)
                     duration = arm.set_joint_waypoints(
                         [command["start_joints_rad"], *command["waypoints_rad"]],
-                        time_sec=command["time_sec"],
+                        speed_percent=command["speed_percent"],
                     )
                     if not self.stop_requested.is_set():
                         with self.arm_lock:
@@ -1164,6 +1242,8 @@ def main() -> None:
                 bridge.enqueue_motion(command)
             elif name == "move_l":
                 bridge.move_linear(command)
+            elif name == "preview_ik":
+                bridge.preview_ik(command)
             elif name == "go_home":
                 bridge.go_home(command.get("request_id"))
             elif name == "gripper":
@@ -1172,6 +1252,7 @@ def main() -> None:
                     command.get("kp"),
                     command.get("kd"),
                     command.get("request_id"),
+                    command.get("grasp_feedback_upper"),
                 )
             elif name == "get_state":
                 if bridge.connected:

@@ -31,7 +31,7 @@ def test_audit_detects_history_runtime_dependency(tmp_path, monkeypatch):
     assert [item.code for item in violations] == ["history_runtime_dependency"]
 
 
-def test_local_runtime_payloads_and_external_symlinks_are_absent():
+def test_unlisted_local_payloads_runtime_state_and_external_symlinks_are_absent():
     violations = audit_repository(ROOT)
     relevant = [
         item
@@ -39,3 +39,23 @@ def test_local_runtime_payloads_and_external_symlinks_are_absent():
         if item.code in {"tracked_local_payload", "tracked_runtime_payload", "external_symlink"}
     ]
     assert relevant == []
+
+
+def test_only_manifest_listed_assets_are_allowed(tmp_path, monkeypatch):
+    import json
+    manifest = tmp_path / 'configs/assets/runtime-assets.json'
+    manifest.parent.mkdir(parents=True)
+    manifest.write_text(json.dumps({'files': [
+        {'path': 'local/models/allowed.bin'},
+        {'path': 'local/runtimes/python/bin/python'},
+        {'path': 'local/sdk/.env'},
+    ]}))
+    monkeypatch.setattr('tools.diagnostics.audit_boundaries._tracked_files', lambda _root: [
+        'local/models/allowed.bin', 'local/models/unlisted.bin',
+        'local/runtimes/python/bin/python', 'local/sdk/.env', 'runtime/token',
+    ])
+    violations = audit_repository(tmp_path)
+    assert {v.path for v in violations} == {
+        'local/models/unlisted.bin', 'local/runtimes/python/bin/python',
+        'local/sdk/.env', 'runtime/token',
+    }

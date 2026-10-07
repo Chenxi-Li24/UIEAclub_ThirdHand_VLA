@@ -39,6 +39,7 @@ class StartouchBridge extends EventEmitter {
       STARTOUCH_INIT_SAMPLE_COUNT: String(this.config.initSampleCount),
       STARTOUCH_INIT_MAX_DRIFT_DEG: String(this.config.initMaxDriftDeg),
       STARTOUCH_SPEED_SCALE: String(Math.min(0.05, this.config.speedScale ?? 0.05)),
+      STARTOUCH_FOLLOW_J1_MAX_SPEED_DEG_S: String(this.config.followJ1MaxSpeedDegS ?? 50),
       STARTOUCH_EVENT_FD: '3',
     };
 
@@ -153,7 +154,6 @@ class StartouchBridge extends EventEmitter {
     }
     if (message.type === 'error') {
       this.emit('bridge_error', message);
-      this.emit('message', { ...message, type: 'bridge_error' });
       return;
     }
     this.emit(message.type, message);

@@ -1,4 +1,5 @@
 from pathlib import Path
+import json
 import re
 import subprocess
 
@@ -100,18 +101,51 @@ def test_legacy_implementations_are_consolidated_under_history():
     assert remaining == []
 
 
-def test_local_and_runtime_payloads_are_ignored():
-    probes = ["local/sdk/startouch/libstartouch.so", "runtime/logs/service.log"]
+def test_environments_temporary_payloads_and_runtime_state_are_ignored():
+    probes = [
+        "local/runtimes/python/bin/python",
+        "local/scratch/temporary.so",
+        "runtime/logs/service.log",
+    ]
     result = subprocess.run(
-        ["git", "check-ignore", "--stdin"],
+        ["git", "check-ignore", "--", *probes],
         cwd=ROOT,
-        input="\n".join(probes) + "\n",
         text=True,
         capture_output=True,
         check=False,
     )
     assert result.returncode == 0
     assert set(result.stdout.splitlines()) == set(probes)
+
+
+def test_manifest_listed_sdk_library_is_trackable_and_tracked():
+    library = "local/sdk/startouch/src/libstartouch.so.24"
+    manifest = json.loads(
+        (ROOT / "configs/assets/runtime-assets.json").read_text(encoding="utf-8")
+    )
+    assert library in {entry["path"] for entry in manifest["files"]}
+    ignored = subprocess.run(
+        ["git", "check-ignore", "--no-index", "--verbose", "--non-matching", "--stdin", "-z"],
+        cwd=ROOT,
+        input=library.encode("utf-8") + b"\0",
+        capture_output=True,
+        check=False,
+    )
+    assert ignored.returncode in (0, 1), ignored.stderr
+    # Older Git reports negated matches as success; inspect the actual rule.
+    fields = ignored.stdout.decode("utf-8").split("\0")
+    assert len(fields) == 5
+    assert fields[3] == library
+    assert fields[2] == "" or fields[2].startswith("!"), fields[2]
+    tracked = subprocess.run(
+        ["git", "ls-files", "--error-unmatch", "--", library],
+        cwd=ROOT,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    assert tracked.returncode == 0, tracked.stderr
+    assert tracked.stdout.splitlines() == [library]
 
 
 def test_each_skill_manifest_has_protocol_document():

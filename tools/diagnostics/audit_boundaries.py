@@ -30,13 +30,14 @@ class Violation:
 
 def _tracked_files(root: Path) -> list[str]:
     result = subprocess.run(
-        ["git", "ls-files"],
+        ["git", "ls-files", "-z"],
         cwd=root,
         text=True,
+        encoding="utf-8",
         capture_output=True,
         check=True,
     )
-    return result.stdout.splitlines()
+    return [name for name in result.stdout.split('\0') if name]
 
 
 def _text_lines(path: Path) -> list[str]:
@@ -64,6 +65,19 @@ def audit_repository(root: Path) -> list[Violation]:
     """Scan formal text source and repository boundaries without following symlinks."""
     root = root.resolve()
     violations: list[Violation] = []
+    # User-authorized runtime delivery assets are enumerated individually.
+    # This does not permit credentials, copied environments or runtime state.
+    asset_manifest = root / 'configs/assets/runtime-assets.json'
+    allowed_local: set[str] = set()
+    if asset_manifest.is_file():
+        for entry in json.loads(asset_manifest.read_text(encoding='utf-8'))['files']:
+            name = entry['path']
+            if (name.startswith(('local/sdk/', 'local/models/', 'local/vendor/funasr/',
+                                 'local/generated/startouch-python/'))
+                    and '..' not in Path(name).parts
+                    and not any(part in {'.env', '.git', 'api_keys.yaml'}
+                                for part in Path(name).parts)):
+                allowed_local.add(name)
 
     for root_name in FORMAL_ROOTS:
         formal_root = root / root_name
@@ -89,7 +103,7 @@ def audit_repository(root: Path) -> list[Violation]:
                     )
 
     for tracked in _tracked_files(root):
-        if tracked.startswith("local/") and tracked != "local/README.md":
+        if tracked.startswith("local/") and tracked != "local/README.md" and tracked not in allowed_local:
             violations.append(Violation("tracked_local_payload", tracked, 0, "local payload tracked"))
         if tracked.startswith("runtime/") and tracked != "runtime/README.md":
             violations.append(

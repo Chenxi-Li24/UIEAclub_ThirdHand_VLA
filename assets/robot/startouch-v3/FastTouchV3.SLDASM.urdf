@@ -1,0 +1,511 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- This URDF was automatically created by SolidWorks to URDF Exporter! Originally created by Stephen Brawner (brawner@gmail.com) 
+     Commit Version: 1.6.0-4-g7f85cfe  Build Version: 1.6.7995.38578
+     For more information, please see http://wiki.ros.org/sw_urdf_exporter -->
+<robot
+  name="FastTouchV3.SLDASM">
+  <link
+    name="base_link">
+    <inertial>
+      <origin
+        xyz="0 0.001552 0.022758"
+        rpy="0 0 0" />
+      <mass
+        value="0.959" />
+      <inertia
+        ixx="0.001918"
+        ixy="0"
+        ixz="0"
+        iyy="0.001122"
+        iyz="0"
+        izz="0.002212" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://FastTouchV3.SLDASM/meshes/base_link.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="0.752941176470588 0.752941176470588 0.752941176470588 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://FastTouchV3.SLDASM/meshes/base_link.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <link
+    name="link1">
+    <inertial>
+      <origin
+        xyz="0.02 -0.002 0.109"
+        rpy="0 0 0" />
+      <mass
+        value="0.496" />
+      <inertia
+        ixx="0.000349"
+        ixy="0"
+        ixz="0"
+        iyy="0.000356"
+        iyz="0"
+        izz="0.000267" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://FastTouchV3.SLDASM/meshes/link1.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="0.75294 0.75294 0.75294 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://FastTouchV3.SLDASM/meshes/link1.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="joint1"
+    type="revolute">
+    <origin
+      xyz="0 0 0"
+      rpy="0 0 0" />
+    <parent
+      link="base_link" />
+    <child
+      link="link1" />
+    <axis
+      xyz="0 0 1" />
+    <limit
+      lower="-2.827433388231"
+      upper="2.827433388231"
+      effort="27"
+      velocity="5.235987755983" />
+  </joint>
+  <link
+    name="link2">
+    <inertial>
+      <origin
+        xyz="-0.19164 -0.001145 -5.7E-05"
+        rpy="0 0 0" />
+      <mass
+        value="0.774" />
+      <inertia
+        ixx="0.00037"
+        ixy="0"
+        ixz="0"
+        iyy="0.006613"
+        iyz="0"
+        izz="0.006701" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://FastTouchV3.SLDASM/meshes/link2.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="0.75294 0.75294 0.75294 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://FastTouchV3.SLDASM/meshes/link2.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="joint2"
+    type="revolute">
+    <origin
+      xyz="0.024 0 0.117"
+      rpy="0 0 0" />
+    <parent
+      link="link1" />
+    <child
+      link="link2" />
+    <axis
+      xyz="0 1 0" />
+    <limit
+      lower="-0.209439510239"
+      upper="3.508111796508"
+      effort="27"
+      velocity="5.235987755983" />
+  </joint>
+  <link
+    name="link3">
+    <inertial>
+      <origin
+        xyz="0.17632 -0.001549 0.054649"
+        rpy="0 0 0" />
+      <mass
+        value="0.67366" />
+      <inertia
+        ixx="0.000494"
+        ixy="0"
+        ixz="0.000806"
+        iyy="0.007196"
+        iyz="0"
+        izz="0.00709" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://FastTouchV3.SLDASM/meshes/link3.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="0.75294 0.75294 0.75294 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://FastTouchV3.SLDASM/meshes/link3.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="joint3"
+    type="revolute">
+    <origin
+      xyz="-0.265 0 0"
+      rpy="0 0 0" />
+    <parent
+      link="link2" />
+    <child
+      link="link3" />
+    <axis
+      xyz="0 1 0" />
+    <limit
+      lower="-3.193952531150"
+      upper="0"
+      effort="27"
+      velocity="5.235987755983" />
+  </joint>
+  <link
+    name="link4">
+    <inertial>
+      <origin
+        xyz="0.064717 0 0.047271"
+        rpy="0 0 0" />
+      <mass
+        value="0.45575" />
+      <inertia
+        ixx="0.000449"
+        ixy="0"
+        ixz="0.000246"
+        iyy="0.000662"
+        iyz="0"
+        izz="0.000513" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://FastTouchV3.SLDASM/meshes/link4.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="0.75294 0.75294 0.75294 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://FastTouchV3.SLDASM/meshes/link4.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="joint4"
+    type="revolute">
+    <origin
+      xyz="0.265 0 0.062"
+      rpy="0 0 0" />
+    <parent
+      link="link3" />
+    <child
+      link="link4" />
+    <axis
+      xyz="0 1 0" />
+    <limit
+      lower="-1.710422666954"
+      upper="1.710422666954"
+      effort="7"
+      velocity="17.453292519943" />
+  </joint>
+  <link
+    name="link5">
+    <inertial>
+      <origin
+        xyz="0.002443 0 0.002098"
+        rpy="0 0 0" />
+      <mass
+        value="0.37166" />
+      <inertia
+        ixx="0.000176"
+        ixy="-5.299E-11"
+        ixz="4E-06"
+        iyy="0.00017"
+        iyz="-5.3273E-08"
+        izz="0.000147" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://FastTouchV3.SLDASM/meshes/link5.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="0.75294 0.75294 0.75294 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://FastTouchV3.SLDASM/meshes/link5.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="joint5"
+    type="revolute">
+    <origin
+      xyz="0.078 0 -0.00295"
+      rpy="0 0 0" />
+    <parent
+      link="link4" />
+    <child
+      link="link5" />
+    <axis
+      xyz="0 0 1" />
+    <limit
+      lower="-1.710422666954"
+      upper="1.710422666954"
+      effort="12.5"
+      velocity="17.453292519943" />
+  </joint>
+  <link
+    name="gripper_base">
+    <inertial>
+      <origin
+        xyz="0.043232 0.000041 0.000635"
+        rpy="0 0 0" />
+      <mass
+        value="0.484919" />
+      <inertia
+        ixx="0.000344"
+        ixy="0"
+        ixz="0"
+        iyy="0.000318"
+        iyz="0"
+        izz="0.000433" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://FastTouchV3.SLDASM/meshes/gripper_base.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="0.75294 0.75294 0.75294 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://FastTouchV3.SLDASM/meshes/gripper_base.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="joint6"
+    type="revolute">
+    <origin
+      xyz="0.0255 0 0"
+      rpy="0 0 0" />
+    <parent
+      link="link5" />
+    <child
+      link="gripper_base" />
+    <axis
+      xyz="1 0 0" />
+    <limit
+      lower="-2.862339973271"
+      upper="2.862339973271"
+      effort="12.5"
+      velocity="17.453292519943" />
+  </joint>
+  <link
+    name="gripper_link1">
+    <inertial>
+      <origin
+        xyz="-0.063436 -0.016849 -0.0013986"
+        rpy="0 0 0" />
+      <mass
+        value="0.043757" />
+      <inertia
+        ixx="0.000011"
+        ixy="0"
+        ixz="0"
+        iyy="0.000024"
+        iyz="0"
+        izz="0.000020" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://FastTouchV3.SLDASM/meshes/gripper_link1.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="0.75294 0.75294 0.75294 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://FastTouchV3.SLDASM/meshes/gripper_link1.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="gripper_joint1"
+    type="prismatic">
+    <origin
+      xyz="0.15584 0 0"
+      rpy="0 0 0" />
+    <parent
+      link="gripper_base" />
+    <child
+      link="gripper_link1" />
+    <axis
+      xyz="0 1 0" />
+    <limit
+      lower="-0.0425"
+      upper="0"
+      effort="100"
+      velocity="0.7" />
+  </joint>
+  <link
+    name="gripper_link2">
+    <inertial>
+      <origin
+        xyz="-0.063226 0.016763 -0.00085755"
+        rpy="0 0 0" />
+      <mass
+        value="0.043114" />
+      <inertia
+        ixx="0.000011"
+        ixy="0"
+        ixz="0"
+        iyy="0.000024"
+        iyz="0"
+        izz="0.000020" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://FastTouchV3.SLDASM/meshes/gripper_link2.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="0.75294 0.75294 0.75294 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://FastTouchV3.SLDASM/meshes/gripper_link2.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="gripper_joint2"
+    type="prismatic">
+    <origin
+      xyz="0.15584 0 0"
+      rpy="0 0 0" />
+    <parent
+      link="gripper_base" />
+    <child
+      link="gripper_link2" />
+    <axis
+      xyz="0 1 0" />
+    <limit
+      lower="0"
+      upper="0.0425"
+      effort="100"
+      velocity="0.7" />
+  </joint>
+</robot>

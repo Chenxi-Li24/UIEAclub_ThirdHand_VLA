@@ -1,0 +1,382 @@
+import re
+from pathlib import Path
+
+
+ROOT = Path(__file__).resolve().parents[1]
+
+
+DOCS_WITH_CURRENT_FUNASR_INSTALL = [
+    "docs/vllm_guide.md",
+    "docs/vllm_guide_zh.md",
+    "docs/vllm_guide_zh_v2.md",
+    "examples/industrial_data_pretraining/fun_asr_nano/docs/finetune.md",
+    "examples/industrial_data_pretraining/fun_asr_nano/docs/finetune_zh.md",
+]
+
+PUBLIC_DOCS_SHOULD_USE_CURRENT_HOSTS = [
+    "benchmarks/benchmark_pipeline_cer.md",
+    "docs/installation/installation.md",
+    "docs/installation/installation_zh.md",
+    "model_zoo/modelscope_models.md",
+    "model_zoo/readme.md",
+    "runtime/docs/SDK_advanced_guide_offline.md",
+    "runtime/docs/SDK_advanced_guide_offline_en.md",
+    "runtime/docs/SDK_advanced_guide_offline_en_zh.md",
+    "runtime/docs/SDK_advanced_guide_offline_gpu.md",
+    "runtime/docs/SDK_advanced_guide_offline_gpu_zh.md",
+    "runtime/docs/SDK_advanced_guide_offline_zh.md",
+    "runtime/docs/SDK_advanced_guide_online.md",
+    "runtime/docs/SDK_advanced_guide_online_zh.md",
+    "runtime/python/grpc/Readme.md",
+    "runtime/python/libtorch/README.md",
+    "runtime/python/onnxruntime/README.md",
+    "runtime/python/websocket/README.md",
+    "docs/m2met2/Baseline.md",
+    "examples/industrial_data_pretraining/monotonic_aligner/README_zh.md",
+    "examples/industrial_data_pretraining/sense_voice/README.md",
+    "examples/industrial_data_pretraining/sense_voice/README_zh.md",
+    "examples/industrial_data_pretraining/sense_voice/README_ja.md",
+    "runtime/html5/readme.md",
+    "runtime/html5/readme_zh.md",
+]
+
+PUBLIC_ENTRYPOINTS_SHOULD_USE_CURRENT_REPO_URLS = [
+    "model_zoo/modelscope_models.md",
+    "model_zoo/modelscope_models_zh.md",
+    "model_zoo/readme.md",
+    "web-pages/src/views/home/index.vue",
+    "web-pages/src/views/home/lxwjzxfw.vue",
+    "web-pages/src/views/home/sstx.vue",
+    "runtime/deploy_tools/funasr-runtime-deploy-offline-cpu-en.sh",
+    "runtime/deploy_tools/funasr-runtime-deploy-offline-cpu-zh.sh",
+    "runtime/deploy_tools/funasr-runtime-deploy-online-cpu-zh.sh",
+    "runtime/docs/SDK_tutorial.md",
+    "runtime/docs/SDK_tutorial_en.md",
+    "runtime/docs/SDK_tutorial_en_zh.md",
+    "runtime/docs/SDK_tutorial_online.md",
+    "runtime/docs/SDK_tutorial_online_zh.md",
+    "runtime/docs/SDK_tutorial_zh.md",
+    "runtime/python/http/server.py",
+    "runtime/python/libtorch/setup.py",
+    "runtime/python/onnxruntime/setup.py",
+]
+
+
+def test_current_funasr_install_commands_are_quoted():
+    for relpath in DOCS_WITH_CURRENT_FUNASR_INSTALL:
+        text = (ROOT / relpath).read_text()
+        assert '"funasr>=1.3.26"' in text
+        assert "funasr>=1.3.0" not in text
+        assert not re.search(r"pip install funasr>=", text)
+
+
+def test_fun_asr_nano_finetune_zh_uses_canonical_filename():
+    docs_dir = ROOT / "examples/industrial_data_pretraining/fun_asr_nano/docs"
+    assert (docs_dir / "finetune_zh.md").exists()
+    assert "fintune_zh.md" not in (docs_dir / "finetune.md").read_text()
+
+
+def test_public_docs_use_current_repository_and_docs_hosts():
+    for relpath in PUBLIC_DOCS_SHOULD_USE_CURRENT_HOSTS:
+        text = (ROOT / relpath).read_text()
+        assert "github.com/alibaba/FunASR" not in text
+        assert "alibaba-damo-academy.github.io/FunASR" not in text
+
+
+def test_public_entrypoints_use_current_repository_urls():
+    forbidden = [
+        "github.com/alibaba-damo-academy/FunASR",
+        "raw.githubusercontent.com/alibaba-damo-academy/FunASR",
+    ]
+
+    for relpath in PUBLIC_ENTRYPOINTS_SHOULD_USE_CURRENT_REPO_URLS:
+        text = (ROOT / relpath).read_text()
+        for marker in forbidden:
+            assert marker not in text
+
+
+def test_troubleshooting_faq_is_linked_from_readmes():
+    readme_links = [
+        ("README.md", "./docs/troubleshooting.md"),
+        ("README_zh.md", "./docs/troubleshooting_zh.md"),
+    ]
+
+    for readme, link in readme_links:
+        text = (ROOT / readme).read_text()
+        assert link in text
+
+
+def test_troubleshooting_faq_covers_common_install_and_deploy_failures():
+    docs = [
+        (ROOT / "docs/troubleshooting.md").read_text(),
+        (ROOT / "docs/troubleshooting_zh.md").read_text(),
+    ]
+    required_markers = [
+        "torch",
+        "torchaudio",
+        "ModelScope",
+        "Hugging Face",
+        "funasr-server",
+        "/v1/audio/transcriptions",
+        "WebSocket",
+        "llama.cpp",
+        "GGUF",
+        "Deployment Help",
+    ]
+
+    for text in docs:
+        for marker in required_markers:
+            assert marker in text
+
+
+def test_public_docs_do_not_advertise_stale_release_or_star_copy():
+    checked_docs = [
+        "docs/repository_roles.md",
+        "docs/repository_roles_zh.md",
+        "docs/blog_whisper_vs_funasr_zh.md",
+        "runtime/llama.cpp/README.md",
+    ]
+    forbidden = [
+        "GitHub tags go up to `v1.3.13`",
+        "PyPI has published `1.3.14`",
+        "GitHub tag 至 `v1.3.13`",
+        "PyPI 已发布 `1.3.14`",
+        "（16K+ stars）",
+        "runtime-llamacpp-v0.1.7",
+    ]
+
+    for relpath in checked_docs:
+        text = (ROOT / relpath).read_text()
+        for marker in forbidden:
+            assert marker not in text
+
+
+def test_readme_model_tables_use_current_modelscope_entries():
+    readmes = [
+        (ROOT / "README.md").read_text(),
+        (ROOT / "README_zh.md").read_text(),
+        (ROOT / "README_ja.md").read_text(),
+        (ROOT / "README_ko.md").read_text(),
+    ]
+
+    current_entries = [
+        "models/iic/speech_paraformer-large-vad-punc_asr_nat-zh-cn-16k-common-vocab8404-pytorch/summary",
+        "models/iic/speech_paraformer-large_asr_nat-zh-cn-16k-common-vocab8404-online/summary",
+        "models/iic/punc_ct-transformer_cn-en-common-vocab471067-large/summary",
+        "models/iic/speech_fsmn_vad_zh-cn-16k-common-pytorch/summary",
+    ]
+    stale_entries = [
+        "models/damo/speech_paraformer-large-vad-punc_asr_nat-zh-cn-16k-common-vocab8404-pytorch/summary",
+        "models/damo/speech_paraformer-large_asr_nat-zh-cn-16k-common-vocab8404-online/summary",
+        "models/damo/punc_ct-transformer_cn-en-common-vocab471067-large/summary",
+        "models/damo/speech_fsmn_vad_zh-cn-16k-common-pytorch/summary",
+    ]
+
+    for text in readmes:
+        assert current_entries[0] in text
+        assert stale_entries[0] not in text
+
+    for text in readmes[:2]:
+        for marker in current_entries:
+            assert marker in text
+        for marker in stale_entries:
+            assert marker not in text
+
+
+def test_model_zoo_tables_use_current_paraformer_modelscope_entry():
+    docs = [
+        (ROOT / "model_zoo/modelscope_models.md").read_text(),
+        (ROOT / "model_zoo/modelscope_models_zh.md").read_text(),
+        (ROOT / "model_zoo/readme.md").read_text(),
+    ]
+
+    current = (
+        "models/iic/"
+        "speech_paraformer-large-vad-punc_asr_nat-zh-cn-16k-common-vocab8404-pytorch"
+        "/summary"
+    )
+    stale = (
+        "models/damo/"
+        "speech_paraformer-large-vad-punc_asr_nat-zh-cn-16k-common-vocab8404-pytorch"
+        "/summary"
+    )
+
+    for text in docs:
+        assert current in text
+        assert stale not in text
+
+
+def test_full_modelscope_tables_use_current_core_entries():
+    docs = [
+        (ROOT / "model_zoo/modelscope_models.md").read_text(),
+        (ROOT / "model_zoo/modelscope_models_zh.md").read_text(),
+    ]
+
+    current_entries = [
+        "models/iic/speech_paraformer-large_asr_nat-zh-cn-16k-common-vocab8404-pytorch/summary",
+        "models/iic/speech_paraformer-large_asr_nat-zh-cn-16k-common-vocab8404-online/summary",
+        "models/iic/punc_ct-transformer_cn-en-common-vocab471067-large/summary",
+        "models/iic/speech_fsmn_vad_zh-cn-16k-common-pytorch/summary",
+    ]
+    stale_entries = [
+        "models/damo/speech_paraformer-large_asr_nat-zh-cn-16k-common-vocab8404-pytorch/summary",
+        "models/damo/speech_paraformer-large_asr_nat-zh-cn-16k-common-vocab8404-online/summary",
+        "models/damo/punc_ct-transformer_cn-en-common-vocab471067-large/summary",
+        "models/damo/speech_fsmn_vad_zh-cn-16k-common-pytorch/summary",
+    ]
+
+    for text in docs:
+        for marker in current_entries:
+            assert marker in text
+        for marker in stale_entries:
+            assert marker not in text
+
+
+def test_runtime_benchmark_docs_use_current_core_modelscope_entries():
+    docs = [
+        (ROOT / "benchmarks/benchmark_pipeline_cer.md").read_text(),
+        (ROOT / "runtime/docs/benchmark_libtorch.md").read_text(),
+        (ROOT / "runtime/docs/benchmark_onnx.md").read_text(),
+        (ROOT / "runtime/docs/benchmark_onnx_cpp.md").read_text(),
+    ]
+
+    current_entries = [
+        "models/iic/speech_paraformer-large_asr_nat-zh-cn-16k-common-vocab8404-pytorch/summary",
+        "models/iic/speech_paraformer-large-vad-punc_asr_nat-zh-cn-16k-common-vocab8404-pytorch/summary",
+        "models/iic/speech_paraformer-large_asr_nat-zh-cn-16k-common-vocab8404-online/summary",
+        "models/iic/speech_fsmn_vad_zh-cn-16k-common-onnx/summary",
+        "models/iic/punc_ct-transformer_zh-cn-common-vocab272727-onnx/summary",
+    ]
+    stale_entries = [
+        entry.replace("models/iic/", "models/damo/") for entry in current_entries
+    ]
+
+    combined = "\n".join(docs)
+    for marker in current_entries:
+        assert marker in combined
+    for marker in stale_entries:
+        assert marker not in combined
+
+
+def test_model_zoo_landing_tables_link_huggingface_repos():
+    docs = [
+        (
+            (ROOT / "model_zoo/readme.md").read_text(),
+            [
+                "https://huggingface.co/funasr/paraformer-zh",
+                "https://huggingface.co/funasr/paraformer-zh-streaming",
+                "https://huggingface.co/funasr/ct-punc",
+                "https://huggingface.co/funasr/fsmn-vad",
+            ],
+        ),
+        (
+            (ROOT / "model_zoo/readme_zh.md").read_text(),
+            [
+                "https://huggingface.co/funasr/paraformer-zh",
+                "https://huggingface.co/funasr/paraformer-zh-streaming",
+            ],
+        ),
+    ]
+
+    for text, required_hf_links in docs:
+        for link in required_hf_links:
+            assert link in text
+
+
+def test_model_zoo_landing_tables_use_current_core_modelscope_entries():
+    docs = [
+        (
+            (ROOT / "model_zoo/readme.md").read_text(),
+            [
+                "models/iic/speech_paraformer-large-vad-punc_asr_nat-zh-cn-16k-common-vocab8404-pytorch/summary",
+                "models/iic/speech_paraformer-large_asr_nat-zh-cn-16k-common-vocab8404-online/summary",
+                "models/iic/punc_ct-transformer_cn-en-common-vocab471067-large/summary",
+                "models/iic/speech_fsmn_vad_zh-cn-16k-common-pytorch/summary",
+            ],
+            [
+                "models/damo/speech_paraformer-large-vad-punc_asr_nat-zh-cn-16k-common-vocab8404-pytorch/summary",
+                "models/damo/speech_paraformer-large_asr_nat-zh-cn-16k-common-vocab8404-online/summary",
+                "models/damo/punc_ct-transformer_cn-en-common-vocab471067-large/summary",
+                "models/damo/speech_fsmn_vad_zh-cn-16k-common-pytorch/summary",
+            ],
+        ),
+        (
+            (ROOT / "model_zoo/readme_zh.md").read_text(),
+            [
+                "models/iic/speech_paraformer-large-vad-punc_asr_nat-zh-cn-16k-common-vocab8404-pytorch/summary",
+                "models/iic/speech_paraformer-large_asr_nat-zh-cn-16k-common-vocab8404-online/summary",
+            ],
+            [
+                "models/damo/speech_paraformer-large-vad-punc_asr_nat-zh-cn-16k-common-vocab8404-pytorch/summary",
+                "models/damo/speech_paraformer-large_asr_nat-zh-cn-16k-common-vocab8404-online/summary",
+            ],
+        ),
+    ]
+
+    for text, current_entries, stale_entries in docs:
+        for marker in current_entries:
+            assert marker in text
+        for marker in stale_entries:
+            assert marker not in text
+
+
+def test_readme_model_tables_surface_public_gguf_entries():
+    readmes = [
+        (ROOT / "README.md").read_text(),
+        (ROOT / "README_zh.md").read_text(),
+        (ROOT / "README_ja.md").read_text(),
+        (ROOT / "README_ko.md").read_text(),
+    ]
+
+    for text in readmes:
+        assert "https://huggingface.co/FunAudioLLM/Fun-ASR-Nano-GGUF" in text
+        assert "https://huggingface.co/FunAudioLLM/SenseVoiceSmall-GGUF" in text
+        assert "https://huggingface.co/FunAudioLLM/Fun-ASR-MLT-Nano-GGUF" not in text
+
+
+def test_top_level_readmes_surface_current_release_and_edge_runtime():
+    readmes = {
+        name: (ROOT / name).read_text()
+        for name in ("README.md", "README_zh.md", "README_ja.md", "README_ko.md")
+    }
+
+    for name, text in readmes.items():
+        assert 'python -m pip install -U "funasr==1.4.1"' in text, name
+        assert "https://github.com/modelscope/FunASR/releases/tag/v1.4.1" in text, name
+        assert "runtime-llamacpp-v0.2.0" in text, name
+
+    assert "https://www.funasr.com/en/deploy/llama-cpp.html" in readmes["README.md"]
+    assert "https://www.funasr.com/deploy/llama-cpp.html" in readmes["README_zh.md"]
+    for name in ("README_ja.md", "README_ko.md"):
+        assert "https://www.funasr.com/en/deploy/llama-cpp.html" in readmes[name]
+
+    for name in ("README.md", "README_zh.md"):
+        text = readmes[name]
+        for asset in (
+            "funasr-llamacpp-linux-x64-vulkan.tar.gz",
+            "funasr-llamacpp-windows-x64-vulkan.zip",
+            "funasr-llamacpp-windows-x64-cuda.zip",
+        ):
+            assert (
+                f"releases/download/runtime-llamacpp-v0.2.0/{asset}" in text
+            ), name
+        assert "releases/download/runtime-llamacpp-v0.1.9/" not in text, name
+
+
+def test_realtime_demo_documents_partial_and_hotword_boundaries():
+    text = (
+        ROOT
+        / "examples/industrial_data_pretraining/fun_asr_nano/docs/realtime_demo.md"
+    ).read_text()
+
+    required = [
+        "data.sentences.map",
+        "data.partial || \"\"",
+        "partial_start_ms",
+        "--partial-window-sec",
+        "不是确定性文本替换",
+        "HOTWORDS:Tool,客製化,季會",
+        "后处理",
+    ]
+    for marker in required:
+        assert marker in text

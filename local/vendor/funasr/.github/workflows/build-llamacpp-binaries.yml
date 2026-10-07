@@ -1,0 +1,260 @@
+name: Build llama.cpp runtime binaries
+
+# Cross-platform prebuilt binaries for the FunASR llama.cpp / GGUF runtime,
+# like whisper.cpp's whisper-bin-*. Push a `runtime-llamacpp-v*` tag to publish
+# a GitHub Release with the binaries; or run manually (workflow_dispatch) to test
+# the build without creating a release.
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'runtime-llamacpp-v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: build-${{ matrix.name }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            name: linux-x64
+            cmake_flags: >-
+              -DGGML_NATIVE=OFF
+              -DGGML_AVX=OFF
+              -DGGML_AVX2=OFF
+              -DGGML_AVX_VNNI=OFF
+              -DGGML_AVX512=OFF
+              -DGGML_AVX512_VBMI=OFF
+              -DGGML_AVX512_VNNI=OFF
+              -DGGML_AVX512_BF16=OFF
+              -DGGML_FMA=OFF
+              -DGGML_F16C=OFF
+              -DGGML_BMI2=OFF
+          - os: ubuntu-latest
+            name: linux-x64-avx2
+            cmake_flags: >-
+              -DGGML_NATIVE=OFF
+              -DGGML_AVX=ON
+              -DGGML_AVX2=ON
+              -DGGML_AVX_VNNI=OFF
+              -DGGML_AVX512=OFF
+              -DGGML_AVX512_VBMI=OFF
+              -DGGML_AVX512_VNNI=OFF
+              -DGGML_AVX512_BF16=OFF
+              -DGGML_FMA=ON
+              -DGGML_F16C=ON
+              -DGGML_BMI2=ON
+          - os: ubuntu-latest
+            name: linux-x64-vulkan
+            vulkan: true
+            build_target: llama-funasr-sensevoice
+            timeout_minutes: 90
+            cmake_flags: >-
+              -DGGML_NATIVE=OFF
+              -DGGML_VULKAN=ON
+              -DGGML_AVX=OFF
+              -DGGML_AVX2=OFF
+              -DGGML_AVX_VNNI=OFF
+              -DGGML_AVX512=OFF
+              -DGGML_AVX512_VBMI=OFF
+              -DGGML_AVX512_VNNI=OFF
+              -DGGML_AVX512_BF16=OFF
+              -DGGML_FMA=OFF
+              -DGGML_F16C=OFF
+              -DGGML_BMI2=OFF
+          - os: ubuntu-24.04-arm
+            name: linux-arm64
+            cmake_flags: -DGGML_NATIVE=OFF
+          - os: macos-latest
+            name: macos-arm64
+            cmake_flags: -DGGML_NATIVE=OFF
+          - os: windows-latest
+            name: windows-x64
+            cmake_flags: >-
+              -DGGML_NATIVE=OFF
+              -DGGML_AVX=OFF
+              -DGGML_AVX2=OFF
+              -DGGML_AVX_VNNI=OFF
+              -DGGML_AVX512=OFF
+              -DGGML_AVX512_VBMI=OFF
+              -DGGML_AVX512_VNNI=OFF
+              -DGGML_AVX512_BF16=OFF
+              -DGGML_FMA=OFF
+              -DGGML_F16C=OFF
+              -DGGML_BMI2=OFF
+          - os: windows-latest
+            name: windows-x64-avx2
+            cmake_flags: >-
+              -DGGML_NATIVE=OFF
+              -DGGML_AVX=ON
+              -DGGML_AVX2=ON
+              -DGGML_AVX_VNNI=OFF
+              -DGGML_AVX512=OFF
+              -DGGML_AVX512_VBMI=OFF
+              -DGGML_AVX512_VNNI=OFF
+              -DGGML_AVX512_BF16=OFF
+              -DGGML_FMA=ON
+              -DGGML_F16C=ON
+              -DGGML_BMI2=ON
+          - os: windows-latest
+            name: windows-x64-vulkan
+            vulkan: true
+            windows_vulkan: true
+            build_target: llama-funasr-sensevoice
+            timeout_minutes: 90
+            cmake_flags: >-
+              -DGGML_NATIVE=OFF
+              -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded
+              -DGGML_VULKAN=ON
+              -DGGML_OPENMP=OFF
+              -DGGML_AVX=OFF
+              -DGGML_AVX2=OFF
+              -DGGML_AVX_VNNI=OFF
+              -DGGML_AVX512=OFF
+              -DGGML_AVX512_VBMI=OFF
+              -DGGML_AVX512_VNNI=OFF
+              -DGGML_AVX512_BF16=OFF
+              -DGGML_FMA=OFF
+              -DGGML_F16C=OFF
+              -DGGML_BMI2=OFF
+          - os: windows-latest
+            name: windows-x64-cuda
+            cuda: true
+            cuda_version: '13.2.0'
+            cuda_architectures: '86'
+            build_target: llama-funasr-sensevoice
+            timeout_minutes: 90
+            cmake_flags: >-
+              -DGGML_NATIVE=OFF
+              -DGGML_CUDA=ON
+              -DGGML_CUDA_FORCE_CUBLAS=ON
+              -DGGML_CUDA_FA=OFF
+              -DGGML_CUDA_NCCL=OFF
+              -DGGML_CUDA_GRAPHS=OFF
+              -DGGML_AVX=OFF
+              -DGGML_AVX2=OFF
+              -DGGML_AVX_VNNI=OFF
+              -DGGML_AVX512=OFF
+              -DGGML_AVX512_VBMI=OFF
+              -DGGML_AVX512_VNNI=OFF
+              -DGGML_AVX512_BF16=OFF
+              -DGGML_FMA=OFF
+              -DGGML_F16C=OFF
+              -DGGML_BMI2=OFF
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: ${{ matrix.timeout_minutes || 30 }}
+    defaults:
+      run:
+        shell: bash
+        working-directory: runtime/llama.cpp
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install CUDA Toolkit
+        if: matrix.cuda
+        uses: Jimver/cuda-toolkit@v0.2.35
+        with:
+          cuda: ${{ matrix.cuda_version }}
+          method: network
+          log-file-suffix: ${{ matrix.name }}.txt
+      - name: Show CUDA compiler
+        if: matrix.cuda
+        run: nvcc --version
+      - name: Install Vulkan SDK packages
+        if: matrix.vulkan && runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libvulkan-dev glslc spirv-headers vulkan-tools
+          vulkaninfo --summary || true
+      - name: Install Vulkan SDK
+        if: matrix.windows_vulkan
+        uses: humbletim/install-vulkan-sdk@30ba978f977e81b72d091fc8888feb1fb26f9aff
+        with:
+          version: '1.4.309.0'
+          cache: true
+      - name: Show Vulkan shader compiler
+        if: matrix.windows_vulkan
+        run: glslc --version
+      - name: Install SPIR-V Headers CMake package
+        if: matrix.windows_vulkan
+        run: |
+          runner_temp="$(cygpath -u "$RUNNER_TEMP")"
+          headers_src="$runner_temp/SPIRV-Headers"
+          headers_build="$runner_temp/SPIRV-Headers-build"
+          headers_prefix="$runner_temp/SPIRV-Headers-install"
+          git init -q "$headers_src"
+          git -C "$headers_src" remote add origin https://github.com/KhronosGroup/SPIRV-Headers.git
+          git -C "$headers_src" fetch --depth 1 origin 09913f088a1197aba4aefd300a876b2ebbaa3391
+          git -C "$headers_src" checkout --detach FETCH_HEAD
+          cmake -S "$headers_src" -B "$headers_build" \
+            -DSPIRV_HEADERS_ENABLE_INSTALL=ON \
+            -DSPIRV_HEADERS_ENABLE_TESTS=OFF \
+            -DCMAKE_INSTALL_PREFIX="$headers_prefix"
+          cmake --install "$headers_build" --config Release
+          cmake_prefix_path="$(cygpath -m "$headers_prefix")"
+          echo "CMAKE_PREFIX_PATH=$cmake_prefix_path" >> "$GITHUB_ENV"
+      - name: Configure and build
+        run: |
+          # Release binaries must be portable across user machines, not tuned to
+          # the ephemeral CI runner CPU. A native ggml build may emit AVX512 or
+          # AVX-VNNI instructions and then crash with SIGILL on ordinary CPUs.
+          # Keep the default x64 package conservative, and publish explicit
+          # x64-avx2 assets for machines that support AVX2/FMA/F16C/BMI2.
+          # The GPU release assets are SenseVoiceSmall-specific for now; building
+          # only that target keeps the bounded jobs aligned with the backend
+          # currently exposed by `--backend cuda` / `--backend vulkan`.
+          cmake_args=(
+            -B build
+            -DCMAKE_BUILD_TYPE=Release
+            ${{ matrix.cmake_flags }}
+          )
+          if [ -n "${{ matrix.cuda_architectures }}" ]; then
+            cmake_args+=("-DCMAKE_CUDA_ARCHITECTURES=${{ matrix.cuda_architectures }}")
+          fi
+          cmake "${cmake_args[@]}"
+          if [ -n "${{ matrix.build_target }}" ]; then
+            cmake --build build --config Release -j 2 --target "${{ matrix.build_target }}"
+          else
+            cmake --build build --config Release -j 2
+          fi
+      - name: Package
+        run: |
+          mkdir -p pkg
+          cp build/bin/llama-funasr-* pkg/ 2>/dev/null || true
+          cp build/bin/Release/llama-funasr-* pkg/ 2>/dev/null || true
+          cp README.md download-funasr-model.sh pkg/ 2>/dev/null || true
+          echo "--- packaged binaries ---"; ls -la pkg
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            7z a "funasr-llamacpp-${{ matrix.name }}.zip" ./pkg/*
+          else
+            tar czf "funasr-llamacpp-${{ matrix.name }}.tar.gz" -C pkg .
+          fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: funasr-llamacpp-${{ matrix.name }}
+          path: runtime/llama.cpp/funasr-llamacpp-${{ matrix.name }}.*
+          if-no-files-found: error
+
+  release:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="${{ github.ref_name }}"
+          version="${tag#runtime-llamacpp-}"
+          docs="https://github.com/${{ github.repository }}/blob/$tag/runtime/llama.cpp/README.md"
+          gh release create "$tag" dist/* \
+            --repo "${{ github.repository }}" \
+            --title "FunASR llama.cpp runtime $version" \
+            --notes "Prebuilt self-contained binaries for the FunASR llama.cpp / GGUF runtime: SenseVoice, Paraformer and Fun-ASR-Nano with built-in FSMN-VAD. Download the default quantized model with \`bash download-funasr-model.sh <sensevoice|paraformer|nano>\` (the helper requires the Hugging Face CLI: \`pip install -U huggingface_hub\`), then run \`llama-funasr-cli\` / \`llama-funasr-sensevoice\` / \`llama-funasr-paraformer\`. Use the default x64 asset for maximum CPU compatibility; use the x64-avx2 asset on CPUs with AVX2/FMA/F16C/BMI2 for higher throughput. The Vulkan assets are \`linux-x64-vulkan\` and \`windows-x64-vulkan\`; they require a working Vulkan driver/ICD and enable SenseVoiceSmall graph execution with \`llama-funasr-sensevoice ... --backend vulkan\`. Build from source with \`-DGGML_VULKAN=ON\` to validate platform-specific GPU stacks. The Windows CUDA asset is \`windows-x64-cuda\`; it requires an NVIDIA driver compatible with the CUDA Toolkit version configured by the release workflow, targets CUDA architecture 86, and enables SenseVoiceSmall graph execution with \`llama-funasr-sensevoice ... --backend cuda\`. Build from source for other GPU architectures. No Python ASR runtime or local build is required. Docs: $docs"

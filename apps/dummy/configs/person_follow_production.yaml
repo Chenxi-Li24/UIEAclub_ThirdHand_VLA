@@ -1,0 +1,23 @@
+person_follow:
+  vision_status_url: "http://127.0.0.1:3100/api/vision/person-follow/status"
+  vision_observation_url: "http://127.0.0.1:3100/api/vision/person-follow/observation"
+  max_observation_age_s: 0.50
+  proposal_ttl_s: 0.25
+  verify_timeout_s: 1.00
+  min_improvement_px: 1.0
+  log_path: "logs/person-follow.jsonl"
+robot:
+  ws_url: "ws://127.0.0.1:3000/ws"
+  health_url: "http://127.0.0.1:3000/health"
+  motion_completion_timeout_s: 45.0
+  min_command_interval_s: 0.10
+vision:
+  service_port: 3100
+  detector: "rtmdet-tiny"
+  reid: "osnet"
+  require_camera_calibration: true
+  require_model_hash: true
+control:
+  mode: "measured_local_visual_jacobian"
+  require_calibration: true
+  stop_look_move_verify: true

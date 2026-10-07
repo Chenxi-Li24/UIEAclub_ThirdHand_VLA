@@ -168,6 +168,7 @@ def test_motion_player_fake():
 
 def test_vision_service_tracker_holds_recent_target():
     cfg = load_config()
+    cfg.setdefault("vision_service", {})["person_lock_enabled"] = False
     tracker = VisionServiceTracker(cfg)
     tracker.target_hold_s = 10.0
     tracker.last_target = Target(True, 123, 234, 640, 480, 0.5, "person_motion", 1e12)
@@ -223,6 +224,7 @@ def test_vision_service_tracker_rejects_far_motion_after_wave_lock():
 
 def test_vision_service_tracker_treats_mediapipe_face_as_lock():
     cfg = load_config()
+    cfg.setdefault("vision_service", {})["person_lock_enabled"] = False
     tracker = VisionServiceTracker(cfg)
     tracker.last_target = Target(True, 130, 140, 640, 480, 0.25, "mediapipe_face", 1e12)
 
@@ -234,6 +236,7 @@ def test_vision_service_tracker_releases_stale_image_position_quickly():
     import time
 
     cfg = load_config()
+    cfg.setdefault("vision_service", {})["person_lock_enabled"] = False
     tracker = VisionServiceTracker(cfg)
     tracker.last_target = Target(
         True, 130, 140, 640, 480, 0.8, "mediapipe_face", time.time() - 2.0
@@ -259,6 +262,8 @@ def test_vision_service_tracker_does_not_redetect_the_same_camera_frame():
             return self.frame.copy(), None, self.sequence, self.received_at
 
     cfg = load_config()
+    cfg.setdefault("vision_service", {})["follow_target"] = "person"
+    cfg.setdefault("vision_service", {})["person_lock_enabled"] = False
     tracker = VisionServiceTracker(cfg)
     tracker.reader = RepeatingReader()
     calls = []
@@ -275,7 +280,9 @@ def test_vision_service_tracker_does_not_redetect_the_same_camera_frame():
     second, _frame, _error = tracker.read_frame()
 
     assert first.kind == "mediapipe_face"
-    assert second.kind == "mediapipe_face_hold"
+    # Repeated source frames are stale evidence and must never authorize motion.
+    assert second.kind == "vision_frame_duplicate"
+    assert len(calls) == 1
     assert len(calls) == 1
 
 
@@ -492,7 +499,7 @@ def test_director_recovers_when_a_search_command_hits_a_joint_limit():
     assert director.follow.base == joints
 
 
-def test_touch_r1_adapter_sends_timed_move_joint_for_follow_speed():
+def test_touch_r1_adapter_sends_target_without_local_speed_override():
     class FakeRobotClient:
         def __init__(self):
             self.snapshot = RobotSnapshot(
@@ -512,7 +519,10 @@ def test_touch_r1_adapter_sends_timed_move_joint_for_follow_speed():
             return self.snapshot
 
     async def exercise():
-        adapter = TouchR1Adapter(load_config())
+        cfg = load_config()
+        cfg["workspace_guard"]["enabled"] = False
+        cfg["robot"]["follow_wait_complete"] = False
+        adapter = TouchR1Adapter(cfg)
         adapter.client = FakeRobotClient()
         await adapter.send_joint_target([4, 0, -4, 37, 0, 0])
         return adapter.client.commands[-1]
@@ -521,10 +531,10 @@ def test_touch_r1_adapter_sends_timed_move_joint_for_follow_speed():
 
     assert command == "move_joint"
     assert kwargs["joints_deg"] == [4.0, 0.0, -4.0, 37.0, 0.0, 0.0]
-    assert kwargs["time_sec"] == 0.2
+    assert "time_sec" not in kwargs
 
 
-def test_touch_r1_adapter_refreshes_joint_state_before_delta_validation():
+def test_touch_r1_adapter_refreshes_joint_state_before_sending():
     class FreshStateClient:
         def __init__(self):
             self.snapshot = RobotSnapshot(
@@ -545,7 +555,10 @@ def test_touch_r1_adapter_refreshes_joint_state_before_delta_validation():
             self.commands.append((command, kwargs))
 
     async def exercise():
-        adapter = TouchR1Adapter(load_config())
+        cfg = load_config()
+        cfg["workspace_guard"]["enabled"] = False
+        cfg["robot"]["follow_wait_complete"] = False
+        adapter = TouchR1Adapter(cfg)
         adapter.client = FreshStateClient()
         await adapter.send_joint_target([8, 0, -4, 41, 0, 0])
         return adapter.client.commands[-1]
@@ -555,6 +568,73 @@ def test_touch_r1_adapter_refreshes_joint_state_before_delta_validation():
     assert command == "move_joint"
     assert kwargs["joints_deg"][0] == 8.0
     assert kwargs["joints_deg"][3] == 41.0
+    assert "time_sec" not in kwargs
+
+
+def test_touch_r1_adapter_can_send_servo_targets_for_follow_mode():
+    class FakeRobotClient:
+        def __init__(self):
+            self.snapshot = RobotSnapshot(
+                connected=True,
+                state_ready=True,
+                moving=False,
+                joints_deg=[0, 0, -4, 33, 0, 0],
+                state_name="IDLE",
+            )
+            self.commands = []
+
+        async def command(self, command, **kwargs):
+            self.commands.append((command, kwargs))
+
+        async def refresh_state(self, timeout=2.0):
+            del timeout
+            return self.snapshot
+
+    async def exercise():
+        cfg = load_config()
+        cfg.setdefault("robot", {})["follow_command"] = "servo"
+        cfg["robot"]["follow_wait_complete"] = False
+        cfg["workspace_guard"]["enabled"] = False
+        adapter = TouchR1Adapter(cfg)
+        adapter.client = FakeRobotClient()
+        await adapter.send_joint_target([3, 0, -4, 36, 0, 0])
+        return adapter.client.commands[-1]
+
+    command, kwargs = asyncio.run(exercise())
+
+    assert command == "servo"
+    assert kwargs["joints"] == [3.0, 0.0, -4.0, 36.0, 0.0, 0.0]
+
+
+def test_touch_r1_adapter_can_skip_command_when_robot_is_busy():
+    class BusyClient:
+        def __init__(self):
+            self.snapshot = RobotSnapshot(
+                connected=True,
+                state_ready=True,
+                moving=True,
+                joints_deg=[0, 0, 0, 0, 0, 0],
+                state_name="MOVING",
+            )
+            self.commands = []
+
+        async def refresh_state(self, timeout=2.0):
+            del timeout
+            return self.snapshot
+
+        async def command(self, command, **kwargs):
+            self.commands.append((command, kwargs))
+
+    async def exercise():
+        adapter = TouchR1Adapter(load_config())
+        adapter.client = BusyClient()
+        sent = await adapter.send_joint_target([0, 0, 0, 1, 0, 0], skip_if_busy=True)
+        return sent, adapter.client.commands
+
+    sent, commands = asyncio.run(exercise())
+
+    assert sent is False
+    assert commands == []
 
 
 def test_single_instance_lock_rejects_second_follow_controller(tmp_path=None):

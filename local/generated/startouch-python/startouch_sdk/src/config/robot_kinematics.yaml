@@ -1,0 +1,213 @@
+kinematics:
+  tool:
+    xyz: [0.17334, 0.0, 0.0] # TypeFZ 夹爪取 0.15584，TypeLJ 夹爪取 0.17334
+    rpy: [0.0, 0.0, 0.0]
+  payload:
+    mass: 0 #0.126
+    com: [0.072, 0, 0.082] #相对于Joint6的Origin的质心    # inertia is optional and not required for current payload handling
+  mounting:
+    # 机械臂安装方向。默认 upright=正装；可选 inverted=倒装、left_wall=左侧装、right_wall=右侧装。
+    # 也兼容数字：0正装，1倒装，2左侧装，3右侧装。该项只改变动力学补偿里的重力方向，不改变URDF/FK/IK坐标。
+    mode: upright
+    # 自定义重力向量，单位 m/s^2，基坐标系表达；写该项时优先级高于 mode。默认正装为 [0,0,-9.81]。
+    # gravity_vector: [0.0, 0.0, -9.81]
+
+motor_signs: [1, -1, -1, -1, -1, 1]
+
+logging:
+  # 是否打印轨迹规划 Debug 摘要。默认 false；打开后打印 MoveJ/MoveL/MoveP 的采样数、规划时长、实际最大速度/加速度/jerk。
+  motion_planning_debug: True
+  # 是否打印 IK 诊断 Debug。默认 false；打开后当 IK 原始解被 URDF 限位裁剪时，打印 raw/clipped 解和 FK 误差。
+  ik_diagnostics: false
+
+ik_fallback:
+  # 严格 KDL IK 失败后是否启用 XYZ 容差 fallback。false 时保持旧逻辑：直接返回 IK 失败。
+  enabled: true
+  # fallback 只允许在原始目标 XYZ 周围该半径内微调；姿态目标不放宽。
+  position_tolerance_m: 0.005
+  # fallback 最多尝试的微调候选点数量，防止奇异点附近长时间卡顿。
+  max_candidates: 32
+  # fallback 最大耗时，单位 ms；超过后快速失败并返回 false。
+  max_time_ms: 3.0
+
+ik_solver:
+  # 默认 kdl_with_approx_fallback：KDL exact/位置扰动优先，全部失败后再用近似 IK 兜底。
+  # fast 仅用于对比/调试；kdl 可恢复纯 KDL 主路径。
+  mode: kdl_with_approx_fallback
+  position_tolerance_m: 0.003
+  orientation_tolerance_rad: 0.05
+  max_fast_iterations: 5
+  max_residual_search_iterations: 60
+  damping: 0.02
+  max_joint_step_rad: 0.25
+  # approximate fallback 的单步关节验收阈值按 joint_trajectory.max_vel_limits * 该点间隔计算。
+  # 当前 VLA/chunk 点间隔按 20ms 验收；实际 chunk horizon 变化时只改该时间，不直接拍关节阈值。
+  max_joint_delta_time_sec: 0.02
+  allow_kdl_fallback: true
+
+pos_vel_mode:
+  max_acc_limits: [28.0, 28.0, 28.0, 22.0, 26.0, 26.0]
+  max_dec_limits: [-28.0, -28.0, -28.0, -22.0, -26.0, -26.0]
+  kp_apr_limits: [250.0, 250.0, 260.0, 100.0, 100.0, 100.0]
+
+joint_trajectory:
+  max_vel_limits: [5.5, 5.5, 5.5, 20.9, 20.9, 20.9]
+  # max_acc_limits: [35.0, 18.0, 87.0, 300.0, 300.0, 300.0]
+  max_acc_limits: [500.0, 500.0, 800.0, 2000.0, 2000.0, 2000.0]
+  max_jerk_limits: [1000000.0, 1000000.0, 1000000.0, 1000000.0, 1000000.0, 1000000.0]
+  # max_jerk_limits: [5000.0, 5000.0, 5000.0, 5000.0, 5000.0, 5000.0]
+  default_speed_percent: 0.1
+  # time_sec 模式下是否将规划加速度超限作为错误拒绝执行。默认 true；调试录制轨迹时可临时设为 false，仅打印实际值。
+  enforce_time_mode_acc_limit: false
+  # time_sec 模式下是否将规划加加速度/jerk 超限作为错误拒绝执行。默认 true；录制数据高频抖动较大时可临时设为 false。
+  enforce_time_mode_jerk_limit: false
+
+singularity_protection:
+  # 是否启用奇异位保护。默认 true；建议量产/真机运行保持 true。
+  enabled: false
+  # 腕部奇异目标角。默认 pi/2=1.570796rad；当 |Joint5| 接近 90deg 时 Joint4/Joint6 轴线趋于重合。
+  wrist_target_abs_rad: 1.57079632679
+  # 腕部奇异黄色区半宽。默认 0.20rad=11.5deg；进入后报警并自动降速。
+  wrist_warn_margin_rad: 0.03
+  # 腕部奇异红色停止区半宽。默认 0.06rad=3.4deg；进入后拒绝轨迹。
+  wrist_stop_margin_rad: 0.01
+  # 肩部奇异黄色区。默认 0.08m；Joint5_Origin 到 Joint1 Z 轴水平距离小于该值时报警/降速。
+  shoulder_warn_radius_m: 0.005
+  # 肩部奇异红色停止区。默认 0.03m；距离过小会导致末端某些方向需要极高关节速度。
+  shoulder_stop_radius_m: 0.002
+  # 肘部奇异 Joint3 目标角。默认 -2.912226rad=-166.83deg；这里按 URDF/代码关节方向填写。
+  elbow_j3_target_rad: -2.912226
+  # 肘部奇异 Joint4 目标角。默认 -0.267559rad=-15.33deg。
+  elbow_j4_target_rad: -0.267559
+  # 肘部奇异黄色区半径。默认 0.20rad；按 sqrt(dJ3^2+dJ4^2) 判断并报警/降速。
+  elbow_warn_radius_rad: 0.03
+  # 肘部奇异红色停止区半径。默认 0.07rad；靠近该组合位姿时拒绝轨迹。
+  elbow_stop_radius_rad: 0.01
+  # Jacobian 最小奇异值黄色阈值。默认 0.025；越小代表某些末端方向越难运动，用于兜底捕获组合奇异。
+  jacobian_warn_sigma_min: 0.02
+  # Jacobian 最小奇异值红色阈值。默认 0.008；低于该值拒绝轨迹。
+  jacobian_stop_sigma_min: 0.005
+  # Jacobian 条件数黄色阈值。默认 120；越大代表速度放大越严重，进入后报警/降速。
+  jacobian_warn_condition: 150.0
+  # Jacobian 条件数红色阈值。默认 350；超过后拒绝轨迹。
+  jacobian_stop_condition: 500.0
+  # Jacobian 角速度行等效长度。默认 0.25m；SVD 前将角速度换算为 v_equiv=L*omega，近似取腕到工具/典型作业半径。
+  jacobian_angular_scale_m: 0.17
+  # 黄色区自动降速下限。默认 0.2；越靠近红区速度比例越低，但不会低于该值。
+  yellow_min_speed_scale: 0.2
+
+trajectory_safety:
+  # 是否启用轨迹级保护。默认 true；包括关节限位 margin、运行期跟踪误差、速度/加速度/jerk 超限。
+  enabled: false
+  # 关节限位黄色 margin。默认 0.174533rad=10deg；轨迹距离 URDF 软/硬限位小于该值时报警。
+  joint_limit_warn_margin_rad: 0.174533
+  # 关节限位红色 margin。默认 0.052360rad=3deg；小于该值时拒绝轨迹。
+  joint_limit_stop_margin_rad: 0.052360
+  # 6轴运行期跟踪误差黄色阈值。默认 0.10rad=5.7deg；只作用于 400Hz 关节 waypoint 轨迹，不作用于夹爪。
+  tracking_error_warn_rad: 0.10
+  # 6轴运行期跟踪误差红色阈值。默认 0.25rad=14.3deg；连续超限后切到当前位置保持。
+  tracking_error_stop_rad: 0.25
+  # 6轴跟踪误差红色连续周期数。默认 30；在 400Hz 下约 75ms。夹爪通讯频率不同，后续应单独配置 gripper watchdog。
+  tracking_error_stop_cycles: 30
+  # 实测关节速度报警倍率。默认 1.10；实测速度超过 joint_trajectory.max_vel_limits 的该倍率报警。
+  velocity_warn_scale: 1.10
+  # 实测关节速度停机倍率。默认 1.30；连续超限后触发急停。
+  velocity_stop_scale: 1.30
+  # 实测关节加速度报警倍率。默认 1.20；由 200Hz 状态反馈速度差分得到。
+  acceleration_warn_scale: 1.20
+  # 实测关节加速度停机倍率。默认 1.60；连续超限后触发急停。
+  acceleration_stop_scale: 1.60
+  # 实测关节 jerk 报警倍率。默认 1.50；由 200Hz 状态反馈加速度差分得到，主要捕捉异常冲击。
+  jerk_warn_scale: 1.50
+  # 实测关节 jerk 停机倍率。默认 2.00；连续超限后触发急停。
+  jerk_stop_scale: 2.00
+  # 速度/加速度/jerk 红色超限连续周期数。默认 8；在 200Hz 状态刷新下约 40ms。
+  derivative_stop_cycles: 2000 #10s
+
+runtime_joint_safety:
+  # 是否启用运行期关节状态保护。默认 true；包括扭矩报警/停机。
+  enabled: false
+  # 实测平均扭矩报警阈值。默认 [16,16,16,6,5,5]，单位 Nm；超过后报警。
+  torque_warn_limits: [27.0, 27.0, 27.0, 7.0, 12.5, 12.5]
+  # 实测平均扭矩停机阈值。默认 [20,20,20,8,6,6]，单位 Nm；连续超限 6s 后急停。
+  torque_stop_limits: [32.0, 32.0, 32.0, 8.0, 14.0, 14.0]
+
+gripper_watchdog:
+  # 是否启用夹爪 watchdog。默认 true；夹爪命令/状态当前按 200Hz，即 5ms 周期处理。
+  enabled: false
+  # 夹爪命令发送周期。默认 5ms=200Hz；不要套用 6轴 400Hz 周期。
+  command_period_ms: 5.0
+  # 夹爪状态反馈超时。默认 100ms；超过后报警。
+  state_timeout_ms: 100.0
+  # 夹爪位置误差报警阈值。默认 0.015m；夹物体时可能长期存在误差，因此先报警。
+  position_error_warn_m: 0.015
+  # 夹爪位置误差停止命令阈值。默认 0.035m；连续超限后停止继续下发夹爪命令，不急停6轴。
+  position_error_stop_m: 0.035
+  # 夹爪位置误差连续停止时间。默认 500ms；避免夹取物体瞬间误触发。
+  position_error_stop_ms: 50000.0
+
+gripper_control:
+  # 夹爪型号选择，只允许 TypeFZ 或 TypeLJ。
+  # TypeFZ：起始角偏置 1.056071rad，最大打开距离 0.085m。
+  # TypeLJ：起始角偏置 1.210426rad，最大打开距离 0.08m。
+  # 更换夹爪后只需精确修改这一项，默认使用 TypeFZ。
+  type: TypeLJ
+  # 夹爪 MIT 位置控制默认 P/D。未显式传 kp/kd 的 open/close/setGripperDistance/with_gripper 轨迹使用这里。
+  # 若接口显式传入 kp/kd，则以传参为准并覆盖本默认值。
+  # 底层有效范围：default_kp [0.1, 20.0]，default_kd [0.1, 1.0]。
+  default_kp: 2.0
+  default_kd: 0.1
+
+self_collision:
+  # 是否启用自碰撞保护。默认 true；基于下方手工胶囊做 capsule-capsule 距离检测。
+  enabled: false
+  # 自碰撞黄色距离。默认 0.03m；两碰撞体距离小于该值时应报警/降速。该值包含URDF/胶囊包络/装配误差的工程裕量。
+  warn_distance_m: 0.002
+  # 自碰撞红色距离。默认 0.01m；两碰撞体距离小于该值时应拒绝轨迹或停机。
+  stop_distance_m: 0.000
+  # 忽略检测的碰撞体对。默认忽略相邻连杆；通常相邻连杆、天然连接处需要忽略。
+  ignored_pairs:
+    - [link1_body, link2_body]
+    - [link1_body, link3_body]
+    - [link1_body, link4_body]
+    - [link2_body, link3_body]
+    - [link2_body, link4_body]
+    - [link2_body, link5_body]
+    - [link2_body, link6_body]
+    - [link3_body, link4_body]
+    - [link3_body, link5_body]
+    - [link3_body, link6_body]
+    - [link4_body, link5_body]
+    - [link4_body, link6_body]
+    - [link5_body, link6_body]
+  # 碰撞体手工配置区。默认 []；支持 capsule 和 box，坐标均为 link 局部坐标，单位 m/rad。
+  # 手工更新流程：在 SolidWorks/URDF viewer 里量取每段连杆包络轴线和半径 -> 填到这里 -> 重启控制程序加载 YAML。
+  # 示例：
+  # bodies:
+  #   - name: link2_upper_arm
+  #     link: link2
+  #     type: capsule
+  #     p0: [0.0, 0.0, 0.02]
+  #     p1: [0.0, 0.0, 0.28]
+  #     radius: 0.045
+  bodies:
+    - {name: link1_body, link: link1, type: capsule, p0: [0.024, -0.033, 0.117], p1: [0.024, 0.033, 0.117], radius: 0.0285}
+    # - {name: link1_body, link: link1, type: capsule, p0: [0.025, 0.0, 0.02], p1: [0.025, 0.0, 0.135], radius: 0.025}
+    - {name: link2_body, link: link2, type: capsule, p0: [0.015, 0.0, 0.0], p1: [-0.293, 0.0, 0.0], radius: 0.025}
+    - {name: link3_body, link: link3, type: capsule, p0: [-0.02, 0.0, 0.062], p1: [0.293, 0.0, 0.062], radius: 0.03}
+    - {name: link4_body, link: link4, type: capsule, p0: [0.078, 0.0, 0.032], p1: [0.078, 0.0, 0.085], radius: 0.03}
+    - {name: link5_body, link: link5, type: capsule, p0: [-0.0235, 0.0, 0.0], p1: [0.082, 0.0, 0.0], radius: 0.03}
+    - {name: link6_body, link: link6, type: box, center: [0.107, 0.0, 0.0], size: [0.1, 0.155, 0.06], rpy: [0.0, 0.0, 0.0]}
+
+mit_mode:
+  kp: [300.0, 490.0, 490.0, 65.0,  45.0,  45.0]
+  kd: [ 16.0, 15,  12.5,   2,   2,  2]
+  # 是否启用重力前馈补偿。默认 true；关闭后 MIT 前馈不含 G(q)。
+  enable_gravity_compensation: true
+  # 是否启用哥氏/离心项前馈补偿。默认 true；关闭后 MIT 前馈不含 C(q,dq)。
+  enable_coriolis_compensation: true
+  # 是否启用惯量项前馈补偿。默认 true；关闭后 MIT 前馈不含 M(q)*ddq。
+  enable_inertia_compensation: true
+  # 动力学前馈力矩限幅，单位 Nm；作用于 G/C/M 合成后的总前馈力矩。原 gravity_tau_limits 已兼容但建议改用该项。
+  feedforward_tau_limits: [27.0, 27.0, 27.0, 7.0, 12.5, 12.5]
+  gravity_comp_scale: 1.05

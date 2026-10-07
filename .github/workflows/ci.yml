@@ -10,6 +10,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Restore geometry and face assets for offline tests
+        run: git lfs pull --include="assets/robot/startouch-v3/meshes/**,apps/dummy/models/*.tflite,local/models/vision/*.onnx,local/models/vision/yolov8n.pt" --exclude=""
+
       - uses: actions/setup-node@v4
         with:
           node-version: "24"
@@ -23,13 +26,16 @@ jobs:
         run: npm ci
 
       - name: Install lightweight Python test dependencies
-        run: python -m pip install pytest numpy pyyaml "websockets>=12,<16" "opencv-python-headless>=4.8,<5"
+        run: python -m pip install pytest numpy pyyaml pillow "websockets>=12,<16" "opencv-python-headless>=4.8,<5"
 
       - name: Node tests
         run: npm run test:node
 
       - name: Python tests
         run: npm run test:python
+
+      - name: Dummy adapter and resource path tests
+        run: python -m pytest -q apps/dummy/tests/test_direct_robot_control.py apps/dummy/tests/test_resource_paths.py apps/dummy/tests/test_yolo_person_detector.py apps/dummy/tests/test_follow_speed_limits.py apps/dummy/tests/test_robot_ws_client.py apps/dummy/tests/test_runtime_scheduler.py apps/dummy/tests/test_follow_pipeline.py apps/dummy/tests/test_person_follow_runtime.py
 
       - name: Source boundary audit
         run: python tools/diagnostics/audit_boundaries.py --root .

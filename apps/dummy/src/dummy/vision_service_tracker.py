@@ -12,8 +12,15 @@ import numpy as np
 from PIL import Image
 
 from .filters import OneEuro
+from .face_lock_tracker import FaceLockTracker
+from .face_person_selector import FacePersonSelector
 from .mediapipe_face import MediaPipeFaceDetector
+from .person_lock_tracker import Candidate, PersonLockTracker
+from .rgbd_target import RgbdTargetBuilder
 from .tracker import Target
+from .yolo_person_detector import YoloPersonDetector
+from .yolo_person_tracker import YoloPersonTracker
+from .yunet_face import YuNetFaceDetector
 
 
 class MjpegReader:
@@ -26,31 +33,55 @@ class MjpegReader:
         self.received_at = 0.0
         self.stop = False
         self.thread = None
+        self._stop_event = threading.Event()
+        self._response = None
 
     def start(self):
         if self.thread is not None:
             return
-        self.thread = threading.Thread(target=self._run, daemon=True)
+        self.stop = False
+        self._stop_event.clear()
+        self.thread = threading.Thread(target=self._run, name="dummy-mjpeg", daemon=False)
         self.thread.start()
 
     def close(self):
         self.stop = True
+        self._stop_event.set()
+        with self.lock:
+            response = self._response
+        if response is not None:
+            response.close()
+        if self.thread is not None:
+            self.thread.join(timeout=6.0)
+            if self.thread.is_alive():
+                raise RuntimeError("Dummy MJPEG reader did not stop")
+            self.thread = None
 
     def _run(self):
         while not self.stop:
             try:
                 with urllib.request.urlopen(self.url, timeout=5) as response:
+                    with self.lock:
+                        self._response = response
                     buf = b""
                     while not self.stop:
-                        chunk = response.read(8192)
+                        read_available = getattr(response, "read1", response.read)
+                        chunk = read_available(65536)
                         if not chunk:
                             raise EOFError("stream ended")
                         buf += chunk
-                        start = buf.find(b"\xff\xd8")
-                        end = buf.find(b"\xff\xd9", start + 2)
-                        if start >= 0 and end >= 0:
+                        # Drain every complete JPEG, decode only the newest one.
+                        jpg = None
+                        while True:
+                            start = buf.find(b"\xff\xd8")
+                            end = buf.find(b"\xff\xd9", start + 2) if start >= 0 else -1
+                            if start < 0 or end < 0:
+                                break
                             jpg = buf[start:end + 2]
                             buf = buf[end + 2:]
+                        if len(buf) > 8 * 1024 * 1024:
+                            raise ValueError("MJPEG frame exceeded buffer limit")
+                        if jpg is not None:
                             rgb = np.asarray(Image.open(BytesIO(jpg)).convert("RGB"))
                             bgr = cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR)
                             with self.lock:
@@ -61,7 +92,10 @@ class MjpegReader:
             except Exception as exc:
                 with self.lock:
                     self.error = str(exc)
-                time.sleep(1)
+                self._stop_event.wait(1)
+            finally:
+                with self.lock:
+                    self._response = None
 
     def latest(self):
         with self.lock:
@@ -78,9 +112,22 @@ class MjpegReader:
 class VisionServiceTracker:
     def __init__(self, config):
         v = config.get("vision_service", {})
+        self.face_only = v.get("follow_target", "person") == "face"
+        self.person_tracking_enabled = self.face_only and bool(config.get("person_tracking", {}).get("enabled", False))
+        self.face_person = FacePersonSelector(config) if self.person_tracking_enabled else None
+        self.face_detector_backend = v.get("face_detector", "mediapipe")
+        if self.face_only and self.face_detector_backend not in ("mediapipe", "yunet"):
+            raise ValueError("unknown face detector backend")
+        self.yunet_face = YuNetFaceDetector(
+            v.get("yunet_face_model_path", "local/models/vision/face_detection_yunet_2026may.onnx"),
+            min_confidence=float(v.get("yunet_face_min_score", .8)),
+        ) if self.face_only and self.face_detector_backend == "yunet" else None
+        self.face_lock = FaceLockTracker(config) if self.face_only else None
         self.url = v.get("mjpeg_url", "http://127.0.0.1:3100/camera/xvisio/vision")
         self.health_url = v.get("health_url", "http://127.0.0.1:3100/health")
+        self.observation_url = v.get("observation_url", "http://127.0.0.1:3100/api/vision/person-follow/observation")
         self.allow_health_fallback = bool(v.get("allow_health_fallback", False))
+        self.rgbd_enabled = bool(v.get("rgbd_enabled", False))
         self.prefer_labels = tuple(v.get("prefer_labels", ["person", "face", "human", "bottle"]))
         self.width = int(config.get("vision", {}).get("frame_w", v.get("frame_w", 640)))
         self.height = int(config.get("vision", {}).get("frame_h", v.get("frame_h", 480)))
@@ -118,12 +165,18 @@ class VisionServiceTracker:
         self._person_candidate_count = 0
         self._wave_candidate_count = 0
         self.reader = MjpegReader(self.url)
+        self.rgbd_target = RgbdTargetBuilder(config)
         hz = float(config.get("vision", {}).get("hz", 15))
         self.fx = OneEuro(hz, config.get("vision", {}).get("filter_min_cutoff", 1.0), config.get("vision", {}).get("filter_beta", 0.04))
         self.fy = OneEuro(hz, config.get("vision", {}).get("filter_min_cutoff", 1.0), config.get("vision", {}).get("filter_beta", 0.04))
         self.bg = None
         self.last_debug = {}
         self.last_target = Target(False)
+        self.person_lock_enabled = bool(v.get("person_lock_enabled", True))
+        self.person_lock = PersonLockTracker(config) if self.person_lock_enabled else None
+        person_config = {**config, "vision_service": {**v, "yolo_person_enabled": self.person_tracking_enabled}} if self.face_only else config
+        self.yolo_person = (YoloPersonTracker(person_config) if self.person_tracking_enabled
+                            else YoloPersonDetector(person_config))
         self._last_frame_sequence = None
         self.face = None
         self.upperbody = None
@@ -175,8 +228,14 @@ class VisionServiceTracker:
 
     def close(self):
         self.reader.close()
+        if self.yunet_face is not None:
+            self.yunet_face.close()
         if self.mediapipe_face is not None:
             self.mediapipe_face.close()
+
+    @property
+    def face_detector(self):
+        return self.yunet_face if self.face_detector_backend == "yunet" else self.mediapipe_face
 
     def read_frame(self):
         if hasattr(self.reader, "latest_packet"):
@@ -185,7 +244,7 @@ class VisionServiceTracker:
             frame, error = self.reader.latest()
             sequence, received_at = None, time.time()
         if frame is None:
-            if self.allow_health_fallback:
+            if self.allow_health_fallback and not self.face_only:
                 target, health_error = self._read_health_target()
                 return target, None, error or health_error
             return Target(False, w=self.width, h=self.height, kind="vision_stream_unavailable", ts=time.time()), None, error
@@ -199,21 +258,134 @@ class VisionServiceTracker:
                 error or stale_error,
             )
         if sequence is not None and sequence == self._last_frame_sequence:
-            held = self._held_target()
-            if held.found:
-                return held, frame, error
             return (
                 Target(False, w=frame.shape[1], h=frame.shape[0], kind="vision_frame_duplicate", ts=now),
                 frame,
                 error,
             )
         self._last_frame_sequence = sequence
+        if self.face_only:
+            target = self._read_face_target(frame, float(received_at or now))
+            return target, frame, error
+        yolo_candidates = self.yolo_person.detect(frame)
         target = self.detect(frame)
+        if self.person_lock is not None:
+            target = self._lock_person_target(target, frame.shape[1], frame.shape[0], yolo_candidates)
+        if self.rgbd_enabled:
+            target = self._merge_rgbd_target(target)
+        if target.found and "hold" not in str(target.kind):
+            # Receive time is not a camera capture timestamp. Keep its age honest.
+            target.ts = float(received_at or now)
         if not target.found and self.allow_health_fallback:
             health_target, _health_error = self._read_health_target()
             if health_target.found:
                 return health_target, frame, error
         return target, frame, error
+
+    def _read_face_target(self, frame, received_at):
+        detector = self.face_detector
+        if detector is None:
+            raise RuntimeError("face-only follow requires MediaPipe or YuNet face detection")
+        h, w = frame.shape[:2]
+        rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        candidates = []
+        for target, debug in detector.detect_all(rgb):
+            bbox = debug["bbox"]
+            candidates.append(Candidate(target.u, target.v, bbox[2], bbox[3], target.score, target.kind))
+        if self.face_person is not None:
+            bodies = self.yolo_person.track(frame, received_at=received_at)
+            target = self.face_person.update(candidates, bodies, now=received_at, frame_size=(w, h))
+            self.last_debug = dict(self.face_person.last_debug)
+            self.last_debug["person_detection_ms"] = self.yolo_person.inference_ms
+        else:
+            target = self.face_lock.update(candidates, now=received_at, frame_size=(w, h))
+            self.last_debug = dict(self.face_lock.last_debug)
+        self.last_debug["face_detector"] = self.face_detector_backend
+        self.last_target = target
+        return target
+
+    def _merge_rgbd_target(self, fallback):
+        rgbd = self._read_rgbd_target()
+        if rgbd is None:
+            return fallback
+        self.last_debug["rgbd_kind"] = rgbd.kind
+        self.last_debug["rgbd_depth_valid"] = rgbd.depth_valid
+        self.last_debug["rgbd_depth_ratio"] = rgbd.depth_valid_ratio
+        self.last_debug["rgbd_points"] = rgbd.valid_depth_points
+        if rgbd.depth_m is not None:
+            self.last_debug["rgbd_depth_m"] = rgbd.depth_m
+        if rgbd.xyz_m is not None:
+            self.last_debug["rgbd_xyz_m"] = rgbd.xyz_m
+        if not rgbd.found:
+            return fallback
+        if not str(rgbd.kind).startswith(("person", "face", "human")):
+            return fallback
+        if not getattr(fallback, "found", False):
+            return rgbd
+        if rgbd.xyz_m is None:
+            return fallback
+        rgbd.u = float(getattr(fallback, "u", rgbd.u))
+        rgbd.v = float(getattr(fallback, "v", rgbd.v))
+        rgbd.score = max(float(getattr(fallback, "score", 0.0) or 0.0), rgbd.score)
+        rgbd.kind = f"{getattr(fallback, 'kind', 'person')}_depth"
+        return rgbd
+
+    def _read_rgbd_target(self):
+        if not self.observation_url:
+            return None
+        try:
+            with urllib.request.urlopen(self.observation_url, timeout=0.25) as response:
+                observation = json.loads(response.read().decode("utf-8"))
+            return self.rgbd_target.from_observation(observation)
+        except Exception as exc:
+            self.last_debug["rgbd_error"] = str(exc)
+            return None
+
+    def _lock_person_target(self, target, width, height, extra_candidates=None):
+        candidates = list(extra_candidates or [])
+        raw = self.last_debug.get("raw_target")
+        bbox = self.last_debug.get("person_bbox") or self.last_debug.get("bbox")
+        if raw and bbox:
+            candidates.append(Candidate(
+                float(raw[0]),
+                float(raw[1]),
+                float(bbox[2]),
+                float(bbox[3]),
+                float(getattr(target, "score", 0.0) or 0.0),
+                str(getattr(target, "kind", "candidate")),
+            ))
+        elif target.found and str(target.kind).startswith(("face", "mediapipe_face", "front_person_lock", "wave_lock", "person_motion")):
+            candidates.append(Candidate(
+                float(target.u),
+                float(target.v),
+                80.0,
+                80.0,
+                float(target.score or 0.0),
+                str(target.kind),
+            ))
+        locked = self.person_lock.update(candidates, now=time.time(), frame_size=(width, height))
+        lock_debug = getattr(self.person_lock, "last_debug", {}) or {}
+        self.last_debug["candidate_count"] = len(candidates)
+        self.last_debug["yolo_available"] = bool(getattr(self.yolo_person, "available", False))
+        if getattr(self.yolo_person, "error", None):
+            self.last_debug["yolo_error"] = self.yolo_person.error
+        candidate = lock_debug.get("candidate")
+        if candidate is not None:
+            self.last_debug["lock_candidate"] = {
+                "u": candidate.u,
+                "v": candidate.v,
+                "w": candidate.w,
+                "h": candidate.h,
+                "score": candidate.score,
+                "kind": candidate.kind,
+            }
+        self.last_debug["lock_state"] = getattr(self.person_lock, "state", "unknown")
+        if lock_debug.get("rejected"):
+            self.last_debug["rejected"] = lock_debug["rejected"]
+            self.last_debug["pending_count"] = lock_debug.get("pending_count")
+        if locked.found:
+            self.last_target = locked
+        return locked
 
     def _read_health_target(self):
         try:
@@ -546,5 +718,5 @@ class VisionServiceTracker:
             self.last_target.h,
             max(0.01, self.last_target.score * (1.0 - age / self.target_hold_s)),
             f"{self.last_target.kind}_hold",
-            time.time(),
+            self.last_target.ts,
         )

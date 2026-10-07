@@ -1,0 +1,2 @@
+# Use the existing vision runtime; do not upgrade torch/opencv/ultralytics here.
+lap==0.5.12

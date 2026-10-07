@@ -1,0 +1,174 @@
+([English](./README.md)|[简体中文](./README_zh.md)|日本語|[한국어](./README_ko.md))
+
+<p align="center">
+<a href="https://github.com/modelscope/FunASR"><img src="https://svg-banners.vercel.app/api?type=origin&text1=FunASR🤠&text2=💖%20A%20Fundamental%20End-to-End%20Speech%20Recognition%20Toolkit&width=800&height=210" alt="FunASR"></a>
+</p>
+
+<p align="center">
+  <strong>オフライン、ストリーミング、エッジ展開に対応する産業グレードの音声認識ツールキット。</strong><br>
+  <em>ASR · VAD · 句読点 · 話者パイプライン · 感情/音声イベントモデル · OpenAI互換配信</em>
+</p>
+
+<p align="center">
+  <a href="https://pypi.org/project/funasr/"><img src="https://img.shields.io/pypi/v/funasr" alt="PyPI"></a>
+  <a href="https://github.com/modelscope/FunASR"><img src="https://img.shields.io/github/stars/modelscope/FunASR?style=social" alt="Stars"></a>
+  <a href="https://pypi.org/project/funasr/"><img src="https://img.shields.io/pypi/dm/funasr" alt="Downloads"></a>
+  <a href="https://modelscope.github.io/FunASR/"><img src="https://img.shields.io/badge/ドキュメント-オンライン-blue" alt="Docs"></a>
+</p>
+
+<p align="center">
+<a href="https://trendshift.io/repositories/10479" target="_blank"><img src="https://trendshift.io/api/badge/repositories/10479" alt="modelscope%2FFunASR | Trendshift" style="width: 250px; height: 55px;" width="250" height="55"/></a>
+</p>
+
+<p align="center">
+  <a href="#クイックスタート">クイックスタート</a> · <a href="./examples/colab/README_ja.md">Colab</a> · <a href="./docs/model_selection_ja.md">モデル選択</a> · <a href="#ベンチマーク">ベンチマーク</a> · <a href="./docs/migration_from_whisper.md">Migration guide</a> · <a href="./docs/use_case_showcase.md">Use cases</a> · <a href="./docs/deployment_matrix_ja.md">Deployment matrix</a> · <a href="#モデル一覧">モデル一覧</a> · <a href="https://modelscope.github.io/FunASR/agent.html">Agent連携</a> · <a href="https://modelscope.github.io/FunASR/">ドキュメント</a>
+</p>
+
+---
+
+<a name="クイックスタート"></a>
+
+## クイックスタート
+
+```bash
+pip install funasr
+```
+
+```python
+from funasr import AutoModel
+
+model = AutoModel(model="iic/SenseVoiceSmall", vad_model="fsmn-vad", spk_model="cam++", device="cuda")
+result = model.generate(input="meeting.wav")
+```
+
+**出力** — 話者ラベル・タイムスタンプ・句読点付きの構造化テキスト：
+```
+[00:00.4 → 00:03.8] 話者0: Q3の計画について話し合いましょう。
+[00:04.2 → 00:07.1] 話者1: いいですね。3つのポイントがあります。
+[00:07.5 → 00:12.3] 話者0: どうぞ。あと30分あります。
+```
+
+これは1回の `AutoModel` パイプライン呼び出しですが、SenseVoiceSmall、
+FSMN-VAD、CAM++という独立したモデルを組み合わせています。話者分離は
+SenseVoiceSmall自体ではなく、CAM++によって提供されます。
+
+初めて使う場合は [Colab クイックスタート](./examples/colab/README_ja.md) から試せます。どのモデルを選ぶか迷う場合は [モデル選択ガイド](./docs/model_selection_ja.md) を参照してください。
+
+> **APIサーバーとしてデプロイ：** `funasr-server --device cuda` → localhost:8000でOpenAI互換エンドポイント
+>
+> **AIエージェント連携：** [MCPサーバー](examples/mcp_server/) Claude/Cursor対応 · [OpenAI API](examples/openai_api/) LangChain/Dify/AutoGen対応
+
+### なぜFunASRを選ぶのか？
+
+Whisper は単一モデルですが、**FunASR はツールキット**です——用途に応じて
+**Fun-ASR-Nano**（中・英・日と中国語方言・地域アクセント、GPU）、
+**Fun-ASR-MLT-Nano**（31言語）、**SenseVoiceSmall**（5言語ASRと感情・
+音声イベント）、**Paraformer**（低遅延ストリーミング）を選べます。
+下の表はツールキット全体の機能と、それを提供するモデルまたはパイプラインを示します：
+
+| | FunASR（ツールキット） | Whisper | クラウドAPI |
+|---|---|---|---|
+| 最高速度 | **340倍リアルタイム**（Fun-ASR-Nano + vLLM） | 13倍リアルタイム | 〜1倍リアルタイム |
+| 話者認識 | ✅ VAD + CAM++パイプライン | ❌ pyannoteが必要 | ✅ 追加料金 |
+| 感情認識 | ✅ SenseVoice による | ❌ | ❌ |
+| 言語数 | チェックポイントごとに異なる（例：Qwen3-ASR 52、MLT-Nano 31、Nano 中/英/日） | 57 | サービスにより異なる |
+| ストリーミング | ✅ WebSocket（Paraformer） | ❌ | ✅ |
+| CPU対応 | ✅ 17倍リアルタイム（SenseVoice） | ❌ 遅すぎる | 該当なし |
+| セルフホスト | ✅ 対応（ツールキット: MIT、モデルごとに異なる） | ✅ MITライセンス | ❌ クラウドのみ |
+| コスト | 無料 | 無料 | $0.006/分〜 |
+
+---
+
+<a name="ベンチマーク"></a>
+
+## ベンチマーク
+
+> 184件の長時間音声（計192分）。[詳細レポート →](https://modelscope.github.io/FunASR/benchmark.html)
+
+| モデル | 中国語 CER ↓ | GPU速度 | CPU速度 | Whisper-large-v3比 |
+|--------|------|---------|---------|-------------------|
+| **Fun-ASR-Nano**（vLLM） | **8.20%** | **340倍**リアルタイム | — | 🚀 **26倍高速** |
+| **SenseVoice-Small** | **7.81%** | **170倍**リアルタイム | **17倍**リアルタイム | 🚀 **13倍高速** |
+| **Paraformer-Large** | 10.18% | **120倍**リアルタイム | **15倍**リアルタイム | 🚀 **9倍高速** |
+| Whisper-large-v3-turbo | 21.71% | 46倍リアルタイム | ❌ | 3.4倍高速 |
+| Whisper-large-v3 | 20.02% | 13倍リアルタイム | ❌ | ベースライン |
+
+> **ポイント：** FunASRのCPU速度は、WhisperのGPU速度より速い。
+
+---
+
+## 最新情報
+
+- 2026/08/14：**v1.4.2 を PyPI に公開** — 句読点モデルの token 境界がタイムスタンプ付き ASR 単語の内部にある場合でも、文アラインメントが字幕分割を正しく保持するようになりました。分散学習では、各勾配累積 window の最後の microbatch で DDP/FSDP 勾配を同期し、解決済み設定から DeepSpeed/FSDP mode を初期化します。対応する GitHub ソース tag には llama.cpp SRT 出力と v0.2.0 の AMD Vulkan submission 更新も含まれます。インストール：`python -m pip install -U "funasr==1.4.2"`。[Release →](https://github.com/modelscope/FunASR/releases/tag/v1.4.2)
+- 2026/08/11：**llama.cpp runtime v0.2.0** — upstream llama.cpp を `803b7fca` に固定し、同一のテスト済み workflow から SHA-256 付きの Linux、macOS、Windows 向け 9 archive を公開しました。Fun-ASR-Nano、SenseVoice、Paraformer CLI は SRT 字幕を出力でき、Vulkan 起動時には AMD 向け診断と CPU fallback を案内します。AMD Windows Vulkan crash の修正は、報告者の実機確認待ちです。[ダウンロード一覧と quickstart →](https://www.funasr.com/en/deploy/llama-cpp.html) · [Release →](https://github.com/modelscope/FunASR/releases/tag/runtime-llamacpp-v0.2.0)
+- 2026/08/04：**v1.4.1 を PyPI に公開** — Hugging Face の `paraformer-en` エイリアスが、誤って中国語モデルをダウンロードせず、公式の英語 checkpoint を解決するようになりました。このパッチには Fun-ASR-Nano の LoRA 微調整と、より安全な checkpoint 処理も含まれます。対応する GitHub ソース tag には JSONL タイムスタンプ出力、SenseVoice TensorRT デプロイ、OpenClaw リアルタイム文字起こし連携も含まれます。インストール：`python -m pip install -U "funasr==1.4.1"`。[Release →](https://github.com/modelscope/FunASR/releases/tag/v1.4.1)
+- 2026/07/31：**v1.4.0 を PyPI に公開** — `AutoModel` はモデルのダウンロード前に、よくある `vda_model` のスペルミスを拒否し、正しい `vad_model` を案内します。これにより、VAD に依存する分割、話者処理、`sentence_info` が気付かないまま無効になることを防ぎます。GitHub のソースリリースでは legacy WebSocket ファイルランタイムも更新され、クライアントは明示的な入力終了応答を待ち、サーバーは保留中の offline、online、2pass 音声を処理してから完了またはエラーを返します。Python パッケージのインストール：`python -m pip install -U "funasr==1.4.0"`。[Release →](https://github.com/modelscope/FunASR/releases/tag/v1.4.0)
+- 2026/07/27：**v1.3.30 を PyPI に公開** — WAV、MP3、FLAC、OGG、MP4/M4A、WebM などのコンテナ形式の音声バイト列を raw PCM と誤認せず、対応するコーデックでデコードするようになりました。OpenAI 互換レスポンスは話者ラベルを保持し、句読点が一致しない場合も VAD 区間時刻を保持します。信頼済みブラウザクライアント向け CORS と、vLLM の 30 秒 VAD 上限にも対応しました。GitHub Release には、デスクトップ／サーバー向け 9 ターゲットの最新 llama.cpp ビルドも同梱しています。インストール：`python -m pip install -U "funasr==1.3.30"`。[Release →](https://github.com/modelscope/FunASR/releases/tag/v1.3.30)
+- 2026/07/24：**v1.3.29 hotfix が PyPI に公開** — SenseVoice の長時間音声推論で word timestamp と句読点モデルがない場合でも、各 VAD 音声区間を `sentence_info` で返すようになりました。字幕クライアントは、ゼロ長またはメディア全体を覆う一つの cue ではなく、認識テキストと実際のミリ秒単位の開始・終了時刻を取得できます。インストール：`python -m pip install -U "funasr==1.3.29"`。[Release →](https://github.com/modelscope/FunASR/releases/tag/v1.3.29)
+- 2026/07/24：**v1.3.28 hotfix が PyPI に公開** — VAD で確定した realtime WebSocket の最終結果が短い接頭辞、反復 hallucination、または decode 例外へ退化した場合、現在の音声区間を連続して完全に覆う clean partial を保持します。短い STOP tail、VAD finalize、話者処理も同じ信頼できる完了経路に統一しました。SenseVoice 字幕は rich tag、句読点、word/BPE timestamp を正しく整列し、中国語を一つの cue に潰さず、英語表記も保持します。インストール：`python -m pip install -U "funasr==1.3.28"`。[Release →](https://github.com/modelscope/FunASR/releases/tag/v1.3.28)
+- 2026/07/24：**v1.3.27 が PyPI に公開** — OpenAI 互換サーバーが `verbose_json` で SenseVoice の検出言語を返し、vLLM fallback 後はキャッシュ済み Fun-ASR-Nano `AutoModel` を再利用します。vLLM/VAD 初期化と fallback の両方が失敗した場合は、半初期化状態を残さず、後続リクエストで再試行できます。インストール：`python -m pip install -U "funasr==1.3.27"`。[Release →](https://github.com/modelscope/FunASR/releases/tag/v1.3.27)
+- 2026/07/23：**v1.3.26 が PyPI に公開** — `funasr-server --model fun-asr-nano --hub ms` は ModelScope hub 指定を vLLM 経路と AutoModel fallback の両方で尊重します。インストール：`python -m pip install -U "funasr==1.3.26"`。[Release →](https://github.com/modelscope/FunASR/releases/tag/v1.3.26)
+- 2026/07/23：**llama.cpp runtime v0.1.9** — Windows Vulkan 向け `funasr-llamacpp-windows-x64-vulkan.zip` を追加。現在の AMD、Intel、NVIDIA Vulkan ドライバーで SenseVoiceSmall を単独実行できます。Linux Vulkan、Windows CUDA、CPU/AVX2、Linux arm64、macOS arm64 も引き続き提供します。[Release →](https://github.com/modelscope/FunASR/releases/tag/runtime-llamacpp-v0.1.9)
+- 2026/07/22：**llama.cpp runtime v0.1.8** — Linux Vulkan tarball と Windows CUDA zip を含む CPU/エッジ向け GGUF ランタイム。現在のダウンロードと手順：[funasr.com/deploy/llama-cpp](https://www.funasr.com/en/deploy/llama-cpp.html) · [Release →](https://github.com/modelscope/FunASR/releases/tag/runtime-llamacpp-v0.1.8)
+- 2026/05/24：**v1.3.3** — `funasr-server` CLI、OpenAI互換API、MCPサーバー。`pip install --upgrade funasr`
+- 2026/05/20：Qwen3-ASR (0.6B/1.7B) 追加 — 52言語対応。
+- 2026/05/20：GLM-ASR-Nano (1.5B) 追加 — 17言語、方言対応。
+- 2026/05/19：Fun-ASR-NanoとSenseVoiceは、VADおよびCAM++と組み合わせて話者分離パイプラインを構成できます。
+- 2025/12/15：[Fun-ASR-Nano-2512](https://github.com/QwenAudio/Fun-ASR) — 中・英・日と中国語方言に対応。
+
+---
+
+## インストール
+
+```bash
+pip install funasr
+```
+
+要件：Python ≥ 3.8、PyTorch ≥ 1.13、torchaudio
+
+---
+
+<a name="モデル一覧"></a>
+
+## モデル一覧
+
+| モデル | タスク | 言語 | パラメータ | リンク |
+|--------|--------|------|-----------|--------|
+| **Fun-ASR-Nano** | 認識 | 中/英/日 + 中国語方言 | 800M | [⭐](https://www.modelscope.cn/models/FunAudioLLM/Fun-ASR-Nano-2512) [🤗](https://huggingface.co/FunAudioLLM/Fun-ASR-Nano-2512) [GGUF](https://huggingface.co/FunAudioLLM/Fun-ASR-Nano-GGUF) |
+| **Fun-ASR-MLT-Nano** | 認識 | 31言語 | 800M | [⭐](https://www.modelscope.cn/models/FunAudioLLM/Fun-ASR-MLT-Nano-2512) [🤗](https://huggingface.co/FunAudioLLM/Fun-ASR-MLT-Nano-2512) |
+| **SenseVoiceSmall** | 認識 + 感情 + イベント | 中/英/日/韓/粤 | 234M | [⭐](https://www.modelscope.cn/models/iic/SenseVoiceSmall) [🤗](https://huggingface.co/FunAudioLLM/SenseVoiceSmall) [GGUF](https://huggingface.co/FunAudioLLM/SenseVoiceSmall-GGUF) |
+| **Paraformer-zh** | 認識 + タイムスタンプ | 中/英 | 220M | [⭐](https://www.modelscope.cn/models/iic/speech_paraformer-large-vad-punc_asr_nat-zh-cn-16k-common-vocab8404-pytorch/summary) [🤗](https://huggingface.co/funasr/paraformer-zh) |
+| Qwen3-ASR | 認識、52言語 | 多言語 | 1.7B | [使用法](examples/industrial_data_pretraining/qwen3_asr) |
+| GLM-ASR-Nano | 認識、17言語 | 多言語 | 1.5B | [使用法](examples/industrial_data_pretraining/glm_asr) |
+| Whisper-large-v3-turbo | 認識 + 翻訳 | 多言語 | 809M | [使用法](examples/industrial_data_pretraining/whisper) |
+
+---
+
+## デプロイ
+
+```bash
+# OpenAI互換API（推奨）
+pip install funasr fastapi uvicorn python-multipart
+funasr-server --device cuda
+
+# Dockerストリーミングサービス
+docker pull registry.cn-hangzhou.aliyuncs.com/funasr_repo/funasr:funasr-runtime-sdk-online-cpu-0.1.12
+```
+
+CPU/エッジで Python なしのオフライン ASR が必要な場合は、llama.cpp / GGUF ランタイムを使えます：[funasr.com/deploy/llama-cpp](https://www.funasr.com/en/deploy/llama-cpp.html) · [Fun-ASR-Nano-GGUF](https://huggingface.co/FunAudioLLM/Fun-ASR-Nano-GGUF) · [SenseVoiceSmall-GGUF](https://huggingface.co/FunAudioLLM/SenseVoiceSmall-GGUF)。
+
+[Colab quickstart →](./examples/colab/README_ja.md) · [OpenAI API example →](./examples/openai_api/README_ja.md) · [Client recipes →](./examples/openai_api/CLIENTS.md) · [Workflow recipes →](./examples/openai_api/WORKFLOWS.md) · [Postman collection →](./examples/openai_api/POSTMAN.md) · [OpenAPI spec →](./examples/openai_api/OPENAPI.md) · [Security guide →](./examples/openai_api/SECURITY.md) · [Deployment matrix →](./docs/deployment_matrix_ja.md) · [デプロイドキュメント →](./runtime/readme.md) · [Agent連携 →](https://modelscope.github.io/FunASR/agent.html)
+
+---
+
+## コミュニティ
+
+|  |  |
+|---|---|
+| 📖 [ドキュメント](https://modelscope.github.io/FunASR/) | 🐛 [Issues](https://github.com/modelscope/FunASR/issues) |
+| 💬 [Discussions](https://github.com/modelscope/FunASR/discussions) | 🤗 [HuggingFace](https://huggingface.co/funasr) |
+
+## ライセンス
+
+- このリポジトリの FunASR ツールキットのソースコード: [MIT License](./LICENSE)。
+- 事前学習済みモデルの重みは個別にライセンスされます。各モデルカードに記載されたライセンスを確認してください。モデルカードがこのリポジトリの [FunASR Model Open Source License Agreement](./MODEL_LICENSE) を参照している場合、その条件が適用されます。

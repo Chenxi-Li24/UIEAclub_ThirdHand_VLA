@@ -5,3 +5,17 @@ History/legacy-web/**/web/js/lib/** -whitespace
 # Preserve imported and retired source snapshots byte-for-byte.
 History/source-snapshots/** -whitespace
 History/retired/** -whitespace
+
+# Explicit runtime payloads; configuration and URDF remain ordinary Git text.
+local/** -text
+assets/robot/startouch-v3/** -text
+assets/robot/startouch-v3/meshes/** filter=lfs diff=lfs merge=lfs -text
+apps/dummy/models/*.tflite filter=lfs diff=lfs merge=lfs -text
+local/models/**/*.pt filter=lfs diff=lfs merge=lfs -text
+local/models/**/*.bin filter=lfs diff=lfs merge=lfs -text
+local/models/**/*.safetensors filter=lfs diff=lfs merge=lfs -text
+local/models/**/*.pt.parts/* filter=lfs diff=lfs merge=lfs -text
+local/models/**/*.onnx filter=lfs diff=lfs merge=lfs -text
+local/sdk/**/*.so* filter=lfs diff=lfs merge=lfs -text
+local/sdk/**/*.deb filter=lfs diff=lfs merge=lfs -text
+local/generated/**/*.so* filter=lfs diff=lfs merge=lfs -text

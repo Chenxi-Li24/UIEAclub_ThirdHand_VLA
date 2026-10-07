@@ -82,7 +82,7 @@ class DummyDirector:
         await self.adapter.connect()
         print("[dummy] robot connected; starting wake_up", flush=True)
         if self.config.get("robot", {}).get("go_home_on_start", True) and hasattr(self.adapter, "go_home"):
-            print("[dummy] going to configured Home preset", flush=True)
+            print("[dummy] going to configured initial preset", flush=True)
             await self.adapter.go_home()
             self.follow.reset_base((await self.adapter.get_state()).joints_deg)
         await self.gesture("wake_up")
@@ -165,7 +165,7 @@ class DummyDirector:
                     else:
                         await self.gesture("droop")
                         if self.config.get("robot", {}).get("go_home_on_lost", True) and hasattr(self.adapter, "go_home"):
-                            print("[dummy] target lost; returning to Home preset", flush=True)
+                            print("[dummy] target lost; returning to initial preset", flush=True)
                             await self.adapter.go_home()
                             self.follow.reset_base((await self.adapter.get_state()).joints_deg)
                         self._set_state(State.IDLE)
@@ -178,7 +178,8 @@ class DummyDirector:
                     cmd = list(self.idle_base)
                     cmd[1] += math.sin(phase) * amp
                     cmd[2] -= math.sin(phase) * amp
-                    await self.adapter.send_joint_target(cmd)
+                    if self.config.get("idle", {}).get("enabled", False):
+                        await self.adapter.send_joint_target(cmd)
                     if now - self.last_activity > self.sleep_after_s:
                         await self.gesture("sleep")
                         self._set_state(State.SLEEP)
@@ -188,4 +189,6 @@ class DummyDirector:
                 await asyncio.sleep(period)
         finally:
             wake_task.cancel()
+            await asyncio.gather(wake_task, return_exceptions=True)
             self.tracker.close()
+            await self.adapter.close()

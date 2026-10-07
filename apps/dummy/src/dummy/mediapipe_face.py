@@ -59,6 +59,12 @@ def target_from_mediapipe_result(result, frame_w: int, frame_h: int, *, referenc
     return target_from_mediapipe_detection(best, frame_w, frame_h)
 
 
+def targets_from_mediapipe_result(result, frame_w: int, frame_h: int):
+    converted = [target_from_mediapipe_detection(item, frame_w, frame_h)
+                 for item in getattr(result, "detections", None) or []]
+    return [(target, debug) for target, debug in converted if target.found]
+
+
 def remap_debug_from_crop(debug: dict, x0: int, y0: int) -> dict:
     out = dict(debug or {})
     bbox = out.get("bbox")
@@ -125,6 +131,15 @@ class MediaPipeFaceDetector:
         image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb_frame)
         result = self.detector.detect(image)
         return target_from_mediapipe_result(result, w, h, reference=reference)
+
+    def detect_all(self, rgb_frame):
+        if self.detector is None and not self.open():
+            raise RuntimeError(self.error or "MediaPipe face detector unavailable")
+        import mediapipe as mp
+
+        h, w = rgb_frame.shape[:2]
+        image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb_frame)
+        return targets_from_mediapipe_result(self.detector.detect(image), w, h)
 
     def detect_crop(self, rgb_frame, crop, *, reference=None):
         x0, y0, x1, y1 = [int(v) for v in crop]

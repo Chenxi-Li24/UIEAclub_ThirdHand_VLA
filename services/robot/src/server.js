@@ -4,6 +4,7 @@
 const fs = require('node:fs');
 const http = require('node:http');
 const path = require('node:path');
+const { randomUUID } = require('node:crypto');
 const { WebSocket, WebSocketServer } = require('ws');
 const { loadConfig } = require('./config');
 const { ExecutionGateway } = require('./execution-gateway');
@@ -82,6 +83,7 @@ function createRobotService(options = {}) {
   });
 
   wss.on('connection', socket => {
+    const owner = randomUUID();
     sockets.add(socket);
     socket.send(JSON.stringify(controller.configMessage()));
     socket.on('message', data => {
@@ -111,9 +113,12 @@ function createRobotService(options = {}) {
       }
       controller.handleCommand(message, reply => {
         if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify(reply));
-      });
+      }, owner);
     });
-    socket.on('close', () => sockets.delete(socket));
+    socket.on('close', () => {
+      sockets.delete(socket);
+      controller.releaseFollow(owner);
+    });
   });
   executionWss.on('connection', socket => {
     executionSockets.add(socket);

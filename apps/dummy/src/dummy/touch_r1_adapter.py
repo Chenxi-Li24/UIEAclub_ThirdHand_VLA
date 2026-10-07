@@ -3,12 +3,14 @@ from __future__ import annotations
 import asyncio
 import math
 import time
+from uuid import uuid4
 
 from .robot_ws_client import RobotWebSocketClient
+from .workspace_guard import WorkspaceGuard
 
 
 class TouchR1Adapter:
-    def __init__(self, config: dict):
+    def __init__(self, config: dict, *, workspace_guard=None):
         robot = config.get("robot", {})
         self.client = RobotWebSocketClient(
             robot.get("ws_url", "ws://127.0.0.1:3000/ws"),
@@ -18,19 +20,56 @@ class TouchR1Adapter:
             "joint_limits_deg",
             [[-162, 162], [-12, 201], [-183, 0], [-98, 98], [-98, 98], [-164, 164]],
         )
-        self.max_delta = float(robot.get("max_relative_move_deg", 1.0))
         self.min_command_interval = float(robot.get("min_command_interval_s", 0.10))
-        self.follow_speed_percent = float(robot.get("follow_speed_percent", 0.50))
-        self.servo_min_time_sec = float(robot.get("servo_min_time_sec", 0.20))
-        self.servo_max_speeds_deg_s = [
-            float(x) for x in robot.get("servo_max_speeds_deg_s", [300, 300, 300, 1000, 1000, 1000])
-        ]
+        self.follow_command = str(robot.get("follow_command", "move_joint") or "move_joint")
+        self.follow_wait_complete = bool(robot.get("follow_wait_complete", True))
+        self.completion_timeout = float(robot.get("motion_completion_timeout_s", 45.0))
+        if not math.isfinite(self.completion_timeout) or self.completion_timeout <= 0:
+            raise ValueError("motion completion timeout must be finite and positive")
         self.home_joints = robot.get("home_joints_deg")
+        self.home_preset_name = str(robot.get("home_preset_name", "zero") or "zero")
+        self.workspace_guard = workspace_guard if workspace_guard is not None else WorkspaceGuard(config)
         self._last_send = 0.0
+        self.last_request_id = None
+        self._inflight = None
+        self.continuous_follow = bool(robot.get("continuous_follow", True))
+        self.follow_active = False
+        self.follow_stream_id = f"dummy-stream-{uuid4()}"
+        self.follow_hold_joints = None
+        self.last_follow_target = None
+        self.client.listeners.append(self._follow_event)
+
+    def _follow_event(self, message):
+        if message.get("type") == "follow_state" and message.get("stream_id") == self.follow_stream_id:
+            self.follow_active = message.get("active") is True
+            if message.get("hold_joints_deg") is not None:
+                self.follow_hold_joints = list(message["hold_joints_deg"])
+
+    async def send_follow_target(self, joints_deg, sequence, observed_at_ms):
+        if not self.follow_active:
+            await self._command_wait("follow_start", stream_id=self.follow_stream_id,
+                                     request_id=f"dummy-start-{uuid4()}", terminal_only=False, timeout=2)
+        if not self.follow_active or self.follow_hold_joints is None:
+            raise RuntimeError("Robot did not activate continuous follow")
+        target = list(joints_deg)
+        for index in (1, 2, 4, 5):
+            target[index] = self.follow_hold_joints[index]
+        target = self._validate(target)
+        self.last_request_id = f"dummy-target-{uuid4()}"
+        await self._command_wait("follow_target", joints_deg=target, sequence=sequence,
+                                 observed_at_ms=observed_at_ms, stream_id=self.follow_stream_id,
+                                 request_id=self.last_request_id, terminal_only=False, timeout=1)
+        self.last_follow_target = list(target)
+        return True
+
+    async def pause_follow(self):
+        if self.follow_active:
+            await self._command_wait("follow_stop", stream_id=self.follow_stream_id,
+                                     request_id=f"dummy-stop-{uuid4()}", terminal_only=True, timeout=5)
 
     async def connect(self):
         await self.client.open()
-        health = self.client.health()
+        health = await asyncio.to_thread(self.client.health)
         if not health.get("robot", {}).get("connected"):
             return await self.client.connect_robot()
         await self.client.command("status")
@@ -49,25 +88,35 @@ class TouchR1Adapter:
             start = list(state.joints_deg)
             target = self._validate(self.home_joints)
             if len(start) == 6:
-                max_delta = max(abs(a - b) for a, b in zip(target, start))
-                steps = max(1, math.ceil(max_delta / max(self.max_delta * 0.8, 0.1)))
-                for step in range(1, steps + 1):
-                    alpha = step / steps
-                    waypoint = [a + (b - a) * alpha for a, b in zip(start, target)]
-                    await self.send_joint_target(waypoint, allow_large=True)
-                    await self.wait_idle(timeout=20.0)
+                await self.send_joint_target(target, allow_large=True)
+                await self.wait_idle()
                 return await self.get_state()
-        await self.client.command("preset", name="home")
-        return await self.wait_idle(timeout=20.0)
+        if self.home_preset_name != "zero":
+            raise ValueError("home requires zero or explicit home_joints_deg")
+        await self.get_state()
+        await self._command_wait(
+            "preset", name="zero", request_id=f"dummy-home-{uuid4()}",
+            timeout=self.completion_timeout, terminal_only=True,
+        )
+        return await self.wait_idle()
 
     async def close(self):
-        await self.client.close()
+        try:
+            await self.pause_follow()
+            if self._inflight is not None:
+                # Cancellation of Dummy must not orphan its completion waiter.
+                await asyncio.shield(self._inflight)
+        finally:
+            self._inflight = None
+            await self.client.close()
 
     async def get_state(self):
-        try:
-            return await self.client.refresh_state(timeout=2.0)
-        except Exception:
-            return self.client.snapshot
+        state = self.client.snapshot
+        if not state.state_ready or time.time() - state.last_event_at > 0.25:
+            state = await self.client.refresh_state(timeout=2.0)
+        if not state.connected or not state.state_ready or len(state.joints_deg) != 6:
+            raise RuntimeError("fresh valid robot feedback is unavailable")
+        return state
 
     def latest_state(self):
         return self.client.snapshot
@@ -91,59 +140,104 @@ class TouchR1Adapter:
             raise ValueError("joint target must contain six degree values")
         out = [float(x) for x in joints]
         for index, (value, (lo, hi)) in enumerate(zip(out, self.joint_limits), start=1):
+            if not math.isfinite(value):
+                raise ValueError(f"J{index} target must be finite")
             if value < lo - 0.05 or value > hi + 0.05:
                 raise ValueError(f"J{index} target {value:.3f} outside limit [{lo},{hi}]")
             out[index - 1] = min(max(value, lo), hi)
         return out
 
-    async def send_joint_target(self, joints_deg, *, allow_large=False, time_sec=None):
+    async def send_joint_target(self, joints_deg, *, allow_large=False, time_sec=None, skip_if_busy=False, before_send=None):
+        # Retain the legacy keyword without overriding SDK speed-mode planning.
+        del time_sec
         if self.client.snapshot.moving or self.client.snapshot.state_name == "MOVING":
+            if skip_if_busy:
+                return False
             await self.wait_idle()
         target = self._validate(joints_deg)
         state = await self.get_state()
-        if state.joints_deg and not allow_large:
-            delta = max(abs(a - b) for a, b in zip(target, state.joints_deg))
-            if delta > self.max_delta:
-                raise ValueError(f"relative move {delta:.3f} deg exceeds {self.max_delta:.3f} deg")
-        elapsed = time.time() - self._last_send
+        if state.moving or state.state_name == "MOVING":
+            return False
+        elapsed = time.monotonic() - self._last_send
         if elapsed < self.min_command_interval:
             await asyncio.sleep(self.min_command_interval - elapsed)
-        if time_sec is None:
-            time_sec = self._time_for_speed_percent(target, state.joints_deg)
-        # The robot service's legacy ``servo`` route ignores ``time_sec`` and
-        # falls back to its global speed scale.  ``move_joint`` carries the
-        # requested duration through to the Startouch bridge, so the configured
-        # follow speed is actually applied by the hardware.
-        await self.client.command(
-            "move_joint",
-            joints_deg=target,
-            time_sec=float(time_sec),
-            source="dummy_follow",
-        )
-        self._last_send = time.time()
+            state = await self.get_state()
+            if state.moving:
+                return False
+        if before_send is not None:
+            latest_target = before_send(state)
+            if latest_target is None:
+                return False
+            target = self._validate(latest_target)
+        if not allow_large:
+            allowed, reason = self.workspace_guard.check(target)
+            if not allowed:
+                raise RuntimeError(f"workspace guard rejected target: {reason}")
+        request_id = f"dummy-follow-{uuid4()}"
+        self.last_request_id = request_id
+        if not self.follow_wait_complete:
+            if self.follow_command == "servo":
+                await self.client.command("servo", joints=target, request_id=request_id)
+            else:
+                await self.client.command(
+                    "move_joint",
+                    joints_deg=target,
+                    source="dummy_follow",
+                    request_id=request_id,
+                )
+            self._last_send = time.monotonic()
+            return True
+        if self.follow_command == "servo":
+            await self._command_wait(
+                "servo",
+                joints=target,
+                request_id=request_id,
+                timeout=self.completion_timeout,
+                terminal_only=self.follow_wait_complete,
+            )
+        else:
+            await self._command_wait(
+                "move_joint",
+                joints_deg=target,
+                source="dummy_follow",
+                request_id=request_id,
+                timeout=self.completion_timeout,
+                terminal_only=self.follow_wait_complete,
+            )
+        self._last_send = time.monotonic()
+        return True
 
-    def _time_for_speed_percent(self, target, current):
-        if not current or len(current) != 6:
-            return self.servo_min_time_sec
-        speed = max(0.01, min(1.0, self.follow_speed_percent))
-        durations = []
-        for index, (dst, src) in enumerate(zip(target, current)):
-            max_speed = self.servo_max_speeds_deg_s[index] if index < len(self.servo_max_speeds_deg_s) else 300.0
-            durations.append(abs(float(dst) - float(src)) / max(1e-6, max_speed * speed))
-        return max(self.servo_min_time_sec, max(durations or [0.0]))
+    async def _command_wait(self, command, **payload):
+        request_id = payload.get("request_id")
+        self._inflight = asyncio.create_task(self.client.command_wait(command, **payload))
+        try:
+            ack = await asyncio.shield(self._inflight)
+        finally:
+            if self._inflight.done():
+                self._inflight = None
+        if ack is None:
+            raise RuntimeError(f"robot command timed out waiting for request_id={request_id}")
+        if isinstance(ack, dict) and ack.get("type") == "error":
+            raise RuntimeError(f"robot command rejected: {ack.get('code', '-')}: {ack.get('msg', ack)}")
+        if isinstance(ack, dict) and ack.get("status") in {"failed", "rejected", "uncertain"}:
+            raise RuntimeError(f"robot command {ack['status']}: {ack.get('msg', ack)}")
+        if ack.get("reached") is False:
+            raise RuntimeError("robot command completed without reaching its target")
+        return ack
 
     async def set_gripper(self, position):
         if self.client.snapshot.moving or self.client.snapshot.state_name == "MOVING":
             await self.wait_idle()
         value = float(position)
-        if value < 0 or value > 1:
+        if not math.isfinite(value) or value < 0 or value > 1:
             raise ValueError("gripper position must be 0..1")
         await self.client.command("gripper", position=value)
 
     async def software_stop(self):
         await self.client.command("software_stop")
 
-    async def wait_idle(self, timeout=8.0):
+    async def wait_idle(self, timeout=None):
+        timeout = self.completion_timeout if timeout is None else timeout
         deadline = time.time() + timeout
         while time.time() < deadline:
             state = await self.get_state()

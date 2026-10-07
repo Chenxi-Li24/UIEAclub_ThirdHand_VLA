@@ -2,7 +2,12 @@
 
 Recorded: 2026-09-10
 
-The physical payloads listed here exist only below `local/` in the isolated Ubuntu checkout. GitHub receives this provenance, the measured sizes and hashes in `configs/assets/ubuntu20.manifest.json`, and the import/verification tools. It does not receive SDK binaries, model weights, copied runtimes, calibration captures, or vendor payloads.
+This table records the historical Ubuntu deployment. Runtime delivery now follows
+`configs/assets/runtime-assets.json`: user-authorized SDKs, models and FunASR
+source are tracked, with large binaries stored in Git LFS. Copied environments,
+credentials, calibration captures and runtime state remain excluded. See
+[fresh-clone instructions](FRESH_CLONE_CN.md). License labels below retain their
+original provenance and do not assert a new third-party license.
 
 | Asset | Read-only source | Destination | License status | Notes |
 |---|---|---|---|---|
@@ -17,6 +22,20 @@ The physical payloads listed here exist only below `local/` in the isolated Ubun
 | Calibration source | `/home/nieqingcao/calibration` | `local/calibration/source` | Local-only | Raw input for later review; no calibration is promoted automatically. |
 
 ## Copy Rules
+
+### FACE/BODY Delivery Update: 2026-10-06
+
+The current Dummy configuration enables body fallback, so its YOLOv8n weights
+are a required runtime asset, not an optional external copy. The payload was
+copied read-only from the Ubuntu fork's `local/models/vision/yolov8n.pt`.
+Its 6,549,796 bytes and SHA-256
+`f59b3d833e2ff32e194b5bb8e08d211dc7c5bdf144b90d2c8412c47ccfc83b36`
+match the existing Ubuntu home-folder copy. The project tracks it through Git
+LFS and the runtime manifest. No new license claim is made for this local copy.
+Dummy dependency versions were read from the existing Ubuntu runtime; no
+environment, caches, or credentials were copied into Git.
+
+### Historical Copy Rules
 
 - Every destination was required to be absent before copying.
 - `rsync -a --safe-links` preserved valid relative links and skipped unsafe absolute links.

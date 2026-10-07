@@ -15,6 +15,7 @@ import tempfile
 import threading
 import time
 from joint_speed_policy import bounded_speed_percent, validate_sdk_speed_reference
+from continuous_follow import ContinuousFollow
 from typing import Any
 
 try:
@@ -55,7 +56,7 @@ REQUIRE_CAN_RX = os.environ.get("STARTOUCH_REQUIRE_CAN_RX", "1") != "0"
 CAN_RX_STALE_SEC = max(
     0.25, float(os.environ.get("STARTOUCH_CAN_RX_STALE_SEC", "1.0"))
 )
-POLL_INTERVAL_SEC = max(0.05, float(os.environ.get("STARTOUCH_POLL_INTERVAL_MS", "100")) / 1000)
+POLL_INTERVAL_SEC = max(0.033, float(os.environ.get("STARTOUCH_POLL_INTERVAL_MS", "50")) / 1000)
 JOINT_LOG_INTERVAL_SEC = max(
     0.05, float(os.environ.get("STARTOUCH_JOINT_LOG_INTERVAL_MS", "100")) / 1000
 )
@@ -162,6 +163,9 @@ class SimulatedArm:
     def setGripperPosition(self, position):
         self.gripper = float(position)
 
+    def set_joint_raw(self, positions, velocities):
+        self.joints = list(positions)
+
     def setGripperDistance(self, distance, kp=None, kd=None):
         del kp, kd
         self.gripper = float(distance) / GRIPPER_MAX_DISTANCE_M
@@ -192,10 +196,126 @@ class RobotBridge:
         self.last_gripper_log_monotonic = 0.0
         self.can_rx_packets: int | None = None
         self.last_can_rx_monotonic = 0.0
+        self.follow = None
+        self.follow_stop_request = None
+        self.follow_thread = threading.Thread(target=self._follow_loop, daemon=True)
         self.motion_thread = threading.Thread(target=self._motion_loop, daemon=True)
         self.state_thread = threading.Thread(target=self._state_loop, daemon=True)
         self.motion_thread.start()
         self.state_thread.start()
+        self.follow_thread.start()
+
+    def follow_command(self, command):
+        from pathlib import Path
+        from workspace_guard import WorkspaceGuard
+
+        name = command["cmd"]
+        request_id = command.get("request_id")
+        with self.arm_lock:
+            if not self.connected or self.arm is None or (name != "follow_stop" and not self.state_ready):
+                raise RuntimeError("fresh connected robot state required for follow")
+            if name == "follow_start":
+                if self.motion_active or not self.motion_queue.empty():
+                    raise RuntimeError("another motion is active")
+                if not callable(getattr(self.arm, "set_joint_raw", None)):
+                    raise RuntimeError("SDK lacks set_joint_raw")
+                if self.follow is None:
+                    path = os.environ.get("STARTOUCH_FOLLOW_URDF") or str(
+                        Path(__file__).resolve().parents[3] / "assets/robot/startouch-v3/FastTouchV3.SLDASM.urdf")
+                    guard = WorkspaceGuard({"workspace_guard": {
+                        "enabled": not SIMULATE, "urdf_path": path, "clearance_m": 0.04}})
+                    self.follow = ContinuousFollow(guard, SPEED_PERCENT,
+                        j1_speed_deg_s=float(os.environ.get("STARTOUCH_FOLLOW_J1_MAX_SPEED_DEG_S", "50")))
+                measured = self._finite_values(self.arm.get_joint_positions(), 6, "follow start feedback")
+                self.follow.begin(command.get("stream_id"), measured, time.monotonic())
+                self.motion_active = True
+                emit("follow_state", active=True, stream_id=self.follow.session_id,
+                     hold_joints_rad=list(measured))
+            elif name == "follow_target":
+                if self.follow is None:
+                    raise RuntimeError("follow has not started")
+                self.follow.update(command.get("stream_id"), command.get("sequence"),
+                                   command.get("joints_rad"), command.get("observed_at_ms"),
+                                   time.monotonic(), time.time() * 1000)
+            else:
+                if self.follow is None or not self.follow.active:
+                    emit("command_complete", command="follow_stop", request_id=request_id, reached=True)
+                    return
+                if command.get("stream_id") != self.follow.session_id:
+                    raise RuntimeError("follow stream ID mismatch")
+                if self.follow_stop_request is not None:
+                    raise RuntimeError("follow stop already pending")
+                self.follow_stop_request = request_id
+                self.follow.stop("requested")
+        emit("command_accepted", command=name, request_id=request_id)
+
+    def _follow_loop(self):
+        previous = time.monotonic()
+        while not self.shutdown_requested.wait(0.01):
+            now = time.monotonic()
+            dt, previous = now - previous, now
+            try:
+                with self.arm_lock:
+                    if self.follow is None or not self.follow.active or not self.connected or self.arm is None:
+                        continue
+                    if not self.state_ready:
+                        self.follow.stop("feedback_invalid")
+                    result = self.follow.tick(now, dt)
+                    if result is None:
+                        continue
+                    positions, velocities, finished = result
+                    self.arm.set_joint_raw(positions, velocities)
+                    if finished:
+                        request_id, self.follow_stop_request = self.follow_stop_request, None
+                        final_positions = list(positions)
+                if finished:
+                    self._finish_follow_hold(request_id, final_positions)
+            except Exception as exc:
+                emit("error", message=f"continuous follow failed: {exc}")
+                # An SDK write failure cannot be represented as a successful hold.
+                self.disconnect("follow_failed")
+
+    def _finish_follow_hold(self, request_id, target):
+        deadline = time.monotonic() + 1.5
+        reached = False
+        while not self.stop_requested.is_set():
+            with self.arm_lock:
+                if self.arm is None:
+                    return
+                measured = self._finite_values(self.arm.get_joint_positions(), 6, "follow hold feedback")
+                velocity = self._finite_values(self.arm.get_joint_velocities(), 6, "follow hold velocity")
+            reached = (max(abs(a-b) for a,b in zip(measured,target)) <= math.radians(1)
+                       and max(abs(v) for v in velocity) <= math.radians(5))
+            if reached or time.monotonic() >= deadline:
+                break
+            self.stop_requested.wait(0.05)
+        if self.stop_requested.is_set():
+            return
+        with self.arm_lock:
+            self.motion_active = False
+        emit("follow_state", active=False, stream_id=self.follow.session_id,
+             reason=self.follow.reason if reached else "hold_feedback_unconfirmed")
+        emit("motion_state", state="IDLE")
+        self.publish_state(phase="follow_hold")
+        if request_id is not None:
+            emit("command_complete", command="follow_stop", request_id=request_id, reached=reached)
+
+    def _finish_measured_motion(self, command, duration):
+        deadline = time.monotonic() + 1.5
+        target = command["joints_rad"]
+        while not self.stop_requested.is_set():
+            with self.arm_lock:
+                if self.arm is None:
+                    return
+                measured = self._finite_values(self.arm.get_joint_positions(), 6, "completion feedback")
+                self.last_valid_joints = list(measured)
+                reached = max(abs(a-b) for a,b in zip(measured, target)) <= math.radians(1)
+            if reached or time.monotonic() >= deadline:
+                self.publish_state(phase="motion_complete", force_joint_log=True)
+                emit("command_complete", command=command["command"], duration_sec=float(duration),
+                     request_id=command["request_id"], reached=reached, actual_joints_rad=measured)
+                return
+            self.stop_requested.wait(0.05)
 
     def _acquire_control_lock(self) -> None:
         if SIMULATE or DRY_RUN or fcntl is None:
@@ -483,7 +603,7 @@ class RobotBridge:
                 )
         return samples[-1]
 
-    def _emit_snapshot(self, snapshot: dict[str, Any], state: str = "IDLE") -> None:
+    def _emit_snapshot(self, snapshot: dict[str, Any], state: str | None = None) -> None:
         emit(
             "robot_state",
             joints_rad=snapshot["joints"],
@@ -493,7 +613,7 @@ class RobotBridge:
             tcp_euler_rad=snapshot["euler"],
             gripper_position=snapshot["gripper"],
             gripper_distance_m=snapshot["gripper_distance"],
-            state=state,
+            state=state or ("MOVING" if self.motion_active else "IDLE"),
         )
 
     def _update_gripper_progress_locked(
@@ -698,6 +818,10 @@ class RobotBridge:
             self.gripper_start_position = None
             self.can_rx_packets = None
             self.last_can_rx_monotonic = 0.0
+            self.motion_active = False
+            if self.follow is not None:
+                self.follow.active = False
+            self.follow_stop_request = None
         while True:
             try:
                 self.motion_queue.get_nowait()
@@ -720,20 +844,20 @@ class RobotBridge:
                 list(self.last_valid_joints) if self.last_valid_joints is not None else None
             )
         if not connected:
-            emit("error", message="Startouch SDK is not connected")
+            emit("error", request_id=command.get("request_id"), message="Startouch SDK is not connected")
             return
         if not state_ready or start_joints is None:
-            emit("error", message="robot state is not ready; motion command was rejected")
+            emit("error", request_id=command.get("request_id"), message="robot state is not ready; motion command was rejected")
             return
         if motion_active or not self.motion_queue.empty():
-            emit("error", message="a joint motion is already active")
+            emit("error", request_id=command.get("request_id"), message="a joint motion is already active")
             return
 
         command_name = str(command.get("cmd", "move_joint"))
         if command_name == "move_joint_path":
             raw_waypoints = command.get("waypoints_rad")
             if not isinstance(raw_waypoints, list) or not raw_waypoints:
-                emit("error", message="waypoints_rad must contain at least one waypoint")
+                emit("error", request_id=command.get("request_id"), message="waypoints_rad must contain at least one waypoint")
                 return
         else:
             raw_waypoints = [command.get("joints_rad")]
@@ -742,6 +866,7 @@ class RobotBridge:
             if not isinstance(joints, list) or len(joints) != 6:
                 emit(
                     "error",
+                    request_id=command.get("request_id"),
                     message=f"waypoint {point_index} must contain six values",
                 )
                 return
@@ -750,12 +875,14 @@ class RobotBridge:
             except (TypeError, ValueError):
                 emit(
                     "error",
+                    request_id=command.get("request_id"),
                     message=f"waypoint {point_index} contains a non-numeric value",
                 )
                 return
             if not all(math.isfinite(value) for value in point):
                 emit(
                     "error",
+                    request_id=command.get("request_id"),
                     message=f"waypoint {point_index} contains a non-finite value",
                 )
                 return
@@ -766,6 +893,7 @@ class RobotBridge:
                 if value < limits[0] or value > limits[1]:
                     emit(
                         "error",
+                        request_id=command.get("request_id"),
                         message=(
                             f"waypoint {point_index} J{joint_index} is outside "
                             "the Startouch joint limit"
@@ -783,6 +911,7 @@ class RobotBridge:
         ):
             emit(
                 "error",
+                request_id=command.get("request_id"),
                 message="all-zero target rejected; use the explicit zero preset",
             )
             return
@@ -1020,7 +1149,6 @@ class RobotBridge:
                 if (
                     not self.connected
                     or self.arm is None
-                    or self.motion_active
                 ):
                     return
                 snapshot = self._read_snapshot(
@@ -1032,6 +1160,8 @@ class RobotBridge:
                     self.last_valid_joints is not None
                     and max(abs(value) for value in snapshot["joints"]) < math.radians(0.05)
                     and max(abs(value) for value in self.last_valid_joints) > math.radians(2.0)
+                    and (self.expected_motion_target is None
+                         or max(abs(value) for value in self.expected_motion_target) > math.radians(0.05))
                 ):
                     self.state_ready = False
                     raise RuntimeError(
@@ -1103,21 +1233,7 @@ class RobotBridge:
                         [command["start_joints_rad"], [0.0] * 6],
                         speed_percent=command["speed_percent"],
                     )
-                    # After homing, read actual joint state
-                    try:
-                        joints = self._finite_values(arm.get_joint_positions(), 6, "joint positions after home")
-                        with self.arm_lock:
-                            self.last_valid_joints = list(joints)
-                    except Exception:
-                        with self.arm_lock:
-                            self.last_valid_joints = [0.0] * 6
-                    if not self.stop_requested.is_set():
-                        emit(
-                            "command_complete",
-                            command="go_home",
-                            duration_sec=float(duration),
-                            request_id=command["request_id"],
-                        )
+                    self._finish_measured_motion(command, duration)
                 elif command.get("_move_l_pos"):
                     # move_l Cartesian path
                     pos = command["_move_l_pos"]
@@ -1149,15 +1265,7 @@ class RobotBridge:
                         [command["start_joints_rad"], *command["waypoints_rad"]],
                         speed_percent=command["speed_percent"],
                     )
-                    if not self.stop_requested.is_set():
-                        with self.arm_lock:
-                            self.last_valid_joints = list(command["joints_rad"])
-                        emit(
-                            "command_complete",
-                            command=command["command"],
-                            duration_sec=float(duration),
-                            request_id=command["request_id"],
-                        )
+                    self._finish_measured_motion(command, duration)
             except Exception as exc:
                 emit("error", message=f"joint motion failed: {exc}", request_id=command["request_id"])
             finally:
@@ -1201,6 +1309,7 @@ def main() -> None:
     for line in sys.stdin:
         if bridge.shutdown_requested.is_set():
             break
+        command = {}
         try:
             command = json.loads(line)
             name = command.get("cmd")
@@ -1218,6 +1327,8 @@ def main() -> None:
                 bridge.preview_ik(command)
             elif name == "go_home":
                 bridge.go_home(command.get("request_id"))
+            elif name in {"follow_start", "follow_target", "follow_stop"}:
+                bridge.follow_command(command)
             elif name == "gripper":
                 bridge.set_gripper(
                     command.get("position"),
@@ -1238,7 +1349,11 @@ def main() -> None:
         except json.JSONDecodeError as exc:
             emit("error", message=f"invalid bridge JSON: {exc}")
         except Exception as exc:
-            emit("error", message=f"bridge command failed: {exc}")
+            emit(
+                "error",
+                message=f"bridge command failed: {exc}",
+                request_id=command.get("request_id") if isinstance(command, dict) else None,
+            )
 
 
 if __name__ == "__main__":

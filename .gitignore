@@ -48,17 +48,34 @@ node_modules/
 dist/
 .pio/
 
-# Unified local delivery assets: present on Ubuntu, never tracked publicly
+# Runtime assets are tracked explicitly; environments and mutable state stay local.
 /local/**
 !/local/README.md
+!/local/sdk/
+!/local/sdk/**
+!/local/models/
+!/local/models/**
+!/local/vendor/
+!/local/vendor/funasr/
+!/local/vendor/funasr/**
+!/local/generated/
+!/local/generated/startouch-python/
+!/local/generated/startouch-python/**
 /configs/assets/manifest.local.json
 
 # Unified mutable runtime state
 /runtime/**
 !/runtime/README.md
 
-# Robot geometry is local runtime payload; Git stores its manifest and importer.
-/assets/robot/startouch-v3/
+# The high ASR checkpoint is reconstructed from LFS parts by the setup script.
+/local/models/asr/high/model.pt
+/local/**/__pycache__/
+/local/**/*.pyc
+/local/**/.git/
+/local/**/.cache/
+/local/**/.locks/
+/local/**/build/
+/local/**/dist/
 
 # History preserves source only, never copied environments or runtime payloads.
 /History/**/.git/

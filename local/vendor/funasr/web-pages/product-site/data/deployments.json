@@ -1,0 +1,704 @@
+{
+  "schema_version": 1,
+  "verified": "2026-08-13",
+  "deployments": [
+    {
+      "id": "vllm",
+      "routes": {"zh": "/deploy/vllm.html", "en": "/en/deploy/vllm.html"},
+      "maturity": "community-verified",
+      "selector_rank": 10,
+      "workloads": ["batch", "private-api"],
+      "hardware": ["nvidia-gpu", "kubernetes"],
+      "priorities": ["throughput", "latency"],
+      "models": ["Fun-ASR-Nano-2512 (community vLLM conversion)"],
+      "operating_systems": ["Linux"],
+      "interfaces": ["OpenAI-compatible HTTP"],
+      "tested": {"funasr": "Fun-ASR-Nano-2512 conversion@e718b36e", "runtime": "vLLM 0.27.1+cu129 / Torch 2.13.0+cu129", "verified": "2026-08-13"},
+      "commands": {
+        "install": [
+          "curl -fL https://github.com/vllm-project/vllm/releases/download/v0.27.1/vllm-0.27.1%2Bcu129-cp38-abi3-manylinux_2_28_x86_64.whl -o vllm-0.27.1+cu129-cp38-abi3-manylinux_2_28_x86_64.whl",
+          "echo \"bf0d52faa2a51e7a01c6856a7a8a2d1307fd0ff711415d34168a67ffac0fa47b  vllm-0.27.1+cu129-cp38-abi3-manylinux_2_28_x86_64.whl\" | sha256sum -c -",
+          "uv venv --python 3.12 .venv && uv pip install --python .venv/bin/python --torch-backend=auto \"vllm[audio] @ file://$PWD/vllm-0.27.1+cu129-cp38-abi3-manylinux_2_28_x86_64.whl\""
+        ],
+        "launch": [
+          "CUDA_VISIBLE_DEVICES=0 .venv/bin/vllm serve allendou/Fun-ASR-Nano-2512-vllm --revision e718b36e2578203ec893e9b488239225f8d668e2 --served-model-name fun-asr-nano --host 127.0.0.1 --port 8899 --dtype float32 --gpu-memory-utilization 0.40 --enforce-eager"
+        ],
+        "health": [
+          "curl -fsS http://127.0.0.1:8899/health",
+          "curl -fsS http://127.0.0.1:8899/v1/models"
+        ],
+        "smoke": [
+          "curl -fL https://huggingface.co/allendou/Fun-ASR-Nano-2512-vllm/resolve/e718b36e2578203ec893e9b488239225f8d668e2/example/zh.mp3 -o zh.mp3 && echo \"0e64de19e4ff9a02e682955c9112f32d2317cfdbb5bc2f3504664044c993f195  zh.mp3\" | sha256sum -c -",
+          "curl -fsS http://127.0.0.1:8899/v1/audio/transcriptions -F file=@zh.mp3 -F model=fun-asr-nano -F language=zh -F response_format=json",
+          "curl -fsS http://127.0.0.1:8899/v1/audio/transcriptions -F file=@zh.mp3 -F model=fun-asr-nano -F language=zh -F 'hotwords=开放时间,开放时间,开放时间' -F response_format=json"
+        ]
+      },
+      "evidence": [
+        {"label": "H100 native FunASR validation record", "url": "https://github.com/modelscope/FunASR/blob/main/docs/vllm_native_funasr_validation.md"},
+        {"label": "vLLM 0.27.1 release and CUDA 12.9 wheel", "url": "https://github.com/vllm-project/vllm/releases/tag/v0.27.1"},
+        {"label": "native FunASR model integration", "url": "https://github.com/vllm-project/vllm/pull/33247"},
+        {"label": "native FunASR hotword support", "url": "https://github.com/vllm-project/vllm/pull/39674"},
+        {"label": "FunASR initialization fix", "url": "https://github.com/vllm-project/vllm/pull/44215"},
+        {"label": "validated community conversion at e718b36e", "url": "https://huggingface.co/allendou/Fun-ASR-Nano-2512-vllm/tree/e718b36e2578203ec893e9b488239225f8d668e2"},
+        {"label": "official FunASR split-engine guide", "url": "https://github.com/modelscope/FunASR/blob/main/docs/vllm_guide.md"},
+        {"label": "FunASR deployment matrix", "url": "https://github.com/modelscope/FunASR/blob/main/docs/deployment_matrix.md"}
+      ],
+      "benchmarks": [
+        {
+          "model": "allendou/Fun-ASR-Nano-2512-vllm@e718b36e",
+          "runtime": "vLLM 0.27.1+cu129 / Torch 2.13.0+cu129",
+          "hardware": "NVIDIA H100 80GB",
+          "workload": "OpenAI-compatible transcription; Chinese baseline and hotword probes plus two concurrent requests (English and Japanese)",
+          "audio": "Pinned model-repository examples: 6 s Chinese, 8 s English, and 8 s Japanese",
+          "settings": "FP32; eager mode; gpu-memory-utilization 0.40; max model length 40,960; explicit language; warmed server",
+          "timing_scope": "Client wall time after /health became ready; local HTTP and decoding included; cold model download and 20.3 s engine warmup excluded",
+          "result": "Chinese 200 in 0.968 s; repeated hotword corrected 开饭时间 to 开放时间 in 0.214 s; English and Japanese two-request batch completed in 1.123 s wall time",
+          "qualification": "Single-H100 correctness and concurrency probe with a community-converted checkpoint, not an accuracy study or production capacity promise. Revalidate the checkpoint, target GPU, languages, traffic, and hotword policy before rollout.",
+          "source": "https://github.com/modelscope/FunASR/blob/main/docs/vllm_native_funasr_validation.md",
+          "verified": "2026-08-13"
+        }
+      ],
+      "translations": {
+        "zh": {
+          "name": "vLLM 原生 FunASR 服务",
+          "summary": "通过 vLLM 内置的 FunASR 架构，在 NVIDIA GPU 上提供兼容 OpenAI 的多语言转写与热词接口。",
+          "fit": ["需要标准 /v1/audio/transcriptions 接口", "Fun-ASR-Nano 批量或并发转写", "已有 NVIDIA GPU 和 Linux 服务环境"],
+          "not_fit": ["只接受官方发布权重、不能使用社区转换 checkpoint", "纯 CPU 或边缘设备", "尚未完成显存、并发与业务音频压测的公网服务"],
+          "selection_reason": "vLLM 已原生注册 FunASR 架构，并提供 OpenAI 兼容转写、显存调度、并发和热词参数。",
+          "primary_limitation": "当前原生 vLLM 路径依赖社区转换 checkpoint；要求官方权重链路时使用官方 FunASR split-engine。实测仅覆盖单张 H100，必须按目标 GPU、音频、语言、热词与流量复测。",
+          "status_label": "社区验证",
+          "operations": ["固定 vLLM wheel、Torch、CUDA、模型 revision 与音频依赖", "等待 /health 就绪并完成预热后再采集容量数据", "记录队列等待、最终结果延迟、显存和热词命中率"],
+          "security": ["在 API 网关实现认证、TLS、限流和音频大小/时长限制", "worker 仅绑定内网地址，不直接暴露公网", "校验 wheel、模型 revision 和示例音频摘要，隔离模型缓存与上传临时目录"],
+          "troubleshooting": ["音频返回 400 时确认安装了 vllm[audio]", "启动时 KV cache 不足则提高显存利用率或在业务允许时降低 max-model-len", "非英文请求必须显式传 language；热词用逗号分隔并以真实业务样本验证偏置强度"]
+        },
+        "en": {
+          "name": "Native FunASR on vLLM",
+          "summary": "Use vLLM's built-in FunASR architecture for multilingual and hotword-aware transcription through an OpenAI-compatible API on NVIDIA GPUs.",
+          "fit": ["A standard /v1/audio/transcriptions endpoint", "Concurrent or batch Fun-ASR-Nano transcription", "An NVIDIA GPU Linux serving environment"],
+          "not_fit": ["Deployments that accept only officially published weights and cannot use a community conversion", "CPU-only or edge devices", "Internet-facing service before memory, concurrency, and workload tests"],
+          "selection_reason": "vLLM natively registers the FunASR architecture and provides OpenAI-compatible transcription, memory scheduling, concurrency, and hotword parameters.",
+          "primary_limitation": "The native vLLM path currently depends on a community-converted checkpoint; use the official FunASR split-engine when an official-weight chain is required. Evidence covers one H100 only, so retest the target GPU, audio, languages, hotwords, and traffic.",
+          "status_label": "Community verified",
+          "operations": ["Pin the vLLM wheel, Torch, CUDA, model revision, and audio dependencies", "Wait for /health and warm the model before measuring capacity", "Measure queue time, final-result latency, memory, and hotword hit rate"],
+          "security": ["Put authentication, TLS, rate limits, and audio size/duration limits at the gateway", "Bind workers to a private address instead of exposing them directly", "Verify wheel, model revision, and sample digests; isolate model cache and temporary uploads"],
+          "troubleshooting": ["For audio HTTP 400 responses, confirm vllm[audio] is installed", "If startup reports insufficient KV cache, raise GPU utilization or lower max-model-len only when the workload permits", "Pass language explicitly for non-English audio; comma-separate hotwords and validate bias strength on production samples"]
+        }
+      }
+    },
+    {
+      "id": "sensevoice-tensorrt",
+      "routes": {"zh": "/deploy/sensevoice-tensorrt.html", "en": "/en/deploy/sensevoice-tensorrt.html"},
+      "maturity": "production-verified",
+      "selector_rank": 15,
+      "workloads": ["batch", "private-api"],
+      "hardware": ["nvidia-gpu", "kubernetes"],
+      "priorities": ["throughput", "latency"],
+      "models": ["SenseVoiceSmall"],
+      "operating_systems": ["Linux"],
+      "interfaces": ["Triton gRPC/HTTP", "TensorRT plan", "Docker"],
+      "tested": {"funasr": "main@6408aaa9", "runtime": "TensorRT 10.0.1 / Triton 24.05", "verified": "2026-08-04"},
+      "commands": {
+        "install": [
+          "git clone https://github.com/modelscope/FunASR.git && cd FunASR && git checkout 6408aaa96d54f89db467346010eff3c7d1fc485a",
+          "pip install -e . \"onnx>=1.16\" soundfile \"tritonclient[grpc]\"",
+          "python - <<'PY'\nfrom funasr import AutoModel\n\nmodel = AutoModel(model=\"iic/SenseVoiceSmall\", device=\"cuda:0\")\nmodel.export(\n    type=\"onnx\",\n    quantize=False,\n    device=\"cuda:0\",\n    output_dir=\"./sensevoice_onnx\",\n    max_seq_len=4096,\n)\nPY",
+          "curl -fL https://huggingface.co/FunAudioLLM/SenseVoiceSmall/resolve/main/chn_jpn_yue_eng_ko_spectok.bpe.model \\\n  -o runtime/triton_gpu/model_repo_sense_voice_small/scoring/chn_jpn_yue_eng_ko_spectok.bpe.model \\\n&& echo \"aa87f86064c3730d799ddf7af3c04659151102cba548bce325cf06ba4da4e6a8  runtime/triton_gpu/model_repo_sense_voice_small/scoring/chn_jpn_yue_eng_ko_spectok.bpe.model\" | sha256sum -c -"
+        ],
+        "launch": [
+          "python runtime/triton_gpu/scripts/build_sensevoice_tensorrt.py \\\n    ./sensevoice_onnx/model.onnx \\\n    runtime/triton_gpu/model_repo_sense_voice_small/encoder/1/model.plan \\\n    --precision fp16 \\\n    --min-batch 1 --opt-batch 8 --max-batch 16 \\\n    --min-frames 1 --opt-frames 512 --max-frames 4096 \\\n    --workspace-gb 8",
+          "cp runtime/triton_gpu/model_repo_sense_voice_small/encoder/config.pbtxt.tensorrt \\\n   runtime/triton_gpu/model_repo_sense_voice_small/encoder/config.pbtxt",
+          "cd runtime/triton_gpu && tritonserver --model-repository ./model_repo_sense_voice_small \\\n  --pinned-memory-pool-byte-size=512000000 \\\n  --cuda-memory-pool-byte-size=0:1024000000"
+        ],
+        "health": [
+          "curl -fsS http://localhost:8000/v2/health/ready",
+          "curl -fsS http://localhost:8000/v2/models/sensevoice/ready"
+        ],
+        "smoke": [
+          "python - <<'PY'\nimport numpy as np\nimport soundfile as sf\nimport tritonclient.grpc as grpc\n\naudio, sample_rate = sf.read(\n    \"runtime/triton_gpu/client/test_wavs/mid.wav\", dtype=\"float32\"\n)\nassert sample_rate == 16000\nvalues = {\n    \"WAV\": audio[None, :],\n    \"WAV_LENS\": np.array([[audio.size]], dtype=np.int32),\n    \"LANGUAGE\": np.array([[0]], dtype=np.int32),\n    \"TEXT_NORM\": np.array([[1]], dtype=np.int32),\n}\ninputs = []\nfor name, value in values.items():\n    tensor = grpc.InferInput(name, value.shape, grpc.np_to_triton_dtype(value.dtype))\n    tensor.set_data_from_numpy(value)\n    inputs.append(tensor)\nresult = grpc.InferenceServerClient(\"localhost:8001\").infer(\"sensevoice\", inputs)\ntranscript = result.as_numpy(\"TRANSCRIPTS\")[0][0].decode()\nassert transcript.strip(), \"SenseVoice returned an empty transcript\"\nprint(transcript)\nPY"
+        ]
+      },
+      "evidence": [
+        {"label": "TensorRT deployment guide", "url": "https://github.com/modelscope/FunASR/blob/main/runtime/triton_gpu/README.md"},
+        {"label": "validated TensorRT builder", "url": "https://github.com/modelscope/FunASR/blob/main/runtime/triton_gpu/scripts/build_sensevoice_tensorrt.py"},
+        {"label": "native TensorRT integration PR", "url": "https://github.com/modelscope/FunASR/pull/3463"},
+        {"label": "deployment request and validation record", "url": "https://github.com/modelscope/FunASR/issues/3453"}
+      ],
+      "benchmarks": [
+        {
+          "model": "SenseVoiceSmall",
+          "runtime": "TensorRT 10.0.1 with Triton 24.05 model contract",
+          "hardware": "NVIDIA H100; device memory capacity and host CPU are not part of the recorded result",
+          "workload": "Native FP16 engine build, profile-bound execution, and PyTorch parity validation",
+          "audio": "Bundled Chinese example plus synthetic feature tensors at 30 and 64 frames",
+          "settings": "FP16; batch profile 1/8/16; post-LFR frame profile 1/512/4096; 8 GiB builder workspace",
+          "timing_scope": "Engine build wall time only; inference timings are correctness probes and not a throughput benchmark",
+          "result": "527,504,916 bytes; 113.9 s engine build; 100% CTC top-1 agreement; exact bundled-audio transcript",
+          "qualification": "Single-H100 compatibility and parity evidence. Build on the target GPU and TensorRT version, then load-test with production audio before capacity planning.",
+          "source": "https://github.com/modelscope/FunASR/blob/main/runtime/triton_gpu/README.md",
+          "verified": "2026-08-04"
+        }
+      ],
+      "translations": {
+        "zh": {
+          "name": "SenseVoice TensorRT / Triton",
+          "summary": "把 SenseVoiceSmall 构建为原生 FP16 TensorRT engine，并通过 Triton 提供可批处理的 GPU 推理服务。",
+          "fit": ["固定 NVIDIA GPU 环境中的 SenseVoice 批量转写", "需要 Triton 动态批处理、健康检查和模型仓库", "愿意按生产音频分布定制 batch 与帧长 profile"],
+          "not_fit": ["CPU、macOS、Windows 或通用边缘设备", "需要跨 GPU 型号直接复制同一个 engine", "只有动态量化 model_quant.onnx 的部署"],
+          "selection_reason": "原生 TensorRT engine 和 Triton 调度适合固定 NVIDIA GPU 上以 SenseVoice 延迟与吞吐为核心的服务。",
+          "primary_limitation": "TensorRT plan 不保证跨 GPU 架构或 TensorRT 版本可移植，必须在目标环境重新构建并复测精度、显存和容量。",
+          "status_label": "生产验证",
+          "operations": ["在与生产相同的 GPU 架构和 TensorRT 版本上构建 engine", "按真实 batch、并发和音频时长重设优化 profile", "保存 ONNX、engine、构建日志、SHA-256 与 Triton 配置用于回滚"],
+          "security": ["Triton worker 仅绑定内网，由网关完成认证、TLS、限流和审计", "限制音频大小、时长、声道、采样率和并发", "只加载经过校验的 ONNX、TensorRT plan、分词器和模型仓库"],
+          "troubleshooting": ["构建前确认导出使用 quantize=False，不能使用 model_quant.onnx", "parser 报错时先运行 ONNX checker 并核对 SenseVoice tensor 名称和 dtype", "Triton 加载失败时确认 model.plan 与 config.pbtxt.tensorrt 位于同一 encoder 版本目录"]
+        },
+        "en": {
+          "name": "SenseVoice TensorRT / Triton",
+          "summary": "Build SenseVoiceSmall as a native FP16 TensorRT engine and serve batched GPU inference through Triton.",
+          "fit": ["SenseVoice batch transcription on a fixed NVIDIA GPU fleet", "Triton dynamic batching, health checks, and model repositories", "Optimization profiles tuned to production batch and audio distributions"],
+          "not_fit": ["CPU, macOS, Windows, or general edge targets", "Copying one engine across different GPU models", "Deployments that only have dynamically quantized model_quant.onnx"],
+          "selection_reason": "A native TensorRT engine and Triton scheduling fit SenseVoice services that prioritize latency and throughput on fixed NVIDIA GPUs.",
+          "primary_limitation": "A TensorRT plan is not portable across arbitrary GPU architectures or TensorRT versions; rebuild and revalidate accuracy, memory, and capacity on the target stack.",
+          "status_label": "Production verified",
+          "operations": ["Build on the same GPU architecture and TensorRT version used in production", "Retune optimization profiles for real batch, concurrency, and audio duration", "Retain ONNX, engine, build log, SHA-256, and Triton configuration for rollback"],
+          "security": ["Bind Triton workers to private networks and provide authentication, TLS, rate limits, and audit at the gateway", "Limit audio size, duration, channels, sample rate, and concurrency", "Load only verified ONNX, TensorRT plans, tokenizers, and model repositories"],
+          "troubleshooting": ["Confirm the export used quantize=False; model_quant.onnx is unsupported", "Run the ONNX checker and verify SenseVoice tensor names and dtypes before investigating parser errors", "When Triton cannot load the model, keep model.plan and config.pbtxt.tensorrt in the same encoder version directory"]
+        }
+      }
+    },
+    {
+      "id": "llama-cpp",
+      "routes": {"zh": "/deploy/llama-cpp.html", "en": "/en/deploy/llama-cpp.html"},
+      "maturity": "production-verified",
+      "selector_rank": 20,
+      "workloads": ["edge", "batch"],
+      "hardware": ["cpu", "desktop-edge-gpu"],
+      "priorities": ["portability", "compatibility"],
+      "models": ["SenseVoiceSmall-GGUF", "Paraformer-GGUF", "Fun-ASR-Nano-GGUF", "FSMN-VAD-GGUF"],
+      "operating_systems": ["Linux", "macOS", "Windows"],
+      "interfaces": ["CLI", "local HTTP server"],
+      "tested": {"funasr": "runtime-llamacpp-v0.2.0", "runtime": "llama.cpp@803b7fca", "verified": "2026-08-11"},
+      "commands": {
+        "install": ["curl -fLO https://github.com/modelscope/FunASR/releases/download/runtime-llamacpp-v0.2.0/funasr-llamacpp-linux-x64.tar.gz", "echo \"15e6407143b4fb91d90bb37f2a41c64c4d48ea0fbe6404b88a9b70269c84f240  funasr-llamacpp-linux-x64.tar.gz\" | sha256sum -c -", "mkdir funasr-llamacpp && tar -xzf funasr-llamacpp-linux-x64.tar.gz -C funasr-llamacpp && cd funasr-llamacpp && bash download-funasr-model.sh sensevoice ./funasr-gguf f16"],
+        "launch": ["cd funasr-llamacpp && ./llama-funasr-sensevoice -m funasr-gguf/sensevoice-small-f16.gguf --vad funasr-gguf/fsmn-vad.gguf -a sample.wav"],
+        "health": ["cd funasr-llamacpp && ./llama-funasr-sensevoice --help"],
+        "smoke": ["cd funasr-llamacpp && ./llama-funasr-sensevoice -m funasr-gguf/sensevoice-small-f16.gguf --vad funasr-gguf/fsmn-vad.gguf -a sample.wav | tee transcript.txt && test -s transcript.txt"]
+      },
+      "downloads": [
+        {"operating_system": "Linux", "architecture": "arm64", "backend": "CPU", "archive": "funasr-llamacpp-linux-arm64.tar.gz", "url": "https://github.com/modelscope/FunASR/releases/download/runtime-llamacpp-v0.2.0/funasr-llamacpp-linux-arm64.tar.gz", "sha256": "c78987b2384c6aef339aea1bcd0e130070455d6394fa7ab7ca26840ead10d5da"},
+        {"operating_system": "Linux", "architecture": "x64", "backend": "CPU", "archive": "funasr-llamacpp-linux-x64.tar.gz", "url": "https://github.com/modelscope/FunASR/releases/download/runtime-llamacpp-v0.2.0/funasr-llamacpp-linux-x64.tar.gz", "sha256": "15e6407143b4fb91d90bb37f2a41c64c4d48ea0fbe6404b88a9b70269c84f240"},
+        {"operating_system": "Linux", "architecture": "x64 AVX2", "backend": "CPU", "archive": "funasr-llamacpp-linux-x64-avx2.tar.gz", "url": "https://github.com/modelscope/FunASR/releases/download/runtime-llamacpp-v0.2.0/funasr-llamacpp-linux-x64-avx2.tar.gz", "sha256": "02e10e9a46ea76a040c45d431efe51a3324e64f08c24d38e18c8a4d2781490cd"},
+        {"operating_system": "Linux", "architecture": "x64", "backend": "Vulkan", "archive": "funasr-llamacpp-linux-x64-vulkan.tar.gz", "url": "https://github.com/modelscope/FunASR/releases/download/runtime-llamacpp-v0.2.0/funasr-llamacpp-linux-x64-vulkan.tar.gz", "sha256": "caf71b8c0b4c3249cebc4175e5406d3c588eb9e8966a00d571d4cc5070405385"},
+        {"operating_system": "macOS", "architecture": "arm64", "backend": "CPU", "archive": "funasr-llamacpp-macos-arm64.tar.gz", "url": "https://github.com/modelscope/FunASR/releases/download/runtime-llamacpp-v0.2.0/funasr-llamacpp-macos-arm64.tar.gz", "sha256": "416cbb289e31cb7575365d382155074e922fd061807a37b9ca0247dabd9bc6f9"},
+        {"operating_system": "Windows", "architecture": "x64", "backend": "CPU", "archive": "funasr-llamacpp-windows-x64.zip", "url": "https://github.com/modelscope/FunASR/releases/download/runtime-llamacpp-v0.2.0/funasr-llamacpp-windows-x64.zip", "sha256": "297c962346d7e30d7a7c2c860dfaab3ff07d01fddf15e6fc5212ca9545441a51"},
+        {"operating_system": "Windows", "architecture": "x64 AVX2", "backend": "CPU", "archive": "funasr-llamacpp-windows-x64-avx2.zip", "url": "https://github.com/modelscope/FunASR/releases/download/runtime-llamacpp-v0.2.0/funasr-llamacpp-windows-x64-avx2.zip", "sha256": "4db0f11f603c324a63545cd7009cdd45bb45576efe282cec22796b5fd42d8ea1"},
+        {"operating_system": "Windows", "architecture": "x64", "backend": "Vulkan", "archive": "funasr-llamacpp-windows-x64-vulkan.zip", "url": "https://github.com/modelscope/FunASR/releases/download/runtime-llamacpp-v0.2.0/funasr-llamacpp-windows-x64-vulkan.zip", "sha256": "90b45240c6ccc9177c25490a11848de60a406e129391c8736b14521c0c28cdcb"},
+        {"operating_system": "Windows", "architecture": "x64", "backend": "CUDA", "archive": "funasr-llamacpp-windows-x64-cuda.zip", "url": "https://github.com/modelscope/FunASR/releases/download/runtime-llamacpp-v0.2.0/funasr-llamacpp-windows-x64-cuda.zip", "sha256": "7f2f9ef4d7e0291b284a295ec74bbeca9ea635a7f5f42d0ad06eb780c0d6efc1"}
+      ],
+      "evidence": [
+        {"label": "llama.cpp runtime", "url": "https://github.com/modelscope/FunASR/blob/main/runtime/llama.cpp/README.md"},
+        {"label": "runtime v0.2.0 release", "url": "https://github.com/modelscope/FunASR/releases/tag/runtime-llamacpp-v0.2.0"},
+        {"label": "nine-platform release workflow", "url": "https://github.com/modelscope/FunASR/actions/runs/31458121788"},
+        {"label": "regression tests", "url": "https://github.com/modelscope/FunASR/tree/main/runtime/llama.cpp/tests"}
+      ],
+      "benchmarks": [
+        {
+          "model": "SenseVoiceSmall Q8 GGUF",
+          "runtime": "llama.cpp/GGUF with built-in FSMN-VAD",
+          "hardware": "CPU, 8 threads; CPU model not recorded in the cited report",
+          "workload": "Offline Mandarin CPU",
+          "audio": "184 Mandarin clips, about 44-60 seconds each; total duration not recorded in the cited report",
+          "settings": "Q8 runtime; built-in FSMN-VAD; micro-CER normalize_zh; model load excluded",
+          "timing_scope": "Sum of compute time divided by sum of audio duration; model load excluded",
+          "result": "Approximately 20x realtime; Q8 CER 8.17%",
+          "qualification": "CPU model and full software stack are not recorded. Reproduce on target hardware before comparison.",
+          "source": "https://github.com/modelscope/FunASR/blob/main/runtime/llama.cpp/BENCHMARKS.md",
+          "verified": "2026-07-26"
+        },
+        {
+          "model": "Paraformer Q8 GGUF",
+          "runtime": "llama.cpp/GGUF with built-in FSMN-VAD",
+          "hardware": "CPU, 8 threads; CPU model not recorded in the cited report",
+          "workload": "Offline Mandarin CPU",
+          "audio": "184 Mandarin clips, about 44-60 seconds each; total duration not recorded in the cited report",
+          "settings": "Q8 runtime; built-in FSMN-VAD; micro-CER normalize_zh; model load excluded",
+          "timing_scope": "Sum of compute time divided by sum of audio duration; model load excluded",
+          "result": "Approximately 21x realtime; Q8 CER 9.89%",
+          "qualification": "CPU model and full software stack are not recorded. Reproduce on target hardware before comparison.",
+          "source": "https://github.com/modelscope/FunASR/blob/main/runtime/llama.cpp/BENCHMARKS.md",
+          "verified": "2026-07-26"
+        }
+      ],
+      "translations": {
+        "zh": {
+          "name": "llama.cpp / GGUF 独立运行",
+          "summary": "使用 v0.2.0 的九个预编译包或源码构建，在 CPU、Vulkan、CUDA 和边缘设备上运行 FunASR GGUF 模型。",
+          "fit": ["不依赖 Python ML 环境", "桌面应用和离线边缘部署", "需要 Linux、macOS、Windows 的 CPU、Vulkan 或 CUDA 发布包"],
+          "not_fit": ["需要 vLLM 式大批量 GPU 调度", "未验证目标 GPU 架构的通用预编译 CUDA 包", "必须使用完整 Python 模型生态的流程"],
+          "selection_reason": "GGUF 运行时和独立二进制优先满足可移植、离线和低依赖部署。",
+          "primary_limitation": "预编译 GPU 包只覆盖标注的后端和架构；Windows AMD Vulkan 的崩溃修复仍需问题报告者实机复测，其他设备也必须在目标硬件验证。",
+          "status_label": "生产验证",
+          "operations": ["按页面列出的 SHA-256 校验九个发布资产", "模型和二进制使用同一发布清单", "保留旧二进制和模型目录用于回滚"],
+          "security": ["默认只读取本地音频和模型", "HTTP 服务绑定内网地址并限制上传大小", "不要从不可信地址加载 GGUF"],
+          "troubleshooting": ["CPU 路径先用 q8 模型验证", "CUDA 和 Vulkan 必须匹配本机驱动", "Windows AMD Vulkan 异常时记录 GPU、驱动、GGML_VK_MAX_NODES_PER_SUBMIT 和 GGML_VK_SERIALIZE_SUBMISSIONS 后回报"]
+        },
+        "en": {
+          "name": "llama.cpp / GGUF standalone",
+          "summary": "Use the nine v0.2.0 release packages or source builds to run FunASR GGUF models on CPU, Vulkan, CUDA, and edge devices.",
+          "fit": ["No Python ML environment", "Desktop applications and offline edge deployment", "CPU, Vulkan, or CUDA packages for Linux, macOS, and Windows"],
+          "not_fit": ["vLLM-style large GPU batch scheduling", "A universal prebuilt CUDA package for an unverified GPU architecture", "Workflows that require the full Python model ecosystem"],
+          "selection_reason": "GGUF runtimes and standalone binaries prioritize portability, offline use, and low dependency count.",
+          "primary_limitation": "Prebuilt GPU packages cover only the documented backend and architecture; the Windows AMD Vulkan crash fix still awaits reporter hardware confirmation, and every other target also requires hardware validation.",
+          "status_label": "Production verified",
+          "operations": ["Verify all nine release assets against the listed SHA-256 values", "Keep models and binaries on the same release manifest", "Retain the previous binary and model directory for rollback"],
+          "security": ["Read local audio and models by default", "Bind the HTTP server to a private address and limit uploads", "Do not load GGUF files from untrusted sources"],
+          "troubleshooting": ["Validate the q8 CPU path first", "Match CUDA or Vulkan to the local driver", "For Windows AMD Vulkan failures, record the GPU, driver, GGML_VK_MAX_NODES_PER_SUBMIT, and GGML_VK_SERIALIZE_SUBMISSIONS before reporting"]
+        }
+      }
+    },
+    {
+      "id": "sensevoice-native-server",
+      "routes": {"zh": "/deploy/sensevoice-native-server.html", "en": "/en/deploy/sensevoice-native-server.html"},
+      "maturity": "production-verified",
+      "selector_rank": 20.5,
+      "workloads": ["private-api", "realtime", "edge"],
+      "hardware": ["cpu", "nvidia-gpu"],
+      "priorities": ["compatibility", "portability"],
+      "models": ["SenseVoiceSmall-GGUF", "FSMN-VAD-GGUF"],
+      "operating_systems": ["Linux"],
+      "interfaces": ["OpenAI-compatible HTTP", "OpenAI realtime WebSocket", "WS /v1/realtime?intent=transcription", "SSE", "SRT/VTT"],
+      "tested": {
+        "funasr": "SenseVoice main@b054623c",
+        "runtime": "sensevoice-server@558bd67c",
+        "verified": "2026-08-13"
+      },
+      "commands": {
+        "install": [
+          "git clone https://github.com/QwenAudio/SenseVoice.git && cd SenseVoice",
+          "git checkout b054623cca8f015b73ec471dce4f473ac47413da",
+          "python3 -m pip install -U huggingface_hub",
+          "bash runtime/llama.cpp/download-funasr-model.sh sensevoice model",
+          "cmake -S runtime/llama.cpp -B runtime/llama.cpp/build -DCMAKE_BUILD_TYPE=Release",
+          "cmake --build runtime/llama.cpp/build --target sensevoice-server -j"
+        ],
+        "launch": [
+          "runtime/llama.cpp/build/bin/sensevoice-server -m model/sensevoice-small-q8.gguf -vad model/fsmn-vad.gguf --threads 8 --max-connections 4 --max-audio-seconds 300 127.0.0.1 8040"
+        ],
+        "health": [
+          "curl -fsS http://127.0.0.1:8040/health",
+          "curl -fsS http://127.0.0.1:8040/v1/models"
+        ],
+        "smoke": [
+          "curl -fsS http://127.0.0.1:8040/v1/audio/transcriptions -F file=@speech.wav",
+          "curl -fsS http://127.0.0.1:8040/v1/audio/transcriptions -F file=@speech.wav -F response_format=vtt | tee transcript.vtt && grep -q WEBVTT transcript.vtt",
+          "curl -fsSN http://127.0.0.1:8040/v1/audio/transcriptions -F file=@speech.wav -F stream=true | grep -q transcript.text.done",
+          "python3 runtime/llama.cpp/tests/stream_client.py 127.0.0.1 8040 speech_16k.wav 200"
+        ]
+      },
+      "evidence": [
+        {
+          "label": "merged SenseVoice server contribution",
+          "url": "https://github.com/QwenAudio/SenseVoice/pull/341"
+        },
+        {
+          "label": "source and operating guide at the verified merge",
+          "url": "https://github.com/QwenAudio/SenseVoice/blob/b054623cca8f015b73ec471dce4f473ac47413da/runtime/llama.cpp/sensevoice-server/README.md"
+        },
+        {
+          "label": "pull-request build, unit, and contract workflow",
+          "url": "https://github.com/QwenAudio/SenseVoice/actions/runs/31633373807"
+        },
+        {
+          "label": "main-branch build, unit, and contract workflow",
+          "url": "https://github.com/QwenAudio/SenseVoice/actions/runs/31633730096"
+        },
+        {
+          "label": "server regression and contract tests",
+          "url": "https://github.com/QwenAudio/SenseVoice/tree/b054623cca8f015b73ec471dce4f473ac47413da/runtime/llama.cpp/tests"
+        }
+      ],
+      "benchmarks": [],
+      "translations": {
+        "zh": {
+          "name": "SenseVoice 原生 OpenAI 实时服务",
+          "summary": "用一个无 Python 运行时的 C++ 二进制提供 SenseVoice REST、SSE、SRT/VTT 与 OpenAI Realtime WebSocket 转写。",
+          "fit": ["本地或内网 OpenAI 兼容语音接口", "CPU 优先、可选 CUDA 的低依赖部署", "需要文件转写、流式 partial/final 与服务端 VAD"],
+          "not_fit": ["需要预编译跨平台发布包", "需要多租户认证、计费或持久任务队列", "没有在目标硬件完成容量测试就直接暴露公网"],
+          "selection_reason": "原生 GGUF 服务把 REST 文件转写和实时 WebSocket 放进同一个受资源上限保护的二进制，适合私有兼容接口和边缘流式场景。",
+          "primary_limitation": "当前官方验证覆盖 Linux 源码构建；服务不内置生产认证、TLS、多租户配额或持久队列，必须由网关和基础设施补齐。",
+          "status_label": "生产验证",
+          "operations": ["固定 merge commit、SenseVoice GGUF 与 FSMN-VAD GGUF", "显式设置连接上限、单请求音频上限和读取超时", "发布前分别压测 REST、SSE 和 WebSocket，并保留旧二进制回滚"],
+          "security": ["默认绑定 127.0.0.1 或可信内网", "在反向代理实施 TLS、认证、MIME、请求体大小、速率和并发限制", "只加载经过来源与摘要校验的 GGUF"],
+          "troubleshooting": ["先用 CPU、已知 16 kHz WAV 和 REST JSON 路径验证", "确认模型文件名为 sensevoice-small-q8.gguf 与 fsmn-vad.gguf", "WebSocket 客户端发送 16 kHz 单声道 PCM16 的 base64 chunk"]
+        },
+        "en": {
+          "name": "SenseVoice native OpenAI realtime server",
+          "summary": "Use one C++ binary with no Python runtime to serve SenseVoice over REST, SSE, SRT/VTT, and OpenAI realtime WebSocket transcription.",
+          "fit": ["A local or private OpenAI-compatible speech endpoint", "CPU-first deployment with optional CUDA and few runtime dependencies", "File transcription, streaming partial/final results, and server-side VAD"],
+          "not_fit": ["Prebuilt cross-platform release packages are required", "Built-in multi-tenant authentication, billing, or durable job queues are required", "Public exposure before capacity testing on the target hardware"],
+          "selection_reason": "The native GGUF server combines REST file transcription and realtime WebSocket in one resource-bounded binary for private compatible APIs and edge streaming.",
+          "primary_limitation": "Official verification currently covers Linux source builds; the server does not include production authentication, TLS, tenant quotas, or durable queues, so provide them at the gateway and infrastructure layers.",
+          "status_label": "Production verified",
+          "operations": ["Pin the merge commit plus the SenseVoice and FSMN-VAD GGUF files", "Set the connection limit, per-request audio limit, and read timeout explicitly", "Load-test REST, SSE, and WebSocket separately before rollout, and retain the previous binary for rollback"],
+          "security": ["Bind to 127.0.0.1 or a trusted private network by default", "Enforce TLS, authentication, MIME, request-body size, rate, and concurrency at the reverse proxy", "Load only GGUF files with verified provenance and digests"],
+          "troubleshooting": ["Validate CPU, a known 16 kHz WAV, and the REST JSON path first", "Confirm the model files are named sensevoice-small-q8.gguf and fsmn-vad.gguf", "Send base64 chunks of 16 kHz mono PCM16 from WebSocket clients"]
+        }
+      }
+    },
+    {
+      "id": "audio-cpp",
+      "routes": {"zh": "/deploy/audio-cpp.html", "en": "/en/deploy/audio-cpp.html"},
+      "maturity": "community-verified",
+      "selector_rank": 21,
+      "workloads": ["edge", "batch", "private-api"],
+      "hardware": ["cpu", "nvidia-gpu", "desktop-edge-gpu"],
+      "priorities": ["portability", "compatibility"],
+      "models": ["Fun-ASR-Nano-2512", "SenseVoice-Small"],
+      "operating_systems": ["Linux", "macOS", "Windows"],
+      "interfaces": ["CLI", "OpenAI-compatible HTTP", "Buffered streaming CLI/SSE"],
+      "tested": {"funasr": "Fun-ASR-Nano-2512 + SenseVoice-Small", "runtime": "audio.cpp main@979e070f", "verified": "2026-08-13"},
+      "commands": {
+        "install": [
+          "git clone https://github.com/0xShug0/audio.cpp.git && cd audio.cpp",
+          "git checkout 979e070fc130bd499ad3fabeefc42b3884fff23a",
+          "bash scripts/build_linux.sh --backend cpu --model-set custom --models fun_asr_nano,sense_asr --target audiocpp_cli --target audiocpp_server",
+          "python3 tools/model_manager_v2.py install fun_asr_nano",
+          "python3 tools/model_manager_v2.py install sensevoice_small_q8"
+        ],
+        "launch": [
+          "build/linux-cpu-release/bin/audiocpp_cli --task asr --family fun_asr_nano --model models/Fun-ASR-Nano-2512-GGUF/fun-asr-nano-2512-q8_0.gguf --backend cpu --audio speech.wav --text-out transcript.txt",
+          "build/linux-cpu-release/bin/audiocpp_cli --task asr --family sense_asr --model models/SenseVoice-Small-GGUF/sensevoice-small-q8-audiocpp-v1.gguf --backend cpu --audio speech.wav --text-out sensevoice.txt",
+          "build/linux-cpu-release/bin/audiocpp_cli --task asr --family sense_asr --model models/SenseVoice-Small-GGUF/sensevoice-small-q8-audiocpp-v1.gguf --backend cpu --mode streaming --audio - --request-option audio_chunk_duration_sec=5 --request-option audio_chunk_mode=none < 16k_s16.pcm",
+          "printf '%s\\n' '{\"host\":\"127.0.0.1\",\"port\":8080,\"backend\":\"cpu\",\"threads\":4,\"lazy_load\":true,\"models\":[{\"id\":\"fun-asr-nano\",\"family\":\"fun_asr_nano\",\"path\":\"models/Fun-ASR-Nano-2512-GGUF/fun-asr-nano-2512-q8_0.gguf\",\"task\":\"asr\",\"mode\":\"offline\"},{\"id\":\"sense-asr\",\"family\":\"sense_asr\",\"path\":\"models/SenseVoice-Small-GGUF/sensevoice-small-q8-audiocpp-v1.gguf\",\"task\":\"asr\",\"mode\":\"streaming\"}]}' > server.json",
+          "build/linux-cpu-release/bin/audiocpp_server --config server.json"
+        ],
+        "health": [
+          "curl -fsS http://127.0.0.1:8080/health",
+          "curl -fsS http://127.0.0.1:8080/v1/models"
+        ],
+        "smoke": [
+          "curl -fsS http://127.0.0.1:8080/v1/audio/transcriptions -F model=fun-asr-nano -F language=auto -F file=@speech.wav",
+          "curl -fsS http://127.0.0.1:8080/v1/audio/transcriptions -F model=sense-asr -F language=auto -F file=@speech.wav"
+        ]
+      },
+      "evidence": [
+        {"label": "audio.cpp Fun-ASR-Nano guide", "url": "https://github.com/0xShug0/audio.cpp/blob/1778b23a5f6a4951c788e4bb0e7baa04f20012a2/docs/models/fun_asr_nano.md"},
+        {"label": "merged implementation", "url": "https://github.com/0xShug0/audio.cpp/pull/155"},
+        {"label": "pinned Fun-ASR-Nano GGUF package", "url": "https://huggingface.co/FunAudioLLM/Fun-ASR-Nano-2512-GGUF/tree/ce72677f84900f0dc57f498ace253bfb3c9155b6"},
+        {"label": "merged SenseVoice implementation (6/6 CI)", "url": "https://github.com/0xShug0/audio.cpp/pull/219"},
+        {"label": "SenseVoice promotion to main", "url": "https://github.com/0xShug0/audio.cpp/pull/221"},
+        {"label": "pinned mainline integration commit", "url": "https://github.com/0xShug0/audio.cpp/commit/979e070fc130bd499ad3fabeefc42b3884fff23a"},
+        {"label": "pinned SenseVoice GGUF package (SHA-256 4dedf169f625437fb336f2959674f399819729a765e184128c0e25a6e16ff0ec)", "url": "https://huggingface.co/FunAudioLLM/SenseVoiceSmall-GGUF-audiocpp/tree/5c3fcfe748a8714216bc135476d5863084fddb72"}
+      ],
+      "benchmarks": [
+        {
+          "model": "Fun-ASR-Nano-2512 Q8_0 GGUF",
+          "runtime": "audio.cpp native Fun-ASR-Nano runtime",
+          "hardware": "NVIDIA H100 CUDA; exact driver and toolchain versions are not recorded in the cited guide",
+          "workload": "Single offline transcription through the OpenAI-compatible server",
+          "audio": "One 14.07-second reference WAV",
+          "settings": "Standalone Q8_0 GGUF; CUDA backend; concurrency one; other runtime settings are not recorded",
+          "timing_scope": "End-to-end server validation; the cited guide does not state warmup, file I/O, or process-start boundaries",
+          "result": "Approximately 0.0725 RTF; transcript matched the official safetensors path",
+          "qualification": "Single-sample parity smoke, not a capacity benchmark. Reproduce on target hardware with production audio and concurrency.",
+          "source": "https://github.com/0xShug0/audio.cpp/blob/1778b23a5f6a4951c788e4bb0e7baa04f20012a2/docs/models/fun_asr_nano.md",
+          "verified": "2026-07-29"
+        },
+        {
+          "model": "SenseVoice-Small Q8_0 GGUF",
+          "runtime": "audio.cpp native sense_asr main@979e070f",
+          "hardware": "CPU; validation host details are not a cross-hardware benchmark contract",
+          "workload": "Offline Chinese transcription plus buffered streaming partials",
+          "audio": "Known 16 kHz reference WAV and PCM stream",
+          "settings": "Standalone schema-v1 Q8_0 GGUF; CPU backend; two-second streaming windows during validation",
+          "timing_scope": "Functional parity and loader validation; no capacity claim",
+          "result": "919 tensors loaded without sidecar overrides; transcript 开饭时间早上9点至下午5点。; GGUF SHA-256 4dedf169f625437fb336f2959674f399819729a765e184128c0e25a6e16ff0ec",
+          "qualification": "Merged into audio.cpp main with all six contribution CI jobs passing, but not yet included in a tagged release; pin the exact main commit.",
+          "source": "https://github.com/0xShug0/audio.cpp/commit/979e070fc130bd499ad3fabeefc42b3884fff23a",
+          "verified": "2026-08-13"
+        }
+      ],
+      "translations": {
+        "zh": {
+          "name": "audio.cpp 原生 Fun-ASR-Nano 与 SenseVoice",
+          "summary": "用原生 C++ / GGML 在 CPU 或 GPU 上运行 Fun-ASR-Nano 与 SenseVoice Q8，并提供离线 CLI、兼容 OpenAI 的本地接口和 SenseVoice 缓冲流式结果。",
+          "fit": ["不希望安装 Python 推理环境", "桌面、边缘、离线批量与低依赖私有部署", "需要兼容 OpenAI 的本地音频接口或 SenseVoice 多语言流式 partial"],
+          "not_fit": ["需要词级时间戳或严格低延迟在线流式", "只允许使用正式 tagged release 的生产环境", "尚未在目标硬件完成容量与准确率复测的公网服务"],
+          "selection_reason": "Fun-ASR-Nano 与 SenseVoice 已进入 audio.cpp 主线，共用原生 GGML、Q8 模型及 CLI/HTTP 接口，适合低依赖部署。",
+          "primary_limitation": "SenseVoice 已合并到 audio.cpp main@979e070f，但尚未进入 tagged release；正式包发布前应固定该主线提交，且当前两条路径都不提供词级 timestamps。",
+          "status_label": "社区验证",
+          "operations": ["固定 audio.cpp 主线提交与两份 GGUF revision", "先用已知 WAV 核对两种模型的 transcript 再接业务流量", "分别记录冷启动、预热 RTF、内存、流式窗口与并发队列"],
+          "security": ["服务默认绑定 127.0.0.1 或可信内网", "在反向代理限制上传大小、MIME、认证与并发", "只加载经过 SHA-256 校验的 GGUF 和配置"],
+          "troubleshooting": ["先用 CPU + Q8_0 路径排除 GPU 环境问题", "构建 backend 必须与运行参数一致", "SenseVoice 输入异常时先核对 schema-v1 GGUF revision、WAV 或 16 kHz 单声道 PCM"]
+        },
+        "en": {
+          "name": "audio.cpp native Fun-ASR-Nano and SenseVoice",
+          "summary": "Run Fun-ASR-Nano and SenseVoice Q8 with native C++ and GGML on CPU or GPU, using offline CLI, a local OpenAI-compatible API, and buffered SenseVoice streaming results.",
+          "fit": ["No Python inference environment", "Desktop, edge, offline batch, and low-dependency private deployment", "A local OpenAI-compatible endpoint or multilingual SenseVoice streaming partials are required"],
+          "not_fit": ["Word-level timestamps or strict low-latency online streaming", "Production environments restricted to tagged releases", "Internet-facing service before capacity and accuracy tests on target hardware"],
+          "selection_reason": "Fun-ASR-Nano and SenseVoice are both on the audio.cpp main branch and share native GGML, Q8 weights, and CLI/HTTP surfaces for low-dependency deployment.",
+          "primary_limitation": "SenseVoice is merged into audio.cpp main@979e070f but is not yet in a tagged release. Pin that main commit until a release is published. Neither path currently provides word-level timestamps.",
+          "status_label": "Community verified",
+          "operations": ["Pin the audio.cpp main commit and both GGUF revisions", "Verify known WAV transcripts with both models before business traffic", "Measure cold start, warm RTF, memory, streaming windows, and concurrent queueing separately"],
+          "security": ["Bind the service to 127.0.0.1 or a trusted private network", "Enforce upload size, MIME, authentication, and concurrency at the proxy", "Load only GGUF and configuration files verified with SHA-256"],
+          "troubleshooting": ["Start with CPU and Q8_0 to isolate GPU setup", "Match the compiled backend to the runtime argument", "For SenseVoice input failures, verify the schema-v1 GGUF revision plus WAV or 16 kHz mono PCM"]
+        }
+      }
+    },
+    {
+      "id": "openai-api",
+      "routes": {"zh": "/deploy/openai-api.html", "en": "/en/deploy/openai-api.html"},
+      "maturity": "production-verified",
+      "selector_rank": 30,
+      "workloads": ["private-api", "batch"],
+      "hardware": ["cpu", "nvidia-gpu", "kubernetes"],
+      "priorities": ["compatibility", "portability"],
+      "models": ["sensevoice", "paraformer", "paraformer-en", "fun-asr-nano"],
+      "operating_systems": ["Linux", "macOS", "Windows"],
+      "interfaces": ["OpenAI-compatible HTTP", "OpenAPI", "Python SDK", "JavaScript"],
+      "tested": {"funasr": "1.3.29", "runtime": "FastAPI and Uvicorn example", "verified": "2026-07-26"},
+      "commands": {
+        "install": ["pip install funasr fastapi uvicorn python-multipart"],
+        "launch": ["cd examples/openai_api && python server.py --model sensevoice --device cpu --port 8000"],
+        "health": ["curl -fsS http://localhost:8000/health", "curl -fsS http://localhost:8000/v1/models"],
+        "smoke": ["cd examples/openai_api && python smoke_test.py --base-url http://localhost:8000"]
+      },
+      "evidence": [
+        {"label": "OpenAI API server", "url": "https://github.com/modelscope/FunASR/blob/main/examples/openai_api/README.md"},
+        {"label": "OpenAPI contract", "url": "https://github.com/modelscope/FunASR/blob/main/examples/openai_api/OPENAPI.md"},
+        {"label": "security guide", "url": "https://github.com/modelscope/FunASR/blob/main/examples/openai_api/SECURITY.md"}
+      ],
+      "benchmarks": [],
+      "translations": {
+        "zh": {
+          "name": "OpenAI 兼容私有 API",
+          "summary": "把 FunASR 模型作为 `/v1/audio/transcriptions` 私有服务接入现有 SDK、代理和工作流。",
+          "fit": ["替换云端转写 API", "复用 OpenAI SDK 或 HTTP 客户端", "需要健康检查和模型枚举"],
+          "not_fit": ["需要浏览器直接匿名访问生产服务", "没有网关但准备暴露公网", "严格实时逐块字幕"],
+          "selection_reason": "稳定的 OpenAI 音频接口能以最少客户端改动接入现有应用。",
+          "primary_limitation": "示例服务不内置生产认证、租户配额和全套可观测性，这些必须由网关和基础设施补齐。",
+          "status_label": "生产验证",
+          "operations": ["用 `/health` 做就绪探针", "用 `/v1/models` 验证加载模型", "模型缓存使用持久卷并在发布前预热"],
+          "security": ["认证、配额、审计和 TLS 在网关实现", "限制 MIME、文件大小和请求时长", "服务仅接受可信反向代理流量"],
+          "troubleshooting": ["先运行仓库 smoke_test.py", "核对客户端 base_url 必须包含 `/v1`", "将模型加载错误与请求格式错误分开排查"]
+        },
+        "en": {
+          "name": "OpenAI-compatible private API",
+          "summary": "Serve FunASR models through `/v1/audio/transcriptions` for existing SDKs, agents, and workflows.",
+          "fit": ["Replacing a cloud transcription API", "Reusing OpenAI SDK or HTTP clients", "Health checks and model discovery are required"],
+          "not_fit": ["Anonymous browser access to a production worker", "Public exposure without a gateway", "Strict chunk-by-chunk live captions"],
+          "selection_reason": "A stable OpenAI audio contract integrates with existing applications with minimal client changes.",
+          "primary_limitation": "The example server does not include production authentication, tenant quotas, or full observability; provide them at the gateway and infrastructure layers.",
+          "status_label": "Production verified",
+          "operations": ["Use `/health` for readiness", "Use `/v1/models` to verify loaded models", "Persist and warm the model cache before rollout"],
+          "security": ["Implement authentication, quotas, audit, and TLS at the gateway", "Limit MIME types, file sizes, and request duration", "Accept traffic only from trusted reverse proxies"],
+          "troubleshooting": ["Run the repository smoke_test.py first", "Ensure the client base_url includes `/v1`", "Separate model-loading failures from request-format failures"]
+        }
+      }
+    },
+    {
+      "id": "realtime",
+      "routes": {"zh": "/deploy/realtime.html", "en": "/en/deploy/realtime.html"},
+      "maturity": "community-verified",
+      "selector_rank": 40,
+      "workloads": ["realtime"],
+      "hardware": ["cpu", "nvidia-gpu", "kubernetes"],
+      "priorities": ["latency", "compatibility"],
+      "models": ["Paraformer-online", "FSMN-VAD", "CT-Transformer punctuation", "Fun-ASR-Nano realtime"],
+      "operating_systems": ["Linux"],
+      "interfaces": ["WebSocket", "Python client", "C++ client", "Go client"],
+      "tested": {"funasr": "1.4.2", "runtime": "FunASR v1.4.2 Python WebSocket runtime", "verified": "2026-08-17"},
+      "commands": {
+        "install": ["python -m pip install -U \"funasr==1.4.2\"", "git clone --branch v1.4.2 --depth 1 https://github.com/modelscope/FunASR.git && python -m pip install -r FunASR/runtime/python/websocket/requirements_server.txt"],
+        "launch": ["cd FunASR/runtime/python/websocket && python funasr_wss_server.py --port 10095"],
+        "health": ["ss -ltn | grep 10095"],
+        "smoke": ["cd FunASR/runtime/python/websocket && python funasr_wss_client.py --host 127.0.0.1 --port 10095 --mode 2pass --chunk_size \"8,8,4\" --audio_in ../../funasr_api/asr_example.wav"]
+      },
+      "source_url": "/go/github",
+      "evidence": [
+        {"label": "Python WebSocket runtime", "url": "https://github.com/modelscope/FunASR/blob/main/runtime/python/websocket/README.md"},
+        {"label": "WebSocket protocol", "url": "https://github.com/modelscope/FunASR/blob/main/runtime/docs/websocket_protocol.md"},
+        {"label": "realtime benchmark method", "url": "https://github.com/modelscope/FunASR/blob/main/docs/benchmark/realtime_ws_benchmark.md"}
+      ],
+      "benchmarks": [],
+      "translations": {
+        "zh": {
+          "name": "实时流式与字幕",
+          "summary": "通过 WebSocket 在线或 2-pass 协议处理麦克风、会议字幕和实时语音流。",
+          "fit": ["实时字幕", "客户端持续推送 PCM 音频", "需要在线初稿与离线修订"],
+          "not_fit": ["只转写完整文件", "客户端不能处理断线重连和背压", "未定义端点与最终结果语义"],
+          "selection_reason": "WebSocket 和 2-pass 协议为持续音频流提供低延迟初稿与最终结果。",
+          "primary_limitation": "真实容量由音频实时比、分块、VAD、连接数和客户端背压共同决定，文件 RTFx 不能替代并发测试。",
+          "status_label": "社区验证",
+          "operations": ["监控活动连接、积压音频秒数和最终结果延迟", "验证优雅断开与重连", "固定 chunk_size、VAD 和标点配置"],
+          "security": ["在反向代理限制来源、连接数和消息大小", "使用 TLS WebSocket", "不在 URL 查询参数传递长期凭证"],
+          "troubleshooting": ["先用仓库客户端和固定 WAV 验证", "确认 PCM16、16 kHz、单声道", "分别记录首稿和最终结果时刻"]
+        },
+        "en": {
+          "name": "Realtime streaming and captions",
+          "summary": "Use online or two-pass WebSocket protocols for microphones, meeting captions, and continuous speech streams.",
+          "fit": ["Live captions", "Clients continuously send PCM audio", "Online drafts plus offline correction"],
+          "not_fit": ["Complete-file transcription only", "Clients cannot handle reconnects and backpressure", "Endpoint and final-result semantics are undefined"],
+          "selection_reason": "WebSocket and two-pass protocols provide low-latency drafts and final results for continuous audio.",
+          "primary_limitation": "Capacity depends on realtime ratio, chunks, VAD, connection count, and client backpressure; file RTFx does not replace concurrency tests.",
+          "status_label": "Community verified",
+          "operations": ["Monitor active connections, queued audio seconds, and final latency", "Validate graceful disconnect and reconnect", "Pin chunk_size, VAD, and punctuation configuration"],
+          "security": ["Limit origins, connections, and message size at the proxy", "Use TLS WebSocket", "Do not put long-lived credentials in URL query strings"],
+          "troubleshooting": ["Start with the repository client and a fixed WAV", "Confirm PCM16, 16 kHz, mono audio", "Record draft and final-result timestamps separately"]
+        }
+      }
+    },
+    {
+      "id": "containers",
+      "routes": {"zh": "/deploy/containers.html", "en": "/en/deploy/containers.html"},
+      "maturity": "community-verified",
+      "selector_rank": 25,
+      "workloads": ["private-api", "batch", "realtime"],
+      "hardware": ["kubernetes", "cpu", "nvidia-gpu"],
+      "priorities": ["portability", "compatibility"],
+      "models": ["sensevoice", "paraformer", "fun-asr-nano"],
+      "operating_systems": ["Linux containers", "Kubernetes"],
+      "interfaces": ["Docker Compose", "Kubernetes ClusterIP", "OpenAI-compatible HTTP"],
+      "tested": {"funasr": "1.3.29", "runtime": "Docker Compose and Kubernetes templates", "verified": "2026-07-26"},
+      "commands": {
+        "install": ["cd examples/openai_api && cp .env.example .env"],
+        "launch": ["docker compose up --build"],
+        "health": ["curl -fsS http://localhost:8000/health"],
+        "smoke": ["python examples/openai_api/smoke_test.py --base-url http://localhost:8000"]
+      },
+      "evidence": [
+        {"label": "deployment matrix", "url": "https://github.com/modelscope/FunASR/blob/main/docs/deployment_matrix.md"},
+        {"label": "Kubernetes template", "url": "https://github.com/modelscope/FunASR/tree/main/examples/openai_api/kubernetes"},
+        {"label": "Docker installation", "url": "https://github.com/modelscope/FunASR/blob/main/docs/installation/docker.md"}
+      ],
+      "benchmarks": [],
+      "translations": {
+        "zh": {
+          "name": "容器与 Kubernetes",
+          "summary": "用 Docker Compose 验证，再用带持久模型缓存、探针和 ClusterIP 的 Kubernetes 模板部署。",
+          "fit": ["需要可重复环境", "已有容器平台", "需要滚动发布和持久模型缓存"],
+          "not_fit": ["尚未验证本地模型和接口", "GPU 镜像与集群调度未准备", "把示例 Compose 直接当作公网生产架构"],
+          "selection_reason": "容器模板适合把已验证的 FunASR API 纳入现有发布和编排体系。",
+          "primary_limitation": "CPU 示例不是 CUDA 生产镜像；GPU 驱动、镜像、调度和容量仍需平台团队验证。",
+          "status_label": "社区验证",
+          "operations": ["模型缓存使用持久卷", "就绪探针检查 `/health`", "部署前完成镜像和模型预热"],
+          "security": ["默认使用私有 ClusterIP", "Secret 不写入镜像和仓库", "入口网关承担 TLS、认证和限流"],
+          "troubleshooting": ["先让 CPU Compose smoke test 通过", "区分镜像拉取、模型下载和推理错误", "GPU Pod 核对设备插件、驱动和运行时"]
+        },
+        "en": {
+          "name": "Containers and Kubernetes",
+          "summary": "Validate with Docker Compose, then deploy with the Kubernetes template, persistent model cache, probes, and private ClusterIP.",
+          "fit": ["Reproducible environments", "An existing container platform", "Rolling releases and persistent model cache"],
+          "not_fit": ["The local model and API are not yet validated", "GPU images and cluster scheduling are not ready", "Using the example Compose file as a public production architecture"],
+          "selection_reason": "Container templates bring an already validated FunASR API into an existing release and orchestration system.",
+          "primary_limitation": "The CPU example is not a CUDA production image; GPU drivers, image, scheduling, and capacity still require platform validation.",
+          "status_label": "Community verified",
+          "operations": ["Persist the model cache", "Use `/health` for readiness", "Warm images and models before rollout"],
+          "security": ["Use a private ClusterIP by default", "Keep secrets out of images and source control", "Put TLS, authentication, and rate limits at ingress"],
+          "troubleshooting": ["Pass the CPU Compose smoke test first", "Separate image pull, model download, and inference failures", "Check device plugin, driver, and runtime for GPU pods"]
+        }
+      }
+    },
+    {
+      "id": "cpu-runtime",
+      "routes": {"zh": "/deploy/cpu-runtime.html", "en": "/en/deploy/cpu-runtime.html"},
+      "maturity": "community-verified",
+      "selector_rank": 60,
+      "workloads": ["batch", "realtime", "edge"],
+      "hardware": ["cpu"],
+      "priorities": ["latency", "portability", "compatibility"],
+      "models": ["Paraformer", "Paraformer-online", "SenseVoiceSmall", "FSMN-VAD", "CT-Transformer punctuation"],
+      "operating_systems": ["Linux", "macOS", "Windows"],
+      "interfaces": ["C++", "ONNX Runtime", "Python ONNX", "HTTP", "WebSocket"],
+      "tested": {"funasr": "1.3.29", "runtime": "ONNX Runtime C++ and Python", "verified": "2026-07-26"},
+      "commands": {
+        "install": ["cd runtime/onnxruntime && cmake -B build -DCMAKE_BUILD_TYPE=Release", "cmake --build build -j"],
+        "launch": ["python runtime/python/onnxruntime/demo_sencevoice_small.py"],
+        "health": ["test -x runtime/onnxruntime/build/bin/funasr-onnx-offline"],
+        "smoke": ["python runtime/python/onnxruntime/demo_paraformer_offline.py"]
+      },
+      "evidence": [
+        {"label": "ONNX C++ runtime", "url": "https://github.com/modelscope/FunASR/blob/main/runtime/onnxruntime/readme.md"},
+        {"label": "Python ONNX runtime", "url": "https://github.com/modelscope/FunASR/blob/main/runtime/python/onnxruntime/README.md"},
+        {"label": "CPU benchmark guide", "url": "https://github.com/modelscope/FunASR/blob/main/runtime/docs/benchmark_onnx_cpp.md"}
+      ],
+      "benchmarks": [],
+      "translations": {
+        "zh": {
+          "name": "ONNX / C++ CPU 运行时",
+          "summary": "在通用 CPU 上用 ONNX Runtime 和 C++ 路径部署离线、在线与 2-pass ASR。",
+          "fit": ["CPU 高并发服务", "嵌入式或本地应用", "现有 Paraformer 在线链路已经满足质量"],
+          "not_fit": ["需要 LLM 解码和开放式指令", "未经测试就迁移成熟 CPU 流量到 GPU", "依赖特定 Python 业务插件"],
+          "selection_reason": "ONNX/C++ 路径适合低依赖、可控延迟和已证明的 CPU 并发。",
+          "primary_limitation": "模型转换、算子支持和线程参数受平台影响；必须使用目标 CPU 与真实音频测容量。",
+          "status_label": "社区验证",
+          "operations": ["固定 ONNX Runtime 与模型版本", "分别设置模型、解码和 I/O 线程", "监控实时比、CPU 饱和度与队列"],
+          "security": ["限制本地文件和网络输入边界", "服务模式限制请求大小和并发", "模型目录只读并校验来源"],
+          "troubleshooting": ["先运行单文件离线示例", "线程增加不等于吞吐线性增加", "热词不足先评估确定性文本后处理"]
+        },
+        "en": {
+          "name": "ONNX / C++ CPU runtime",
+          "summary": "Deploy offline, online, and two-pass ASR on general CPUs with ONNX Runtime and C++ paths.",
+          "fit": ["High-concurrency CPU services", "Embedded or local applications", "An existing Paraformer online path already meets quality goals"],
+          "not_fit": ["LLM decoding and open-ended instructions", "Moving proven CPU traffic to GPU without tests", "Workflows that depend on Python-only business plugins"],
+          "selection_reason": "ONNX/C++ fits low-dependency, controlled-latency, proven CPU concurrency.",
+          "primary_limitation": "Model conversion, operator support, and thread settings vary by platform; measure capacity on the target CPU with real audio.",
+          "status_label": "Community verified",
+          "operations": ["Pin ONNX Runtime and model versions", "Tune model, decoder, and I/O threads separately", "Monitor realtime ratio, CPU saturation, and queue depth"],
+          "security": ["Bound local file and network inputs", "Limit request size and concurrency in service mode", "Keep model directories read-only and verify their source"],
+          "troubleshooting": ["Start with a single-file offline example", "More threads do not guarantee linear throughput", "Evaluate deterministic text post-processing before changing models for fixed terms"]
+        }
+      }
+    },
+    {
+      "id": "production",
+      "routes": {"zh": "/deploy/production.html", "en": "/en/deploy/production.html"},
+      "maturity": "production-verified",
+      "selector_rank": 70,
+      "workloads": ["private-api", "batch", "realtime", "edge"],
+      "hardware": ["cpu", "nvidia-gpu", "desktop-edge-gpu", "kubernetes"],
+      "priorities": ["compatibility", "latency", "throughput", "portability"],
+      "models": ["All supported deployment models"],
+      "operating_systems": ["Linux", "macOS", "Windows", "Kubernetes"],
+      "interfaces": ["HTTP", "WebSocket", "CLI", "C++"],
+      "tested": {"funasr": "1.3.29", "runtime": "cross-runtime production checklist", "verified": "2026-07-26"},
+      "commands": {
+        "install": ["git clone https://github.com/modelscope/FunASR.git"],
+        "launch": ["Run the selected runtime with pinned versions and an immutable model cache"],
+        "health": ["Verify readiness, model identity, and one known-audio transcript"],
+        "smoke": ["Record version, model digest, hardware, warmup, audio duration, concurrency, latency, and output before promotion"]
+      },
+      "evidence": [
+        {"label": "deployment matrix", "url": "https://github.com/modelscope/FunASR/blob/main/docs/deployment_matrix.md"},
+        {"label": "reproducible benchmark method", "url": "https://github.com/modelscope/FunASR/blob/main/docs/benchmark/rtf_reproducibility.md"},
+        {"label": "API security guide", "url": "https://github.com/modelscope/FunASR/blob/main/examples/openai_api/SECURITY.md"}
+      ],
+      "benchmarks": [],
+      "translations": {
+        "zh": {
+          "name": "生产上线检查",
+          "summary": "把模型能运行推进到可观测、可扩缩、可回滚且边界清晰的生产服务。",
+          "fit": ["准备上线或扩容", "需要容量、就绪和安全边界", "需要可审计的发布与回滚"],
+          "not_fit": ["用单次演示结果代替容量测试", "省略网关和访问控制", "没有版本、模型和硬件记录的性能比较"],
+          "selection_reason": "无论选择哪种运行时，生产检查都是发布前的共同必经路径。",
+          "primary_limitation": "清单不能替代目标业务的负载、准确率、故障和安全演练。",
+          "status_label": "生产验证",
+          "operations": ["区分存活、就绪和业务 smoke test", "容量测试包含预热、队列和音频分布", "发布保留模型、配置和上一版本回滚点"],
+          "security": ["网络入口默认拒绝并最小授权", "上传、日志、缓存和临时文件有保留策略", "凭证、音频和预签名 URL 不写入普通日志"],
+          "troubleshooting": ["先确认模型和运行时精确版本", "使用已知音频区分基础设施与质量回归", "故障时先回滚再做在线试错"]
+        },
+        "en": {
+          "name": "Production rollout checklist",
+          "summary": "Move from a runnable model to an observable, scalable, reversible production service with explicit boundaries.",
+          "fit": ["Preparing a launch or scale-up", "Capacity, readiness, and security boundaries are required", "Auditable release and rollback are required"],
+          "not_fit": ["Using one demo result as a capacity test", "Omitting gateway and access control", "Comparing performance without version, model, and hardware records"],
+          "selection_reason": "Production readiness is a required path before release regardless of the selected runtime.",
+          "primary_limitation": "A checklist does not replace workload, accuracy, failure, and security exercises for the target product.",
+          "status_label": "Production verified",
+          "operations": ["Separate liveness, readiness, and business smoke tests", "Include warmup, queueing, and audio distribution in capacity tests", "Keep model, configuration, and previous-version rollback points"],
+          "security": ["Default-deny network access and grant minimum privileges", "Define retention for uploads, logs, caches, and temporary files", "Keep credentials, audio, and presigned URLs out of normal logs"],
+          "troubleshooting": ["Confirm exact model and runtime versions first", "Use known audio to separate infrastructure and quality regressions", "Roll back before experimenting during an incident"]
+        }
+      }
+    }
+  ]
+}

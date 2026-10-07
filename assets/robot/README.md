@@ -16,9 +16,11 @@ The payload was copied from the previously accepted Startouch web-control source
 `/home/nieqingcao/arm/UIEAclub_ThirdHand_VLA/web-control/web/models/startouch-v3`.
 The source path is provenance only and is never used at runtime.
 
-The payload is intentionally excluded from Git. Its expected directory hash and
-size are recorded as `robot.startouch-v3.geometry` in
-`configs/assets/ubuntu20.manifest.json`. Prepare another machine with:
+The URDF is tracked in Git and the STL geometry is tracked with Git LFS.
+Per-file sizes and hashes are recorded in `configs/assets/runtime-assets.json`.
+Install Git LFS and run `git lfs pull` after cloning; no old checkout is needed.
+The historical hash remains in `configs/assets/ubuntu20.manifest.json`.
+To import different geometry explicitly:
 
 ```bash
 PYTHONPATH=. python3 tools/assets/prepare_robot_assets.py \

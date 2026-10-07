@@ -1,16 +1,11 @@
 from __future__ import annotations
 
-import argparse
-import fcntl
 import math
-import os
-import tempfile
 import threading
 import time
 from dataclasses import dataclass
 from pathlib import Path
 
-from arm import create_startouch_arm
 from logger import CsvPoseLogger
 from safety import (
     SafetyError,
@@ -22,19 +17,14 @@ from safety import (
     assert_workspace_position,
     euler_to_quaternion_wxyz,
     finite_vector,
-    require_can_interface,
 )
 from trajectory import RCMConeOrbitTrajectory
 
 
 @dataclass(frozen=True)
 class DemoConfig:
-    can_interface: str = "can0"
-    sdk_path: str = "/home/nieqingcao/arm/startouch_sdk"
-    module_path: str | None = None
     dry_run: bool = True
     execute: bool = False
-    gripper: bool = False
     control_hz: float = 50.0
     command_time_sec: float = 0.08
     print_interval_sec: float = 0.5
@@ -86,27 +76,6 @@ class TimedTrajectory:
     trajectory: RCMConeOrbitTrajectory
 
 
-def acquire_startouch_control_lock(config: DemoConfig):
-    if not config.execute or config.dry_run:
-        return None
-    lock_name = f"thirdhand-robot-{config.can_interface.replace('/', '_')}.lock"
-    lock_path = os.path.join(tempfile.gettempdir(), lock_name)
-    lock_file = open(lock_path, "a+", encoding="ascii")
-    try:
-        fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
-    except BlockingIOError as exc:
-        lock_file.close()
-        raise SafetyError(
-            f"{config.can_interface} is already controlled by the port-3000 "
-            "Startouch bridge. Stop the robot service first, then rerun this demo."
-        ) from exc
-    lock_file.seek(0)
-    lock_file.truncate()
-    lock_file.write(f"{os.getpid()}\n")
-    lock_file.flush()
-    return lock_file
-
-
 class FixedTcpDemo:
     def __init__(self, arm, *, config: DemoConfig, log_dir: Path):
         self.arm = arm
@@ -120,7 +89,6 @@ class FixedTcpDemo:
         self.last_target_joints: list[float] | None = None
         self.last_print = 0.0
         self.last_loop = time.monotonic()
-        self.control_lock_file = None
 
     def initialize(self) -> None:
         if self.config.max_cone_deg > self.config.allow_max_cone_deg:
@@ -500,10 +468,6 @@ class FixedTcpDemo:
             cleanup = getattr(self.arm, "cleanup", None)
             if callable(cleanup):
                 cleanup()
-            if self.control_lock_file is not None:
-                fcntl.flock(self.control_lock_file.fileno(), fcntl.LOCK_UN)
-                self.control_lock_file.close()
-                self.control_lock_file = None
 
     def _actual_pose(self) -> tuple[list[float], list[float]]:
         pos, rpy = self.arm.get_ee_pose_euler()
@@ -534,131 +498,3 @@ class FixedTcpDemo:
     @staticmethod
     def _fmt_deg(values: list[float]) -> str:
         return "[" + ", ".join(f"{math.degrees(value):.2f}" for value in values) + "]"
-
-
-def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Touch R1 fixed TCP orientation demo")
-    parser.add_argument("--execute", action="store_true", help="send real motion commands")
-    parser.add_argument("--dry-run", action="store_true", default=True, help="do not send real motion commands")
-    parser.add_argument("--no-dry-run", dest="dry_run", action="store_false", help="allow SDK hardware mode")
-    parser.add_argument("--can-interface", default=os.environ.get("STARTOUCH_CAN_INTERFACE", "can0"))
-    parser.add_argument("--sdk-path", default=os.environ.get("STARTOUCH_SDK_PATH", "/home/nieqingcao/arm/startouch_sdk"))
-    parser.add_argument("--module-path", default=os.environ.get("STARTOUCH_MODULE_PATH") or None)
-    parser.add_argument("--with-gripper", dest="gripper", action="store_true", help="also initialize the gripper motor")
-    parser.add_argument("--control-hz", type=float, default=50.0)
-    parser.add_argument("--command-time-sec", type=float, default=0.08)
-    parser.add_argument("--duration-sec", type=float, default=60.0)
-    parser.add_argument(
-        "--max-cone-deg",
-        "--max-rpy-deg",
-        dest="max_cone_deg",
-        type=float,
-        default=50.0,
-        help=(
-            "requested RCM cone angle in degrees; the full trajectory is "
-            "prechecked and automatically reduced to the largest safe angle"
-        ),
-    )
-    parser.add_argument("--max-position-error-mm", type=float, default=25.0)
-    parser.add_argument("--period-sec", type=float, default=6.0)
-    parser.add_argument("--ramp-sec", type=float, default=3.0)
-    parser.add_argument("--transition-sec", type=float, default=1.5)
-    parser.add_argument("--cone-pulse-fraction", type=float, default=0.0)
-    parser.add_argument("--phase-wobble-rad", type=float, default=0.0)
-    parser.add_argument("--path-style", choices=("orbit", "lissajous"), default="lissajous")
-    parser.add_argument("--max-joint-step-deg", type=float, default=3.0)
-    parser.add_argument("--max-joint-accel-step-deg", type=float, default=2.0)
-    parser.add_argument("--execute-speed-percent", type=float, default=0.08)
-    parser.add_argument("--zero-time-sec", type=float, default=3.0)
-    parser.add_argument("--center-move-time-sec", type=float, default=6.0)
-    parser.add_argument("--return-home-time-sec", type=float, default=4.0)
-    parser.add_argument("--startup-state-timeout-sec", type=float, default=5.0)
-    parser.add_argument("--startup-state-poll-sec", type=float, default=0.1)
-    parser.add_argument("--no-zero-start", dest="start_from_zero", action="store_false")
-    parser.add_argument(
-        "--fixed-xyz",
-        nargs=3,
-        type=float,
-        metavar=("X", "Y", "Z"),
-        default=[0.48, 0.0, 0.36],
-        help="fixed TCP point in meters; default: 0.48 0.0 0.36",
-    )
-    parser.add_argument(
-        "--use-current-tcp",
-        action="store_true",
-        help="lock the current measured TCP XYZ instead of the configured fixed point",
-    )
-    parser.add_argument("--log-dir", default="logs")
-    return parser.parse_args(argv)
-
-
-def main(argv: list[str] | None = None) -> int:
-    args = parse_args(argv)
-    config = DemoConfig(
-        can_interface=args.can_interface,
-        sdk_path=args.sdk_path,
-        module_path=args.module_path,
-        dry_run=args.dry_run,
-        execute=args.execute,
-        gripper=args.gripper,
-        control_hz=args.control_hz,
-        command_time_sec=args.command_time_sec,
-        fixed_xyz=args.fixed_xyz,
-        use_current_tcp_xyz=args.use_current_tcp,
-        start_from_zero=args.start_from_zero,
-        zero_time_sec=args.zero_time_sec,
-        center_move_time_sec=args.center_move_time_sec,
-        return_home_time_sec=args.return_home_time_sec,
-        duration_sec=args.duration_sec,
-        max_cone_deg=args.max_cone_deg,
-        max_joint_step_deg=args.max_joint_step_deg,
-        max_joint_accel_step_deg=args.max_joint_accel_step_deg,
-        max_position_error_mm=args.max_position_error_mm,
-        period_sec=args.period_sec,
-        ramp_sec=args.ramp_sec,
-        transition_sec=args.transition_sec,
-        cone_pulse_fraction=args.cone_pulse_fraction,
-        phase_wobble_rad=args.phase_wobble_rad,
-        path_style=args.path_style,
-        execute_speed_percent=args.execute_speed_percent,
-        startup_state_timeout_sec=args.startup_state_timeout_sec,
-        startup_state_poll_sec=args.startup_state_poll_sec,
-    )
-    if config.execute and config.dry_run:
-        raise SystemExit("Refusing to execute while dry-run is enabled; use --execute --no-dry-run")
-    if config.execute:
-        require_can_interface(config.can_interface)
-    else:
-        print("DRY-RUN: no real motion commands will be sent. Use --execute --no-dry-run for hardware.")
-    control_lock_file = None
-    arm = None
-    demo = None
-    try:
-        control_lock_file = acquire_startouch_control_lock(config)
-        arm = create_startouch_arm(
-            sdk_path=config.sdk_path,
-            module_path=config.module_path,
-            can_interface=config.can_interface,
-            gripper=config.gripper,
-            dry_run=config.dry_run,
-        )
-        demo = FixedTcpDemo(arm, config=config, log_dir=Path(args.log_dir))
-        demo.control_lock_file = control_lock_file
-        control_lock_file = None
-        demo.run_forever()
-    except KeyboardInterrupt:
-        print("\nCtrl+C received; stopping new commands and cleaning up.")
-    except Exception as exc:
-        print(f"\nERROR: {exc}")
-        return 1
-    finally:
-        if demo is not None:
-            demo.close()
-        elif arm is not None:
-            cleanup = getattr(arm, "cleanup", None)
-            if callable(cleanup):
-                cleanup()
-        if control_lock_file is not None:
-            fcntl.flock(control_lock_file.fileno(), fcntl.LOCK_UN)
-            control_lock_file.close()
-    return 0

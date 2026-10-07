@@ -6,6 +6,7 @@ from __future__ import annotations
 import json
 import math
 import os
+from pathlib import Path
 import queue
 import signal
 import socket
@@ -819,6 +820,45 @@ class RobotBridge:
             source=source,
         )
 
+    def enqueue_fixed_tcp_demo(self, command: dict[str, Any]) -> None:
+        request_id = command.get("request_id")
+        execute = command.get("execute")
+        use_current_tcp = command.get("use_current_tcp_xyz", False)
+        xyz = command.get("fixed_xyz")
+        cone = command.get("max_cone_deg")
+        duration = command.get("duration_sec")
+        if (not isinstance(execute, bool) or not isinstance(use_current_tcp, bool)
+                or not isinstance(xyz, list) or len(xyz) != 3
+                or any(not isinstance(value, (int, float)) or isinstance(value, bool)
+                       or not math.isfinite(value) for value in xyz)
+                or not 0.15 <= xyz[0] <= 0.66 or not -0.65 <= xyz[1] <= 0.45
+                or not 0.04 <= xyz[2] <= 0.65
+                or not isinstance(cone, (int, float)) or isinstance(cone, bool)
+                or not math.isfinite(cone) or not 25 <= cone <= 50
+                or not isinstance(duration, (int, float)) or isinstance(duration, bool)
+                or not math.isfinite(duration) or not 10 <= duration <= 60):
+            emit("error", message="fixed TCP demo parameters invalid", request_id=request_id)
+            return
+        with self.arm_lock:
+            ready = self.connected and self.state_ready and self.arm is not None
+            idle = not self.motion_active and self.motion_queue.empty()
+            start = list(self.last_valid_joints) if self.last_valid_joints is not None else None
+        if not ready or not idle or start is None:
+            emit("error", message="robot is not ready or is busy", request_id=request_id)
+            return
+        try:
+            self.motion_queue.put_nowait({
+                "_fixed_tcp_demo": True, "request_id": request_id,
+                "execute": execute, "fixed_xyz": xyz,
+                "use_current_tcp_xyz": use_current_tcp,
+                "max_cone_deg": cone, "duration_sec": duration,
+                "start_joints_rad": start, "joints_rad": start,
+            })
+        except queue.Full:
+            emit("error", message="robot motion queue is busy", request_id=request_id)
+            return
+        emit("command_accepted", command="fixed_tcp_demo", request_id=request_id)
+
     def set_gripper(
         self,
         position: Any,
@@ -1125,7 +1165,30 @@ class RobotBridge:
                 if arm is None:
                     continue
 
-                if command.get("_go_home"):
+                if command.get("_fixed_tcp_demo"):
+                    demo_dir = Path(__file__).resolve().parents[3] / "fixed_tcp_demo"
+                    if str(demo_dir) not in sys.path:
+                        sys.path.insert(0, str(demo_dir))
+                    from demo import DemoConfig, FixedTcpDemo
+
+                    demo = FixedTcpDemo(arm, config=DemoConfig(
+                        dry_run=not command["execute"], execute=command["execute"],
+                        fixed_xyz=command["fixed_xyz"],
+                        use_current_tcp_xyz=command["use_current_tcp_xyz"],
+                        max_cone_deg=command["max_cone_deg"],
+                        duration_sec=command["duration_sec"],
+                    ), log_dir=demo_dir / "logs")
+                    try:
+                        demo.run_forever()
+                    finally:
+                        demo.logger.close()  # 3000 keeps ownership of the SDK arm.
+                    if not self.stop_requested.is_set():
+                        joints = self._finite_values(arm.get_joint_positions(), 6, "joints after fixed TCP demo")
+                        with self.arm_lock:
+                            self.last_valid_joints = joints
+                        emit("command_complete", command="fixed_tcp_demo",
+                             request_id=command["request_id"])
+                elif command.get("_go_home"):
                     # Homing obeys the same policy; never use SDK default speed.
                     duration = arm.set_joint_waypoints(
                         [command["start_joints_rad"], [0.0] * 6],
@@ -1240,6 +1303,8 @@ def main() -> None:
                 bridge.disconnect("software_stop")
             elif name in {"move_joint", "move_joint_path"}:
                 bridge.enqueue_motion(command)
+            elif name == "fixed_tcp_demo":
+                bridge.enqueue_fixed_tcp_demo(command)
             elif name == "move_l":
                 bridge.move_linear(command)
             elif name == "preview_ik":

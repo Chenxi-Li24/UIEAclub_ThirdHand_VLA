@@ -83,6 +83,7 @@ function createRobotService(options = {}) {
 
   wss.on('connection', socket => {
     sockets.add(socket);
+    let demoRequestId = null;
     socket.send(JSON.stringify(controller.configMessage()));
     socket.on('message', data => {
       let message;
@@ -112,8 +113,15 @@ function createRobotService(options = {}) {
       controller.handleCommand(message, reply => {
         if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify(reply));
       });
+      if (message?.cmd === 'fixed_tcp_demo'
+          && controller.demoActiveRequestId === message.request_id) {
+        demoRequestId = message.request_id;
+      }
     });
-    socket.on('close', () => sockets.delete(socket));
+    socket.on('close', () => {
+      sockets.delete(socket);
+      if (demoRequestId) controller.interruptFixedTcpDemo(demoRequestId);
+    });
   });
   executionWss.on('connection', socket => {
     executionSockets.add(socket);

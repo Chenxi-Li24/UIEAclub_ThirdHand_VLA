@@ -7,8 +7,9 @@ cd /home/nieqingcao/ThirdHand/UIEAclub_ThirdHand_VLA/fixed_tcp_demo
 python fixed_tcp_demo.py
 ```
 
-The default mode is dry-run and does not send motion commands. It initializes the
-StarTouch SDK in dry-run mode, uses the configured fixed gripper-tip point
+The default mode is dry-run and does not send motion commands. It asks the
+already-running port-3000 Robot Service to use its existing StarTouch SDK instance,
+with the configured fixed gripper-tip point
 `[0.48, 0.0, 0.36]` meters, moves through the same planning path without
 sending hardware commands, checks IK for a dramatic RCM cone trajectory, and
 writes CSV logs.
@@ -26,8 +27,8 @@ python fixed_tcp_demo.py --execute --no-dry-run
 
 The hardware sequence is:
 
-1. Check `can0`.
-2. Initialize StarTouch SDK.
+1. Require port 3000 to have a connected, healthy StarTouch SDK on `can0`.
+2. Run the existing `FixedTcpDemo` action inside that port-3000 Python bridge.
 3. Move to all-zero joints `[0,0,0,0,0,0]` over 3 seconds.
 4. Move smoothly to the screened fixed-tip center pose over 6 seconds.
 5. Lock the configured fixed gripper-tip point.
@@ -37,7 +38,7 @@ The hardware sequence is:
    mode over 60 seconds, so the SDK's internal waypoint backend performs one
    continuous motion instead of stop-start Python servo steps.
 8. On normal completion, return smoothly to all-zero home joints over 4 seconds.
-9. Stop sending new commands and call SDK `cleanup()`.
+9. Stop sending new commands; port 3000 keeps its SDK connection for subsequent commands.
 
 To use a different fixed point:
 
@@ -54,7 +55,7 @@ all waypoints pass IK, joint limits, workspace checks, and local collision-risk
 guards. It shows clockwise cone, cardinal cross, irregular shell, flower
 envelope, nod/shake, spiral breathe, counterclockwise cone, and a final flower
 envelope. The whole demo expands once at startup, blends between motion sets
-with `--transition-sec`, and contracts once before the arm returns home; the
+with its configured transition time, and contracts once before the arm returns home; the
 individual sets do not stop-and-restart at their boundaries. Strict mathematical
 `+/-X`, `+/-Y`, `+/-Z`
 ray poses would require a 90 degree cone and are not safe for this arm near the
@@ -68,9 +69,11 @@ To restore the old behavior and lock the current measured TCP XYZ:
 python fixed_tcp_demo.py --use-current-tcp
 ```
 
-Stop with `Ctrl+C`. The program stops sending new commands and calls SDK
-`cleanup()`; it does not send Home on exceptions or interrupts, only after a
-normal completed demo.
+Stop with `Ctrl+C` or the 9983 software-stop control. Port 3000 stops its SDK
+control process; the demo does not send Home on exceptions or interrupts, only
+after a normal completed demo. Closing the command client also requests a stop.
+
+The demo program itself never opens `can0`. Port 3000 remains the only SDK/CAN owner.
 
 Dangerous parameters are at the top of `demo.py` in `DemoConfig`.
 For a gentler first real test, run:

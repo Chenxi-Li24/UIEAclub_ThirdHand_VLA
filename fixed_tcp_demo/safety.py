@@ -1,8 +1,6 @@
 from __future__ import annotations
 
 import math
-import os
-import socket
 from typing import Iterable
 
 
@@ -138,21 +136,3 @@ def euler_to_quaternion_wxyz(euler: Iterable[float]) -> list[float]:
         cr * sp * cy + sr * cp * sy,
         cr * cp * sy - sr * sp * cy,
     ]
-
-
-def require_can_interface(name: str) -> None:
-    path = os.path.join("/sys/class/net", name)
-    if not os.path.isdir(path):
-        raise SafetyError(f"CAN interface {name} does not exist")
-    flags_path = os.path.join(path, "flags")
-    try:
-        flags = int(open(flags_path, "r", encoding="ascii").read().strip(), 16)
-    except OSError as exc:
-        raise SafetyError(f"cannot read {name} state: {exc}") from exc
-    if not (flags & 0x1):
-        raise SafetyError(f"CAN interface {name} is not UP")
-    sock = socket.socket(socket.PF_CAN, socket.SOCK_RAW, socket.CAN_RAW)
-    try:
-        sock.bind((name,))
-    finally:
-        sock.close()

@@ -18,6 +18,7 @@ const ALLOWED_COMMANDS = new Set([
   'get_state',
   'servo',
   'move_joint',
+  'fixed_tcp_demo',
   'move_l',
   'preview_ik',
   'preset',
@@ -112,6 +113,7 @@ class RobotController extends EventEmitter {
     this.latestRobotStateAtMs = null;
     this.stateReady = false;
     this.motionActive = false;
+    this.demoActiveRequestId = null;
     this.connectPending = false;
     this.started = false;
     this.contracts = createContractValidator();
@@ -238,7 +240,7 @@ class RobotController extends EventEmitter {
       nonce,
       protocol_version: 'thirdhand-robot-lowlevel-v1',
       pose_frame: 'robot_flange',
-      commands: ['move_l', 'preview_ik', 'move_joint', 'gripper', 'preset', 'software_stop', 'get_state'],
+      commands: ['move_l', 'preview_ik', 'move_joint', 'fixed_tcp_demo', 'gripper', 'preset', 'software_stop', 'get_state'],
       correlated_completions: true,
       software_stop_ack: true,
       software_stop_state_boundary: true,
@@ -264,6 +266,7 @@ class RobotController extends EventEmitter {
         connected: this.bridge.connected,
         stateReady: this.stateReady,
         moving: this.motionActive,
+        fixedTcpDemoActive: Boolean(this.demoActiveRequestId),
         lastStateAt: this.latestRobotStateAtMs,
       },
     };
@@ -337,6 +340,9 @@ class RobotController extends EventEmitter {
           message.joints_deg, message.source || 'move_joint', reply,
           message.request_id, 'move_joint', message.time_sec,
         );
+        return;
+      case 'fixed_tcp_demo':
+        this._startFixedTcpDemo(message, reply);
         return;
       case 'move_l':
         this._sendLinearMotion(message, reply);
@@ -536,6 +542,41 @@ class RobotController extends EventEmitter {
     return interrupted;
   }
 
+  _startFixedTcpDemo(message, reply) {
+    const requestId = message.request_id;
+    const xyz = message.fixed_xyz ?? [0.48, 0, 0.36];
+    const useCurrentTcp = message.use_current_tcp_xyz ?? false;
+    const cone = message.max_cone_deg ?? 50;
+    const duration = message.duration_sec ?? 60;
+    if (typeof requestId !== 'string' || !/^[\w:-]{1,120}$/.test(requestId)
+        || typeof message.execute !== 'boolean'
+        || typeof useCurrentTcp !== 'boolean'
+        || !linearTargetAllowed(xyz)
+        || !Number.isFinite(cone) || cone < 25 || cone > 50
+        || !Number.isFinite(duration) || duration < 10 || duration > 60) {
+      reply({ type: 'error', code: 'fixed_tcp_demo_invalid', request_id: requestId });
+      return;
+    }
+    const readinessError = this._motionReadinessError();
+    if (readinessError || this.pendingExecutions.size > 0 || this.pendingLowLevel.size > 0) {
+      reply({ ...(readinessError || { type: 'error', code: 'execution_active' }), request_id: requestId });
+      return;
+    }
+    this.demoActiveRequestId = requestId;
+    this.pendingLowLevel.set(requestId, 'fixed_tcp_demo');
+    if (!this.bridge.send({ cmd: 'fixed_tcp_demo', request_id: requestId,
+      execute: message.execute, fixed_xyz: xyz, use_current_tcp_xyz: useCurrentTcp,
+      max_cone_deg: cone, duration_sec: duration })) {
+      this.demoActiveRequestId = null;
+      this.pendingLowLevel.delete(requestId);
+      reply({ type: 'error', code: 'bridge_unavailable', request_id: requestId });
+    }
+  }
+
+  interruptFixedTcpDemo(requestId) {
+    return this.demoActiveRequestId === requestId && this.bridge.softwareStop();
+  }
+
   _sendJointMotion(
     joints, source, reply, suppliedRequestId = null,
     command = 'move_joint', suppliedTimeSec = null,
@@ -688,6 +729,9 @@ class RobotController extends EventEmitter {
     if (this.motionActive) {
       return { type: 'error', code: 'motion_active', msg: 'Previous motion is still active' };
     }
+    if (this.demoActiveRequestId) {
+      return { type: 'error', code: 'fixed_tcp_demo_active', msg: 'Fixed TCP demo is active' };
+    }
     return null;
   }
 
@@ -715,6 +759,7 @@ class RobotController extends EventEmitter {
 
   _handleBridgeMessage(message) {
     if (message.type === 'connection') {
+      this.demoActiveRequestId = null;
       this.connectPending = false;
       this.stateReady = false;
       this.latestJointsDeg = null;
@@ -797,6 +842,7 @@ class RobotController extends EventEmitter {
       return;
     }
     if (message.type === 'command_complete') {
+      if (message.request_id === this.demoActiveRequestId) this.demoActiveRequestId = null;
       this.motionActive = false;
       const pending = this.pendingExecutions.get(message.request_id);
       if (pending) {
@@ -840,6 +886,7 @@ class RobotController extends EventEmitter {
       return;
     }
     if (message.type === 'error') {
+      if (message.request_id === this.demoActiveRequestId) this.demoActiveRequestId = null;
       const pending = this.pendingExecutions.get(message.request_id);
       if (pending) {
         clearTimeout(pending.timer);

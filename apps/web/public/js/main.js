@@ -721,6 +721,13 @@ class UIControls {
     document.getElementById('btn-send').addEventListener('click', () => {
       this._sendSelectedTarget();
     });
+    document.getElementById('btn-fixed-tcp-demo').addEventListener('click', () => {
+      const requestId = `fixed-tcp-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      if (!this.ws.send({ cmd: 'fixed_tcp_demo', request_id: requestId, execute: true })) return;
+      this.fixedTcpDemoRequestId = requestId;
+      document.getElementById('btn-fixed-tcp-demo').disabled = true;
+      document.getElementById('fixed-tcp-demo-status').textContent = '启动中';
+    });
 
     // SDK software stop. A hardware E-stop remains a separate safety device.
     document.getElementById('btn-estop-top').addEventListener('click', () => {
@@ -846,6 +853,10 @@ class UIControls {
     // WebSocket 事件监听
     this.ws.on('connection', (data) => {
       this.robotConnected = data.connected === true;
+      if (!data.connected && this.fixedTcpDemoRequestId) {
+        document.getElementById('fixed-tcp-demo-status').textContent = '连接已断开，请确认机械臂状态';
+        this.fixedTcpDemoRequestId = null;
+      }
       this.clearVoicePreview({ restore: false, reason: '连接状态变化' });
       if (data.connected) {
         this.gripperTargetEdited = false;
@@ -1019,6 +1030,11 @@ class UIControls {
     });
 
     this.ws.on('command_status', data => {
+      if (data.command === 'fixed_tcp_demo' && data.request_id === this.fixedTcpDemoRequestId) {
+        document.getElementById('fixed-tcp-demo-status').textContent =
+          data.status === 'complete' ? '演示完成' : '演示运行中';
+        if (data.status === 'complete') this.fixedTcpDemoRequestId = null;
+      }
       if (data.status !== 'complete') return;
       if (data.command === 'gripper' && Number.isFinite(data.actual_position)) {
         const actual = `${(data.actual_position * 100).toFixed(1)}%`;
@@ -1033,6 +1049,10 @@ class UIControls {
     });
 
     this.ws.on('software_stop', data => {
+      if (this.fixedTcpDemoRequestId) {
+        document.getElementById('fixed-tcp-demo-status').textContent = '已停止';
+        this.fixedTcpDemoRequestId = null;
+      }
       this.clearVoicePreview({ restore: false, reason: '软件停止状态' });
       document.getElementById('estop-overlay').classList.add('active');
       const title = document.getElementById('stop-title');
@@ -1050,6 +1070,12 @@ class UIControls {
       this._log(`← ${data.msg}`);
     });
     this.ws.on('error', (data) => {
+      if (data.request_id === this.fixedTcpDemoRequestId) {
+        document.getElementById('fixed-tcp-demo-status').textContent =
+          `启动失败：${data.msg || data.code || '未知错误'}`;
+        this.fixedTcpDemoRequestId = null;
+        this._setMotionControlsEnabled(this.robotStateReady);
+      }
       if (this.tcpDraftActive && data.request_id === this.tcpPreviewRequestId) {
         this.tcpPreviewOk = false;
         this._tcpError(data.msg || '末端预览失败');
@@ -1858,12 +1884,14 @@ class UIControls {
   _setMotionControlsEnabled(enabled) {
     [
       'btn-send',
+      'btn-fixed-tcp-demo',
       'btn-gripper-send',
       'btn-gripper-close',
       'btn-gripper-open',
     ].forEach(id => {
       const button = document.getElementById(id);
-      if (button) button.disabled = !enabled;
+      if (button) button.disabled = !enabled ||
+        (id === 'btn-fixed-tcp-demo' && Boolean(this.fixedTcpDemoRequestId || this._motionWasActive));
     });
     document.querySelectorAll('.preset-btn').forEach(button => {
       button.disabled = !enabled;

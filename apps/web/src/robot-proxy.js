@@ -24,6 +24,7 @@ const ROBOT_COMMANDS = new Set([
   'move_l',
   'preview_ik',
   'preset',
+  'fixed_tcp_demo',
   'gripper',
   'software_stop',
   'estop',
@@ -224,7 +225,7 @@ class RobotProxy {
   hasActiveControl() {
     return Boolean(this.languageController.active || this.directionalController.active
       || this.forwardedMotion.size || [...this.sessions].some(s => s.queue.some(raw =>
-        ['servo','move_l','preset','gripper'].includes(parseJson(raw)?.cmd))));
+        ['servo','move_l','preset','gripper','fixed_tcp_demo'].includes(parseJson(raw)?.cmd))));
   }
 
   _forward(session, message) {
@@ -233,7 +234,7 @@ class RobotProxy {
         msg:'抓取流程正在控制机械臂；可使用软件停止'});
       return false;
     }
-    if (['servo','move_l','preset','gripper'].includes(message.cmd)) {
+    if (['servo','move_l','preset','gripper','fixed_tcp_demo'].includes(message.cmd)) {
       message = {...message,request_id:message.request_id || randomUUID()};
       this.forwardedMotion.set(message.request_id,session);
     }
@@ -373,6 +374,9 @@ class RobotProxy {
     });
 
     browser.on('close', () => {
+      for (const [requestId, owner] of this.forwardedMotion) {
+        if (owner === session) this.forwardedMotion.delete(requestId);
+      }
       this.languageController.disconnect(browser);
       this.directionalController.disconnect(browser);
       this.languageCandidateOwners.delete(browser);

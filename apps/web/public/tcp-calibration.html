@@ -27,11 +27,11 @@
     <div class="sample-actions"><select id="fit-sample" aria-label="选择拟合样本"></select><button id="delete-fit" disabled>删除选中异常点</button><button id="solve" disabled>8 个姿态采满后，求解 TCP</button></div>
   </section>
   <section data-stage="2"><h2>第2关：求解与诊断</h2><pre id="diagnostics">等待求解</pre><p>绿色可继续；黄色建议核对最差样本；红色禁止验证。</p></section>
-  <section data-stage="3"><h2>第3关：独立验证</h2><p>求解通过后，继续使用上方同一组拖动、锁定和记录按钮，另外采集至少 3 个姿态。它们不会重新参与拟合。</p><label class="check-line"><input id="confirm-derive" type="checkbox">确认验证姿态独立且均为轻触</label><button id="derive" disabled>完成验证并换算</button></section>
+  <section data-stage="3"><h2>第3关：独立验证</h2><p>求解通过后，继续使用上方同一组拖动、锁定和记录按钮，另外采集至少 3 个姿态。它们不会重新参与拟合。</p><div class="sample-actions"><select id="validation-sample" aria-label="选择验证样本"></select><button id="delete-validation" disabled>删除选中验证点</button></div><label class="check-line"><input id="confirm-derive" type="checkbox">确认验证姿态独立且均为轻触</label><button id="derive" disabled>完成验证并换算</button></section>
   <section data-stage="4"><h2>第4关：换算夹爪TCP</h2><div class="transforms"><article><h3>当前 SDK 173.34 mm 名义工具点</h3><pre id="sdk-transform">--</pre></article><article><h3>探针尖端 TCP</h3><pre id="probe-transform">--</pre></article><article><h3>实际夹爪抓持中心 TCP</h3><pre id="grasp-transform">--</pre></article></div><div class="checks"><label><input id="confirm-distance" type="checkbox">卡尺距离正确</label><label><input id="confirm-axis" type="checkbox">工具轴方向正确</label><label><input id="confirm-probe-removed" type="checkbox">探针已经移除</label><label><input id="confirm-production" type="checkbox">夹爪已恢复生产状态</label></div></section>
   <section data-stage="5"><h2>第5关：保存候选结果</h2><p>默认只保存 pending，不修改当前生产配置。</p><button id="finalize">保存 pending 候选</button><output id="pending-status">尚未保存</output></section>
   <section data-stage="6"><h2>第6关：激活与回滚</h2><p>激活和回滚是独立显式操作；真实设备激活不属于本次软件开发。</p><label><input id="confirm-activate" type="checkbox">再次确认激活已验证版本</label><button id="activate">激活</button><label><input id="confirm-rollback" type="checkbox">确认回滚到上一版本</label><button id="rollback">回滚</button></section>
 </main>
 <div id="message" role="status" aria-live="polite"></div>
-<script src="js/tcp-calibration.js?v=8"></script>
+<script src="js/tcp-calibration.js?v=9"></script>
 </body></html>

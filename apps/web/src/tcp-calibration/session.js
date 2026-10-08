@@ -196,6 +196,17 @@ class TcpCalibrationSession {
         result = sample.accepted === false ? sample
           : this._commit(() => this.state.validationSamples.push(sample));
       }
+    } else if (command.type === 'delete_validation') {
+      if (this.state.stage !== 'collecting_validation' || !validDelete(command)) {
+        result = this._failure('request_invalid');
+      } else {
+        const index = this.state.validationSamples.findIndex(sample => sample.id === command.sampleId);
+        result = index < 0 ? this._failure('sample_not_found') : this._commit(() => {
+          this.state.validationSamples.splice(index, 1);
+          this.state.validationReport = null;
+          this.state.derivedTcp = null;
+        });
+      }
     } else if (command.type === 'derive') {
       if (this.state.stage !== 'collecting_validation' || !validSimple(command, 'derive')) {
         result = this._failure('stage_invalid');

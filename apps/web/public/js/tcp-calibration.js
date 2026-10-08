@@ -25,6 +25,7 @@ class TcpCalibrationWizard{
  bind(){if(this.bound)return;this.bound=true;const on=(id,fn)=>{const node=this.el(id);if(node)node.onclick=()=>fn().catch(error=>this.message(error.message));};
   on('start-session',()=>this.start());on('record-fit',()=>this.record('fit'));
   on('delete-fit',async()=>{const id=this.el('fit-sample').value;if(!id)throw new Error('请先选择已记录的异常样本；当前没有可删除的样本。');return this.mutate(`/api/tcp-calibration/samples/${encodeURIComponent(id)}`,{},'DELETE');});
+  on('delete-validation',async()=>{const id=this.el('validation-sample').value;if(!id)throw new Error('请先选择要重采的验证点；当前没有可删除的验证点。');return this.mutate(`/api/tcp-calibration/verification-samples/${encodeURIComponent(id)}`,{},'DELETE');});
   on('solve',()=>this.mutate('/api/tcp-calibration/solve'));on('record-validation',()=>this.record('validation'));
   on('derive',()=>this.mutate('/api/tcp-calibration/derive'));on('finalize',async()=>{this.pending=await this.mutate('/api/tcp-calibration/finalize');this.render(this.state);});
   on('activate',async()=>{this.active=await this.mutate('/api/tcp-calibration/activate',{candidateId:this.pending.candidateId,expectedActiveId:this.active?.activeId||null,confirm:true});this.render(this.state);});
@@ -136,6 +137,7 @@ class TcpCalibrationWizard{
   this.el('robot-status').textContent=robot.connected?`已连接 · ${this.teaching?'0 阻尼示教中':robot.stationary?'静止':'运动中'} · ${robot.stateFresh?'状态新鲜':'状态过期'}`:'3000 未连接';
   this.el('frame-status').textContent=robot.poseFrame==='robot_flange'?'法兰坐标已校验':'等待坐标校验';this.el('frame-status').title=robot.framePolicyId||'policy 未知';
   this.el('delete-fit').disabled=state.stage!=='collecting_fit'||fitCount===0;
+  this.el('delete-validation').disabled=state.stage!=='collecting_validation'||validationCount===0;
   const unlocked=robot.locked===false&&!this.teaching&&!this.teachPending&&!this.recording;
   const confirmed=this.captureHeld&&this.el('contact-ready').checked&&this.el('pose-stable').checked&&robot.teachSupported===true;
   this.el('record-fit').disabled=!(state.stage==='collecting_fit'&&unlocked&&confirmed);this.el('solve').disabled=!(state.stage==='collecting_fit'&&state.fitSamples?.length>=8&&!this.teaching&&!this.teachPending);
@@ -147,6 +149,7 @@ class TcpCalibrationWizard{
   const ready=state.stage==='ready_to_finalize'&&state.validationReport?.accepted===true;const finalChecks=['confirm-distance','confirm-axis','confirm-probe-removed','confirm-production'].every(id=>this.el(id).checked);
   this.el('finalize').disabled=!(ready&&finalChecks);this.el('activate').disabled=!(this.pending?.candidateId&&this.el('confirm-activate').checked);this.el('rollback').disabled=!(this.active?.previousActiveId&&this.el('confirm-rollback').checked);
   const select=this.el('fit-sample');if(select){const selected=select.value;select.textContent='';for(const sample of state.fitSamples||[]){const option=this.document.createElement('option');option.value=sample.id;option.textContent=sample.id;select.append(option);}if((state.fitSamples||[]).some(sample=>sample.id===selected))select.value=selected;}
+  const validationSelect=this.el('validation-sample');if(validationSelect){const selected=validationSelect.value;validationSelect.textContent='';for(const [index,sample] of (state.validationSamples||[]).entries()){const option=this.document.createElement('option');option.value=sample.id;const error=state.validationReport?.sample_ids?.indexOf(sample.id);const metres=error>=0?state.validationReport?.sample_errors_m?.[error]:null;option.textContent=`验证点 ${index+1}${Number.isFinite(metres)?` · ${(metres*1000).toFixed(2)} mm`:''} · ${sample.id}`;validationSelect.append(option);}if((state.validationSamples||[]).some(sample=>sample.id===selected))validationSelect.value=selected;}
   const report=state.solveReport;if(report){const color={green:'绿色',yellow:'黄色',red:'红色'}[report.classification]||report.classification;this.el('diagnostics').textContent=`${color} · rank ${report.rank}\nRMS ${report.rms_residual_m} m · 最大 ${report.maximum_residual_m} m\n最差样本 ${report.worst_sample_id}\nsingular values ${(report.singular_values||[]).join(', ')}`;}
   if(report?.sample_ids && (report.sample_ids.length!==fitCount||!report.sample_ids.every(id=>state.fitSamples.some(s=>s.id===id))))this.el('diagnostics').textContent='样本已变更，下面是旧结果；补齐 8 个姿态并重新求解。\n'+this.el('diagnostics').textContent;
   this.el('sdk-transform').textContent='T_flange_sdk_tool = [0.17334, 0, 0] m';this.el('probe-transform').textContent=JSON.stringify(state.derivedTcp?.T_flange_probe_tip||state.solveReport?.probe_tip_flange_m||null,null,2);this.el('grasp-transform').textContent=JSON.stringify(state.derivedTcp?.T_flange_grasp_tcp||null,null,2);

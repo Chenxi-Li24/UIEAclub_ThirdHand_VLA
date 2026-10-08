@@ -210,6 +210,27 @@ test('validation over five millimetres blocks derivation', async () => {
   assert.equal(h.session.status().stage, 'collecting_validation');
 });
 
+test('failed validation permits deleting one validation sample without changing fit data', async () => {
+  const h = harness({ validationMaximum: 0.006 });
+  await collectFit(h);
+  await h.session.handle({type:'solve',requestId:'solve'});
+  await collectValidation(h);
+  await h.session.handle({type:'derive',requestId:'derive'});
+  const before = h.session.status();
+  const removed = before.validationSamples[2].id;
+
+  const result = await h.session.handle({
+    type:'delete_validation',requestId:'delete-validation',sampleId:removed,
+  });
+
+  assert.equal(result.accepted, true);
+  assert.equal(result.state.stage, 'collecting_validation');
+  assert.equal(result.state.fitSamples.length, 8);
+  assert.deepEqual(result.state.validationSamples.map(sample => sample.id),
+    before.validationSamples.slice(0, 2).map(sample => sample.id));
+  assert.equal(result.state.validationReport, null);
+});
+
 test('request replay is idempotent, conflicting reuse fails, and abort is terminal', async () => {
   const h = harness();
   const first = await h.session.handle(startCommand('same'));

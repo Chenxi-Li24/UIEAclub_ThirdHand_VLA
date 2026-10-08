@@ -45,7 +45,7 @@ function validSimple(command, type) {
 
 function validDelete(command) {
   return exactKeys(command, ['type', 'requestId', 'sampleId'])
-    && command.type === 'delete_fit' && validRequestId(command.requestId)
+    && ['delete_fit', 'delete_validation'].includes(command.type) && validRequestId(command.requestId)
     && typeof command.sampleId === 'string' && command.sampleId.length > 0;
 }
 

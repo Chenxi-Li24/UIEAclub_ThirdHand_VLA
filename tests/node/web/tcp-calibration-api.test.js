@@ -18,6 +18,7 @@ function fakeSession(){
   else if(command.type==='delete_fit')state={...state,revision:state.revision+1,fitSamples:[]};
   else if(command.type==='solve')state={...state,revision:state.revision+1,stage:'collecting_validation'};
   else if(command.type==='record_validation')state={...state,revision:state.revision+1,validationSamples:[...state.validationSamples,{id:'validation-1'}]};
+  else if(command.type==='delete_validation')state={...state,revision:state.revision+1,validationSamples:[]};
   else if(command.type==='derive')state={...state,revision:state.revision+1,stage:'ready_to_finalize',validationReport:{accepted:true},solveReport:{accepted:true},derivedTcp:{schema:'thirdhand-grasp-tcp-derived-v1'}};
   else if(command.type==='abort')state={...state,revision:state.revision+1,stage:'aborted'};
   return {accepted:true,state:structuredClone(state)};
@@ -66,7 +67,7 @@ test('same-origin start validates exact body and body limit',async t=>{
  assert.equal((await mutation(url,'/api/tcp-calibration/sessions',huge)).status,413);
 });
 
-test('fit sample, delete, solve, validation, derive and abort map to session commands',async t=>{
+test('fit sample, delete, solve, validation delete, derive and abort map to session commands',async t=>{
  const {url,session}=await setup(t);
  const start={requestId:'start',operator:'op',measurement:{distanceM:.02,uncertaintyM:.001,toolAxisFlange:[1,0,0]},confirmations:{probeCentered:true,pivotFixed:true,estopReady:true,manualTeachOnly:true}};
  await mutation(url,'/api/tcp-calibration/sessions',start);
@@ -74,9 +75,10 @@ test('fit sample, delete, solve, validation, derive and abort map to session com
  response=await mutation(url,'/api/tcp-calibration/samples/fit-1',envelope(2,'delete'),{method:'DELETE'});assert.equal(response.status,200);
  response=await mutation(url,'/api/tcp-calibration/solve',envelope(3,'solve'));assert.equal(response.status,200);
  response=await mutation(url,'/api/tcp-calibration/verification-samples',{...envelope(4,'verify'),contactConfirmed:true,probeUnloaded:true});assert.equal(response.status,200);
- response=await mutation(url,'/api/tcp-calibration/derive',envelope(5,'derive'));assert.equal(response.status,200);
- response=await mutation(url,'/api/tcp-calibration/abort',envelope(6,'abort'));assert.equal(response.status,200);
- assert.deepEqual(session.calls.map(call=>call.type),['start','record_fit','delete_fit','solve','record_validation','derive','abort']);
+ response=await mutation(url,'/api/tcp-calibration/verification-samples/validation-1',envelope(5,'delete-validation'),{method:'DELETE'});assert.equal(response.status,200);
+ response=await mutation(url,'/api/tcp-calibration/derive',envelope(6,'derive'));assert.equal(response.status,200);
+ response=await mutation(url,'/api/tcp-calibration/abort',envelope(7,'abort'));assert.equal(response.status,200);
+ assert.deepEqual(session.calls.map(call=>call.type),['start','record_fit','delete_fit','solve','record_validation','delete_validation','derive','abort']);
 });
 
 test('stale session revision, malformed sample id, and disconnected sample fail closed',async t=>{

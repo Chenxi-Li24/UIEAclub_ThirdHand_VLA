@@ -153,6 +153,18 @@ test('fit and validation controls stay separate and diagnostics are text-labelle
  assert.match(element('diagnostics').textContent,/rank 6/);
 });
 
+test('validation stage can delete the selected validation sample',async()=>{
+ const current=state({stage:'collecting_validation',validationSamples:[{id:'validation-1'}]});
+ const {wizard,element,requests}=browser([current]);
+ await wizard.init();
+ element('validation-sample').value='validation-1';
+
+ await element('delete-validation').onclick();
+
+ const deletion=requests.find(item=>item.options.method==='DELETE');
+ assert.equal(deletion.url,'/api/tcp-calibration/verification-samples/validation-1');
+});
+
 test('refresh before mutation rejects stale local revision without POST',async()=>{
  const {wizard,requests}=browser([state({revision:3}),state({revision:4})]);await wizard.init();
  await assert.rejects(wizard.mutate('/api/tcp-calibration/solve',{}),/stale_local_revision/);

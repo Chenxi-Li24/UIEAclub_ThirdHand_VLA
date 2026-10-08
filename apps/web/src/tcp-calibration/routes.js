@@ -47,7 +47,8 @@ function createTcpCalibrationRoutes({session,store,stateSource}={}){
    'POST /api/tcp-calibration/teach/hold','POST /api/tcp-calibration/teach/keepalive',
   ]);
   const deleteMatch=pathname.match(/^\/api\/tcp-calibration\/samples\/([A-Za-z0-9._:-]+)$/);
-  if(!allowed.has(`${request.method} ${pathname}`)&&!(request.method==='DELETE'&&deleteMatch)){
+  const deleteValidationMatch=pathname.match(/^\/api\/tcp-calibration\/verification-samples\/([A-Za-z0-9._:-]+)$/);
+  if(!allowed.has(`${request.method} ${pathname}`)&&!(request.method==='DELETE'&&(deleteMatch||deleteValidationMatch))){
    writeJson(response,request.method==='GET'?405:400,{error:request.method==='GET'?'method_not_allowed':'request_invalid'});return true;
   }
   if(!originAllowed(request)){writeJson(response,403,{error:'origin_not_allowed'});return true;}
@@ -85,6 +86,7 @@ function createTcpCalibrationRoutes({session,store,stateSource}={}){
    await sessionMutation(key,body,response,{type:'record_fit',requestId,contactConfirmed:body.contactConfirmed,probeUnloaded:body.probeUnloaded});return true;
   }
   if(deleteMatch){if(!exact(body,['sessionId','expectedRevision','requestId'])){writeJson(response,400,{error:'request_invalid'});return true;}await sessionMutation(key,body,response,{type:'delete_fit',requestId,sampleId:deleteMatch[1]});return true;}
+  if(deleteValidationMatch){if(!exact(body,['sessionId','expectedRevision','requestId'])){writeJson(response,400,{error:'request_invalid'});return true;}await sessionMutation(key,body,response,{type:'delete_validation',requestId,sampleId:deleteValidationMatch[1]});return true;}
   if(pathname==='/api/tcp-calibration/solve'){if(!exact(body,['sessionId','expectedRevision','requestId'])){writeJson(response,400,{error:'request_invalid'});return true;}await sessionMutation(key,body,response,{type:'solve',requestId});return true;}
   if(pathname==='/api/tcp-calibration/verification-samples'){
    if(!exact(body,['sessionId','expectedRevision','requestId','contactConfirmed','probeUnloaded'])){writeJson(response,400,{error:'request_invalid'});return true;}

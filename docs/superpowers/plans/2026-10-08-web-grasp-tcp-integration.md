@@ -14,10 +14,10 @@
 
 **Interfaces:** createFromFile(file, {ownerToken, tcpStore, webUrl}) creates a lazy grasp controller. createTcpCalibrationRoutes accepts canMutate() for runtime ownership checks. loadPolicy(filename) resolves relative bindings against the policy file while keeping strict hashes. Gateway exposes tcpCalibration readiness and routes plus grasp status. Unsupported teach uses explicit local stationary-hold confirmation without sending mode commands.
 
-- [ ] Add tests showing main runtime cannot currently construct its configured grasp/TCP components; verify failing.
-- [ ] Import selected feature modules/tests and notices, retain main integrations, filter fixed_tcp_demo, resolve relative frame policy paths, add re-bound handeye/config/profile.
-- [ ] Add unsupported-teach capture test and implement stationary manual-hold UI confirmation.
-- [ ] Run node --test tests/node/web/grasp-*.test.js tests/node/web/tcp-calibration-*.test.js tools/frames/test_canonical_robot_client.js; commit.
+- [x] Add tests showing main runtime cannot currently construct its configured grasp/TCP components; verify failing.
+- [x] Import selected feature modules/tests and notices, retain main integrations, filter fixed_tcp_demo, resolve relative frame policy paths, add re-bound handeye/config/profile.
+- [x] Add unsupported-teach capture test and implement stationary manual-hold UI confirmation.
+- [x] Run node --test tests/node/web/grasp-*.test.js tests/node/web/tcp-calibration-*.test.js tools/frames/test_canonical_robot_client.js; commit.
 
 ### Task 2: Consume active TCP and render grasp workflow
 
@@ -25,10 +25,10 @@
 
 **Interfaces:** store.activeTcp(framePolicyId) returns null or immutable {id,source,T_flange_grasp_tcp}; throws for corrupt/unverified/mismatched active data. Coordinator resolves TCP before marking start active, freezes session config and publishes tcp plus plan/progress/result. Runtime/status endpoints expose current TCP or an explicit unavailable reason. UI reads current HTTP state on connect and renders status consistently with WS broadcasts.
 
-- [ ] Test active candidate identity, hash corruption, measured off-axis TCP and 90-degree rotation, freeze across artifact changes, and no duplicate 60 mm backoff; watch failures.
-- [ ] Implement full rigid transform geometry and per-session resolver, ownership checks between calibration and grasp, dynamic runtime config/provenance.
-- [ ] Test real UI rendering/recovery for progress, errors, target/TCP and completion; implement panel and calibration link.
-- [ ] Run grasp/TCP test set; commit.
+- [x] Test active candidate identity, hash corruption, measured off-axis TCP and 90-degree rotation, freeze across artifact changes, and no duplicate 60 mm backoff; watch failures.
+- [x] Implement full rigid transform geometry and per-session resolver, ownership checks between calibration and grasp, dynamic runtime config/provenance.
+- [x] Test real UI rendering/recovery for progress, errors, target/TCP and completion; implement panel and calibration link.
+- [x] Run grasp/TCP test set; commit.
 
 ### Task 3: Offline end-to-end and regression verification
 
@@ -36,9 +36,9 @@
 
 **Interfaces:** Simulated transport boundary supplies real coordinator and gateway with measured artifact and frame-bound vision. HTTP start plus WS/HTTP status must reach complete with measured TCP identity and literal expected grip coordinates; stop/failure preserve ownership semantics.
 
-- [ ] Exercise start → depth → plan → motion → contact → lift through real gateway/controller with synthetic external IO only; watch fail if any boundary is missing, then fix.
-- [ ] Document activation semantics, fallback/retreat, configuration, restart and offline-vs-live verification boundary.
-- [ ] Run full Node suite and TCP Python tests. Compare baseline failures, never label partial suite as full success. Commit and request one fresh read-only reviewer of base..HEAD; fix important findings with regression tests.
+- [x] Exercise start → depth → plan → motion → contact → lift through real gateway/controller with synthetic external IO only; watch fail if any boundary is missing, then fix.
+- [x] Document activation semantics, fallback/retreat, configuration, restart and offline-vs-live verification boundary.
+- [x] Run full Node suite and TCP Python tests. Compare baseline failures, never label partial suite as full success. Commit and request one fresh read-only reviewer of base..HEAD; fix important findings with regression tests.
 
 ## Review Focus
 

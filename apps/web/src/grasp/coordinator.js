@@ -160,7 +160,7 @@ class GraspCoordinator extends EventEmitter{
   const watch=async()=>{
    while(!finished){
     await this.sleep(100);if(finished)return;
-    try{await this._target(s);}catch(error){if(finished)return;s.motionUncertain=true;throw error;}
+    try{await this._target(s,true);}catch(error){if(finished)return;s.motionUncertain=true;throw error;}
    }
   };
   try{await (phase==='preapproach'?Promise.race([command,watch()]):command);}
@@ -170,8 +170,9 @@ class GraspCoordinator extends EventEmitter{
   this._record('actual_pose',{state:after});this._publish({completedSegments:this.current.completedSegments+1,
    progress:{stage:phase,completed:1,total:1,checkedSamples:path.length}});
  }
- async _target(s){
-  this._alive(s);const {observation}=await this._snapshot(s);this._alive(s);
+ async _target(s,trackingOnly=false){
+  this._alive(s);const {observation}=trackingOnly
+   ?await this.visionClient.trackingSnapshot(s.stableId):await this._snapshot(s);this._alive(s);
   const ts=Number(observation.observedAtMs??observation.ts),target=(observation.targets||[]).find(t=>Number(t.stable_id??t.stableId)===s.stableId);
   if(!Number.isFinite(ts)||this.now()-ts>this.config.visionMaxAgeMs||ts-this.now()>500)throw fault('vision_stale');
   if(Number(observation.selectedStableId??observation.selected_stable_id)!==s.stableId||!target||target.track_state!=='confirmed')throw fault('target_lost');

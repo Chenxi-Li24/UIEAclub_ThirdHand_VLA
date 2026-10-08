@@ -28,6 +28,30 @@ class VisionClient {
     this.fetchImpl = fetchImpl;
   }
 
+  async trackingSnapshot(stableId) {
+    if (!Number.isSafeInteger(stableId) || stableId < 1 || stableId > 5) {
+      throw visionError('vision_target_invalid', 'Stable target ID must be within 1..5');
+    }
+    // Motion invalidates stationary calibrated projection evidence, not the
+    // identity of a freshly detected RGB target. Never use this for geometry.
+    const status = await readJson(await this.fetchImpl(`${this.baseUrl}/api/vision/status`,
+      { signal: AbortSignal.timeout(1500) }));
+    const detection = status.detection || {};
+    const frameId = detection.frame_id ?? detection.frameId;
+    const observedAtMs = Number(detection.ts ?? detection.observedAtMs ?? NaN);
+    if (!Number.isSafeInteger(frameId) || frameId < 0 || !Number.isFinite(observedAtMs)) {
+      throw visionError('vision_frame_invalid', 'Motion tracking requires a timestamped detection frame');
+    }
+    const selectedStableId = Number(detection.selected_stable_id ?? detection.selectedStableId);
+    const matches = (detection.targets || []).filter(target =>
+      Number(target.stable_id ?? target.stableId) === stableId);
+    if (selectedStableId !== stableId || matches.length !== 1) {
+      throw visionError('vision_target_mismatch', 'Motion tracking selection changed or is not unique');
+    }
+    return { observation: Object.freeze({ frameId, observedAtMs, selectedStableId,
+      targets: detection.targets }), runtimeEvidence: Object.freeze({}) };
+  }
+
   async snapshot(stableId) {
     if (!Number.isSafeInteger(stableId) || stableId < 1 || stableId > 5) {
       throw visionError('vision_target_invalid', 'Stable target ID must be within 1..5');

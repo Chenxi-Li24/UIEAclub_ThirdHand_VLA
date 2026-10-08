@@ -18,6 +18,7 @@ async function setup(options={}){
   return {reached:command.cmd!=='gripper'||command.position!==0,actual_width_m:state.gripper_width_m};};
  robot.stop=async()=>{events.push({cmd:'software_stop'});return {status:'interrupted'};};robot.close=()=>events.push({cmd:'transport_close'});
  const vision={snapshot:async()=>({observation:{...f.observation,frame_id:++frame,selectedStableId:options.switchTarget?1:2},runtimeEvidence:{}})};
+ vision.trackingSnapshot=id=>vision.snapshot(id);
  const depth={start:async()=>{},status:()=>({phase:'depth_acquired',active:false}),stop:async()=>{},close:async()=>{}};
  const c=new GraspCoordinator({config,robotClient:robot,visionClient:vision,depthCoordinator:depth,now:()=>1000,sleep:async()=>{await pause();}});
  return {c,events,robot,state};
@@ -103,6 +104,39 @@ test('loss of selected target during a continuous preapproach stops the in-fligh
  assert.equal(s.phase,'failed',s.reason);assert.equal(s.reason,'target_lost');
  assert.equal(events.filter(e=>e.cmd==='software_stop').length,1);
  assert.equal(events.filter(e=>e.cmd==='move_l').length,1);
+});
+test('continuous preapproach survives missing stationary projection evidence without releasing motor holding force',async()=>{
+ const {c,events,robot,state}=await setup({config:{executionMode:'phase_linear',orientationMode:'horizontal'}});
+ const originalCommand=robot.command,snapshot=c.visionClient.snapshot;
+ let moving=false,started=false,complete,trackingReads=0,blockedSnapshots=0;
+ robot.command=async cmd=>{
+  if(cmd.cmd==='move_l'&&!started){started=true;moving=true;
+   return new Promise(resolve=>{complete=()=>{state.flange_position_m=[...cmd.position];moving=false;resolve({reached:true});};});}
+  return originalCommand(cmd);
+ };
+ c.visionClient.snapshot=async id=>{if(moving){blockedSnapshots++;throw Object.assign(Error('no stationary evidence during motion'),{code:'vision_evidence_mismatch'});}return snapshot(id);};
+ c.visionClient.trackingSnapshot=async id=>{const result=await snapshot(id);if(moving&&++trackingReads===25)complete();
+  result.observation.frame_projection={status:'invalid'};result.observation.targets=result.observation.targets.map(t=>({...t,depth_valid:false,camera_xyz_m:null}));return result;};
+ try{
+  await c.start(2,'moving-rgb-only');const status=await finish(c);
+  assert.equal(status.phase,'complete',status.reason);assert.equal(trackingReads,25);assert.equal(blockedSnapshots,0);
+  assert.equal(events.some(e=>e.cmd==='software_stop'),false);
+ }finally{if(moving&&complete)complete();}
+});
+for(const [name,change,reason] of [
+ ['stale RGB',o=>o.ts=-3000,'vision_stale'],
+ ['lost identity',o=>o.targets=o.targets.map(t=>({...t,track_state:'lost'})),'target_lost'],
+ ['switched selection',o=>o.selectedStableId=1,'target_lost'],
+])test(`in-flight ${name} still stops the preapproach instead of being ignored`,async()=>{
+ let unblock;
+ const {c,events,robot}=await setup({config:{executionMode:'phase_linear',orientationMode:'horizontal'},
+  command:async(cmd,state)=>{if(cmd.cmd==='gripper'){state.gripper_width_m=.08;return {reached:true};}return new Promise(resolve=>unblock=resolve);}});
+ const snapshot=c.visionClient.snapshot;
+ c.visionClient.trackingSnapshot=async id=>{const result=await snapshot(id);change(result.observation);return result;};
+ try{await c.start(2,'moving-bad-'+name.replaceAll(' ','-'));const status=await finish(c);
+  assert.equal(status.phase,'failed');assert.equal(status.reason,reason);
+  assert.equal(events.filter(e=>e.cmd==='software_stop').length,1);
+ }finally{if(unblock)unblock({reached:false});}
 });
 test('continuous phase previews the fresh actual-start line rather than an obsolete nominal line',async()=>{
  let opened=false;const checked=[];

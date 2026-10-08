@@ -97,3 +97,25 @@ The new measured-TCP checkpoint regression fails with the previous 200 mm
 configuration and passes with 100 mm. Focused geometry/coordinator/horizontal/TCP
 gateway tests pass 94/94. Full Node regression reports 460/464 passing; the same
 four macOS launcher fixture failures listed above remain outside this change.
+
+## 2026-10-08 in-motion projection follow-up
+
+The preapproach watchdog previously requested stationary calibrated evidence
+while the arm was moving. Twenty evidence retries expired and invoked the existing
+Web software stop, which disables motors; this is not a confirmed hardware E-stop.
+The watchdog now reads one complete current RGB detection frame through the same
+Web9983 status endpoint. It checks fresh timestamps, the unchanged selected stable
+ID and a unique confirmed track without requiring depth/projection evidence.
+
+Before motion and after reaching the checkpoint, the original correlated
+calibrated snapshot/depth requirements still apply. Stale or lost targets, selection
+changes, communication failures, command timeouts and explicit stop retain their
+existing fail-closed behavior. This patch does not alter Robot/SDK software stop
+semantics or implement a torque-preserving hardware pause. It prevents expected
+in-motion projection invalidation from incorrectly entering that stop path.
+Deployment restarts only Web; it does not reconnect, level or move the robot.
+
+The reproduced projection-loss regression now completes without software stop.
+Stale RGB, lost identity and selection-switch regressions still confirm exactly
+one stop. Focused tests pass 59/59; full Node regression reports 466/470 passing,
+with only the same four macOS launcher fixture failures listed above.

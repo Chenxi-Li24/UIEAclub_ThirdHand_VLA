@@ -29,6 +29,11 @@ remain unchanged. Deploy only Web and Vision code; do not restart the robot SDK.
   plausible matches or a visibility gap lock the selected identity until release
   and reselection; appearance alone cannot bridge that gap. These are conservative
   association checks, not proof of physical identity.
+  Zero/out-of-range sensor depth cannot create a base anchor or a tracking point.
+- Relay metadata distinguishes actual motion and stale feedback from velocity
+  noise. A velocity-only spike still invalidates calibrated coordinates under
+  the original stationary rule, but does not repeatedly reset a static camera's
+  segmentation. Only genuinely stationary feedback can settle motion mode.
 - Post-motion correlation may settle for up to 3 seconds. Stale depth, target loss,
   wrong frame bindings and unconfirmed stops remain terminal failures. An
   unconfirmed stop retains control ownership until a confirmed stop. Closing the

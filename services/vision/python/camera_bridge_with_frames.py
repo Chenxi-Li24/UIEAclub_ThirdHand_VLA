@@ -489,7 +489,10 @@ class UnifiedVisionRuntime:
                 np.linalg.norm(pose[:3]-previous[:3]) > .001
                 or np.max(np.abs(pose[3:6]-previous[3:6])) > .002
                 or np.max(np.abs(pose[6:]-previous[6:])) > .2)
-            moving = message.get("stationary") is not True or changed
+            motion_signal = (message.get("motion_active") is True
+                or message.get("feedback_invalidated") is True
+                or ("motion_active" not in message and message.get("stationary") is not True))
+            moving = motion_signal or changed
             self._last_robot_pose, self._last_robot_stamp = pose, stamp
             if moving:
                 if not self._camera_moving:
@@ -497,7 +500,7 @@ class UnifiedVisionRuntime:
                     self._tracking_reset_pending = True
                 self._camera_moving = True
                 self._settled_hits = 0
-            elif self._camera_moving:
+            elif self._camera_moving and message.get("stationary") is True:
                 self._settled_hits += 1
                 if self._settled_hits >= 3:
                     self._camera_moving = False

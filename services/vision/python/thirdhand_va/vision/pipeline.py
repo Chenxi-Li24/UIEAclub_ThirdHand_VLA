@@ -121,8 +121,14 @@ class VisionPipeline:
         for candidate in candidates:
             if candidate.mask.shape == frame.xyz_camera_m.shape[:2]:
                 tracking_points = frame.xyz_camera_m[candidate.mask]
+                tracking_depth = frame.depth_m[candidate.mask]
                 tracking_points = tracking_points[
                     np.isfinite(tracking_points).all(axis=1)
+                    & np.isfinite(tracking_depth)
+                    & (tracking_depth >= self.config.min_depth_m)
+                    & (tracking_depth <= self.config.max_depth_m)
+                    & (tracking_points[:, 2] >= self.config.min_depth_m)
+                    & (tracking_points[:, 2] <= self.config.max_depth_m)
                 ]
                 if len(tracking_points) >= self.config.min_depth_points:
                     tracking_point = np.median(tracking_points, axis=0)

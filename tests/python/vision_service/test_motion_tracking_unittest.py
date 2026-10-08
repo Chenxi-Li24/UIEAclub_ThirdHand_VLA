@@ -80,6 +80,15 @@ class MotionTests(unittest.TestCase):
         self.update(state)
         self.backend.visible = False
         self.assertGreater(self.runtime.process_frame(self.frame()).motion_epoch, 0)
+    def test_velocity_only_stationary_rejection_does_not_reset_static_camera_masks(self):
+        self.update(self.state())
+        self.update({**self.state(False), 'motion_active':False, 'feedback_invalidated':False})
+        self.assertEqual(self.runtime.process_frame(self.frame()).motion_epoch, 0)
+    def test_explicit_stale_invalidation_still_resets_camera_tracking(self):
+        state = {**self.state(), 'motion_active':False, 'feedback_invalidated':False}
+        self.update(state)
+        self.update({**state, 'stationary':False, 'feedback_invalidated':True})
+        self.assertGreater(self.runtime.process_frame(self.frame()).motion_epoch, 0)
     def test_settled_motion_reseeds_tracking_and_keeps_selected_id(self):
         self.update(self.state())
         self.update(self.state(False))
@@ -124,6 +133,16 @@ class MotionTests(unittest.TestCase):
         self.backend.infer = ambiguous
         decision = self.runtime.process_frame(self.frame())
         self.assertFalse(any(t.stable_id == 1 and t.state == 'confirmed' for t in decision.tracks))
+    def test_zero_depth_cannot_create_a_reserved_base_anchor(self):
+        runtime = UnifiedVisionRuntime(self.runtime.config, Backend(), projection=SimpleNamespace(
+            snapshot_for_frame=lambda *args, **kwargs: SimpleNamespace(matrix_4x4=np.eye(4))))
+        for _ in range(3):
+            frame = self.frame()
+            frame.depth_m[:] = 0
+            frame.xyz_camera_m[:] = 0
+            runtime.process_frame(frame)
+        self.assertTrue(runtime.select_target(1, 'zero-depth'))
+        self.assertFalse(runtime.pipeline.tracker.reserved_world_anchor_available)
     def test_lost_selected_track_is_not_painted_over_the_live_image(self):
         track = replace(self.decision.tracks[0], state='lost')
         decision = replace(self.decision, tracks=(track,))

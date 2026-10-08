@@ -44,6 +44,76 @@ function fixture(t,{connect=true,capability={}}={}){
 test('canonical client requires a content-bound SDK policy',()=>{
   assert.throws(()=>new CanonicalRobotWebSocketClient({WebSocketImpl:Socket,url:'ws://local-test-only/ws'}),/frame_policy_required/);
 });
+
+test('validated streams have a stable identity and disconnect invalidates it',t=>{
+ const {client,state,feedback}=fixture(t);
+ const first=client.getRobotState().streamId;
+ assert.equal(typeof first,'string');assert.ok(first.length>0);
+ feedback({...state,state_sequence:2,producer_monotonic_ns:1_000_000_001});
+ assert.equal(client.getRobotState().streamId,first);
+ feedback({type:'connection',connected:false});assert.equal(client.streamId,null);
+ feedback({...state,state_sequence:3,producer_monotonic_ns:1_000_000_002});
+ assert.notEqual(client.getRobotState().streamId,first);
+});
+
+test('initial feedback after an idle server refreshes the handshake, never trusts the rejected frame',t=>{
+  const {client,socket,state,feedback,setNow}=fixture(t,{capability:{producer_monotonic_ns:1000}});
+  assert.equal(client.getRobotState(),null);
+  const request=socket.sent.at(-1);
+  assert.equal(request.type,'capability_request');
+  assert.equal(client.protocolReady,false);
+  // Complete a new correlated handshake against the now-running producer.
+  feedback({type:'capability_response',schema:'thirdhand-robot-capability-v1',nonce:request.nonce,
+    protocol_version:'thirdhand-robot-lowlevel-v1',pose_frame:'robot_flange',
+    commands:['move_l','move_joint','gripper','preset','software_stop','get_state'],
+    correlated_completions:true,software_stop_ack:true,software_stop_state_boundary:true,
+    state_units:{position:'m',orientation:'rad',joints:'deg',joint_velocity:'deg/s',gripper:'m'},
+    state_stream:{sequence:'uint53',producer_monotonic_ns:'uint53',strictly_increasing:true},
+    state_sequence:1,producer_monotonic_ns:1_000_000_000});
+  assert.equal(client.getRobotState(),null);
+  setNow(1_050_000_000n);
+  feedback({...state,state_sequence:2,producer_monotonic_ns:1_050_000_000});
+  assert.equal(client.getRobotState()?.stateFresh,true);
+  assert.equal(socket.sent.every(item=>item.type==='capability_request'),true);
+});
+
+const teachCapability={commands:['move_l','move_joint','gripper','preset','software_stop','get_state',
+  'teach_start','teach_hold','teach_keepalive']};
+test('teach start waits for the matching SDK mode acknowledgement',async t=>{
+ const {client,feedback}=fixture(t,{capability:teachCapability});
+ let resolved=false;
+ const pending=client.sendTeachCommand({cmd:'teach_start',request_id:'teach-ack'}).then(value=>{resolved=true;return value;});
+ feedback({type:'command_status',command:'teach_start',status:'accepted',request_id:'teach-ack'});
+ await Promise.resolve();assert.equal(resolved,false);
+ feedback({type:'teach_state',active:true,request_id:'another'});
+ await Promise.resolve();assert.equal(resolved,false);
+ feedback({type:'teach_state',active:true,request_id:'teach-ack'});
+ assert.equal((await pending).accepted,true);assert.equal(client.getRobotState().teachActive,true);
+});
+test('teach rejection is surfaced and disconnect invalidates cached state',async t=>{
+ const {client,feedback}=fixture(t,{capability:teachCapability});
+ const pending=client.sendTeachCommand({cmd:'teach_start',request_id:'teach-error'});
+ feedback({type:'error',request_id:'teach-error',code:'robot_state_stale',msg:'stale feedback'});
+ await assert.rejects(pending,/stale feedback/);
+ feedback({type:'connection',connected:false});
+ assert.equal(client.getRobotState(),null);
+});
+test('hold waits for measured completion, not just leaving gravity mode',async t=>{
+ const {client,feedback}=fixture(t,{capability:teachCapability});
+ let resolved=false;
+ const pending=client.sendTeachCommand({cmd:'teach_hold',request_id:'hold'}).then(value=>{resolved=true;return value;});
+ feedback({type:'teach_state',active:false,request_id:'hold'});
+ await Promise.resolve();assert.equal(resolved,false);
+ feedback({type:'command_status',command:'teach_hold',status:'complete',request_id:'hold',reached:true});
+ assert.equal((await pending).accepted,true);
+});
+test('missing teach capability and unconfirmed hold fail closed',async t=>{
+ const plain=fixture(t);await assert.rejects(plain.client.sendTeachCommand({cmd:'teach_start',request_id:'x'}),/unavailable/);
+ const {client,feedback}=fixture(t,{capability:teachCapability});
+ const pending=client.sendTeachCommand({cmd:'teach_hold',request_id:'bad-hold'});
+ feedback({type:'command_status',command:'teach_hold',status:'complete',request_id:'bad-hold',reached:false});
+ await assert.rejects(pending,/unconfirmed/);
+});
 test('incoming SDK tool coordinates become true flange coordinates',t=>{
   const {client}=fixture(t),state=client.getRobotState();
   assert.deepEqual(state.flangePositionM,[.2,.3,.4]);

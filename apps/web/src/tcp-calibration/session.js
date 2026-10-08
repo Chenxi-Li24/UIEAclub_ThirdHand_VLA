@@ -70,8 +70,9 @@ class TcpCalibrationSession {
     }
     this.state = clone(initialState || emptyState);
     const samples = [...this.state.fitSamples, ...this.state.validationSamples];
-    this.lastStateSequence = samples.length
-      ? Math.max(...samples.map(sample => sample.state_sequence)) : null;
+    const latest=samples.reduce((a,b)=>!a||b.producer_monotonic_ns>a.producer_monotonic_ns?b:a,null);
+    this.lastStateSequence = latest?.state_sequence ?? null;
+    this.lastStreamId = latest?.state_stream_id ?? null;
     this.lastProducerMonotonicNs = samples.length
       ? Math.max(...samples.map(sample => sample.producer_monotonic_ns)) : null;
   }
@@ -94,17 +95,24 @@ class TcpCalibrationSession {
 
   _sample(kind) {
     const snapshot = this.stateSource.snapshot();
-    if (!snapshot || snapshot.locked || snapshot.connected !== true || snapshot.healthy !== true
+    const newStream=typeof snapshot?.streamId==='string' && snapshot.streamId.length>0
+      && snapshot.streamId!==this.lastStreamId;
+    if (!snapshot || snapshot.locked || snapshot.teachActive === true || snapshot.connected !== true || snapshot.healthy !== true
         || snapshot.stationary !== true || snapshot.stateFresh !== true
         || snapshot.poseFrame !== 'robot_flange' || !validMatrix(snapshot.TBaseFlange)
         || typeof snapshot.framePolicyId !== 'string'
         || (this.state.framePolicyId && snapshot.framePolicyId !== this.state.framePolicyId)
         || !Number.isSafeInteger(snapshot.stateSequence)
         || !Number.isSafeInteger(snapshot.producerMonotonicNs)
-        || (this.lastStateSequence !== null && snapshot.stateSequence <= this.lastStateSequence)
+        || (!newStream && this.lastStateSequence !== null && snapshot.stateSequence <= this.lastStateSequence)
         || (this.lastProducerMonotonicNs !== null
           && snapshot.producerMonotonicNs <= this.lastProducerMonotonicNs)) {
-      return this._failure('robot_state_not_recordable');
+      const reason=snapshot?.reason || (snapshot?.teachActive?'robot_teaching':null)
+        || (!snapshot?.stateFresh?'robot_feedback_stale':!snapshot?.stationary?'pose_not_stable':null)
+        || (this.lastProducerMonotonicNs!==null && snapshot?.producerMonotonicNs<=this.lastProducerMonotonicNs
+          ?'feedback_time_not_new':!newStream && this.lastStateSequence!==null
+          && snapshot?.stateSequence<=this.lastStateSequence?'feedback_sequence_not_new':'robot_frame_or_state_invalid');
+      return {...this._failure('robot_state_not_recordable'),reason};
     }
     const all = [...this.state.fitSamples, ...this.state.validationSamples];
     const rotation = snapshot.TBaseFlange.slice(0, 3).map(row => row.slice(0, 3));
@@ -116,12 +124,14 @@ class TcpCalibrationSession {
       kind,
       T_base_flange: clone(snapshot.TBaseFlange),
       state_sequence: snapshot.stateSequence,
+      ...(snapshot.streamId?{state_stream_id:snapshot.streamId}:{}),
       producer_monotonic_ns: snapshot.producerMonotonicNs,
       frame_policy_id: snapshot.framePolicyId,
       operator_confirmed_contact: true,
       operator_confirmed_probe_unloaded: true,
     };
     this.lastStateSequence = snapshot.stateSequence;
+    this.lastStreamId = snapshot.streamId ?? null;
     this.lastProducerMonotonicNs = snapshot.producerMonotonicNs;
     if (!this.state.framePolicyId) this.state.framePolicyId = snapshot.framePolicyId;
     return sample;

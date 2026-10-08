@@ -105,6 +105,23 @@ async function collectValidation(h) {
   }
 }
 
+test('a validated new stream can reset sequence only with a newer producer timestamp', async () => {
+  const h=harness(); await h.session.handle(startCommand());
+  const record=requestId=>h.session.handle({type:'record_fit',requestId,contactConfirmed:true,probeUnloaded:true});
+  h.setSample(FIXTURE.fit_samples[0],16029);
+  assert.equal((await record('legacy')).accepted,true);
+  h.setSample(FIXTURE.fit_samples[1],2);
+  h.changeSnapshot({streamId:'new-stream',producerMonotonicNs:20e9});
+  assert.equal((await record('restarted')).accepted,true);
+  h.setSample(FIXTURE.fit_samples[2],1);
+  h.changeSnapshot({streamId:'new-stream',producerMonotonicNs:21e9});
+  assert.equal((await record('reordered')).accepted,false);
+  h.changeSnapshot({streamId:'other-stream',producerMonotonicNs:19e9});
+  assert.equal((await record('stale-time')).accepted,false);
+  h.changeSnapshot({streamId:'other-stream',producerMonotonicNs:22e9});
+  assert.equal((await record('newer-stream')).accepted,true);
+});
+
 test('start requires exact safety confirmations and finite caliper measurement', async () => {
   const h = harness();
   const invalid = startCommand(); invalid.confirmations.estopReady = false;

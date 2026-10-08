@@ -29,7 +29,7 @@ function createTcpCalibrationRoutes({session,store,stateSource}={}){
   if(!envelope(body,current)){writeJson(response,400,{error:'request_invalid'});return;}
   if(current.revision!==body.expectedRevision){writeJson(response,409,{error:'session_revision_conflict'});return;}
   const result=await session.handle(command);
-  if(!result.accepted){const code=result.error==='robot_state_not_recordable'?423:result.error==='request_id_conflict'?409:400;writeJson(response,code,{error:result.error});return;}
+  if(!result.accepted){const code=result.error==='robot_state_not_recordable'?423:result.error==='request_id_conflict'?409:400;writeJson(response,code,{error:result.error,...(result.reason?{reason:result.reason}:{})});return;}
   try{store.saveSession?.(result.state);}catch(error){storeFailure(error,response);return;}
   remember(key,body,statusCode,result.state,response);
  }
@@ -43,7 +43,8 @@ function createTcpCalibrationRoutes({session,store,stateSource}={}){
    'POST /api/tcp-calibration/sessions','POST /api/tcp-calibration/samples','POST /api/tcp-calibration/solve',
    'POST /api/tcp-calibration/verification-samples','POST /api/tcp-calibration/derive','POST /api/tcp-calibration/finalize',
    'POST /api/tcp-calibration/activate','POST /api/tcp-calibration/rollback','POST /api/tcp-calibration/abort',
-   'POST /api/tcp-calibration/software-stop',
+   'POST /api/tcp-calibration/software-stop','POST /api/tcp-calibration/teach/start',
+   'POST /api/tcp-calibration/teach/hold','POST /api/tcp-calibration/teach/keepalive',
   ]);
   const deleteMatch=pathname.match(/^\/api\/tcp-calibration\/samples\/([A-Za-z0-9._:-]+)$/);
   if(!allowed.has(`${request.method} ${pathname}`)&&!(request.method==='DELETE'&&deleteMatch)){
@@ -57,6 +58,15 @@ function createTcpCalibrationRoutes({session,store,stateSource}={}){
    if(!exact(body,['requestId'])||typeof requestId!=='string'||!requestId){writeJson(response,400,{error:'request_invalid'});return true;}
    const stopped=stateSource.softwareStop();const payload={accepted:stopped};remember(key,body,stopped?200:503,payload,response);return true;
   }
+  const teachMatch=pathname.match(/^\/api\/tcp-calibration\/teach\/(start|hold|keepalive)$/);
+  if(teachMatch){
+   if(!exact(body,['requestId'])||typeof requestId!=='string'||!requestId){writeJson(response,400,{error:'request_invalid'});return true;}
+   try{
+    const command=`teach_${teachMatch[1]}`;const accepted=await stateSource.teach(command);
+    const payload={accepted,robot:stateSource.snapshot()};remember(key,body,accepted?200:503,payload,response);
+   }catch(error){writeJson(response,409,{error:error.message||'teach_failed'});}
+   return true;
+  }
   if(pathname==='/api/tcp-calibration/sessions'){
    if(!exact(body,['requestId','operator','measurement','confirmations'])){writeJson(response,400,{error:'request_invalid'});return true;}
    const result=await session.handle({type:'start',...body});
@@ -66,7 +76,10 @@ function createTcpCalibrationRoutes({session,store,stateSource}={}){
   const current=session.status();
   if(!envelope(body,current)){writeJson(response,400,{error:'request_invalid'});return true;}
   if(current.revision!==body.expectedRevision){writeJson(response,409,{error:'session_revision_conflict'});return true;}
-  if(['/api/tcp-calibration/samples','/api/tcp-calibration/verification-samples'].includes(pathname)&&stateSource.snapshot().locked){writeJson(response,423,{error:'robot_state_locked'});return true;}
+  if(['/api/tcp-calibration/samples','/api/tcp-calibration/verification-samples'].includes(pathname)){
+   const robot=stateSource.snapshot();
+   if(robot.locked){writeJson(response,423,{error:'robot_state_locked',reason:robot.reason||'robot_state_locked'});return true;}
+  }
   if(pathname==='/api/tcp-calibration/samples'){
    if(!exact(body,['sessionId','expectedRevision','requestId','contactConfirmed','probeUnloaded'])){writeJson(response,400,{error:'request_invalid'});return true;}
    await sessionMutation(key,body,response,{type:'record_fit',requestId,contactConfirmed:body.contactConfirmed,probeUnloaded:body.probeUnloaded});return true;

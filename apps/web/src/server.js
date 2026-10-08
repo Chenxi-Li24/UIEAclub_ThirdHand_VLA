@@ -86,7 +86,7 @@ function createWebGateway(options = {}) {
       const {createTcpCalibrationRoutes}=require('./tcp-calibration/routes');
       const client=new CanonicalRobotWebSocketClient({WebSocketImpl:WebSocket,url:config.robotWsUrl,
         framePolicyPath:config.tcpCalibrationFramePolicyFile});
-      const stateSource=new TcpCalibrationRobotStateSource({client});
+      const stateSource=new TcpCalibrationRobotStateSource({client,confirmPoseStability:true});
       const store=new TcpCalibrationArtifactStore({root:config.tcpCalibrationArtifactRoot});
       let initialState=null;
       try{initialState=store.restoreSession();}

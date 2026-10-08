@@ -32,14 +32,14 @@ async function setup(t,{connected=true}={}){
   finalizePending:s=>{storeCalls.push(['finalize',structuredClone(s)]);return {candidateId:`sha256:${'c'.repeat(64)}`};},
   activate:x=>{storeCalls.push(['activate',structuredClone(x)]);return {activeId:x.candidateId,previousActiveId:x.expectedActiveId};},
   rollback:x=>{storeCalls.push(['rollback',structuredClone(x)]);return {activeId:`sha256:${'a'.repeat(64)}`,previousActiveId:x.expectedActiveId};}};
- const stops=[];const stateSource={snapshot:()=>({connected,locked:!connected}),softwareStop:()=>{stops.push('stop');return true;},close(){}};
+ const stops=[],teaches=[];const stateSource={snapshot:()=>({connected,locked:!connected}),softwareStop:()=>{stops.push('stop');return true;},teach:command=>{teaches.push(command);return true;},close(){}};
  const routes=createTcpCalibrationRoutes({session,store,stateSource});
  const noOp={attach(){},close(){},getRobotState(){return null;},broadcast(){},setGraspInterlock(){}};
  const gateway=createWebGateway({host:'127.0.0.1',port:0,readyFile:path.join(temp,'ready'),
   robotProxy:noOp,visionProxy:noOp,voiceProxy:noOp,
   coordinator:{on(){},status(){return {active:false};},async close(){}},tcpCalibrationRoutes:routes,env:{}});
  const address=await gateway.start();t.after(async()=>{await gateway.close();fs.rmSync(temp,{recursive:true,force:true});});
- return {url:`http://127.0.0.1:${address.port}`,session,store,storeCalls,stops};
+ return {url:`http://127.0.0.1:${address.port}`,session,store,storeCalls,stops,teaches};
 }
 const mutation=(url,route,body,{method='POST',origin}={})=>fetch(url+route,{method,
  headers:{'content-type':'application/json',...(origin?{origin}:{})},body:JSON.stringify(body)});
@@ -132,4 +132,11 @@ test('software stop remains available while disconnected and unknown methods fai
  assert.equal((await mutation(url,'/api/tcp-calibration/software-stop',{requestId:'stop'})).status,200);
  assert.deepEqual(stops,['stop']);
  assert.equal((await fetch(url+'/api/tcp-calibration/solve',{method:'GET'})).status,405);
+});
+
+test('teach endpoints expose only start, hold, and keepalive',async t=>{
+ const {url,teaches}=await setup(t);
+ for(const action of ['start','keepalive','hold'])assert.equal((await mutation(url,`/api/tcp-calibration/teach/${action}`,{requestId:`teach-${action}`})).status,200);
+ assert.deepEqual(teaches,['teach_start','teach_keepalive','teach_hold']);
+ assert.equal((await mutation(url,'/api/tcp-calibration/teach/move',{requestId:'bad'})).status,400);
 });

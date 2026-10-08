@@ -335,6 +335,10 @@ class RobotProxy {
           connected: false,
           reason: 'robot_service_disconnected',
         });
+        // This browser transport is bound to one upstream stream. Recycle it
+        // after service loss so clients perform a fresh read-only handshake;
+        // never retain or replay queued actuator commands across a restart.
+        browser.close(1012, 'robot_service_disconnected');
       }
     });
 

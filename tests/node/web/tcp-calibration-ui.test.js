@@ -81,6 +81,17 @@ test('resuming a session hides setup and cannot submit a duplicate start',async(
  await wizard.start();
  assert.equal(requests.some(item=>item.options.method==='POST'),false);
 });
+test('new-session action resets completed wizard without changing active calibration',async()=>{
+ const {wizard,element,requests}=browser([state({stage:'ready_to_finalize'}),state({stage:'ready_to_finalize'}),state({sessionId:null,stage:'idle',revision:4})]);
+ await wizard.init();element('confirm-new-session').checked=true;wizard.render(wizard.state);
+ element('probe-centered').checked=true;
+ assert.equal(element('new-session').disabled,false);await element('new-session').onclick();
+ const post=requests.find(r=>r.url==='/api/tcp-calibration/sessions/new'&&r.options.method==='POST');
+ assert.ok(post);assert.equal(JSON.parse(post.options.body).confirm,true);
+ assert.equal(element('setup-fields').hidden,false);assert.equal(element('start-session').disabled,false);
+ assert.equal(element('probe-centered').checked,false);
+ assert.equal(requests.some(r=>r.url.endsWith('/activate')),false);
+});
 test('empty samples cannot be deleted and the next step explains the disconnected state',async()=>{
  const {wizard,element,requests}=browser([state({robot:{connected:false,locked:true}})]);
  await wizard.init();

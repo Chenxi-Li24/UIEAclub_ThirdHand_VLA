@@ -18,14 +18,22 @@ class WebRobotClient extends EventEmitter{
   if(!deferConnect)this._open();
  }
  _open(){
-  if(this.socket||this.closed)return;
-  this.socket=new WebSocket(this.url,this.ownerToken?{headers:{'x-thirdhand-grasp-owner':this.ownerToken}}:{});
-  this.socket.on('message',raw=>this._message(raw));
-  this.socket.on('error',()=>this._settle(error('web_transport_error')));
-  this.socket.on('close',()=>{this.last=null;this._settle(error('web_disconnected'));this.emit('disconnected');});
+  if(this.closed||this.socket&&this.socket.readyState<WebSocket.CLOSING)return;
+  this.last=null;this.receivedAt=0;
+  const socket=new WebSocket(this.url,this.ownerToken?{headers:{'x-thirdhand-grasp-owner':this.ownerToken}}:{});
+  this.socket=socket;
+  socket.on('message',raw=>{if(this.socket===socket)this._message(raw);});
+  socket.on('error',()=>{if(this.socket!==socket)return;this.last=null;this.receivedAt=0;this._settle(error('web_transport_error'));});
+  socket.on('close',()=>{if(this.socket!==socket)return;this.socket=null;this.last=null;this.receivedAt=0;
+   this._settle(error('web_disconnected'));this.emit('disconnected');});
  }
  _message(raw){
   let m;try{m=JSON.parse(raw);}catch{return;}
+  if(m.type==='connection'&&m.connected===false){
+   this.last=null;this.receivedAt=0;
+   if(this.pending)this.pending.unsafe('web_disconnected');
+   this.socket?.close();return;
+  }
   if(m.type==='robot_state'){
    if(this.last&&Number(m.state_sequence)<=Number(this.last.state_sequence))return;
    this.last=m;this.receivedAt=this.now();this.emit('state',m);this._finishCompletion();return;
@@ -74,7 +82,8 @@ class WebRobotClient extends EventEmitter{
  async ready(timeoutMs=5000){
   this._open();
   const until=this.now()+timeoutMs;while(this.now()<until&&!this.closed){
-   if(this.socket.readyState===WebSocket.OPEN){try{return this.state({idle:true});}catch{}}
+   if(this.socket?.readyState===WebSocket.OPEN){try{return this.state({idle:true});}catch{}}
+   if(!this.socket)throw error('robot_not_ready');
    await delay(20);
   }throw error('robot_not_ready');
  }

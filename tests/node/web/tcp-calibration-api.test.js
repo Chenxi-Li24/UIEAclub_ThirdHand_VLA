@@ -20,6 +20,7 @@ function fakeSession(){
   else if(command.type==='record_validation')state={...state,revision:state.revision+1,validationSamples:[...state.validationSamples,{id:'validation-1'}]};
   else if(command.type==='derive')state={...state,revision:state.revision+1,stage:'ready_to_finalize',validationReport:{accepted:true},solveReport:{accepted:true},derivedTcp:{schema:'thirdhand-grasp-tcp-derived-v1'}};
   else if(command.type==='abort')state={...state,revision:state.revision+1,stage:'aborted'};
+  else if(command.type==='new_session')state={...state,sessionId:null,revision:state.revision+1,stage:'idle',fitSamples:[],validationSamples:[]};
   return {accepted:true,state:structuredClone(state)};
  }};
 }
@@ -146,4 +147,18 @@ test('grasp motion ownership rejects calibration writes but never hides software
  const response=await mutation(url,'/api/tcp-calibration/teach/start',{requestId:'busy'});
  assert.equal(response.status,409);assert.equal((await response.json()).error,'robot_control_busy');assert.deepEqual(teaches,[]);
  assert.equal((await mutation(url,'/api/tcp-calibration/software-stop',{requestId:'stop-owned'})).status,200);
+});
+test('explicit new session preserves artifacts and archives old progress, requiring confirmation and current revision',async t=>{
+ const {url,storeCalls,session}=await setup(t);await session.handle({type:'start'});
+ const body={...envelope(1,'new'),confirm:true};
+ assert.equal((await mutation(url,'/api/tcp-calibration/sessions/new',{...body,confirm:false})).status,400);
+ assert.equal((await mutation(url,'/api/tcp-calibration/sessions/new',{...body,expectedRevision:0})).status,409);
+ const response=await mutation(url,'/api/tcp-calibration/sessions/new',body);assert.equal(response.status,200);
+ assert.equal((await response.json()).stage,'idle');
+ assert.deepEqual(storeCalls.map(c=>c[0]),['save','save']);
+ assert.equal(storeCalls[0][1].sessionId,'session-1');assert.equal(storeCalls[1][1].sessionId,null);
+ const current=await (await fetch(url+'/api/tcp-calibration/sessions/current')).json();
+ assert.equal(current.artifacts.activeId,`sha256:${'b'.repeat(64)}`);
+ assert.equal((await mutation(url,'/api/tcp-calibration/sessions/new',body)).status,200);
+ assert.equal(storeCalls.length,2);
 });

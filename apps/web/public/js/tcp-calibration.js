@@ -24,6 +24,16 @@ class TcpCalibrationWizard{
  }
  bind(){if(this.bound)return;this.bound=true;const on=(id,fn)=>{const node=this.el(id);if(node)node.onclick=()=>fn().catch(error=>this.message(error.message));};
   on('start-session',()=>this.start());on('record-fit',()=>this.record('fit'));
+  on('new-session',async()=>{
+   if(!this.el('confirm-new-session').checked)throw new Error('请确认结束本次会话并重新填写；历史数据及当前 TCP 保留。');
+   await this.mutate('/api/tcp-calibration/sessions/new',{confirm:true});
+   this.captureHeld=false;this.stopHeartbeat();this.resetContact();
+   for(const id of ['confirm-new-session','probe-centered','pivot-fixed','estop-ready','manual-only',
+    'support-ready','confirm-derive','confirm-distance','confirm-axis','confirm-probe-removed','confirm-production',
+    'confirm-activate','confirm-rollback'])this.el(id).checked=false;
+   this.render(this.state);
+   this.message('旧会话已归档，当前 TCP 未修改。请填写新的测量信息并开始。');
+  });
   on('delete-fit',async()=>{const id=this.el('fit-sample').value;if(!id)throw new Error('请先选择已记录的异常样本；当前没有可删除的样本。');return this.mutate(`/api/tcp-calibration/samples/${encodeURIComponent(id)}`,{},'DELETE');});
   on('solve',()=>this.mutate('/api/tcp-calibration/solve'));on('record-validation',()=>this.record('validation'));
   on('derive',()=>this.mutate('/api/tcp-calibration/derive'));on('finalize',async()=>{this.pending=await this.mutate('/api/tcp-calibration/finalize');this.render(this.state);});
@@ -118,6 +128,8 @@ class TcpCalibrationWizard{
   this.el('teach-hold').textContent=robot.teachSupported===true?'锁定当前姿态':'确认已静止（不切换模式）';
   const started=!!state.sessionId;
   this.el('start-session').disabled=started;this.el('start-session').hidden=started;
+  this.el('new-session').disabled=!started||robot.locked!==false||this.teaching||this.teachPending
+    ||!this.el('confirm-new-session').checked;
   this.el('setup-fields').hidden=started;
   this.el('session-summary').hidden=!started;
   this.el('session-summary').textContent=started?`已恢复 ${state.operator||'当前操作员'} 的会话。针尖到夹取中心 ${Number((state.measurement?.distanceM||0)*1000).toFixed(1)} mm；不确定度 ${Number((state.measurement?.uncertaintyM||0)*1000).toFixed(1)} mm；工具轴 [${state.measurement?.toolAxisFlange||'未知'}]。无需重复开始。`:'';
@@ -153,7 +165,7 @@ class TcpCalibrationWizard{
   const ready=state.stage==='ready_to_finalize'&&state.validationReport?.accepted===true;const finalChecks=['confirm-distance','confirm-axis','confirm-probe-removed','confirm-production'].every(id=>this.el(id).checked);
   this.el('finalize').disabled=!(ready&&finalChecks);this.el('activate').disabled=!(this.pending?.candidateId&&this.el('confirm-activate').checked);this.el('rollback').disabled=!(this.active?.previousActiveId&&this.el('confirm-rollback').checked);
   const select=this.el('fit-sample');if(select){const selected=select.value;select.textContent='';for(const sample of state.fitSamples||[]){const option=this.document.createElement('option');option.value=sample.id;option.textContent=sample.id;select.append(option);}if((state.fitSamples||[]).some(sample=>sample.id===selected))select.value=selected;}
-  const report=state.solveReport;if(report){const color={green:'绿色',yellow:'黄色',red:'红色'}[report.classification]||report.classification;this.el('diagnostics').textContent=`${color} · rank ${report.rank}\nRMS ${report.rms_residual_m} m · 最大 ${report.maximum_residual_m} m\n最差样本 ${report.worst_sample_id}\nsingular values ${(report.singular_values||[]).join(', ')}`;}
+  const report=state.solveReport;if(report){const color={green:'绿色',yellow:'黄色',red:'红色'}[report.classification]||report.classification;this.el('diagnostics').textContent=`${color} · rank ${report.rank}\nRMS ${report.rms_residual_m} m · 最大 ${report.maximum_residual_m} m\n最差样本 ${report.worst_sample_id}\nsingular values ${(report.singular_values||[]).join(', ')}`;}else this.el('diagnostics').textContent='等待求解';
   if(report?.sample_ids && (report.sample_ids.length!==fitCount||!report.sample_ids.every(id=>state.fitSamples.some(s=>s.id===id))))this.el('diagnostics').textContent='样本已变更，下面是旧结果；补齐 8 个姿态并重新求解。\n'+this.el('diagnostics').textContent;
   this.el('sdk-transform').textContent='T_flange_sdk_tool = [0.17334, 0, 0] m';this.el('probe-transform').textContent=JSON.stringify(state.derivedTcp?.T_flange_probe_tip||state.solveReport?.probe_tip_flange_m||null,null,2);this.el('grasp-transform').textContent=JSON.stringify(state.derivedTcp?.T_flange_grasp_tcp||null,null,2);
   this.el('pending-status').textContent=this.pending?.candidateId||'尚未保存';

@@ -84,3 +84,15 @@ test('unattributed error after accepted motion stops uncertain execution once',a
  await assert.rejects(client.command({cmd:'move_l',position:[0.305,0,0.2],euler:[0,0,0]}),/robot_error/);await sleep(20);
  assert.equal(received.filter(m=>m.cmd==='software_stop').length,1);
 });
+test('closed transport reopens on the next ready without replaying motion',async t=>{
+ const {client,received,socket}=await setup(t);const old=socket();
+ old.close();await new Promise(r=>client.once('disconnected',r));
+ await client.ready(1000);assert.notEqual(socket(),old);assert.equal(client.state().healthy,true);
+ assert.deepEqual(received,[]);
+});
+test('idle upstream disconnect invalidates feedback immediately and accepts reset sequence only on a new stream',async t=>{
+ const {client,socket}=await setup(t);socket().send(JSON.stringify(robot(1000)));await sleep(15);
+ socket().send(JSON.stringify({type:'connection',connected:false,reason:'robot_service_disconnected'}));await sleep(15);
+ assert.throws(()=>client.state(),/feedback_invalid/);
+ await client.ready(1000);assert.ok(client.state().state_sequence<1000);
+});

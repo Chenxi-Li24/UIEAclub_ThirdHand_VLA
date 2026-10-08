@@ -1415,7 +1415,7 @@ class UIControls {
     const state=this.webGraspStatus||{},phase=state.phase||'idle';
     const labels={idle:'待机',unavailable:'服务不可用',depth_acquiring:'获取深度',planning:'坐标规划',path_checking:'路径检查',
       opening:'张开夹爪',preapproach:'预接近',target_refresh:'刷新目标深度',approach:'接近目标',closing:'闭合夹爪',
-      lifting:'抬升',complete:'流程完成',failed:'执行失败',stopped:'已停止',uncertain:'停止未确认，请现场检查'};
+      lifting:'抬升',complete:'流程完成',failed:'执行失败',stopping:'正在停止，等待确认',stopped:'已停止',uncertain:'停止未确认，请现场检查'};
     const set=(id,text)=>{const node=document.getElementById(id);if(node)node.textContent=text;};
     const mm=values=>Array.isArray(values)&&values.length===3&&values.every(Number.isFinite)?values.map(v=>(v*1000).toFixed(1)).join(', '):'--';
     set('grasp-phase',`${labels[phase]||phase}${state.stableId?' · 目标 #'+state.stableId:''}`);

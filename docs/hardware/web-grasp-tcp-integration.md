@@ -20,8 +20,28 @@
 
 运行数据保存在被 Git 忽略的 `runtime/tcp-calibration/`，包括不可变会话、候选、pending 指针、active-manifest 和上一版本。抓取审计在 `runtime/web-grasp/sessions/`。更新部署时应保留该机器的 runtime 数据，但不应提交到 Git。页面刷新和连接恢复会读回服务器当前状态。
 
+需要重新标定或更正测量信息时，展开第 0 关的「重新标定 / 更正测量信息」，明确确认后点击「归档本次，开始新标定」。旧会话与样本保留，active/pending TCP 不修改；新会话需重新填写测量信息并逐项确认。该操作要求状态有效、静止且不处于示教中。服务器重启也能恢复归档后的待开始状态。
+
+求解与换算结果绑定调用开始时的会话及 revision；期间删除、采样、结束或重置会话，旧异步结果将被拒绝。软件停止期间网页显示「正在停止，等待确认」并保留控制权；确认失败则保持「状态不确定」。深度对准的停止结果也传递到整体抓取流程。Robot 3000 上游断线会关闭对应转发连接，标定自动重建只读连接；抓取在下一次显式启动时重连。所有重连都不启用硬件、不改变模式，也不自动恢复或重放动作。
+
 ## 离线验证与上线边界
 
 `tests/node/web/grasp-tcp-e2e.test.js` 使用真实网页路由、代理、WebSocket 客户端、抓取协调器和标定状态源；仅机械臂/视觉外部 IO 为本机模拟。覆盖 HTTP 目标选择到抬升、实测偏移、状态阶段、标定反馈握手及缺失示教。Python 求解器与几何/存储/UI/所有权测试另行覆盖。
 
 本次只在隔离分支完成代码和离线验证，未部署远端、未发实机动作、未实际激活标定。远端需要更新同一分支并重启既有 Web/视觉服务才能使用新入口；不能仅复制 HTML。实机 TCP 测量、夹爪接触和运动空间应由现场操作者确认。
+
+## 本轮审查与验证
+
+独立只读审查针对主线 `de1f08e` 到实现 `775ad7b`，指出五个重要问题：停止确认的所有权竞争、深度子流程的不确定状态丢失、异步求解提交竞争、无法开启第二次标定、保留连接无法恢复。全部由实现者补充失败回归测试后修复；未进行第二轮审查，也未连接真实设备。
+
+验证命令（在本分支仓库根执行）：
+
+```sh
+PYTHON=/path/to/python-with-numpy node --test tests/node/web/grasp-*.test.js tests/node/web/tcp-calibration-*.test.js tools/frames/test_canonical_robot_client.js tests/node/vision_service/projected-state-route.test.js
+TMPDIR=/private/tmp PYTHON=/path/to/python-with-numpy node --test --test-skip-pattern='one-click restores a missing listener|repair refuses a lookalike entry' tests/node/*/*.test.js tools/frames/test_canonical_robot_client.js
+uv run --system-certs --no-project --with pytest --with numpy --with websockets --with pyyaml --with ikpy --with scipy --with opencv-python-headless --with norfair --with python-socks python -m pytest -q tests/python/tcp_calibration tests/python/vision_service/test_projection_frames.py tests/python/vision_service/test_projection_runtime.py tests/python/vision_service/test_projection_snapshot.py tests/python/vision_service/test_handeye_projection.py tests/python/fixed_tcp_demo tests/python/robot_service
+```
+
+Node 可跨平台回归 427 项通过，排除的两个旧启动器测试依赖 Linux `/proc`，在本次 macOS 环境不适用；这不是 Linux 全量验证。Python 初次回归缺少 `norfair` 与 SOCKS 依赖，补足隔离测试环境后 94 项通过；没有修改生产 Python 依赖或源文件来绕过这些错误。
+
+本轮决策与限制：只接既有网页转发，不新增 CAN/SDK 控制所有者；不重新估计手眼矩阵或宣称实测精度/阻尼通过。实际部署可移植性与物理抓取均留待已授权的实机验证，误把离线通过当作实机通过会有位置误差及碰撞风险。

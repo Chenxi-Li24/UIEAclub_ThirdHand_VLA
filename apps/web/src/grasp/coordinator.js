@@ -34,12 +34,14 @@ class GraspCoordinator extends EventEmitter{
   this._publish({phase:'depth_acquiring',active:true,sessionId:s.id,requestId,stableId,reason:null,holding:false,tcp,
    targetM:null,widthM:null,plan:null,progress:null,depth:null,completedSegments:0,depthValidFrames:0,result:null});
   this._run(s).catch(async e=>{
-   if(s.terminal)return;
+   // Cancellation owns its finalizer; a command rejected by stop() must not
+   // release the arm before that same stop is confirmed.
+   if(s.terminal||s.canceled)return;
    let phase='failed';
    if(s.motionUncertain){
     try{if(this.robotClient.lastStopAt>=s.startedAt&&this.robotClient.lastStopPromise)await this.robotClient.lastStopPromise;else await this.robotClient.stop();}catch{phase='uncertain';}
    }
-   this._terminal(s,phase,e.code||e.message||'grasp_failed');
+   if(!s.canceled)this._terminal(s,phase,e.code||e.message||'grasp_failed');
   });return this.status();
  }
  _terminal(s,phase,reason,result=null){
@@ -75,7 +77,9 @@ class GraspCoordinator extends EventEmitter{
     if(aligned)throw fault('depth_invalid');aligned=true;
     await this.depthCoordinator.start(s.stableId);
     while(this.depthCoordinator.status().active){this._alive(s);this._publish({depth:this.depthCoordinator.status()});await this.sleep(100);}
-    if(this.depthCoordinator.status().phase!=='depth_acquired')throw fault(this.depthCoordinator.status().reason||'depth_acquisition_failed');
+    const depth=this.depthCoordinator.status();
+    if(depth.phase==='uncertain')s.motionUncertain=true;
+    if(depth.phase!=='depth_acquired')throw fault(depth.reason||'depth_acquisition_failed');
    }
    await this.sleep(100);
   }throw fault('depth_timeout');
@@ -160,11 +164,29 @@ class GraspCoordinator extends EventEmitter{
   plan:{preapproach:g.preapproach,contact:g.contact,lift:g.lift,
    segments:Object.fromEntries(Object.entries(g.paths).map(([key,value])=>[key,value.length]))}});}
  async stop(sessionId){
-  const s=this.session;if(!s||s.id!==sessionId||(s.terminal&&this.current.phase!=='uncertain'))return this.status();s.canceled=true;
-  if(s.terminal){try{await this.robotClient.stop();this._publish({phase:'stopped',active:false,interlocked:false,reason:'operator_stop'});this.robotClient.ownerTag=null;}catch{}return this.status();}
-  if(this.depthCoordinator.status().active){await this.depthCoordinator.stop(this.depthCoordinator.status().sessionId);}
-  let phase='stopped';if(s.inFlight||this.robotClient.last?.moving){try{await this.robotClient.stop();}catch{phase='uncertain';}}
-  this._terminal(s,phase,'operator_stop');return this.status();
+  const s=this.session;if(!s||s.id!==sessionId||(s.terminal&&this.current.phase!=='uncertain'))return this.status();
+  if(s.stopPromise)return s.stopPromise;
+  const retry=s.terminal;s.canceled=true;
+  const motion=s.inFlight||s.motionUncertain||this.robotClient.last?.moving;
+  this._publish({phase:'stopping',active:true,interlocked:true,reason:'operator_stop'});
+  s.stopPromise=(async()=>{
+   let phase='stopped',needsStop=motion||retry;
+   try{
+    const depth=this.depthCoordinator.status();
+    if(depth.active){
+     const outcome=await this.depthCoordinator.stop(depth.sessionId);
+     if(outcome?.phase==='uncertain')needsStop=true;
+    }else if(depth.phase==='uncertain')needsStop=true;
+    if(needsStop){
+     if(!retry&&this.robotClient.lastStopAt>=s.startedAt&&this.robotClient.lastStopPromise)await this.robotClient.lastStopPromise;
+     else await this.robotClient.stop();
+    }
+   }catch{phase='uncertain';}
+   // A confirmed retry can resolve a previously terminal uncertain session.
+   if(retry)s.terminal=false;
+   this._terminal(s,phase,'operator_stop');return this.status();
+  })();
+  try{return await s.stopPromise;}finally{s.stopPromise=null;}
  }
  async close(){if(this.current.active)await this.stop(this.current.sessionId);await this.depthCoordinator.close();this.robotClient.close();}
 }

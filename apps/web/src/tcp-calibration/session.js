@@ -63,11 +63,13 @@ class TcpCalibrationSession {
       updatedAt: null,
     };
     if (initialState !== null && (!initialState || initialState.schema !== emptyState.schema
-        || typeof initialState.sessionId !== 'string' || !initialState.sessionId
+        || !(initialState.stage==='idle'&&initialState.sessionId===null)
+          && (typeof initialState.sessionId !== 'string' || !initialState.sessionId)
         || !Number.isSafeInteger(initialState.revision) || initialState.revision < 1
         || !Array.isArray(initialState.fitSamples) || !Array.isArray(initialState.validationSamples))) {
       throw new TypeError('tcp_calibration_session_snapshot_invalid');
     }
+    this.emptyState=clone(emptyState);
     this.state = clone(initialState || emptyState);
     const samples = [...this.state.fitSamples, ...this.state.validationSamples];
     const latest=samples.reduce((a,b)=>!a||b.producer_monotonic_ns>a.producer_monotonic_ns?b:a,null);
@@ -144,10 +146,18 @@ class TcpCalibrationSession {
     const prior = this.replays.get(command.requestId);
     if (prior) return prior.digest === stable(command)
       ? clone(prior.result) : this._failure('request_id_conflict');
-    if (this.state.stage === 'aborted') return this._failure('session_terminal');
+    if (this.state.stage === 'aborted'&&command.type!=='new_session') return this._failure('session_terminal');
+    const origin=this.state,revision=origin.revision;
+    const unchanged=()=>this.state===origin&&this.state.revision===revision;
 
     let result;
-    if (command.type === 'start') {
+    if(command.type==='new_session'){
+      if(this.state.stage==='idle'||!validSimple(command,'new_session'))result=this._failure('stage_invalid');
+      else result=this._commit(()=>{
+        this.state={...clone(this.emptyState),revision};
+        this.replays.clear();this.lastStateSequence=null;this.lastStreamId=null;this.lastProducerMonotonicNs=null;
+      });
+    } else if (command.type === 'start') {
       if (this.state.stage !== 'idle') result = this._failure('stage_invalid');
       else if (!validStart(command)) result = this._failure('start_evidence_invalid');
       else result = this._commit(() => {
@@ -179,6 +189,7 @@ class TcpCalibrationSession {
         try {
           const report = await this.solver({operation:'solve',fit_samples:clone(this.state.fitSamples),
             thresholds:clone(this.thresholds)});
+          if(!unchanged())return this._failure('session_revision_conflict');
           result = this._commit(() => {
             this.state.solveReport = clone(report);
             if (report.accepted === true && report.classification !== 'red') {
@@ -186,7 +197,7 @@ class TcpCalibrationSession {
             }
           });
           if (report.accepted !== true || report.classification === 'red') result.accepted = false;
-        } catch { result = this._failure('solver_failed'); }
+        } catch { if(!unchanged())return this._failure('session_revision_conflict');result = this._failure('solver_failed'); }
       }
     } else if (command.type === 'record_validation') {
       if (this.state.stage !== 'collecting_validation') result = this._failure('stage_invalid');
@@ -205,6 +216,7 @@ class TcpCalibrationSession {
         try {
           const validation = await this.solver({operation:'validate',candidate:clone(this.state.solveReport),
             validation_samples:clone(this.state.validationSamples),thresholds:clone(this.thresholds)});
+          if(!unchanged())return this._failure('session_revision_conflict');
           if (validation.accepted !== true) {
             result = this._commit(() => { this.state.validationReport = clone(validation); });
             result.accepted = false;
@@ -215,13 +227,14 @@ class TcpCalibrationSession {
               distance_m:this.state.measurement.distanceM,
               measurement_uncertainty_m:this.state.measurement.uncertaintyM,
               tool_axis_flange:clone(this.state.measurement.toolAxisFlange)});
+            if(!unchanged())return this._failure('session_revision_conflict');
             result = this._commit(() => {
               this.state.validationReport = clone(validation);
               this.state.derivedTcp = clone(derived);
               this.state.stage = 'ready_to_finalize';
             });
           }
-        } catch { result = this._failure('solver_failed'); }
+        } catch { if(!unchanged())return this._failure('session_revision_conflict');result = this._failure('solver_failed'); }
       }
     } else if (command.type === 'abort' && validSimple(command, 'abort')) {
       result = this._commit(() => { this.state.stage = 'aborted'; });

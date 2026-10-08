@@ -220,3 +220,45 @@ test('request replay is idempotent, conflicting reuse fails, and abort is termin
   assert.equal((await h.session.handle({type:'abort',requestId:'abort'})).state.stage, 'aborted');
   assert.deepEqual(await h.session.handle({type:'solve',requestId:'after'}), {accepted:false,error:'session_terminal'});
 });
+
+test('solve cannot commit a report after fitting samples change',async()=>{
+ const h=harness();await collectFit(h);const original=h.session.solver;let resolve;
+ h.session.solver=request=>new Promise(r=>{resolve=()=>original(request).then(r);});
+ const solving=h.session.handle({type:'solve',requestId:'racing-solve'});
+ await h.session.handle({type:'delete_fit',requestId:'during-solve',sampleId:h.session.status().fitSamples[0].id});
+ resolve();assert.deepEqual(await solving,{accepted:false,error:'session_revision_conflict'});
+ assert.equal(h.session.status().stage,'collecting_fit');assert.equal(h.session.status().solveReport,null);
+});
+test('abort invalidates pending solve and pending derive results',async()=>{
+ for(const operation of ['solve','derive']){
+  const h=harness();await collectFit(h);
+  if(operation==='derive'){await h.session.handle({type:'solve',requestId:'solve'});await collectValidation(h);}
+  const original=h.session.solver;let resolve;
+  h.session.solver=request=>new Promise(r=>{resolve=()=>original(request).then(r);});
+  const pending=h.session.handle({type:operation,requestId:'pending'});
+  await h.session.handle({type:'abort',requestId:'abort-pending'});resolve();
+  assert.deepEqual(await pending,{accepted:false,error:'session_revision_conflict'});
+  assert.equal(h.session.status().stage,'aborted');assert.equal(h.session.status().derivedTcp,null);
+ }
+});
+test('explicit new session clears local evidence and replay state after completion or abort',async()=>{
+ for(const terminal of ['ready_to_finalize','aborted']){
+  const h=harness();await collectFit(h);
+  if(terminal==='ready_to_finalize'){
+   await h.session.handle({type:'solve',requestId:'solve'});await collectValidation(h);
+   await h.session.handle({type:'derive',requestId:'derive'});
+  }else await h.session.handle({type:'abort',requestId:'abort'});
+  const previous=h.session.status();
+  const reset=await h.session.handle({type:'new_session',requestId:'reset'});
+  assert.equal(reset.accepted,true);assert.equal(reset.state.stage,'idle');assert.equal(reset.state.sessionId,null);
+  assert.equal(reset.state.revision,previous.revision+1);assert.deepEqual(reset.state.fitSamples,[]);
+  assert.equal(reset.state.derivedTcp,null);
+  const restored=new TcpCalibrationSession({stateSource:h.session.stateSource,solver:h.session.solver,
+   thresholds:THRESHOLDS,idFactory:()=> 'restored-id',now:()=> 'now',initialState:reset.state});
+  assert.equal(restored.status().stage,'idle');
+  const started=await h.session.handle(startCommand());assert.equal(started.accepted,true);
+  assert.notEqual(started.state.sessionId,previous.sessionId);
+  h.setSample(FIXTURE.fit_samples[0],1);
+  assert.equal((await h.session.handle({type:'record_fit',requestId:'fit-0',contactConfirmed:true,probeUnloaded:true})).accepted,true);
+ }
+});

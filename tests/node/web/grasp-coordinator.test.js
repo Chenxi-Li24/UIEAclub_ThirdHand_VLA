@@ -113,3 +113,66 @@ test('invalid active calibration refuses grasp before ownership or any actuator 
  await assert.rejects(c.start(2,'bad-tcp'),/artifact_hash_mismatch/);
  assert.equal(c.status().active,false);assert.equal(events.length,0);
 });
+
+async function stoppingHarness(){
+ const {WebRobotClient}=require('../../../apps/web/src/grasp/robot-client');
+ const {c,state}=await setup();const wire=[];
+ const client=new WebRobotClient({url:'ws://127.0.0.1:9983/ws',deferConnect:true,now:()=>1000});
+ client.last=state;client.receivedAt=1000;
+ client.socket={readyState:1,send(raw){const command=JSON.parse(raw);wire.push(command);
+  if(command.cmd==='gripper'){
+   client._message(JSON.stringify({type:'command_status',status:'complete',request_id:command.request_id,reached:true}));
+   client._message(JSON.stringify({...client.last,type:'robot_state',gripper_width_m:.08,state_sequence:client.last.state_sequence+1}));
+  }
+ }};
+ client.ready=async()=>client.state();client.preview=async()=>({ok:true,joints_deg:[0,0,-1,0,0,0]});
+ const actualState=client.state.bind(client);client.state=options=>{client.last.state_sequence++;return actualState(options);};
+ c.robotClient=client;
+ await c.start(2,'stop-real-client');
+ for(let i=0;i<1000&&!wire.some(m=>m.cmd==='move_l');i++)await pause();
+ assert.ok(wire.some(m=>m.cmd==='move_l'),c.status().reason);
+ return {c,client,wire};
+}
+test('real client operator-stop rejection retains ownership until delayed stop acknowledgement',async()=>{
+ const {c,client,wire}=await stoppingHarness();const stopping=c.stop(c.status().sessionId);
+ await pause();assert.equal(c.status().phase,'stopping');assert.equal(c.status().active,true);assert.ok(client.ownerTag);
+ const stop=wire.find(m=>m.cmd==='software_stop');assert.ok(stop);
+ client._message(JSON.stringify({type:'command_status',status:'complete',request_id:stop.request_id,stopped:true}));
+ await stopping;assert.equal(c.status().phase,'stopped');assert.equal(c.status().active,false);assert.equal(client.ownerTag,null);
+});
+test('real client rejected stop acknowledgement remains uncertain and owned',async()=>{
+ const {c,client,wire}=await stoppingHarness();const stopping=c.stop(c.status().sessionId);
+ await pause();const stop=wire.find(m=>m.cmd==='software_stop');
+ client._message(JSON.stringify({type:'command_status',status:'complete',request_id:stop.request_id,stopped:false}));
+ await stopping;assert.equal(c.status().phase,'uncertain');assert.equal(c.status().active,true);assert.ok(client.ownerTag);
+});
+test('uncertain nested depth command awaits shared stop before releasing parent ownership',async()=>{
+ const {c,robot}=await setup();let rejectStop;
+ c.visionClient.snapshot=async()=>({observation:{...fixture().observation,frame_id:11,selectedStableId:2,
+  targets:fixture().observation.targets.map(t=>({...t,depth_valid:false}))}});
+ c.depthCoordinator.start=async()=>{robot.lastStopAt=1000;robot.lastStopPromise=new Promise((_,reject)=>{rejectStop=reject;});};
+ c.depthCoordinator.status=()=>({phase:'uncertain',active:false,reason:'feedback_invalid'});
+ await c.start(2,'uncertain-depth');await pause();assert.equal(c.status().active,true);assert.ok(robot.ownerTag);
+ rejectStop(Error('stop_unconfirmed'));await pause();await pause();
+ assert.equal(c.status().phase,'uncertain');assert.equal(c.status().active,true);assert.ok(robot.ownerTag);
+});
+test('uncertain nested depth stop cannot publish inactive parent stopped',async()=>{
+ const {c,robot}=await setup();let started=false;
+ c.visionClient.snapshot=async()=>({observation:{...fixture().observation,frame_id:11,selectedStableId:2,
+  targets:fixture().observation.targets.map(t=>({...t,depth_valid:false}))}});
+ c.depthCoordinator.start=async()=>{started=true;};
+ c.depthCoordinator.status=()=>({phase:'moving',active:true,sessionId:'depth'});
+ c.depthCoordinator.stop=async()=>({phase:'uncertain',active:false});
+ robot.stop=async()=>{throw Error('stop_unconfirmed');};
+ await c.start(2,'depth-stop');for(let i=0;i<1000&&!started;i++)await pause();
+ await c.stop(c.status().sessionId);
+ assert.equal(c.status().phase,'uncertain');assert.equal(c.status().active,true);assert.ok(robot.ownerTag);
+});
+test('operator cancellation supersedes a failure handler already awaiting the automatic stop',async()=>{
+ const {c,robot}=await setup();const command=robot.command;let confirm;
+ robot.command=async cmd=>{if(cmd.cmd==='move_l'){const error=Error('feedback_stale');error.motionUncertain=true;throw error;}return command(cmd);};
+ robot.stop=()=>{robot.lastStopAt=1000;return robot.lastStopPromise=new Promise(r=>{confirm=r;});};
+ await c.start(2,'cancel-during-autostop');for(let i=0;i<1000&&!confirm;i++)await pause();assert.ok(confirm);
+ const canceled=c.stop(c.status().sessionId);confirm({status:'interrupted'});await canceled;
+ assert.equal(c.status().phase,'stopped');assert.equal(robot.ownerTag,null);
+});

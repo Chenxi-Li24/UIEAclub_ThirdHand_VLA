@@ -10,7 +10,7 @@ const {TcpCalibrationArtifactStore}=require('../../../apps/web/src/tcp-calibrati
 const {loadPolicy}=require('../../../services/vision/src/frames/robot_frame_normalization');
 const root=path.resolve(__dirname,'../../..');
 const wait=ms=>new Promise(resolve=>setTimeout(resolve,ms));
-async function until(predicate){for(let n=0;n<500;n++){if(predicate())return;await wait(5);}assert.fail('offline pipeline timeout');}
+async function until(predicate){for(let n=0;n<1000;n++){if(await predicate())return;await wait(5);}assert.fail('offline pipeline timeout');}
 
 test('HTTP target selection and one start traverse actual gateway sockets to measured TCP contact and lift',async t=>{
  const temp=fs.mkdtempSync(path.join(os.tmpdir(),'web-grasp-tcp-e2e-'));
@@ -85,4 +85,13 @@ test('HTTP target selection and one start traverse actual gateway sockets to mea
  assert.equal(calibration.status,200);assert.equal(calibration.body.robot.locked,false,calibration.body.robot.reason);
  assert.equal(calibration.body.robot.teachSupported,false);
  assert.deepEqual(calibration.body.robot.TBaseFlange.slice(0,3).map(row=>row[3]),[.31,-.02,.24]);
+ const stream=calibration.body.robot.streamId,motionCount=received.filter(m=>['move_l','gripper'].includes(m.cmd)).length;
+ // Simulate Robot 3000 dropping its connections: retained gateway clients
+ // must recycle only their transports, not replay or enable any actuator.
+ for(const socket of [...sockets])socket.terminate();
+ await until(()=>client.socket===null);await client.ready(1000);
+ await until(async()=>{const next=(await json('/api/tcp-calibration/sessions/current')).body.robot;
+  return next.locked===false&&next.streamId!==stream;});
+ assert.equal(received.filter(m=>['move_l','gripper'].includes(m.cmd)).length,motionCount);
+ assert.equal(received.some(m=>['connect','disconnect','teach_start'].includes(m.cmd)),false);
 });

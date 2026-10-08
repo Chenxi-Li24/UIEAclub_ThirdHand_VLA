@@ -29,7 +29,7 @@ function createTcpCalibrationRoutes({session,store,stateSource,canMutate=()=>tru
   if(!envelope(body,current)){writeJson(response,400,{error:'request_invalid'});return;}
   if(current.revision!==body.expectedRevision){writeJson(response,409,{error:'session_revision_conflict'});return;}
   const result=await session.handle(command);
-  if(!result.accepted){const code=result.error==='robot_state_not_recordable'?423:result.error==='request_id_conflict'?409:400;writeJson(response,code,{error:result.error,...(result.reason?{reason:result.reason}:{})});return;}
+  if(!result.accepted){const code=result.error==='robot_state_not_recordable'?423:['request_id_conflict','session_revision_conflict'].includes(result.error)?409:400;writeJson(response,code,{error:result.error,...(result.reason?{reason:result.reason}:{})});return;}
   try{store.saveSession?.(result.state);}catch(error){storeFailure(error,response);return;}
   remember(key,body,statusCode,result.state,response);
  }
@@ -40,7 +40,7 @@ function createTcpCalibrationRoutes({session,store,stateSource,canMutate=()=>tru
    catch(error){storeFailure(error,response);}return true;
   }
   const allowed=new Set([
-   'POST /api/tcp-calibration/sessions','POST /api/tcp-calibration/samples','POST /api/tcp-calibration/solve',
+   'POST /api/tcp-calibration/sessions','POST /api/tcp-calibration/sessions/new','POST /api/tcp-calibration/samples','POST /api/tcp-calibration/solve',
    'POST /api/tcp-calibration/verification-samples','POST /api/tcp-calibration/derive','POST /api/tcp-calibration/finalize',
    'POST /api/tcp-calibration/activate','POST /api/tcp-calibration/rollback','POST /api/tcp-calibration/abort',
    'POST /api/tcp-calibration/software-stop','POST /api/tcp-calibration/teach/start',
@@ -79,6 +79,16 @@ function createTcpCalibrationRoutes({session,store,stateSource,canMutate=()=>tru
   const current=session.status();
   if(!envelope(body,current)){writeJson(response,400,{error:'request_invalid'});return true;}
   if(current.revision!==body.expectedRevision){writeJson(response,409,{error:'session_revision_conflict'});return true;}
+  if(pathname==='/api/tcp-calibration/sessions/new'){
+   if(!exact(body,['sessionId','expectedRevision','requestId','confirm'])||body.confirm!==true){writeJson(response,400,{error:'request_invalid'});return true;}
+   const robot=stateSource.snapshot();
+   if(robot.locked!==false||robot.teachActive===true){writeJson(response,423,{error:'robot_state_locked'});return true;}
+   try{store.saveSession?.(current);}catch(error){storeFailure(error,response);return true;}
+   const result=await session.handle({type:'new_session',requestId});
+   if(!result.accepted){writeJson(response,400,{error:result.error});return true;}
+   try{store.saveSession?.(result.state);}catch(error){storeFailure(error,response);return true;}
+   replays.clear();remember(key,body,200,result.state,response);return true;
+  }
   if(['/api/tcp-calibration/samples','/api/tcp-calibration/verification-samples'].includes(pathname)){
    const robot=stateSource.snapshot();
    if(robot.locked){writeJson(response,423,{error:'robot_state_locked',reason:robot.reason||'robot_state_locked'});return true;}

@@ -44,6 +44,13 @@ test('session restart restores content-verified immutable snapshot', t => {
   assert.match(saved.contentHash,/^sha256:[a-f0-9]{64}$/);
   assert.equal(fs.statSync(saved.path).mode & 0o777,0o600);
 });
+test('fresh idle session pointer preserves old session artifacts and the activated TCP',t=>{
+ const {root,store}=harness(t);const old=store.saveSession(snapshot());
+ const candidate=store.finalizePending(snapshot());store.activate({candidateId:candidate.candidateId,expectedActiveId:null});
+ store.saveSession(snapshot({sessionId:null,stage:'idle',revision:13,fitSamples:[],validationSamples:[],derivedTcp:null,solveReport:null,validationReport:null}));
+ assert.equal(new TcpCalibrationArtifactStore({root}).restoreSession().stage,'idle');
+ assert.equal(fs.existsSync(old.path),true);assert.equal(store.activeTcp(`sha256:${'a'.repeat(64)}`).id,candidate.candidateId);
+});
 
 test('truncated pointer and immutable hash mismatch fail closed', t => {
   const {root,store}=harness(t);

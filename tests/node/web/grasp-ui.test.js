@@ -42,3 +42,8 @@ test('reconnect refreshes runtime and current grasp status without relying on pr
  await c._refreshWebGrasp();assert.deepEqual(calls,['/api/runtime-config','/api/grasp/status']);
  assert.equal(c.webGraspStatus.sessionId,'running');assert.match(get('grasp-phase').textContent,/抬升/);
 });
+test('pending stop displays confirmation in progress and retains workflow controls',()=>{
+ const {c,get}=ui();c._applyWebGraspStatus({phase:'stopping',active:true,interlocked:true,sessionId:'one',reason:'operator_stop'});
+ assert.match(get('grasp-phase').textContent,/等待.*确认/);
+ assert.equal(get('btn-grasp-start').disabled,true);assert.equal(get('btn-grasp-cancel').disabled,false);
+});

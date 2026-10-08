@@ -103,7 +103,8 @@ class TcpCalibrationArtifactStore {
 
   saveSession(snapshot) {
     if(!snapshot||snapshot.schema!=='thirdhand-tcp-calibration-session-v1'
-        ||typeof snapshot.sessionId!=='string'||!snapshot.sessionId
+        ||!(snapshot.stage==='idle'&&snapshot.sessionId===null)
+          && (typeof snapshot.sessionId!=='string'||!snapshot.sessionId)
         ||!Number.isSafeInteger(snapshot.revision))throw codedError('session_snapshot_invalid');
     const saved=this._writeImmutable('sessions',{
       schema:'thirdhand-tcp-session-artifact-v1',snapshot:structuredClone(snapshot),savedAt:this.now(),

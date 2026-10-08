@@ -1,0 +1,84 @@
+{
+  "schema": "thirdhand-robot-frame-policy-v1",
+  "source_semantics": "sdk_tool_mislabeled_as_robot_flange",
+  "T_flange_sdk_tool": [
+    [
+      1,
+      0,
+      0,
+      0.17334
+    ],
+    [
+      0,
+      1,
+      0,
+      0
+    ],
+    [
+      0,
+      0,
+      1,
+      0
+    ],
+    [
+      0,
+      0,
+      0,
+      1
+    ]
+  ],
+  "sdk_config_path": "../../local/generated/startouch-python/startouch_sdk/src/config/robot_kinematics.yaml",
+  "bindings": [
+    {
+      "path": "../../local/sdk/startouch/src/config/robot_kinematics.yaml",
+      "sha256": "e88cbf578f1262386adcf7edf40a5638513cdc59a5da4fe938e88a31addd35ce"
+    },
+    {
+      "path": "../../services/robot/src/robot-controller.js",
+      "sha256": "27fb71ee9d7b400eb9f84a9cbfc46a309ecf5dd8afcd00042a9fb04971a825dc"
+    },
+    {
+      "path": "../../services/robot/src/startouch_bridge.py",
+      "sha256": "62f718ce1b2449174940ea90b8694510011ced69401c42882f4452f01f9d9f18"
+    },
+    {
+      "path": "../../assets/robot/startouch-v3/FastTouchV3.SLDASM.urdf",
+      "sha256": "0e52a6ed086e87b2d3dc24391874ab433e7e9cc33b6b0fc995370cf9e37dea86"
+    },
+    {
+      "path": "../../local/generated/startouch-python/startouch_sdk/src/config/robot_kinematics.yaml",
+      "sha256": "f84dd8da8206169bc97d72c35f6a9ec058e79cc5ccf68e14c3b0c102dc5cd9d1"
+    },
+    {
+      "path": "../../local/generated/startouch-python/startouch_sdk/interface_py/libstartouch.so",
+      "sha256": "35f0e2c99eab70e315135427f1d427c25f935419b8a4910b125288c84515f366"
+    },
+    {
+      "path": "../../local/generated/startouch-python/startouch_sdk/src/config/FastTouchV2.SLDASM.urdf",
+      "sha256": "1b62917312850bdb390f5e51009d88ffe392ac2c9ff6115c2a29ad7aeb39d165"
+    },
+    {
+      "path": "../../local/generated/startouch-python/startouch_sdk/interface_py/startouchclass.py",
+      "sha256": "0f4b5f72241392f8a9faf20cc0e42917197a8d417e4db3de8380f0eb01b88be9"
+    },
+    {
+      "path": "../../local/generated/startouch-python/startouch_sdk/interface_py/startouch.cpython-311-x86_64-linux-gnu.so",
+      "sha256": "de0a2499fdb07e27d5c5ecb34ffb5ede400c9913515f4326c255c08813584711"
+    }
+  ],
+  "legacy_calibration_sha256": "d2e322dec9c6dab109212188ccc87b714bbd7f3cd9b0de9f22169cc576764a5b",
+  "physical_grasp_tcp_measured": false,
+  "read_only": true,
+  "runtime_provenance": {
+    "module_path": "../../local/generated/startouch-python/startouch_sdk/interface_py",
+    "library": "../../local/generated/startouch-python/startouch_sdk/interface_py/libstartouch.so",
+    "kinematics": "../../local/generated/startouch-python/startouch_sdk/src/config/robot_kinematics.yaml",
+    "urdf": "../../local/generated/startouch-python/startouch_sdk/src/config/FastTouchV2.SLDASM.urdf",
+    "configuration_scope": "repository-normalized-runtime-20261008",
+    "physical_path_qualified": false
+  },
+  "rebinding": {
+    "source_policy_id": "sha256:832c52da1f9f8a4aa33c1ca4c9ab0aee176b590d8f26a2da8a6bf7b62c0d7e83",
+    "note": "Repository-relative paths and current source hashes; unchanged SDK tool transform, no new physical validation."
+  }
+}

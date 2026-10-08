@@ -1,0 +1,71 @@
+{
+  "schema": "thirdhand-web-grasp-config-v1",
+  "enabled": true,
+  "legacyGraspEnabled": false,
+  "gripOffsetM": 0.06,
+  "forwardBackoffM": 0.06,
+  "forwardBackoffDefinition": "operator-observed-horizontal-forward-overshoot-correction-preserve-base-Z-not-calibration",
+  "gripDefinition": "user-specified-approximate-flange-positive-X-not-measured",
+  "sdkToolOffsetM": 0.17334,
+  "webUrl": "http://127.0.0.1:9983",
+  "preapproachM": 0.2,
+  "keepPreapproachSdkHeight": true,
+  "maxApproachM": 0.22,
+  "liftM": 0.05,
+  "segmentM": 0.005,
+  "stepIntervalMs": 500,
+  "stateMaxAgeMs": 750,
+  "visionMaxAgeMs": 2000,
+  "commandTimeoutMs": 15000,
+  "positionToleranceM": 0.015,
+  "orientationToleranceRad": 0.1,
+  "maxIkStepDeg": 5,
+  "contactMinM": 0.008,
+  "contactMaxM": 0.07,
+  "workspace": {
+    "x": [
+      0.05,
+      0.66
+    ],
+    "y": [
+      -0.65,
+      0.45
+    ],
+    "z": [
+      0.04,
+      0.65
+    ]
+  },
+  "jointLimits": [
+    [
+      -162,
+      162
+    ],
+    [
+      -12,
+      201
+    ],
+    [
+      -183,
+      0
+    ],
+    [
+      -98,
+      98
+    ],
+    [
+      -98,
+      98
+    ],
+    [
+      -164,
+      164
+    ]
+  ],
+  "framePolicyId": "sha256:0555f23dca6c01425caaa09325c10f5a97520e6991f68d6dac6bff6c454e4d11",
+  "calibrationId": "sha256:9b5e644aade896b188513b3699f637b1ef6635606c63a63bb38cc9c42622caca",
+  "framePolicyFile": "../../../configs/vision/sdk-tool-frame-policy.json",
+  "calibrationFile": "../../../configs/vision/handeye-flange-normalized.json",
+  "tcpArtifactRoot": "../../../runtime/tcp-calibration",
+  "calibratedForwardBackoffM": 0
+}

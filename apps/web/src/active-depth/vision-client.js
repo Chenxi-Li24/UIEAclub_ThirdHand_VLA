@@ -73,12 +73,17 @@ class VisionClient {
     if (!Number.isSafeInteger(frameId) || frameId < 0) {
       throw visionError('vision_frame_invalid', 'Vision frame ID is invalid');
     }
+    const projection = detection.frame_projection;
+    if (projection && Number(projection.frame_id) !== frameId) {
+      throw visionError('vision_projection_mismatch', 'Projection must belong to the correlated detection frame');
+    }
     const correlatedEvidence = {
       evidence_id: detectionEvidenceId,
       motion_epoch: Number(detection.motion_epoch ?? detection.motionEpoch ?? 0),
     };
     return {
-      observation: Object.freeze({ ...effectiveObservation, frameId, ...runtimeEvidence, ...correlatedEvidence }),
+      observation: Object.freeze({ ...effectiveObservation, frameId, ...runtimeEvidence, ...correlatedEvidence,
+        ...(projection ? { frame_projection: projection } : {}) }),
       runtimeEvidence: Object.freeze({ ...runtimeEvidence }),
     };
   }

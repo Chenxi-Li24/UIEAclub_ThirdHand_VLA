@@ -1,0 +1,159 @@
+{
+  "schema": "thirdhand-handeye-calibration-v3",
+  "extrinsic_semantics": "T_flange_camera",
+  "robot_state_semantics": "T_base_flange",
+  "T_flange_camera": {
+    "matrix_4x4": [
+      [
+        0.010562549091536921,
+        -0.014085346784711295,
+        0.999845005769716,
+        0.09061992501627068
+      ],
+      [
+        -0.9998508356398819,
+        0.013515883802011797,
+        0.010753016101567592,
+        -0.00042032750839256423
+      ],
+      [
+        -0.013665248878777514,
+        -0.9998094437896679,
+        -0.01394048356679689,
+        0.07642669716889039
+      ],
+      [
+        0,
+        0,
+        0,
+        1
+      ]
+    ]
+  },
+  "camera": {
+    "camera_serial": "250801DR48FP25002738",
+    "registration_id": "xvisio-sdk:250801DR48FP25002738",
+    "camera_mount_id": "luming_eih_20260817_250801DR48FP25002738_85a58f8a28ac"
+  },
+  "selected_method": "DANIILIDIS",
+  "numerically_validated": true,
+  "approved_for_bottle_grasp": false,
+  "activated_camera_mount_id": null,
+  "camera_mount_id_activation": false,
+  "physical_validation": {
+    "status": "pending",
+    "measured_error_m": null,
+    "required_3d_point_or_grasp_error_m_max": 0.01
+  },
+  "numerical_validation": {
+    "training_count": 12,
+    "held_out_count": 3,
+    "held_out": {
+      "translation_max_m": 0.002365450231926898,
+      "rotation_max_deg": 0.8827583175793549
+    },
+    "gates": {
+      "held_out_translation_max_m_max": 0.01,
+      "held_out_rotation_max_deg_max": 2,
+      "frame_reprojection_rmse_px_max": 1
+    },
+    "camera_training_rms_px": 0.2995799737126635,
+    "camera_max_frame_reprojection_rmse_px": 0.46166300151772005
+  },
+  "camera_model": {
+    "model": "opencv_fisheye_fitted_from_same_sdk_stream",
+    "K": [
+      [
+        195.72154207812497,
+        0,
+        318.6648914128247
+      ],
+      [
+        0,
+        195.58721693741165,
+        239.498275483837
+      ],
+      [
+        0,
+        0,
+        1
+      ]
+    ],
+    "D": [
+      0.08585826005655806,
+      -0.014707889472168407,
+      0.004344318435468321,
+      -0.004007860022593932
+    ],
+    "image_size": [
+      640,
+      480
+    ],
+    "usage": "archived_fit_only_not_a_replacement_for_SDK_depth_registration"
+  },
+  "board": {
+    "squares_x": 12,
+    "squares_y": 9,
+    "square_length_m": 0.015,
+    "marker_length_m": 0.01125,
+    "dictionary": "DICT_5X5_100"
+  },
+  "source": {
+    "filename": "artifacts/handeye/run-1791129064810962126/candidate-1791133601317146422.json",
+    "sha256": "sha256:149e459cdc16e1ecdb302600e2e40a39d8d4d00f9fdaa3e89fa77232966a36d4",
+    "samples_manifest": "artifacts/handeye/run-1791129064810962126/manifest-1791133601313207734.json",
+    "samples_manifest_sha256": "sha256:15456b677df8718ff707dc5ec997eaec6f351cdc24cd617276f7005f7eef1725"
+  },
+  "warnings": [
+    "candidate_only_not_grasp_approved",
+    "TCP_and_path_not_validated",
+    "fisheye_model_is_fitted_not_factory_SEUCM",
+    "operator_must_keep_board_fixed",
+    "RGB_ToF_hardware_synchronization_not_independently_validated",
+    "camera_mount_binding_retained_from_existing_runtime_not_physically_revalidated"
+  ],
+  "frame_normalization": {
+    "policy_id": "sha256:0555f23dca6c01425caaa09325c10f5a97520e6991f68d6dac6bff6c454e4d11",
+    "source_calibration_sha256": "d2e322dec9c6dab109212188ccc87b714bbd7f3cd9b0de9f22169cc576764a5b",
+    "source_extrinsic_semantics": "T_sdk_tool_camera",
+    "T_flange_sdk_tool": [
+      [
+        1,
+        0,
+        0,
+        0.17334
+      ],
+      [
+        0,
+        1,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        1,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        1
+      ]
+    ],
+    "note": "SDK configured tool frame is not a physically measured grasp TCP",
+    "runtime_rebinding": {
+      "previous_canonical_calibration_sha256": "7d531f8e48a83b0c3231affc5dc100f2d805a65616b8879c6943c7e004eb10a2",
+      "same_tool_transform": true,
+      "no_extrinsic_matrix_change": true,
+      "scope": "restore_original_loaded_sdk_without_extrinsic_change"
+    }
+  },
+  "repository_rebinding": {
+    "source_calibration_id": "sha256:7010358a7404a1d929d140fe64413b1794da95be3045d9efa8507cc603a0017d",
+    "source_policy_id": "sha256:832c52da1f9f8a4aa33c1ca4c9ab0aee176b590d8f26a2da8a6bf7b62c0d7e83",
+    "unchanged_extrinsic": true,
+    "physical_validation_added": false
+  }
+}

@@ -103,10 +103,22 @@ function createWebGateway(options = {}) {
   const graspOwnerToken = options.graspOwnerToken || randomUUID();
   let graspController = options.graspController || null;
   let graspReason = null;
+  const webUrl=graspEnv.WEB_GRASP_WEB_URL || `http://${['0.0.0.0','::'].includes(config.host)?'127.0.0.1':config.host}:${config.port}`;
+  let tcpCalibrationRoutes=options.tcpCalibrationRoutes||null;
+  let tcpStore=options.tcpStore||null;
+  let tcpStateSource=null;
+  let tcpCalibrationReason=tcpCalibrationRoutes?null:'tcp_calibration_disabled';
+  if(!tcpCalibrationRoutes&&config.tcpCalibrationEnabled){
+    try{
+      const tcp=require('./tcp-calibration').createCalibration(config,{webUrl,
+        canMutate:()=>!graspController?.status().active&&!coordinator?.status().active&&!robotProxy.hasActiveControl?.()});
+      tcpCalibrationRoutes=tcp.routes;tcpStore=tcp.store;tcpStateSource=tcp.stateSource;tcpCalibrationReason=null;
+    }catch(error){tcpCalibrationReason=error.code||error.message||'tcp_calibration_configuration_invalid';}
+  }
   if (!graspController && graspEnv.WEB_GRASP_CONFIG) {
     try {
       const factory = require(graspEnv.WEB_GRASP_MODULE || './grasp');
-      graspController = factory.createFromFile(graspEnv.WEB_GRASP_CONFIG,{ownerToken:graspOwnerToken});
+      graspController = factory.createFromFile(graspEnv.WEB_GRASP_CONFIG,{ownerToken:graspOwnerToken,webUrl,tcpStore});
     } catch (error) { graspReason = error.code || error.message || 'grasp_configuration_invalid'; }
   }
   const graspConfig = { type: 'grasp.config', enabled: Boolean(graspController),
@@ -134,6 +146,7 @@ function createWebGateway(options = {}) {
         dummy: { statusEndpoint: '/api/dummy/status', startEndpoint: '/api/dummy/start',
           stopEndpoint: '/api/dummy/stop', frameEndpoint: '/api/dummy/frame' },
         grasp: graspConfig,
+        tcpCalibration: tcpCalibrationRoutes?.config()||{ready:false,reason:tcpCalibrationReason,page:'/tcp-calibration.html'},
         language: {
           executionBackend: 'formal-3000-upstream',
           directional: {
@@ -155,6 +168,7 @@ function createWebGateway(options = {}) {
           bottlePick: { url: config.language.vaHttpUrl },
           activeDepth: { ready: activeDepthReady, reason: activeDepthReason },
           grasp: graspConfig,
+          tcpCalibration: tcpCalibrationRoutes?.config()||{ready:false,reason:tcpCalibrationReason},
         },
       });
       return;
@@ -220,6 +234,10 @@ function createWebGateway(options = {}) {
       });
       return;
     }
+    if(pathname.startsWith('/api/tcp-calibration/')){
+      if(!tcpCalibrationRoutes){writeJson(response,503,{error:tcpCalibrationReason});return;}
+      await tcpCalibrationRoutes.handle(request,response,pathname);return;
+    }
     if (request.method === 'POST' && ['/api/grasp/start', '/api/grasp/stop'].includes(pathname)) {
       if (request.headers.origin) {
         try {
@@ -241,6 +259,7 @@ function createWebGateway(options = {}) {
             writeJson(response, 400, {error:'request_invalid'}); return;
           }
           if (coordinator?.status().active) { writeJson(response, 409, {error:'active_depth_active'}); return; }
+          if(tcpStateSource?.snapshot().teachActive||tcpStateSource?.teachTransition){writeJson(response,409,{error:'tcp_calibration_teaching'});return;}
           writeJson(response, 202, await graspController.start(body.stableId,body.requestId));
         } else {
           if (!exactKeys(body, ['sessionId']) || typeof body.sessionId !== 'string' || !body.sessionId) {
@@ -398,12 +417,14 @@ function createWebGateway(options = {}) {
         serviceId: 'web',
         pid: process.pid,
       })}\n`);
+      tcpCalibrationRoutes?.connect?.();
       return server.address();
     },
     async close() {
       if (closing) return;
       closing = true;
     await dummyController.close();
+    await tcpCalibrationRoutes?.close?.();
     if (graspController) await graspController.close();
       if (coordinator) await coordinator.close();
       robotProxy.close();

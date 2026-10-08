@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>ThirdHand TCP标定</title>
+  <link rel="stylesheet" href="css/tcp-calibration.css?v=6">
+</head>
+<body>
+<header><div><p class="eyebrow">THIRDHAND · 双人配合</p><h1>夹爪尖针 TCP 标定</h1><p>一人托住末端、摆位；一人操作网页、记录。仅使用人工示教。</p></div><a href="/" target="_blank" rel="noopener">主控制页</a></header>
+<div class="status-bar"><aside class="status"><strong id="session-status">尚未载入会话</strong><span id="robot-status">3000 状态未知</span><span id="frame-status">坐标系未知</span><button id="software-stop" class="danger">软件停止</button></aside><p id="next-step" role="status">正在恢复会话与机械臂状态…</p></div>
+<main>
+  <p id="service-warning" class="notice" role="alert">正在检查示教服务…</p>
+  <section data-stage="0"><h2>第0关：连接与安全检查</h2><p>确认探针居中夹紧、同一个固定尖点不会移动，并有急停人员在场。全过程只允许人工示教。</p>
+    <p id="session-summary" hidden></p><div id="setup-fields">
+    <div class="grid"><label>操作员<input id="operator"></label><label>针尖到夹爪外端点（mm）<input id="needle-mm" type="number" min="0" step="0.1" value="20"></label><label>夹爪外端点到实际夹取中心（mm）<input id="distance-mm" type="number" min="0" step="0.1" value="60"></label><label>测量不确定度（mm）<input id="uncertainty-mm" type="number" min="0.1" max="10" step="0.1"></label><label>工具轴<select id="tool-axis"><option value="1,0,0">+X</option><option value="-1,0,0">-X</option><option value="0,1,0">+Y</option><option value="0,-1,0">-Y</option><option value="0,0,1">+Z</option><option value="0,0,-1">-Z</option></select></label></div><p>轴向合计：20 + 60 = 80 mm（针尖到实际夹取中心）</p>
+    <div class="checks"><label><input id="probe-centered" type="checkbox">探针已居中夹紧</label><label><input id="pivot-fixed" type="checkbox">固定尖点不会移动</label><label><input id="estop-ready" type="checkbox">急停人员已就位</label><label><input id="manual-only" type="checkbox">只使用人工示教</label></div></div><button id="start-session">开始标定会话</button></section>
+  <section data-stage="1" class="capture"><h2>第1关：8姿态采集</h2><h3 id="capture-title">现在采集：8 个不同角度的拟合姿态</h3>
+    <div class="progress-row"><strong id="fit-progress"></strong><strong id="validation-progress"></strong></div>
+    <p class="notice">已观察到 J5 在拖动时下坠。搭档应持续托住末端主体，不要扶针尖，也不要靠固定尖点承重。重力补偿尚未验证到能够悬停。</p>
+    <div class="capture-steps">
+      <article><h3>① 扶稳，再进入拖动</h3><p>搭档托住末端主体，网页操作员等示教确认后再让搭档摆位。</p><label class="check-line"><input id="support-ready" type="checkbox">搭档已扶稳，急停人员就位</label><button id="teach-start" disabled>进入拖动示教（0 阻尼）</button></article>
+      <article><h3>② 对准同一尖点，再锁定</h3><p>从不同方向和倾角轻触同一个固定尖点，确认探针没有弯曲。锁定过程中继续支撑。</p><button id="teach-hold" disabled>锁定当前姿态</button></article>
+      <article><h3>③ 检查本次姿态，再记录</h3><p>锁定后确认能保持，逐渐减小支撑力。若下坠、针尖偏移或顶压，重新摆位，不记录。</p><label class="check-line"><input id="contact-ready" type="checkbox">针尖轻触同一固定尖点，探针未弯曲、未受顶压</label><label class="check-line"><input id="pose-stable" type="checkbox">锁定后能保持，减小支撑力后针尖没有偏移</label><button id="record-fit" disabled>记录当前姿态</button><button id="record-validation" disabled hidden>记录独立验证姿态</button></article>
+    </div>
+    <details><summary>姿态与双人配合说明</summary><p>每次明显改变末端朝向，不是只平移。第一次先远离固定尖点试验进入和锁定。0 阻尼模式带重力补偿，但不保证悬停；网页心跳中断 30 秒后服务会请求锁定，请保持现场监护。</p><p>建议覆盖前、后、左、右及不同倾角，另外保留 3 个不同姿态用于独立验证。</p></details>
+    <div class="sample-actions"><select id="fit-sample" aria-label="选择拟合样本"></select><button id="delete-fit" disabled>删除选中异常点</button><button id="solve" disabled>8 个姿态采满后，求解 TCP</button></div>
+  </section>
+  <section data-stage="2"><h2>第2关：求解与诊断</h2><pre id="diagnostics">等待求解</pre><p>绿色可继续；黄色建议核对最差样本；红色禁止验证。</p></section>
+  <section data-stage="3"><h2>第3关：独立验证</h2><p>求解通过后，继续使用上方同一组拖动、锁定和记录按钮，另外采集至少 3 个姿态。它们不会重新参与拟合。</p><label class="check-line"><input id="confirm-derive" type="checkbox">确认验证姿态独立且均为轻触</label><button id="derive" disabled>完成验证并换算</button></section>
+  <section data-stage="4"><h2>第4关：换算夹爪TCP</h2><div class="transforms"><article><h3>当前 SDK 173.34 mm 名义工具点</h3><pre id="sdk-transform">--</pre></article><article><h3>探针尖端 TCP</h3><pre id="probe-transform">--</pre></article><article><h3>实际夹爪抓持中心 TCP</h3><pre id="grasp-transform">--</pre></article></div><div class="checks"><label><input id="confirm-distance" type="checkbox">卡尺距离正确</label><label><input id="confirm-axis" type="checkbox">工具轴方向正确</label><label><input id="confirm-probe-removed" type="checkbox">探针已经移除</label><label><input id="confirm-production" type="checkbox">夹爪已恢复生产状态</label></div></section>
+  <section data-stage="5"><h2>第5关：保存候选结果</h2><p>默认只保存 pending，不修改当前生产配置。</p><button id="finalize">保存 pending 候选</button><output id="pending-status">尚未保存</output></section>
+  <section data-stage="6"><h2>第6关：激活与回滚</h2><p>激活和回滚是独立显式操作；真实设备激活不属于本次软件开发。</p><label><input id="confirm-activate" type="checkbox">再次确认激活已验证版本</label><button id="activate">激活</button><label><input id="confirm-rollback" type="checkbox">确认回滚到上一版本</label><button id="rollback">回滚</button></section>
+</main>
+<div id="message" role="status" aria-live="polite"></div>
+<script src="js/tcp-calibration.js?v=8"></script>
+</body></html>

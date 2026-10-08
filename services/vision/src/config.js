@@ -29,6 +29,8 @@ function loadConfig(env = process.env) {
     visionConfig: env.VISION_CONFIG ||
       path.join(ROOT, 'configs/vision.yaml'),
     handeye: env.THIRDHAND_VA_HANDEYE || null,
+    robotFramePolicyFile: env.THIRDHAND_ROBOT_FRAME_POLICY || null,
+    robotWsUrl: env.ROBOT_WS_URL || 'ws://127.0.0.1:3000/ws',
     robotUrdf: env.THIRDHAND_ROBOT_URDF || null,
     xvisioExecutable: env.XVISIO_STREAM_EXECUTABLE ||
       path.join(ROOT, 'runtime/build/xvisio/xvisio_rgbd_stream'),

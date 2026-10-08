@@ -424,6 +424,10 @@ function createWebGateway(options = {}) {
         serviceId: 'web',
         pid: process.pid,
       })}\n`);
+      if(tcpStateSource&&config.port===0){
+        const address=server.address(),host=['0.0.0.0','::'].includes(config.host)?'127.0.0.1':config.host;
+        tcpStateSource.client.url=`ws://${host}:${address.port}/ws`;
+      }
       tcpCalibrationRoutes?.connect?.();
       return server.address();
     },

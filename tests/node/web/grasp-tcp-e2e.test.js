@@ -14,9 +14,11 @@ async function until(predicate){for(let n=0;n<1000;n++){if(await predicate())ret
 
 test('HTTP target selection and one start traverse actual gateway sockets to measured TCP contact and lift',async t=>{
  const temp=fs.mkdtempSync(path.join(os.tmpdir(),'web-grasp-tcp-e2e-'));
- const policyFile=path.join(root,'configs/vision/sdk-tool-frame-policy.json'),policyId=loadPolicy(policyFile).id;
+ // Linux deployment evidence differs from ignored local SDK assets. The test
+ // still uses only its own fake robot/vision sockets, never the live devices.
+ const policyFile=process.env.GRASP_E2E_FRAME_POLICY||path.join(root,'configs/vision/sdk-tool-frame-policy.json'),policyId=loadPolicy(policyFile).id;
  const config={...JSON.parse(fs.readFileSync(path.join(root,'apps/web/configs/web-grasp.json'))),
-  preapproachM:.10,keepPreapproachSdkHeight:false,stepIntervalMs:0,stateMaxAgeMs:750};
+  framePolicyId:policyId,preapproachM:.10,keepPreapproachSdkHeight:false,stepIntervalMs:0,stateMaxAgeMs:750};
  const store=new TcpCalibrationArtifactStore({root:path.join(temp,'tcp')});
  const saved=store.finalizePending({schema:'thirdhand-tcp-calibration-session-v1',sessionId:'offline-measured',revision:14,
   stage:'ready_to_finalize',framePolicyId:policyId,solveReport:{accepted:true},validationReport:{accepted:true},

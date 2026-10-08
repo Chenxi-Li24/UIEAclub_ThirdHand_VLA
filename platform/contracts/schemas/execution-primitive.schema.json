@@ -11,7 +11,7 @@
     "taskId": {"type": "string", "minLength": 1},
     "authorizationId": {"type": "string", "minLength": 1},
     "planDigest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
-    "operation": {"enum": ["gripper.set", "vision.align.step"]},
+    "operation": {"enum": ["gripper.set", "vision.align.step", "grasp.pregrasp"]},
     "parameters": {"type": "object"}
   },
   "oneOf": [
@@ -48,6 +48,31 @@
             "startJointsDeg": {"type": "array", "minItems": 6, "maxItems": 6, "items": {"type": "number"}},
             "targetJointsDeg": {"type": "array", "minItems": 6, "maxItems": 6, "items": {"type": "number"}},
             "timeoutMs": {"type": "integer", "minimum": 100, "maximum": 30000}
+          }
+        }
+      }
+    },
+    {
+      "properties": {
+        "operation": {"const": "grasp.pregrasp"},
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["sessionId", "stableId", "frameId", "evidenceId", "motionEpoch", "minimumStateSequence", "minimumProducerMonotonicNs", "startJointsDeg", "targetJointsDeg", "pregraspTcpPositionM", "operationMode", "speedScale", "timeoutMs"],
+          "properties": {
+            "sessionId": {"type": "string", "minLength": 1},
+            "stableId": {"type": "integer", "minimum": 1, "maximum": 5},
+            "frameId": {"type": "integer", "minimum": 0},
+            "evidenceId": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+            "motionEpoch": {"type": "integer", "minimum": 0},
+            "minimumStateSequence": {"type": "integer", "minimum": 0},
+            "minimumProducerMonotonicNs": {"type": "integer", "minimum": 0},
+            "startJointsDeg": {"type": "array", "minItems": 6, "maxItems": 6, "items": {"type": "number"}},
+            "targetJointsDeg": {"type": "array", "minItems": 6, "maxItems": 6, "items": {"type": "number"}},
+            "pregraspTcpPositionM": {"type": "array", "minItems": 3, "maxItems": 3, "items": {"type": "number"}},
+            "operationMode": {"const": "pregrasp_only"},
+            "speedScale": {"type": "number", "minimum": 0.01, "maximum": 0.05},
+            "timeoutMs": {"type": "integer", "minimum": 1000, "maximum": 30000}
           }
         }
       }

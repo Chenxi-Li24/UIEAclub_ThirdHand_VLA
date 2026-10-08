@@ -1,0 +1,51 @@
+{
+  "schema": "thirdhand.grip_transform_candidate.v1",
+  "status": "provisional_urdf_pregrasp_only",
+  "created_date": "2026-10-02",
+  "source": {
+    "type": "urdf",
+    "path": "assets/robot/startouch-v3/FastTouchV3.SLDASM.urdf"
+  },
+  "frame_assumption": {
+    "flange_frame": "link5",
+    "tool_direction_axis": "+X",
+    "candidate_grip_frame": "midpoint between gripper_link1 and gripper_link2 joint origins",
+    "rotation_assumption": "identity"
+  },
+  "urdf_chain": [
+    {
+      "joint": "joint6",
+      "parent": "link5",
+      "child": "gripper_base",
+      "xyz_m": [0.0255, 0.0, 0.0],
+      "rpy_rad": [0.0, 0.0, 0.0]
+    },
+    {
+      "joint": "gripper_joint1",
+      "parent": "gripper_base",
+      "child": "gripper_link1",
+      "xyz_m": [0.15584, 0.0, 0.0],
+      "rpy_rad": [0.0, 0.0, 0.0]
+    },
+    {
+      "joint": "gripper_joint2",
+      "parent": "gripper_base",
+      "child": "gripper_link2",
+      "xyz_m": [0.15584, 0.0, 0.0],
+      "rpy_rad": [0.0, 0.0, 0.0]
+    }
+  ],
+  "candidate_t_flange_grip_matrix_4x4": [
+    [1.0, 0.0, 0.0, 0.18134],
+    [0.0, 1.0, 0.0, 0.0],
+    [0.0, 0.0, 1.0, 0.0],
+    [0.0, 0.0, 0.0, 1.0]
+  ],
+  "candidate_translation_m": [0.18134, 0.0, 0.0],
+  "blocking_notes": [
+    "URDF does not prove the actual bottle contact center under load.",
+    "URDF does not prove the runtime robot flange frame convention.",
+    "This matrix is only approved for high pregrasp-only dry runs.",
+    "Do not use this evidence for final approach, gripper close, lift, or full bottle grasp until physical TCP validation is complete."
+  ]
+}

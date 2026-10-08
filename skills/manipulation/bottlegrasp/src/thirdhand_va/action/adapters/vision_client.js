@@ -96,6 +96,13 @@ function normalizeTarget(target) {
     if (typeof target[source] === 'boolean') normalized[destination] = target[source];
   }
   if (isObject(target.grasp_preview)) normalized.graspPreview = { ...target.grasp_preview };
+  for (const [source, destination] of [
+    ['camera_xyz_m', 'cameraXyzM'],
+    ['base_xyz_m', 'baseXyzM'],
+    ['position_std_m', 'positionStdM'],
+  ]) {
+    if (isFiniteVector(target[source], 3)) normalized[destination] = [...target[source]];
+  }
   return normalized;
 }
 

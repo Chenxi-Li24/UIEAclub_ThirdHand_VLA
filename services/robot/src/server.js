@@ -85,6 +85,7 @@ function createRobotService(options = {}) {
   wss.on('connection', socket => {
     const owner = randomUUID();
     sockets.add(socket);
+    let demoRequestId = null;
     socket.send(JSON.stringify(controller.configMessage()));
     socket.on('message', data => {
       let message;
@@ -114,10 +115,16 @@ function createRobotService(options = {}) {
       controller.handleCommand(message, reply => {
         if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify(reply));
       }, owner);
+      if (message?.cmd === 'fixed_tcp_demo'
+          && controller.demoActiveRequestId === message.request_id
+          && controller.demoActiveOwner === owner) {
+        demoRequestId = message.request_id;
+      }
     });
     socket.on('close', () => {
       sockets.delete(socket);
       controller.releaseFollow(owner);
+      if (demoRequestId) controller.interruptFixedTcpDemo(demoRequestId, owner);
     });
   });
   executionWss.on('connection', socket => {

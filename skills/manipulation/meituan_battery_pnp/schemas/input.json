@@ -1,0 +1,10 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["source", "destination"],
+  "properties": {
+    "source": { "enum": ["A", "B", "C", "D"] },
+    "destination": { "enum": ["T0", "P1", "P2", "P3"] }
+  }
+}

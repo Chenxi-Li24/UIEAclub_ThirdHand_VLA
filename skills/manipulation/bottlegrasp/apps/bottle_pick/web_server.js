@@ -30,6 +30,18 @@ const { OperatorController } = require(
 const { StatusStore } = require(
   '../../src/thirdhand_va/action/operator/status_store'
 );
+const { SupervisedTestSession } = require(
+  '../../src/thirdhand_va/action/operator/supervised_test_session'
+);
+const { createSupervisedPreview } = require(
+  '../../src/thirdhand_va/action/operator/supervised_preview'
+);
+const { VisionClient } = require(
+  '../../src/thirdhand_va/action/adapters/vision_client'
+);
+const { buildLiftOnlyPlan } = require(
+  '../../src/thirdhand_va/action/grasp/lift_only_plan'
+);
 
 const ROBOT_ENABLE_ACK = REAL_ACK;
 
@@ -100,6 +112,19 @@ function robotRuntimeReady({
   }
 }
 
+function liftOnlyRobotReady({ robotClient, cameraInfo }) {
+  try {
+    const state = robotClient?.getRobotState();
+    return robotClient?.connected === true && robotClient?.protocolReady === true &&
+      state?.poseFrame === 'robot_flange' && state.connected === true &&
+      state.healthy === true && state.stateFresh === true &&
+      state.stationary === true && cameraInfo?.ready === true &&
+      cameraInfo.calibrationApproved === true;
+  } catch {
+    return false;
+  }
+}
+
 function sendJson(response, status, payload) {
   const body = Buffer.from(`${JSON.stringify(payload)}\n`);
   response.writeHead(status, {
@@ -151,6 +176,29 @@ function validStop(body) {
     typeof body.request_id === 'string' && body.request_id.length > 0;
 }
 
+function exactObject(body, keys) {
+  return body && typeof body === 'object' && !Array.isArray(body) &&
+    Object.keys(body).sort().join(',') === [...keys].sort().join(',');
+}
+
+function validTestStart(body) {
+  return exactObject(body, ['requestId', 'previewId']) &&
+    typeof body.requestId === 'string' && body.requestId.length > 0 &&
+    typeof body.previewId === 'string' && body.previewId.length > 0;
+}
+
+function validTestNext(body) {
+  return exactObject(body, ['requestId', 'expectedPhase', 'confirmationId']) &&
+    [body.requestId, body.expectedPhase, body.confirmationId].every(
+      value => typeof value === 'string' && value.length > 0
+    );
+}
+
+function validTestStop(body) {
+  return exactObject(body, ['requestId']) &&
+    typeof body.requestId === 'string' && body.requestId.length > 0;
+}
+
 function createWebServer({
   cameraBridge,
   operatorController,
@@ -161,6 +209,7 @@ function createWebServer({
   robotReady = () => false,
   homeStatus = () => null,
   runtimeEvidence = () => ({}),
+  supervisedSession = null,
 } = {}) {
   if (!cameraBridge || typeof cameraBridge.subscribeMjpeg !== 'function') {
     throw new TypeError('cameraBridge.subscribeMjpeg is required');
@@ -175,6 +224,13 @@ function createWebServer({
   if (typeof runtimeEvidence !== 'function') {
     throw new TypeError('runtimeEvidence must be a function');
   }
+  if (supervisedSession !== null && (
+    typeof supervisedSession.preview !== 'function' ||
+    typeof supervisedSession.snapshot !== 'function' ||
+    typeof supervisedSession.start !== 'function' ||
+    typeof supervisedSession.next !== 'function' ||
+    typeof supervisedSession.stop !== 'function'
+  )) throw new TypeError('supervisedSession is invalid');
   const robotControlReady = () => {
     try { return robotControlEnabled === true && robotReady() === true; } catch { return false; }
   };
@@ -185,6 +241,7 @@ function createWebServer({
     ['/camera_xvisio_depth', 'depth'],
   ]);
   const server = http.createServer(async (request, response) => {
+    const url = new URL(request.url, 'http://localhost');
     if (request.method === 'GET' && request.url === '/health') {
       sendJson(response, 200, {
         status: 'ok',
@@ -198,6 +255,57 @@ function createWebServer({
     }
     if (request.method === 'GET' && request.url === '/api/va/status') {
       sendJson(response, 200, { ...operatorController.snapshot(), home: homeStatus() });
+      return;
+    }
+    if (request.method === 'GET' && url.pathname === '/api/va/test/status') {
+      sendJson(response, supervisedSession ? 200 : 503,
+        supervisedSession?.snapshot() ?? {
+          active: false, phase: 'disabled', reason: 'supervised_test_unavailable',
+        });
+      return;
+    }
+    if (request.method === 'GET' && url.pathname === '/api/va/test/preview') {
+      const targetId = Number(url.searchParams.get('target_id'));
+      if (!supervisedSession || !/^[1-5]$/.test(url.searchParams.get('target_id') || '')) {
+        sendJson(response, supervisedSession ? 400 : 503, {
+          executable: false,
+          reason: supervisedSession ? 'target_id_invalid' : 'supervised_test_unavailable',
+        });
+        return;
+      }
+      try {
+        sendJson(response, 200, supervisedSession.preview(targetId));
+      } catch (error) {
+        sendJson(response, 409, { executable: false, reason: error.message });
+      }
+      return;
+    }
+    if (request.method === 'POST' && [
+      '/api/va/test/start', '/api/va/test/next', '/api/va/test/stop',
+    ].includes(url.pathname)) {
+      if (!supervisedSession) {
+        sendJson(response, 503, { accepted: false, reason: 'supervised_test_unavailable' });
+        return;
+      }
+      try {
+        const body = await readJson(request, maxBodyBytes);
+        const route = url.pathname.split('/').at(-1);
+        const valid = route === 'start' ? validTestStart(body)
+          : route === 'next' ? validTestNext(body) : validTestStop(body);
+        if (!valid) {
+          sendJson(response, 400, { accepted: false, reason: `${route}_contract_invalid` });
+          return;
+        }
+        const result = supervisedSession[route](body);
+        const status = result.accepted === true ? 202
+          : ['session_active', 'phase_mismatch', 'session_not_waiting'].includes(result.reason)
+            ? 409 : 423;
+        sendJson(response, status, result);
+      } catch (error) {
+        sendJson(response, error.statusCode || 400, {
+          accepted: false, reason: error.message || 'invalid_request',
+        });
+      }
       return;
     }
     if (request.method === 'GET' && streamRoutes.has(request.url)) {
@@ -320,13 +428,17 @@ async function main() {
   const loadedConfig = loadActionConfig(
     process.env.THIRDHAND_VA_ACTION_CONFIG || path.join(projectRoot, 'configs/action.yaml')
   );
-  const config = process.env.THIRDHAND_ROBOT_WS_URL
+  let config = process.env.THIRDHAND_ROBOT_WS_URL
     ? {
       ...loadedConfig,
       robot: { ...loadedConfig.robot, backend: 'websocket',
         ws_url: process.env.THIRDHAND_ROBOT_WS_URL },
     }
     : loadedConfig;
+  const liftOnly = process.env.THIRDHAND_VA_LIFT_ONLY === '1';
+  if (liftOnly) config = {
+    ...config, execution_enabled: true, workflow_mode: 'lift_only',
+  };
   const visionWsUrl = process.env.THIRDHAND_VA_VISION_WS_URL || null;
   const cameraBridge = visionWsUrl
     ? new VisionServiceClient({
@@ -344,7 +456,7 @@ async function main() {
     if (config.execution_enabled !== true) {
       throw new Error('robot enable requested but action config execution is disabled');
     }
-    approvedRuntimeEvidence = loadApprovedRuntimeEvidence({
+    approvedRuntimeEvidence = liftOnly ? null : loadApprovedRuntimeEvidence({
       visionConfigPath: path.resolve(
         process.env.VISION_CONFIG || path.join(projectRoot, 'configs/vision.yaml')
       ),
@@ -359,7 +471,7 @@ async function main() {
         } : {}),
     };
     robotClient = createRobotClient(config, robotDependencies);
-    homeCoordinator = new HomeCoordinator({
+    homeCoordinator = liftOnly ? null : new HomeCoordinator({
       robotClient,
       homePreset: config.place.home_preset,
       homeJointsDeg: config.robot.presets[config.place.home_preset],
@@ -368,35 +480,103 @@ async function main() {
       startupJointRangesDeg: config.place.startup_joint_ranges_deg,
       timeoutMs: config.home_timeout_ms,
     });
-    const homeStart = homeCoordinator.start();
-    if (homeStart.accepted !== true) {
-      throw new Error(homeStart.reason || 'startup_home_failed');
+    if (homeCoordinator) {
+      const homeStart = homeCoordinator.start();
+      if (homeStart.accepted !== true) {
+        throw new Error(homeStart.reason || 'startup_home_failed');
+      }
     }
     if (robotClient.connect() !== true) throw new Error('robot_start_failed');
     createWorkflow = ({ onFinish }) => new WorkflowClient({
       cameraBridge, robotClient, config, store: statusStore, onFinish,
       workflowTimeoutMs: config.workflow_timeout_ms,
-      runtimeEvidence: () => cameraBridge.getInfo().runtimeEvidence,
+      runtimeEvidence: liftOnly ? null : () => cameraBridge.getInfo().runtimeEvidence,
       approvedRuntimeEvidence,
     });
   } else {
     createWorkflow = createDisabledWorkflow;
   }
   const operatorController = new OperatorController({ createWorkflow, statusStore });
+  const visionClient = new VisionClient();
+  let latestVision = null;
+  cameraBridge.on?.('detection_result', message => visionClient.accept(message));
+  visionClient.on('result', result => { latestVision = result; });
+  const currentRobotState = () => robotClient?.getRobotState?.() ?? null;
+  const currentTarget = targetId => {
+    const target = latestVision?.targets.find(item => item.stableId === targetId) ?? null;
+    return target === null ? null : {
+      ...target,
+      frameId: latestVision.frameId,
+      evidenceId: latestVision.evidenceId,
+      motionEpoch: latestVision.motionEpoch,
+      ...(latestVision.selectedStableId === targetId && latestVision.pose
+        ? { pose: latestVision.pose } : {}),
+    };
+  };
+  const currentEvidence = targetId => {
+    const target = currentTarget(targetId);
+    const state = currentRobotState();
+    const runtime = cameraBridge.getInfo().runtimeEvidence;
+    return {
+      targetId: target?.stableId ?? targetId,
+      frameId: target?.frameId ?? null,
+      visionEvidenceId: target?.evidenceId ?? null,
+      motionEpoch: target?.motionEpoch ?? null,
+      robotStateSequence: state?.stateSequence ?? null,
+      visionConfigId: runtime?.vision_config_id ?? null,
+      calibrationId: runtime?.calibration_id ?? null,
+      gripValidationId: config.grasp?.grip_transform?.validation_id ?? null,
+    };
+  };
+  const supervisedSession = new SupervisedTestSession({
+    previewFactory: targetId => createSupervisedPreview({
+      target: currentTarget(targetId) ?? { stableId: targetId },
+      robotState: currentRobotState(),
+      runtimeEvidence: cameraBridge.getInfo().runtimeEvidence,
+      config,
+      nowMs: Date.now(),
+      buildPlan: liftOnly ? (target, activeConfig) => buildLiftOnlyPlan({
+        target,
+        pose: target.pose,
+        config: activeConfig,
+        requestId: `lift-${target.stableId}-${target.frameId}`,
+        motionEpoch: target.motionEpoch,
+      }) : null,
+    }),
+    currentEvidence: () => currentEvidence(
+      supervisedSession.currentPreview?.targetId ?? latestVision?.selectedStableId ?? 1
+    ),
+    getRobotState: currentRobotState,
+    robotClient: robotClient ?? { send: () => false },
+  });
+  robotClient?.on?.('event', event => {
+    if (event?.type === 'robot_state') {
+      cameraBridge.sendArmState?.(
+        event.flangePositionM, event.flangeEulerRad, event.jointsDeg,
+        event.velocitiesDegS, event.moving !== true, event.observedMonotonicNs,
+        { connected: event.connected, healthy: event.healthy },
+      );
+    }
+    supervisedSession.onRobotEvent(event);
+  });
   const app = createWebServer({
     cameraBridge,
     operatorController,
     host: process.env.THIRDHAND_VA_HOST || '127.0.0.1',
     port: Number(process.env.THIRDHAND_VA_PORT || 8766),
     robotControlEnabled: robotEnabled && config.execution_enabled,
-    robotReady: () => robotRuntimeReady({
+    robotReady: () => liftOnly ? liftOnlyRobotReady({
+      robotClient, cameraInfo: cameraBridge.getInfo(),
+    }) : robotRuntimeReady({
       robotClient,
       cameraInfo: cameraBridge.getInfo(),
       approvedRuntimeEvidence,
       config,
       homeCoordinator,
     }),
-    homeStatus: () => homeRuntimeStatus({ homeCoordinator, robotClient, config }),
+    homeStatus: () => liftOnly
+      ? { phase: 'bypassed_for_lift_only', ready: true, reason: null }
+      : homeRuntimeStatus({ homeCoordinator, robotClient, config }),
     runtimeEvidence: () => {
       const camera = cameraBridge.getInfo().runtimeEvidence;
       return {
@@ -410,6 +590,7 @@ async function main() {
         camera_mount_id: camera?.camera_mount_id ?? null,
       };
     },
+    supervisedSession,
   });
   if (cameraEnabled) cameraBridge.start();
   const address = await app.start();
@@ -438,6 +619,7 @@ if (require.main === module) {
 }
 
 module.exports = {
-  ROBOT_ENABLE_ACK, createWebServer, homeRuntimeStatus, main, robotRuntimeReady,
+  ROBOT_ENABLE_ACK, createWebServer, homeRuntimeStatus, liftOnlyRobotReady,
+  main, robotRuntimeReady,
   validStart, validStop, validateRuntimeAuthorization,
 };

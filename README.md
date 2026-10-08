@@ -48,7 +48,7 @@ UIEAclub_ThirdHand_VLA/
 - `services/speech`：3004 Ubuntu 本地三档 ASR、LLM Controller、对话和候选动作；
 - `services/vision` 与 `drivers/xvisio`：3100 XVisio RGB-D、检测画面和目标选择；
 - `skills/vision/inspect-scene`：复用 3100 原始视频流的只读视觉问答；
-- `skills/manipulation/bottlegrasp`：8766 取放适配入口，已接入正式 `manual-control` profile；
+- `skills/manipulation/bottlegrasp`：8766 取放适配与监督会话入口，已接入正式 `manual-control` profile；
 - `apps/launcher`：服务生命周期、PID 所有权、日志和运行 profile；
 - `platform/contracts` 与 `platform/skill_registry`：Skill 协议和可用性发现；
 - 项目本地 SDK、模型、运行时清单，以及 Startouch URDF/STL 资产准备工具。
@@ -68,7 +68,7 @@ apps/web (Web Gateway)
     |                              |-- text --> deepseek-v4-pro API
     |                              `-- inspect-scene --> 3100 raw frame --> deepseek-flash API
     |-- http/ws://127.0.0.1:3100 --> services/vision --> drivers/xvisio
-    `-- http://127.0.0.1:8766 --> BottleGrasp adapter
+    `-- http://127.0.0.1:8766 --> BottleGrasp supervised adapter
 ```
 
 上述五个端口属于正式 `manual-control` profile：`9983` 对局域网开放，其余端口只监听 Ubuntu loopback。Pro 处理普通文本并决定是否调用 `inspect-scene`；只有 Flash 接收图片，两个模型调用都是出站 API，不在本机新增监听端口。视觉 Skill 仅从已运行的 3100 获取原始帧，不重新占用摄像头。`8766` 默认不自行打开相机或机器人；它不是已完成的自主抓取 Worker。

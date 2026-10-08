@@ -6,6 +6,7 @@ from __future__ import annotations
 import json
 import math
 import os
+from pathlib import Path
 import queue
 import signal
 import socket
@@ -181,6 +182,8 @@ class RobotBridge:
         self.state_ready = False
         self.last_valid_joints: list[float] | None = None
         self.motion_active = False
+        self.connection_generation = 0
+        self.active_motion_cancel = None
         self.expected_motion_target: list[float] | None = None
         self.stop_requested = threading.Event()
         self.shutdown_requested = threading.Event()
@@ -189,6 +192,7 @@ class RobotBridge:
         self.control_lock_file = None
         self.last_joint_log_monotonic = 0.0
         self.gripper_target: float | None = None
+        self.grasp_feedback_upper: float | None = None
         self.gripper_request_id: str | None = None
         self.gripper_start_position: float | None = None
         self.gripper_started_monotonic = 0.0
@@ -632,7 +636,14 @@ class RobotBridge:
         else:
             self.gripper_stable_samples = 0
 
-        reached = self.gripper_stable_samples >= GRIPPER_STABLE_SAMPLES
+        # Optional policy belongs to this 35% Meituan grasp only. Snapshot is
+        # read after setGripperDistance under the same arm lock.
+        contact_reached = (
+            self.grasp_feedback_upper is not None
+            and math.isfinite(actual)
+            and 0.0 <= actual < self.grasp_feedback_upper
+        )
+        reached = contact_reached or self.gripper_stable_samples >= GRIPPER_STABLE_SAMPLES
         timed_out = elapsed >= GRIPPER_SETTLE_TIMEOUT_SEC
         should_log = (
             reached
@@ -671,6 +682,7 @@ class RobotBridge:
             "request_id": self.gripper_request_id,
         }
         self.gripper_target = None
+        self.grasp_feedback_upper = None
         self.gripper_request_id = None
         self.gripper_start_position = None
         self.gripper_started_monotonic = 0.0
@@ -678,6 +690,11 @@ class RobotBridge:
         return log_message, result
 
     def connect(self) -> None:
+        with self.arm_lock:
+            if self.active_motion_cancel is not None or self.motion_active:
+                emit("connection", connected=False, interface=CAN_INTERFACE,
+                     error="previous motion worker is still stopping; reconnect refused")
+                return
         if self.connected:
             self.publish_state()
             return
@@ -807,6 +824,9 @@ class RobotBridge:
     def disconnect(self, reason: str = "requested") -> None:
         self.stop_requested.set()
         with self.arm_lock:
+            self.connection_generation += 1
+            if self.active_motion_cancel is not None:
+                self.active_motion_cancel.set()
             arm = self.arm
             self.arm = None
             self.connected = False
@@ -818,13 +838,15 @@ class RobotBridge:
             self.gripper_start_position = None
             self.can_rx_packets = None
             self.last_can_rx_monotonic = 0.0
-            self.motion_active = False
+            self.motion_active = self.active_motion_cancel is not None
             if self.follow is not None:
                 self.follow.active = False
             self.follow_stop_request = None
         while True:
             try:
-                self.motion_queue.get_nowait()
+                cancelled = self.motion_queue.get_nowait()
+                emit("error", code="motion_cancelled", message=reason,
+                     request_id=cancelled.get("request_id"))
             except queue.Empty:
                 break
         if arm is not None:
@@ -939,12 +961,52 @@ class RobotBridge:
             source=source,
         )
 
+    def enqueue_fixed_tcp_demo(self, command: dict[str, Any]) -> None:
+        request_id = command.get("request_id")
+        execute = command.get("execute")
+        use_current_tcp = command.get("use_current_tcp_xyz", False)
+        xyz = command.get("fixed_xyz")
+        cone = command.get("max_cone_deg")
+        duration = command.get("duration_sec")
+        if (not isinstance(execute, bool) or not isinstance(use_current_tcp, bool)
+                or not isinstance(xyz, list) or len(xyz) != 3
+                or any(not isinstance(value, (int, float)) or isinstance(value, bool)
+                       or not math.isfinite(value) for value in xyz)
+                or not 0.15 <= xyz[0] <= 0.66 or not -0.65 <= xyz[1] <= 0.45
+                or not 0.04 <= xyz[2] <= 0.65
+                or not isinstance(cone, (int, float)) or isinstance(cone, bool)
+                or not math.isfinite(cone) or not 25 <= cone <= 50
+                or not isinstance(duration, (int, float)) or isinstance(duration, bool)
+                or not math.isfinite(duration) or not 10 <= duration <= 60):
+            emit("error", message="fixed TCP demo parameters invalid", request_id=request_id)
+            return
+        with self.arm_lock:
+            ready = self.connected and self.state_ready and self.arm is not None
+            idle = not self.motion_active and self.motion_queue.empty()
+            start = list(self.last_valid_joints) if self.last_valid_joints is not None else None
+        if not ready or not idle or start is None:
+            emit("error", message="robot is not ready or is busy", request_id=request_id)
+            return
+        try:
+            self.motion_queue.put_nowait({
+                "_fixed_tcp_demo": True, "request_id": request_id,
+                "execute": execute, "fixed_xyz": xyz,
+                "use_current_tcp_xyz": use_current_tcp,
+                "max_cone_deg": cone, "duration_sec": duration,
+                "start_joints_rad": start, "joints_rad": start,
+            })
+        except queue.Full:
+            emit("error", message="robot motion queue is busy", request_id=request_id)
+            return
+        emit("command_accepted", command="fixed_tcp_demo", request_id=request_id)
+
     def set_gripper(
         self,
         position: Any,
         kp: Any = None,
         kd: Any = None,
         request_id: Any = None,
+        grasp_feedback_upper: Any = None,
     ) -> None:
         if not self.connected or self.arm is None:
             emit("error", message="Startouch SDK is not connected")
@@ -959,6 +1021,12 @@ class RobotBridge:
             return
         if not math.isfinite(value) or value < 0.0 or value > 1.0:
             emit("error", message="gripper position must be between 0 and 1")
+            return
+        if grasp_feedback_upper is not None and (
+            grasp_feedback_upper != 0.4 or value != 0.35
+        ):
+            emit("error", message="contact feedback policy requires target 35% and upper 40%",
+                 request_id=request_id)
             return
         try:
             kp_value = GRIPPER_KP if kp is None else float(kp)
@@ -981,6 +1049,7 @@ class RobotBridge:
                 target_distance = value * GRIPPER_MAX_DISTANCE_M
                 self.arm.setGripperDistance(target_distance, kp_value, kd_value)
                 self.gripper_target = value
+                self.grasp_feedback_upper = grasp_feedback_upper
                 self.gripper_request_id = None if request_id is None else str(request_id)
                 self.gripper_start_position = before_position
                 self.gripper_started_monotonic = time.monotonic()
@@ -1090,6 +1159,16 @@ class RobotBridge:
             emit("error", message="move_l position/euler contain non-finite values")
             return
 
+        precision = {}
+        for field, default in (("position_tolerance_m", 0.04),
+                               ("orientation_tolerance_rad", 0.4)):
+            value = command.get(field, default)
+            if (not isinstance(value, (int, float)) or isinstance(value, bool)
+                    or not math.isfinite(value) or not 0 < value <= default):
+                emit("error", message=f"invalid {field}", request_id=request_id)
+                return
+            precision[field] = value
+
         # Use a fake joint target so enqueue_motion doesn't reject it
         fake_item = {
             "start_joints_rad": self.last_valid_joints or [0.0] * 6,
@@ -1101,6 +1180,7 @@ class RobotBridge:
             "command": "move_l",
             "_move_l_pos": pos,
             "_move_l_euler": rot,
+            **precision,
         }
         self.motion_queue.put_nowait(fake_item)
         emit("command_accepted", command="move_l", request_id=request_id, source="move_l")
@@ -1208,10 +1288,15 @@ class RobotBridge:
                 command = self.motion_queue.get(timeout=0.1)
             except queue.Empty:
                 continue
-            if self.stop_requested.is_set() or not self.connected or self.arm is None:
-                continue
-
             with self.arm_lock:
+                if self.stop_requested.is_set() or not self.connected or self.arm is None:
+                    emit("error", code="motion_cancelled", message="robot disconnected before motion",
+                         request_id=command.get("request_id"))
+                    continue
+                arm = self.arm
+                generation = self.connection_generation
+                cancellation = threading.Event()
+                self.active_motion_cancel = cancellation
                 self.motion_active = True
                 self.expected_motion_target = list(command["joints_rad"])
             self._emit_joint_log(
@@ -1222,12 +1307,35 @@ class RobotBridge:
             )
             emit("motion_state", state="MOVING", request_id=command["request_id"])
             try:
-                with self.arm_lock:
-                    arm = self.arm
-                if arm is None:
-                    continue
+                if command.get("_fixed_tcp_demo"):
+                    demo_dir = Path(__file__).resolve().parents[3] / "apps" / "fixed_tcp_demo"
+                    if str(demo_dir) not in sys.path:
+                        sys.path.insert(0, str(demo_dir))
+                    from demo import DemoConfig, FixedTcpDemo
 
-                if command.get("_go_home"):
+                    execute_demo = command["execute"] and not DRY_RUN
+                    demo = FixedTcpDemo(arm, config=DemoConfig(
+                        dry_run=not execute_demo, execute=execute_demo,
+                        fixed_xyz=command["fixed_xyz"],
+                        use_current_tcp_xyz=command["use_current_tcp_xyz"],
+                        max_cone_deg=command["max_cone_deg"],
+                        duration_sec=command["duration_sec"],
+                        execute_speed_percent=SPEED_PERCENT,
+                    ), log_dir=demo_dir / "logs")
+                    demo.stop_requested = cancellation
+                    try:
+                        demo.run_forever()
+                    finally:
+                        demo.logger.close()  # 3000 keeps ownership of the SDK arm.
+                    if cancellation.is_set():
+                        raise RuntimeError("fixed TCP demo cancelled")
+                    if generation == self.connection_generation:
+                        joints = self._finite_values(arm.get_joint_positions(), 6, "joints after fixed TCP demo")
+                        with self.arm_lock:
+                            self.last_valid_joints = joints
+                        emit("command_complete", command="fixed_tcp_demo",
+                             request_id=command["request_id"])
+                elif command.get("_go_home"):
                     # Homing obeys the same policy; never use SDK default speed.
                     duration = arm.set_joint_waypoints(
                         [command["start_joints_rad"], [0.0] * 6],
@@ -1242,8 +1350,8 @@ class RobotBridge:
                         [[pos[0], pos[1], pos[2], euler[0], euler[1], euler[2]]],
                         speed_percent=command["speed_percent"],
                         blend_radius_m=0.0,
-                        position_tolerance_m=0.04,
-                        orientation_tolerance_rad=0.4,
+                        position_tolerance_m=command["position_tolerance_m"],
+                        orientation_tolerance_rad=command["orientation_tolerance_rad"],
                     )
                     # After move, read actual joint state
                     try:
@@ -1271,8 +1379,9 @@ class RobotBridge:
             finally:
                 with self.arm_lock:
                     self.motion_active = False
+                    self.active_motion_cancel = None
                     self.expected_motion_target = None
-                    still_connected = self.connected
+                    still_connected = self.connected and generation == self.connection_generation
                 if still_connected:
                     emit("motion_state", state="IDLE", request_id=command["request_id"])
                     self.publish_state(
@@ -1321,6 +1430,8 @@ def main() -> None:
                 bridge.disconnect("software_stop")
             elif name in {"move_joint", "move_joint_path"}:
                 bridge.enqueue_motion(command)
+            elif name == "fixed_tcp_demo":
+                bridge.enqueue_fixed_tcp_demo(command)
             elif name == "move_l":
                 bridge.move_linear(command)
             elif name == "preview_ik":
@@ -1335,6 +1446,7 @@ def main() -> None:
                     command.get("kp"),
                     command.get("kd"),
                     command.get("request_id"),
+                    command.get("grasp_feedback_upper"),
                 )
             elif name == "get_state":
                 if bridge.connected:

@@ -4,6 +4,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 const { loadConfig } = require('../../../services/robot/src/config');
+const { RobotController } = require('../../../services/robot/src/robot-controller');
 
 test('robot config accepts a separate generated Python module path', () => {
   const config = loadConfig({
@@ -32,4 +33,26 @@ test('robot config allows explicit home and zero preset overrides', () => {
 
   assert.deepEqual(config.robot.homePresetDeg, [1, 2, 3, 4, 5, 6]);
   assert.deepEqual(config.robot.zeroPresetDeg, [6, 5, 4, 3, 2, 1]);
+});
+
+test('robot bridge errors preserve request id for command diagnostics', () => {
+  const config = loadConfig({
+    STARTOUCH_SIMULATE: '1',
+    STARTOUCH_REQUIRE_CAN_RX: '0',
+  });
+  const controller = new RobotController(config.robot);
+  let observed = null;
+  controller.on('message', message => {
+    if (message.type === 'error') observed = message;
+  });
+
+  controller.bridge.emit('bridge_error', {
+    message: 'a joint motion is already active',
+    request_id: 'req-motion-1',
+    command: 'move_joint',
+  });
+
+  assert.equal(observed.code, 'bridge_error');
+  assert.equal(observed.request_id, 'req-motion-1');
+  assert.equal(observed.command, 'move_joint');
 });

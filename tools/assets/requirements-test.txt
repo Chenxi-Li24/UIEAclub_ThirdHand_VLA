@@ -1,0 +1,10 @@
+# Offline CI dependencies; CPU Torch is installed separately by the workflow.
+pytest
+numpy==1.26.4
+PyYAML==6.0.3
+Pillow
+websockets>=12,<16
+opencv-python-headless==4.11.0.86
+norfair==2.3.0
+ikpy==4.1.0
+transformers==4.57.6

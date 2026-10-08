@@ -18,6 +18,7 @@ const ALLOWED_COMMANDS = new Set([
   'get_state',
   'servo',
   'move_joint',
+  'fixed_tcp_demo',
   'move_l',
   'preview_ik',
   'preset',
@@ -80,6 +81,32 @@ function validateAlignmentStep(parameters, latestJointsDeg) {
   return { ok: true, joints: target.joints };
 }
 
+function validatePregrasp(parameters, controller) {
+  if (!finiteVector(controller.latestJointsDeg, 6)) {
+    return { ok: false, code: 'robot_state_stale' };
+  }
+  if (controller.stateSequence < parameters.minimumStateSequence) {
+    return { ok: false, code: 'stale_state_sequence' };
+  }
+  if (controller.latestProducerMonotonicNs < parameters.minimumProducerMonotonicNs) {
+    return { ok: false, code: 'stale_producer_state' };
+  }
+  if (parameters.startJointsDeg.some(
+    (value, index) => Math.abs(value - controller.latestJointsDeg[index]) > 0.2,
+  )) return { ok: false, code: 'stale_start_joints' };
+  const target = validateJointTarget(parameters.targetJointsDeg);
+  if (!target.ok) return { ok: false, code: target.code };
+  if (!linearTargetAllowed(parameters.pregraspTcpPositionM)) {
+    return { ok: false, code: 'pregrasp_out_of_workspace' };
+  }
+  if (parameters.operationMode !== 'pregrasp_only'
+      || parameters.speedScale > 0.05
+      || parameters.speedScale > controller.config.speedScale) {
+    return { ok: false, code: 'pregrasp_safety_profile_invalid' };
+  }
+  return { ok: true, joints: target.joints };
+}
+
 class RobotController extends EventEmitter {
   constructor(config) {
     super();
@@ -89,6 +116,8 @@ class RobotController extends EventEmitter {
     this.latestRobotStateAtMs = null;
     this.stateReady = false;
     this.motionActive = false;
+    this.demoActiveRequestId = null;
+    this.demoActiveOwner = null;
     this.connectPending = false;
     this.started = false;
     this.contracts = createContractValidator();
@@ -107,7 +136,9 @@ class RobotController extends EventEmitter {
 
   _bindBridge() {
     this.bridge.on('message', message => this._handleBridgeMessage(message));
-    this.bridge.on('bridge_error', message => this._handleBridgeMessage(message));
+    this.bridge.on('bridge_error', message => this._handleBridgeMessage({
+      ...message, type: 'error', code: message.code || 'bridge_error',
+    }));
     this.bridge.on('software_stop_complete', message => {
       this._finalizeInterruptedExecutions('interrupted', null);
       const requestId = this.pendingStopRequestId;
@@ -211,7 +242,7 @@ class RobotController extends EventEmitter {
       nonce,
       protocol_version: 'thirdhand-robot-lowlevel-v1',
       pose_frame: 'robot_flange',
-      commands: ['move_l', 'preview_ik', 'move_joint', 'gripper', 'preset', 'software_stop', 'get_state',
+      commands: ['move_l', 'preview_ik', 'move_joint', 'fixed_tcp_demo', 'gripper', 'preset', 'software_stop', 'get_state',
         'follow_start', 'follow_target', 'follow_stop'],
       correlated_completions: true,
       software_stop_ack: true,
@@ -238,6 +269,7 @@ class RobotController extends EventEmitter {
         connected: this.bridge.connected,
         stateReady: this.stateReady,
         moving: this.motionActive,
+        fixedTcpDemoActive: Boolean(this.demoActiveRequestId),
         lastStateAt: this.latestRobotStateAtMs,
         continuousFollow: {
           j1MaxSpeedDegS: this.config.followJ1MaxSpeedDegS ?? 50,
@@ -327,6 +359,9 @@ class RobotController extends EventEmitter {
           message.request_id, 'move_joint', message.time_sec,
         );
         return;
+      case 'fixed_tcp_demo':
+        this._startFixedTcpDemo(message, reply, owner);
+        return;
       case 'move_l':
         this._sendLinearMotion(message, reply);
         return;
@@ -334,7 +369,7 @@ class RobotController extends EventEmitter {
         this._sendIkPreview(message, reply);
         return;
       case 'gripper':
-        this._sendGripper(message.position, reply, message.request_id);
+        this._sendGripper(message.position, reply, message.request_id, message.grasp_feedback_upper);
         return;
       default:
         reply({ type: 'error', code: 'unsupported_command', msg: 'Unsupported robot command' });
@@ -378,6 +413,18 @@ class RobotController extends EventEmitter {
         return;
       }
       this._executeAlignmentPrimitive(primitive, alignment, reply);
+      return;
+    }
+    if (primitive.operation === 'grasp.pregrasp') {
+      const pregrasp = validatePregrasp(primitive.parameters, this);
+      if (!pregrasp.ok) {
+        reply({
+          type: 'execution.status', status: 'failed', code: pregrasp.code,
+          primitiveId: primitive.primitiveId, taskId: primitive.taskId, traceId: primitive.traceId,
+        });
+        return;
+      }
+      this._executePregraspPrimitive(primitive, pregrasp, reply);
       return;
     }
     this._executeGripperPrimitive(primitive, reply);
@@ -452,6 +499,24 @@ class RobotController extends EventEmitter {
     this._acceptExecution(pending);
   }
 
+  _executePregraspPrimitive(primitive, pregrasp, reply) {
+    const pending = this._beginExecution(primitive, reply, 'pregrasp');
+    this.pendingLowLevel.set(pending.requestId, 'move_joint');
+    const sent = this.bridge.send({
+      cmd: 'move_joint',
+      joints_rad: pregrasp.joints.map(value => value * Math.PI / 180),
+      speed_percent: Math.min(0.05, this.config.speedScale ?? 0.05, primitive.parameters.speedScale),
+      request_id: pending.requestId,
+      source: 'protected-grasp-pregrasp',
+    });
+    if (!sent) {
+      this.pendingLowLevel.delete(pending.requestId);
+      this._failExecutionSend(pending);
+      return;
+    }
+    this._acceptExecution(pending);
+  }
+
   interruptPrimitive(primitiveId, reason = 'execution_interrupted') {
     for (const [requestId, pending] of this.pendingExecutions) {
       if (pending.primitive.primitiveId !== primitiveId) continue;
@@ -493,6 +558,44 @@ class RobotController extends EventEmitter {
       interrupted = this.interruptPrimitive(pending.primitive.primitiveId, reason) || interrupted;
     }
     return interrupted;
+  }
+
+  _startFixedTcpDemo(message, reply, owner) {
+    const requestId = message.request_id;
+    const xyz = message.fixed_xyz ?? [0.48, 0, 0.36];
+    const useCurrentTcp = message.use_current_tcp_xyz ?? false;
+    const cone = message.max_cone_deg ?? 50;
+    const duration = message.duration_sec ?? 60;
+    if (typeof requestId !== 'string' || !/^[\w:-]{1,120}$/.test(requestId)
+        || typeof message.execute !== 'boolean'
+        || typeof useCurrentTcp !== 'boolean'
+        || !linearTargetAllowed(xyz)
+        || !Number.isFinite(cone) || cone < 25 || cone > 50
+        || !Number.isFinite(duration) || duration < 10 || duration > 60) {
+      reply({ type: 'error', code: 'fixed_tcp_demo_invalid', request_id: requestId });
+      return;
+    }
+    const readinessError = this._motionReadinessError();
+    if (readinessError || this.pendingExecutions.size > 0) {
+      reply({ ...(readinessError || { type: 'error', code: 'execution_active' }), request_id: requestId });
+      return;
+    }
+    this.demoActiveRequestId = requestId;
+    this.demoActiveOwner = owner;
+    this.pendingLowLevel.set(requestId, 'fixed_tcp_demo');
+    if (!this.bridge.send({ cmd: 'fixed_tcp_demo', request_id: requestId,
+      execute: message.execute, fixed_xyz: xyz, use_current_tcp_xyz: useCurrentTcp,
+      max_cone_deg: cone, duration_sec: duration })) {
+      this.demoActiveRequestId = null;
+      this.demoActiveOwner = null;
+      this.pendingLowLevel.delete(requestId);
+      reply({ type: 'error', code: 'bridge_unavailable', request_id: requestId });
+    }
+  }
+
+  interruptFixedTcpDemo(requestId, owner) {
+    return this.demoActiveRequestId === requestId && this.demoActiveOwner === owner
+      && this.bridge.softwareStop();
   }
 
   _sendJointMotion(
@@ -558,6 +661,16 @@ class RobotController extends EventEmitter {
   }
 
   _sendLinearMotion(message, reply) {
+    const precision = {};
+    for (const [field, upper] of [['position_tolerance_m', 0.04], ['orientation_tolerance_rad', 0.4]]) {
+      if (message[field] === undefined) continue;
+      const value = message[field];
+      if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0 || value > upper) {
+        reply({type:'error',code:'linear_precision_invalid',msg:'Invalid '+field,request_id:message.request_id});
+        return;
+      }
+      precision[field] = value;
+    }
     if (!linearTargetAllowed(message.position) || !finiteVector(message.euler, 3)) {
       reply({
         type: 'error', code: 'linear_target_invalid',
@@ -580,6 +693,7 @@ class RobotController extends EventEmitter {
       speed_percent: Math.min(0.05, this.config.speedScale ?? 0.05),
       request_id: requestId,
       source: message.source || 'robot-service',
+      ...precision,
     });
     if (!sent) {
       this.pendingLowLevel.delete(requestId);
@@ -590,8 +704,12 @@ class RobotController extends EventEmitter {
     }
   }
 
-  _sendGripper(position, reply, suppliedRequestId = null) {
+  _sendGripper(position, reply, suppliedRequestId = null, graspFeedbackUpper = undefined) {
     const normalized = Number(position);
+    if (graspFeedbackUpper !== undefined && (normalized !== 0.35 || graspFeedbackUpper !== 0.4)) {
+      reply({type:'error',code:'gripper_contact_invalid',msg:'Contact policy requires target 35% and upper 40%'});
+      return;
+    }
     if (!Number.isFinite(normalized) || normalized < 0 || normalized > 1) {
       reply({
         type: 'error',
@@ -610,6 +728,7 @@ class RobotController extends EventEmitter {
     this.pendingLowLevel.set(requestId, 'gripper');
     const sent = this.bridge.send({
       cmd: 'gripper', position: normalized, request_id: requestId,
+      ...(graspFeedbackUpper === undefined ? {} : {grasp_feedback_upper:graspFeedbackUpper}),
     });
     if (!sent) {
       this.pendingLowLevel.delete(requestId);
@@ -675,6 +794,9 @@ class RobotController extends EventEmitter {
     if (this.motionActive || this.followOwner !== null) {
       return { type: 'error', code: 'motion_active', msg: 'Previous motion is still active' };
     }
+    if (this.demoActiveRequestId) {
+      return { type: 'error', code: 'fixed_tcp_demo_active', msg: 'Fixed TCP demo is active' };
+    }
     return null;
   }
 
@@ -712,6 +834,8 @@ class RobotController extends EventEmitter {
       return;
     }
     if (message.type === 'connection') {
+      this.demoActiveRequestId = null;
+      this.demoActiveOwner = null;
       this.connectPending = false;
       this.stateReady = false;
       this.latestJointsDeg = null;
@@ -770,7 +894,9 @@ class RobotController extends EventEmitter {
         ts: message.ts,
       });
       for (const pending of this.pendingExecutions.values()) {
-        if (pending.kind === 'alignment') this._completeAlignmentIfReady(pending);
+        if (pending.kind === 'alignment' || pending.kind === 'pregrasp') {
+          this._completeAlignmentIfReady(pending);
+        }
       }
       return;
     }
@@ -797,10 +923,13 @@ class RobotController extends EventEmitter {
       return;
     }
     if (message.type === 'command_complete') {
+      if (message.request_id === this.demoActiveRequestId) {
+        this.demoActiveRequestId = this.demoActiveOwner = null;
+      }
       this.motionActive = false;
       const pending = this.pendingExecutions.get(message.request_id);
       if (pending) {
-        if (pending.kind === 'alignment') {
+        if (pending.kind === 'alignment' || pending.kind === 'pregrasp') {
           pending.commandComplete = true;
           pending.commandReached = message.reached !== false;
           this._completeAlignmentIfReady(pending);
@@ -841,6 +970,9 @@ class RobotController extends EventEmitter {
       return;
     }
     if (message.type === 'error') {
+      if (message.request_id === this.demoActiveRequestId) {
+        this.demoActiveRequestId = this.demoActiveOwner = null;
+      }
       const pending = this.pendingExecutions.get(message.request_id);
       if (pending) {
         clearTimeout(pending.timer);
@@ -881,4 +1013,6 @@ class RobotController extends EventEmitter {
   }
 }
 
-module.exports = { ALLOWED_COMMANDS, RobotController, validateAlignmentStep };
+module.exports = {
+  ALLOWED_COMMANDS, RobotController, validateAlignmentStep, validatePregrasp,
+};

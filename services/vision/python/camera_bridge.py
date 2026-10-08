@@ -9,6 +9,7 @@ import os
 from pathlib import Path
 import signal
 import sys
+import tempfile
 import threading
 import time
 from typing import Any, Callable, Iterable
@@ -40,6 +41,141 @@ class StreamDemand:
             return False
         with self._lock:
             return self._enabled[kind]
+
+
+def write_selected_target_snapshot(
+    frame,
+    decision,
+    *,
+    request_id: str,
+    output_dir: str | Path,
+    observed_at_ms: int,
+) -> dict[str, Any]:
+    """Persist one validated selected target from a single aligned RGB-D frame."""
+
+    import numpy as np
+
+    result = {
+        "type": "selected_target_export_result",
+        "requestId": request_id,
+        "ok": False,
+    }
+    selected_id = decision.selected_stable_id
+    track = next(
+        (item for item in decision.tracks if item.stable_id == selected_id),
+        None,
+    )
+    if selected_id is None or track is None:
+        return {**result, "code": "selected_target_missing"}
+    if track.state in {"lost", "retired", "occluded"}:
+        return {**result, "code": "selected_target_lost"}
+    if not track.depth_supported:
+        return {**result, "code": "selected_target_depth_invalid"}
+
+    mask = np.asarray(track.candidate.mask, dtype=np.bool_)
+    if mask.shape != frame.depth_m.shape or not mask.any():
+        return {**result, "code": "selected_target_mask_invalid"}
+    valid = (
+        mask
+        & np.isfinite(frame.depth_m)
+        & np.isfinite(frame.xyz_camera_m).all(axis=2)
+    )
+    if not valid.any():
+        return {**result, "code": "selected_target_depth_invalid"}
+
+    metadata = {
+        "schema": "thirdhand-selected-target-bundle-v1",
+        "request_id": request_id,
+        "selected_stable_id": int(selected_id),
+        "frame_id": int(frame.sequence),
+        "monotonic_ns": int(frame.monotonic_ns),
+        "observed_at_ms": int(observed_at_ms),
+        "camera_serial": str(frame.camera_serial),
+        "point_frame": "xvisio_color",
+        "length_unit": "m",
+        "bbox_xyxy": [float(value) for value in track.candidate.bbox_xyxy],
+        "track_state": str(track.state),
+        "depth_valid": True,
+        "status": str(decision.status),
+        "blockers": list(track.blockers),
+    }
+    target = Path(output_dir)
+    target.mkdir(parents=True, exist_ok=True)
+    temporary: Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            dir=target,
+            prefix="selected-target-",
+            suffix=".npz",
+            delete=False,
+        ) as stream:
+            temporary = Path(stream.name)
+            np.savez_compressed(
+                stream,
+                rgb=np.asarray(frame.rgb, dtype=np.uint8),
+                depth_m=np.asarray(frame.depth_m, dtype=np.float32),
+                xyz_camera_m=np.asarray(frame.xyz_camera_m, dtype=np.float32),
+                mask=mask,
+                metadata_json=np.asarray(
+                    json.dumps(metadata, ensure_ascii=True, sort_keys=True)
+                ),
+            )
+        return {
+            **result,
+            "ok": True,
+            "path": str(temporary),
+            "schema": metadata["schema"],
+            "frame_id": metadata["frame_id"],
+            "length_unit": metadata["length_unit"],
+            "point_frame": metadata["point_frame"],
+        }
+    except BaseException:
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
+        raise
+
+
+def write_raw_frame_snapshot(
+    frame, *, request_id: str, output_dir: str | Path, observed_at_ms: int,
+) -> dict[str, Any]:
+    """Persist one complete aligned RGB-D frame without changing vision state."""
+    import numpy as np
+
+    metadata = {
+        "schema": "thirdhand-raw-rgbd-frame-v1",
+        "request_id": request_id,
+        "frame_id": int(frame.sequence),
+        "monotonic_ns": int(frame.monotonic_ns),
+        "observed_at_ms": int(observed_at_ms),
+        "camera_serial": str(frame.camera_serial),
+        "point_frame": "xvisio_color",
+        "length_unit": "m",
+    }
+    target = Path(output_dir)
+    target.mkdir(parents=True, exist_ok=True)
+    temporary: Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            dir=target, prefix="raw-rgbd-", suffix=".npz", delete=False,
+        ) as stream:
+            temporary = Path(stream.name)
+            np.savez_compressed(
+                stream,
+                rgb=np.asarray(frame.rgb, dtype=np.uint8),
+                depth_m=np.asarray(frame.depth_m, dtype=np.float32),
+                xyz_camera_m=np.asarray(frame.xyz_camera_m, dtype=np.float32),
+                metadata_json=np.asarray(json.dumps(metadata, ensure_ascii=True, sort_keys=True)),
+            )
+        return {
+            "type": "raw_frame_export_result", "requestId": request_id,
+            "ok": True, "path": str(temporary), "schema": metadata["schema"],
+            "frame_id": metadata["frame_id"], "length_unit": "m",
+            "point_frame": "xvisio_color",
+        }
+    except BaseException:
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
+        raise
 
 
 class CameraRuntime:
@@ -311,10 +447,22 @@ def model_provenance(config) -> dict[str, str]:
     }
 
 
-def attach_depth_evidence(event, decision, frame, config) -> None:
-    """Attach inspectable metric depth without claiming a base-frame pose."""
+def attach_depth_evidence(event, decision, frame, config, projection=None) -> None:
+    """Attach metric depth and fail-closed base projection when approved."""
 
     import numpy as np
+    from handeye_projection import project_point
+
+    base_transform = None
+    base_status = "handeye_not_configured"
+    if projection is not None:
+        if not projection.projection_allowed:
+            base_status = "physical_validation_pending"
+        else:
+            base_transform = projection.for_frame(int(frame.monotonic_ns))
+            base_status = "ready" if base_transform is not None else (
+                projection.last_rejection or "robot_state_unavailable"
+            )
 
     tracks = {track.candidate.detection_id: track for track in decision.tracks}
     for target in event.get("targets", []):
@@ -340,7 +488,7 @@ def attach_depth_evidence(event, decision, frame, config) -> None:
             "valid_depth_points": valid_points,
             "camera_xyz_m": None,
             "base_xyz_m": None,
-            "base_pose_status": "handeye_not_approved",
+            "base_pose_status": base_status,
         })
         if track.state in {"occluded", "lost", "retired"}:
             target["depth_valid"] = False
@@ -358,6 +506,10 @@ def attach_depth_evidence(event, decision, frame, config) -> None:
             center = np.median(points, axis=0)
             spread = np.std(points, axis=0)
             target["camera_xyz_m"] = [float(value) for value in center]
+            if base_transform is not None:
+                target["base_xyz_m"] = [
+                    float(value) for value in project_point(base_transform, center)
+                ]
             target["position_std_m"] = [float(value) for value in spread]
             target["depth_m"] = float(center[2])
     event["selectedStableId"] = event.get("selected_stable_id")
@@ -470,6 +622,12 @@ def build_parser() -> argparse.ArgumentParser:
         type=Path,
         default=ROOT / "runtime/build/xvisio/xvisio_rgbd_stream",
     )
+    parser.add_argument("--handeye", type=Path, default=None)
+    parser.add_argument(
+        "--urdf",
+        type=Path,
+        default=None,
+    )
     return parser
 
 
@@ -481,6 +639,22 @@ def run_bridge(args: argparse.Namespace) -> int:
 
     vision_config = VisionConfig.from_yaml(args.config)
     serial = str(config_data["camera_serial"])
+    projection = None
+    if args.handeye is not None:
+        if args.urdf is None:
+            raise ValueError("handeye_requires_robot_urdf")
+        from handeye_projection import HandEyeProjection
+
+        projection = HandEyeProjection(
+            args.handeye,
+            serial,
+            vision_config.camera_registration_id,
+            vision_config.camera_mount_id,
+            args.urdf,
+            allow_numerical_only=(
+                os.environ.get("THIRDHAND_ALLOW_NUMERICAL_HANDEYE") == "1"
+            ),
+        )
     quality = int(os.environ.get("CAMERA_JPEG_QUALITY", "75"))
     event_stream = os.fdopen(
         int(os.environ.get("CAMERA_EVENT_FD", "3")),
@@ -546,6 +720,13 @@ def run_bridge(args: argparse.Namespace) -> int:
         return UnifiedVisionRuntime(vision_config, backend)
 
     runtime_ref: dict[str, CameraRuntime] = {}
+    export_dir = Path(os.environ.get(
+        "SELECTED_TARGET_EXPORT_DIR",
+        ROOT / "runtime/vision/selected-target-exports",
+    ))
+    export_lock = threading.Lock()
+    pending_export: dict[str, str] = {}
+    pending_raw_export: dict[str, str] = {}
 
     def on_raw(frame) -> None:
         if stream_demand.requested("raw"):
@@ -562,6 +743,20 @@ def run_bridge(args: argparse.Namespace) -> int:
                 ),
                 sequence=frame.sequence,
             ))
+        with export_lock:
+            request_id = pending_raw_export.pop("requestId", None)
+        if request_id is not None:
+            try:
+                result = write_raw_frame_snapshot(
+                    frame, request_id=request_id, output_dir=export_dir,
+                    observed_at_ms=int(time.time_ns() // 1_000_000),
+                )
+            except BaseException as error:
+                result = {
+                    "type": "raw_frame_export_result", "requestId": request_id,
+                    "ok": False, "code": "raw_frame_export_failed", "message": str(error),
+                }
+            events.write(result)
 
     render_state = {"last_ns": None}
 
@@ -601,8 +796,28 @@ def run_bridge(args: argparse.Namespace) -> int:
             encoded,
             model_provenance=model_provenance(vision_config),
         )
-        attach_depth_evidence(event, decision, frame, vision_config)
+        attach_depth_evidence(event, decision, frame, vision_config, projection)
         events.write(event)
+        with export_lock:
+            request_id = pending_export.pop("requestId", None)
+        if request_id is not None:
+            try:
+                export_result = write_selected_target_snapshot(
+                    frame,
+                    decision,
+                    request_id=request_id,
+                    output_dir=export_dir,
+                    observed_at_ms=provenance.observed_at_ms,
+                )
+            except BaseException as error:
+                export_result = {
+                    "type": "selected_target_export_result",
+                    "requestId": request_id,
+                    "ok": False,
+                    "code": "selected_target_export_failed",
+                    "message": str(error),
+                }
+            events.write(export_result)
 
     runtime = CameraRuntime(
         frames(),
@@ -649,6 +864,32 @@ def run_bridge(args: argparse.Namespace) -> int:
                         str(message["kind"]),
                         bool(message["enabled"]),
                     )
+                elif message.get("type") == "export_selected_target":
+                    request_id = str(message["requestId"])
+                    if not request_id:
+                        raise ValueError("missing export request id")
+                    with export_lock:
+                        if "requestId" in pending_export:
+                            events.write({
+                                "type": "selected_target_export_result",
+                                "requestId": request_id,
+                                "ok": False,
+                                "code": "export_in_progress",
+                            })
+                        else:
+                            pending_export["requestId"] = request_id
+                elif message.get("type") == "export_raw_frame":
+                    request_id = str(message["requestId"])
+                    with export_lock:
+                        if "requestId" in pending_raw_export:
+                            events.write({
+                                "type": "raw_frame_export_result", "requestId": request_id,
+                                "ok": False, "code": "export_in_progress",
+                            })
+                        else:
+                            pending_raw_export["requestId"] = request_id
+                elif message.get("type") == "arm_state" and projection is not None:
+                    projection.update(message, time.monotonic_ns())
                 elif message.get("type") == "shutdown":
                     stop.set()
                     return
@@ -674,8 +915,13 @@ def run_bridge(args: argparse.Namespace) -> int:
         "registration_id": vision_config.camera_registration_id,
         "camera_mount_id": vision_config.camera_mount_id,
         "vision_config_id": vision_config.content_id,
-        "calibration_id": None,
-        "calibration_approved": False,
+        "calibration_id": projection.calibration_id if projection is not None else None,
+        "calibration_approved": (
+            projection.physically_validated if projection is not None else False
+        ),
+        "calibration_projection_enabled": (
+            projection.projection_allowed if projection is not None else False
+        ),
         "model_provenance": model_provenance(vision_config),
         "robotControlEnabled": False,
     })

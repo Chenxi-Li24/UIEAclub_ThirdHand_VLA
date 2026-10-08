@@ -8,7 +8,7 @@
   "gripDefinition": "user-specified-approximate-flange-positive-X-not-measured",
   "sdkToolOffsetM": 0.17334,
   "webUrl": "http://127.0.0.1:9983",
-  "preapproachM": 0.2,
+  "preapproachM": 0.1,
   "keepPreapproachSdkHeight": true,
   "maxApproachM": 0.22,
   "liftM": 0.05,

@@ -77,3 +77,23 @@ The first two differ on `/var` versus `/private/var`; the latter two encounter
 `ENOENT` in Linux-specific process inspection. The two leaked fake vision children
 created by that test run were stopped so the full runner could exit. No live
 robot service was involved in those tests.
+
+## 2026-10-08 preapproach IK follow-up
+
+The 200 mm preapproach retreat sent the current nearly folded arm backward into
+a region rejected by the SDK IK solver before the first grasp command. The
+horizontal configuration now uses a 100 mm preapproach. Measured TCP, current
+SDK preapproach height, level roll/pitch, yaw, 5 mm maximum path samples, 5-degree
+joint continuity check and requested 10% speed remain unchanged.
+
+Read-only IK previews through Web9983 checked the actual current pose and measured
+target: all 46 preapproach/contact/lift samples had valid joint solutions, with
+maximum adjacent joint change 4.654 degrees. This is a kinematic check for that
+snapshot, not a collision check or completed physical grasp. Every new grasp still
+checks its own fresh target/path. Only Web/config is updated; Robot/Vision are not
+restarted and deployment does not start grasping.
+
+The new measured-TCP checkpoint regression fails with the previous 200 mm
+configuration and passes with 100 mm. Focused geometry/coordinator/horizontal/TCP
+gateway tests pass 94/94. Full Node regression reports 460/464 passing; the same
+four macOS launcher fixture failures listed above remain outside this change.

@@ -52,6 +52,23 @@ test('invalid joint solutions cannot silently pass hard physical limits',()=>{
  for(const q of [[0,0,1,0,0,0],[0,0,NaN,0,0,0],[0,0,-1]])assert.equal(validateJoints(q,limits),false);
 });
 module.exports={fixture};
+test('shipped horizontal profile advances to the measured-TCP checkpoint instead of retreating into the folded workspace',()=>{
+ const f=fixture(),profile=require('../../../apps/web/configs/web-grasp.json');
+ f.config={...profile,framePolicyId:policy,calibrationId:calibration,forwardBackoffM:0,
+  T_flange_grasp_tcp:[[1,0,0,.09826448704090089],[0,1,0,-.006341722837237676],[0,0,1,-.0013153436560723233],[0,0,0,1]]};
+ f.robot={flange_position_m:[.2888374153738635,-.005301108903154579,.1741254892574079],
+  flange_euler_rad:[-.002014569514826276,.016148429639032333,-.046170187386362915],
+  joints_deg:[2.458905621126779,-9.453126054554062,-.7759213293333391,11.157967285201961,-5.1035952225164705,-.03278540828169039]};
+ f.observation.frame_projection.T_base_camera=[[1,0,0,0],[0,1,0,0],[0,0,1,0],[0,0,0,1]];
+ const target=[.375536122637,-.001544095485,.20682912268];
+ Object.assign(f.observation.targets[0],{camera_xyz_m:target,base_xyz_m:target});
+ const g=buildGraspGeometry(f);
+ assert.ok(g.paths.preapproach.every(p=>p.position[0]>f.robot.flange_position_m[0]),'preapproach must not retreat into the failed near-base IK region');
+ assert.ok(Math.abs(g.preapproach.position[0]-.350930890987)<1e-9);
+ assert.ok(Math.abs(g.contact.position[0]-.450824325609)<1e-9);
+ assert.equal(g.preapproach.position[2],.174125489257);
+ assert.ok(Object.values(g.paths).flat().every(p=>p.euler[0]===0&&p.euler[1]===0));
+});
 test('horizontal grasp keeps roll and pitch level and preserves horizontal heading',()=>{
  const f=fixture();f.config.orientationMode='horizontal';f.config.horizontalToleranceRad=.05;
  f.robot.flange_euler_rad=[.01,-.02,Math.PI/2];

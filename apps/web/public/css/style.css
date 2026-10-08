@@ -2476,3 +2476,9 @@ html, body {
   .voice-asr-heading { align-items: flex-start; flex-direction: column; }
   .voice-asr-summary { justify-content: flex-start; }
 }
+
+.web-grasp-panel { border: 1px solid var(--border-color, #374151); border-radius: 8px; padding: 10px; margin: 10px 0; font-size: 12px; line-height: 1.6; }
+.web-grasp-panel > div { overflow-wrap: anywhere; }
+.grasp-stages { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 12px; margin: 8px 0; padding-left: 22px; color: var(--text-secondary, #9ca3af); }
+.grasp-stages .current { color: var(--accent-color, #60a5fa); font-weight: 700; }
+.grasp-stages .done { color: #34d399; }

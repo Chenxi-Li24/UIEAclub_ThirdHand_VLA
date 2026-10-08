@@ -6,11 +6,17 @@ const delay=ms=>new Promise(r=>setTimeout(r,ms));
 function fault(code){const e=new Error(code);e.code=code;return e;}
 const distance=(a,b)=>Math.hypot(...a.map((x,i)=>x-b[i]));
 class GraspCoordinator extends EventEmitter{
- constructor({config,robotClient,visionClient,depthCoordinator,now=Date.now,sleep=delay,audit=()=>{}}){
-  super();validateConfig(config);Object.assign(this,{config,robotClient,visionClient,depthCoordinator,now,sleep,audit});
+ constructor({config,robotClient,visionClient,depthCoordinator,resolveTcp=()=>null,now=Date.now,sleep=delay,audit=()=>{}}){
+  super();validateConfig(config);Object.assign(this,{config,robotClient,visionClient,depthCoordinator,resolveTcp,now,sleep,audit});
   this.requests=new Map();this.session=null;this.current={type:'grasp.status',phase:'idle',active:false,sessionId:null,gripOffsetM:config.gripOffsetM,legacyGraspEnabled:false};
  }
  status(){return JSON.parse(JSON.stringify(this.current));}
+ tcpConfiguration(){
+  if(this.current.active&&this.current.tcp)return structuredClone(this.current.tcp);
+  const measured=this.resolveTcp();
+  return measured?{...structuredClone(measured),forwardBackoffM:this.config.calibratedForwardBackoffM??0}
+   :{source:'approximate',id:null,T_flange_grasp_tcp:[[1,0,0,this.config.gripOffsetM],[0,1,0,0],[0,0,1,0],[0,0,0,1]],forwardBackoffM:this.config.forwardBackoffM??0};
+ }
  _record(type,data){const event={ts:this.now(),sessionId:this.session?.id,type,...data};this.audit(event);this.emit('trace',event);}
  _publish(changes){this.current={...this.current,...changes};this._record('status',{status:this.current});this.emit('status',this.status());}
  _alive(s){if(this.session!==s||s.canceled||s.terminal)throw fault('operator_stop');if(this.now()-s.startedAt>240000)throw fault('workflow_timeout');}
@@ -19,9 +25,14 @@ class GraspCoordinator extends EventEmitter{
   const existing=this.requests.get(requestId);if(existing){if(existing.stableId!==stableId)throw fault('request_id_conflict');return existing.result||this.status();}
   if(this.current.active)throw fault('grasp_active');
   if(this.requests.size>=100)throw fault('request_history_full');
+  const tcp=this.tcpConfiguration();
+  const sessionConfig=structuredClone({...this.config,T_flange_grasp_tcp:tcp.T_flange_grasp_tcp,forwardBackoffM:tcp.forwardBackoffM});
+  validateConfig(sessionConfig);
   const s={id:randomUUID(),requestId,stableId,startedAt:this.now(),inFlight:false,canceled:false,terminal:false,motionUncertain:false,holding:false};
+  s.config=sessionConfig;
   this.session=s;this.requests.set(requestId,s);this.robotClient.ownerTag='web-grasp:'+s.id;
-  this._publish({phase:'depth_acquiring',active:true,sessionId:s.id,requestId,stableId,reason:null,holding:false,completedSegments:0,depthValidFrames:0,result:null});
+  this._publish({phase:'depth_acquiring',active:true,sessionId:s.id,requestId,stableId,reason:null,holding:false,tcp,
+   targetM:null,widthM:null,plan:null,progress:null,depth:null,completedSegments:0,depthValidFrames:0,result:null});
   this._run(s).catch(async e=>{
    if(s.terminal)return;
    let phase='failed';
@@ -69,7 +80,7 @@ class GraspCoordinator extends EventEmitter{
    await this.sleep(100);
   }throw fault('depth_timeout');
  }
- _geometry(observation,s){return buildGraspGeometry({observation,stableId:s.stableId,robot:this.robotClient.state({idle:true}),config:this.config,now:this.now()});}
+ _geometry(observation,s){return buildGraspGeometry({observation,stableId:s.stableId,robot:this.robotClient.state({idle:true}),config:s.config,now:this.now()});}
  async _check(paths,s){
   let before=this.robotClient.state({idle:true}).joints_deg;
   for(const pose of paths){
@@ -99,7 +110,7 @@ class GraspCoordinator extends EventEmitter{
  _path(from,to){const n=Math.max(1,Math.ceil(distance(from,to.position)/this.config.segmentM));if(n>200)throw fault('path_too_long');
   return Array.from({length:n},(_,i)=>({position:from.map((x,j)=>Number((x+(to.position[j]-x)*(i+1)/n).toFixed(12))),euler:[...to.euler]}));}
  async _move(path,phase,s){
-  this._publish({phase});
+  this._publish({phase,progress:{stage:phase,completed:0,total:path.length}});
   for(const pose of path){
    if(phase==='preapproach')await this._target(s);
    this._alive(s);const before=this.robotClient.state({idle:true});
@@ -111,7 +122,8 @@ class GraspCoordinator extends EventEmitter{
     position_tolerance_m:this.config.positionToleranceM,orientation_tolerance_rad:this.config.orientationToleranceRad},s);
    const after=await this._stable(s);
    if(distance(after.flange_position_m,pose.position)>this.config.positionToleranceM||after.flange_euler_rad.some((x,i)=>Math.abs(Math.atan2(Math.sin(x-pose.euler[i]),Math.cos(x-pose.euler[i])))>this.config.orientationToleranceRad))throw fault('pose_not_reached');
-   this._record('actual_pose',{state:after});this._publish({completedSegments:this.current.completedSegments+1});
+   this._record('actual_pose',{state:after});this._publish({completedSegments:this.current.completedSegments+1,
+    progress:{stage:phase,completed:this.current.progress.completed+1,total:path.length}});
    await this.sleep(Math.max(0,this.config.stepIntervalMs-(this.now()-started)));
   }
  }
@@ -124,13 +136,14 @@ class GraspCoordinator extends EventEmitter{
  async _run(s){
   await this.robotClient.ready();this._alive(s);
   const observation=await this._depth(s);this._publish({phase:'planning'});
-  let g=this._geometry(observation,s);this._publish({targetM:g.targetM,widthM:g.widthM,phase:'path_checking'});
+  let g=this._geometry(observation,s);this._publishPlan(g);this._publish({phase:'path_checking'});
   await this._check([...g.paths.preapproach,...g.paths.approach,...g.paths.lift],s);
   await this._target(s);this._publish({phase:'opening'});await this._command({cmd:'gripper',position:1},s);
   if((await this._stable(s)).gripper_width_m<0.074)throw fault('gripper_not_open');
   await this._move(g.paths.preapproach,'preapproach',s);this._publish({phase:'target_refresh',depthValidFrames:0});
   const refreshed=await this._depth(s),updated=this._geometry(refreshed,s);
   if(distance(updated.targetM,g.targetM)>0.04)throw fault('target_moved');g=updated;
+  this._publishPlan(g);
   const approach=this._path(this.robotClient.state({idle:true}).flange_position_m,g.contact);
   if(distance(this.robotClient.state().flange_position_m,g.contact.position)>(this.config.maxApproachM??0.14))throw fault('approach_distance_changed');
   await this._check([...approach,...g.paths.lift],s);await this._move(approach,'approach',s);
@@ -141,8 +154,11 @@ class GraspCoordinator extends EventEmitter{
   const final=this.robotClient.state({idle:true});
   if(final.gripper_width_m<this.config.contactMinM||final.gripper_width_m>this.config.contactMaxM){s.holding=false;throw fault('contact_lost');}
   this._terminal(s,'complete',null,{pipelineComplete:true,physicalGraspVerified:false,targetM:g.targetM,actualSdkM:final.flange_position_m,
-   actualGripM:getGripPosition(final,this.config),gripperWidthM:final.gripper_width_m,liftM:this.config.liftM});
+   actualGripM:getGripPosition(final,s.config),gripperWidthM:final.gripper_width_m,liftM:this.config.liftM,tcp:this.current.tcp});
  }
+ _publishPlan(g){this._publish({targetM:g.targetM,widthM:g.widthM,frameId:g.frameId,
+  plan:{preapproach:g.preapproach,contact:g.contact,lift:g.lift,
+   segments:Object.fromEntries(Object.entries(g.paths).map(([key,value])=>[key,value.length]))}});}
  async stop(sessionId){
   const s=this.session;if(!s||s.id!==sessionId||(s.terminal&&this.current.phase!=='uncertain'))return this.status();s.canceled=true;
   if(s.terminal){try{await this.robotClient.stop();this._publish({phase:'stopped',active:false,interlocked:false,reason:'operator_stop'});this.robotClient.ownerTag=null;}catch{}return this.status();}

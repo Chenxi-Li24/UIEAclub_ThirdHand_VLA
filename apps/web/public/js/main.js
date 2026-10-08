@@ -1296,6 +1296,7 @@ class UIControls {
     this.ws.on('camera_status', applyXVisionStatus);
 
     this.ws.on('grasp.config', data => {
+      this.webGraspConfig = data;
       this.webGraspEnabled = data.enabled === true;
       this._updateVisionControls();
     });
@@ -1329,7 +1330,8 @@ class UIControls {
       this._renderActiveDepthStatus();
     });
     this.ws.on('ws_connection', state => {
-      if (state.connected) this._refreshActiveDepthStatus();
+      if (state.connected) {this._refreshActiveDepthStatus();this._refreshWebGrasp();}
+      else {this.webGraspEnabled=false;this.webGraspError='网页控制连接已断开';this._updateVisionControls();}
     });
     window.addEventListener('pagehide', () => {
       if (!this.activeDepthStatus?.active || !this.activeDepthStatus.sessionId) return;
@@ -1338,6 +1340,7 @@ class UIControls {
       ], { type: 'application/json' }));
     });
     this._refreshActiveDepthStatus();
+    this._refreshWebGrasp();
     this._renderActiveDepthStatus();
     // === End Active Depth Controls ===
 
@@ -1382,26 +1385,65 @@ class UIControls {
     if (start) {
       start.disabled = active || !this.robotStateReady || !targetReady ||
         !this.webGraspEnabled;
-      start.textContent = '一键抓取（TCP 60 mm）';
+      start.textContent = `一键抓取（${this.webGraspConfig?.tcp?.source==='measured'?'实测 TCP':'近似 TCP'}）`;
     }
     if (next) {
       next.disabled = true;
     }
     if (cancel) cancel.disabled = !active;
     const lock = document.getElementById('vision-lock-reason');
-    if (lock && this.webGraspEnabled) {
-      lock.textContent = `${active ? '执行中' : '新抓取流程'}：${this.webGraspStatus.phase || 'idle'}${this.webGraspStatus.reason ? ' / '+this.webGraspStatus.reason : ''} · TCP 60 mm（近似）`;
-      lock.classList.toggle('ready', !active && targetReady);
+    if (lock) {
+      lock.textContent = this.webGraspEnabled
+        ? `${active?'执行中':'一键流程已接通'}${this.webGraspError?' · '+this.webGraspError:''}`
+        : `抓取不可用：${this.webGraspConfig?.reason||this.webGraspError||'等待服务配置'}`;
+      lock.classList.toggle('ready', this.webGraspEnabled && !active && targetReady);
     }
+    this._renderWebGrasp();
     this._renderActiveDepthStatus();
   }
 
   _applyWebGraspStatus(data) {
     const previous = this.webGraspStatus.phase;
     this.webGraspStatus = data;
+    this.webGraspError = null;
     this.graspPhase = data.phase || 'idle';
     if (previous !== this.graspPhase) this._log(`新抓取: ${this.graspPhase}${data.reason ? ' / '+data.reason : ''}`);
     this._updateVisionControls();
+  }
+
+  _renderWebGrasp() {
+    const state=this.webGraspStatus||{},phase=state.phase||'idle';
+    const labels={idle:'待机',unavailable:'服务不可用',depth_acquiring:'获取深度',planning:'坐标规划',path_checking:'路径检查',
+      opening:'张开夹爪',preapproach:'预接近',target_refresh:'刷新目标深度',approach:'接近目标',closing:'闭合夹爪',
+      lifting:'抬升',complete:'流程完成',failed:'执行失败',stopped:'已停止',uncertain:'停止未确认，请现场检查'};
+    const set=(id,text)=>{const node=document.getElementById(id);if(node)node.textContent=text;};
+    const mm=values=>Array.isArray(values)&&values.length===3&&values.every(Number.isFinite)?values.map(v=>(v*1000).toFixed(1)).join(', '):'--';
+    set('grasp-phase',`${labels[phase]||phase}${state.stableId?' · 目标 #'+state.stableId:''}`);
+    const tcp=state.tcp||this.webGraspConfig?.tcp;
+    const translation=tcp?.T_flange_grasp_tcp?.slice(0,3).map(row=>row[3]);
+    set('grasp-tcp',tcp?`${state.tcp?'本次':'下次'} TCP：${tcp.source==='measured'?'实测':'近似'} [${mm(translation)}] mm${tcp.id?' · '+tcp.id:''} · 水平退让 ${((tcp.forwardBackoffM||0)*1000).toFixed(0)} mm`:'TCP：等待配置');
+    set('grasp-target-position',mm(state.targetM));set('grasp-contact-position',mm(state.plan?.contact?.position));
+    set('grasp-depth',`${state.depthValidFrames||0} / 3`);
+    set('grasp-progress',state.progress?`${state.progress.completed} / ${state.progress.total}（累计 ${state.completedSegments||0}）`:'--');
+    set('grasp-result',this.webGraspError||state.reason|| (phase==='complete'
+      ?'流程完成，夹爪保持；实物抓取未确认，请现场观察。'
+      :state.holding?'夹爪保持，不自动松爪。':'选定目标后一次执行到抬升；不自动松爪'));
+    const stages=['depth_acquiring','path_checking','opening','preapproach','target_refresh','approach','closing','lifting'];
+    const index=phase==='planning'?1:stages.indexOf(phase);
+    stages.forEach((stage,i)=>{const node=document.getElementById(`grasp-stage-${stage}`);if(!node)return;
+      node.classList.toggle('current',i===index);node.classList.toggle('done',phase==='complete'||(index>=0&&i<index));});
+  }
+
+  async _refreshWebGrasp() {
+    try {
+      const fetchStatus=this._graspFetch||fetch;
+      const runtimeResponse=await fetchStatus('/api/runtime-config');
+      if(!runtimeResponse.ok)throw Error(`HTTP ${runtimeResponse.status}`);
+      const runtime=await runtimeResponse.json();this.webGraspConfig=runtime.grasp||{reason:'grasp_unavailable'};
+      this.webGraspEnabled=this.webGraspConfig.enabled===true;
+      const response=await fetchStatus('/api/grasp/status');if(!response.ok)throw Error(`HTTP ${response.status}`);
+      this._applyWebGraspStatus(await response.json());
+    }catch(error){this.webGraspEnabled=false;this.webGraspError=error.message;this._updateVisionControls();}
   }
 
   async _requestWebGrasp(path, body) {
@@ -1410,7 +1452,7 @@ class UIControls {
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || `HTTP ${response.status}`);
       this._applyWebGraspStatus(data);
-    } catch (error) { this._log(`抓取请求失败: ${error.message}`); }
+    } catch (error) { this.webGraspError=error.message;this._log(`抓取请求失败: ${error.message}`);this._updateVisionControls(); }
   }
 
   async _requestActiveDepth(path, body) {

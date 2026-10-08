@@ -95,3 +95,21 @@ test('fresh 60mm bottle contact is usable even when visual width underestimates 
  const {c}=await setup({contactWidth:0.060});await c.start(2,'wide-contact');const s=await finish(c);
  assert.equal(s.phase,'complete',s.reason);assert.equal(s.result.gripperWidthM,0.060);
 });
+
+test('one grasp freezes measured TCP across activation changes and publishes plan progress',async()=>{
+ const {c}=await setup({config:{forwardBackoffM:.06,calibratedForwardBackoffM:0}});
+ let active={id:'tcp-A',source:'measured',T_flange_grasp_tcp:[[1,0,0,.09],[0,1,0,.02],[0,0,1,.01],[0,0,0,1]]};
+ c.resolveTcp=()=>active;
+ const statuses=[];c.on('status',s=>{statuses.push(s);if(s.phase==='depth_acquiring')active={...active,id:'tcp-B',T_flange_grasp_tcp:[[1,0,0,.16],[0,1,0,0],[0,0,1,0],[0,0,0,1]]};});
+ await c.start(2,'freeze-tcp');const result=await finish(c);
+ assert.equal(result.phase,'complete',result.reason);assert.equal(result.tcp.id,'tcp-A');
+ assert.equal(result.tcp.forwardBackoffM,0);assert.deepEqual(result.result.actualGripM,[.4,0,.25]);
+ assert.deepEqual(result.plan.contact.position,[.48334,-.02,.19]);
+ assert.ok(statuses.some(s=>s.progress?.completed>0&&s.progress.total>=s.progress.completed));
+ assert.equal(c.tcpConfiguration().id,'tcp-B');
+});
+test('invalid active calibration refuses grasp before ownership or any actuator command',async()=>{
+ const {c,events}=await setup();c.resolveTcp=()=>{throw Error('artifact_hash_mismatch');};
+ await assert.rejects(c.start(2,'bad-tcp'),/artifact_hash_mismatch/);
+ assert.equal(c.status().active,false);assert.equal(events.length,0);
+});

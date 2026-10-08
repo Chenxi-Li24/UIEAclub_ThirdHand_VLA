@@ -8,7 +8,7 @@ const {TcpCalibrationArtifactStore}=require('./artifact-store');
 const {runTcpSolver}=require('./solver-adapter');
 const {createTcpCalibrationRoutes}=require('./routes');
 
-function createCalibration(config,{webUrl,canMutate}){
+function createCalibration(config,{webUrl,canMutate,onArtifactsChanged}){
  const client=new CanonicalRobotWebSocketClient({WebSocketImpl:WebSocket,
   url:webUrl.replace(/^http/,'ws')+'/ws',framePolicyPath:config.tcpCalibrationFramePolicyFile});
  const stateSource=new TcpCalibrationRobotStateSource({client,confirmPoseStability:true});
@@ -19,7 +19,7 @@ function createCalibration(config,{webUrl,canMutate}){
  const session=new TcpCalibrationSession({stateSource,solver,idFactory:randomUUID,
   now:()=>new Date().toISOString(),initialState,
   thresholds:{fitRmsGreenM:.002,fitMaximumGreenM:.004,fitRmsMaximumM:.003,fitMaximumM:.005,validationMaximumM:.005}});
- const routes=createTcpCalibrationRoutes({session,store,stateSource,canMutate});
+ const routes=createTcpCalibrationRoutes({session,store,stateSource,canMutate,onArtifactsChanged});
  return {routes,store,stateSource};
 }
 module.exports={createCalibration};

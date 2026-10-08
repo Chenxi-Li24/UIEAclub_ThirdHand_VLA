@@ -24,7 +24,7 @@ function fakeSession(){
  }};
 }
 
-async function setup(t,{connected=true}={}){
+async function setup(t,{connected=true,canMutate=()=>true}={}){
  const temp=fs.mkdtempSync(path.join(os.tmpdir(),'tcp-api-'));
  const session=fakeSession(),storeCalls=[];
  const store={saveSession:s=>storeCalls.push(['save',structuredClone(s)]),
@@ -33,7 +33,7 @@ async function setup(t,{connected=true}={}){
   activate:x=>{storeCalls.push(['activate',structuredClone(x)]);return {activeId:x.candidateId,previousActiveId:x.expectedActiveId};},
   rollback:x=>{storeCalls.push(['rollback',structuredClone(x)]);return {activeId:`sha256:${'a'.repeat(64)}`,previousActiveId:x.expectedActiveId};}};
  const stops=[],teaches=[];const stateSource={snapshot:()=>({connected,locked:!connected}),softwareStop:()=>{stops.push('stop');return true;},teach:command=>{teaches.push(command);return true;},close(){}};
- const routes=createTcpCalibrationRoutes({session,store,stateSource});
+ const routes=createTcpCalibrationRoutes({session,store,stateSource,canMutate});
  const noOp={attach(){},close(){},getRobotState(){return null;},broadcast(){},setGraspInterlock(){}};
  const gateway=createWebGateway({host:'127.0.0.1',port:0,readyFile:path.join(temp,'ready'),
   robotProxy:noOp,visionProxy:noOp,voiceProxy:noOp,
@@ -139,4 +139,11 @@ test('teach endpoints expose only start, hold, and keepalive',async t=>{
  for(const action of ['start','keepalive','hold'])assert.equal((await mutation(url,`/api/tcp-calibration/teach/${action}`,{requestId:`teach-${action}`})).status,200);
  assert.deepEqual(teaches,['teach_start','teach_keepalive','teach_hold']);
  assert.equal((await mutation(url,'/api/tcp-calibration/teach/move',{requestId:'bad'})).status,400);
+});
+
+test('grasp motion ownership rejects calibration writes but never hides software stop',async t=>{
+ const {url,teaches}=await setup(t,{canMutate:()=>false});
+ const response=await mutation(url,'/api/tcp-calibration/teach/start',{requestId:'busy'});
+ assert.equal(response.status,409);assert.equal((await response.json()).error,'robot_control_busy');assert.deepEqual(teaches,[]);
+ assert.equal((await mutation(url,'/api/tcp-calibration/software-stop',{requestId:'stop-owned'})).status,200);
 });

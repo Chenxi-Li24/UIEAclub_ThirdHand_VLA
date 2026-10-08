@@ -111,6 +111,7 @@ function createWebGateway(options = {}) {
   if(!tcpCalibrationRoutes&&config.tcpCalibrationEnabled){
     try{
       const tcp=require('./tcp-calibration').createCalibration(config,{webUrl,
+        onArtifactsChanged:()=>robotProxy.broadcast(graspConfiguration()),
         canMutate:()=>!graspController?.status().active&&!coordinator?.status().active&&!robotProxy.hasActiveControl?.()});
       tcpCalibrationRoutes=tcp.routes;tcpStore=tcp.store;tcpStateSource=tcp.stateSource;tcpCalibrationReason=null;
     }catch(error){tcpCalibrationReason=error.code||error.message||'tcp_calibration_configuration_invalid';}
@@ -121,9 +122,13 @@ function createWebGateway(options = {}) {
       graspController = factory.createFromFile(graspEnv.WEB_GRASP_CONFIG,{ownerToken:graspOwnerToken,webUrl,tcpStore});
     } catch (error) { graspReason = error.code || error.message || 'grasp_configuration_invalid'; }
   }
-  const graspConfig = { type: 'grasp.config', enabled: Boolean(graspController),
-    gripOffsetM: graspController?.status().gripOffsetM || null, legacyGraspEnabled: false,
-    startEndpoint: '/api/grasp/start', reason: graspReason };
+  function graspConfiguration(){
+    let tcp=null,reason=graspReason;
+    try{tcp=graspController?.tcpConfiguration?.()||null;}catch(error){reason=error.code||error.message||'tcp_unavailable';}
+    return {type:'grasp.config',enabled:Boolean(graspController)&&!reason,
+      gripOffsetM:graspController?.status().gripOffsetM||null,legacyGraspEnabled:false,
+      startEndpoint:'/api/grasp/start',reason,tcp,calibrationPage:'/tcp-calibration.html'};
+  }
   robotProxy.setGraspInterlock?.(() => graspController?.status());
   visionProxy.canForward = browser => {
     if (!graspController?.status().active) return true;
@@ -145,7 +150,7 @@ function createWebGateway(options = {}) {
         activeDepth: { ready: activeDepthReady, startEndpoint: '/api/active-depth/start' },
         dummy: { statusEndpoint: '/api/dummy/status', startEndpoint: '/api/dummy/start',
           stopEndpoint: '/api/dummy/stop', frameEndpoint: '/api/dummy/frame' },
-        grasp: graspConfig,
+        grasp: graspConfiguration(),
         tcpCalibration: tcpCalibrationRoutes?.config()||{ready:false,reason:tcpCalibrationReason,page:'/tcp-calibration.html'},
         language: {
           executionBackend: 'formal-3000-upstream',
@@ -167,7 +172,7 @@ function createWebGateway(options = {}) {
           voice: { url: config.voiceWsUrl },
           bottlePick: { url: config.language.vaHttpUrl },
           activeDepth: { ready: activeDepthReady, reason: activeDepthReason },
-          grasp: graspConfig,
+          grasp: graspConfiguration(),
           tcpCalibration: tcpCalibrationRoutes?.config()||{ready:false,reason:tcpCalibrationReason},
         },
       });
@@ -270,7 +275,8 @@ function createWebGateway(options = {}) {
       } catch (error) {
         const status = error.code === 'body_too_large' ? 413
           : ['grasp_active','request_id_conflict'].includes(error.code) ? 409
-          : ['request_invalid','invalid_json'].includes(error.code) ? 400 : 500;
+          : ['request_invalid','invalid_json'].includes(error.code) ? 400
+          : /artifact|candidate|tcp_/.test(error.code||error.message||'') ? 503 : 500;
         writeJson(response,status,{error:error.code || error.message || 'grasp_error'});
       }
       return;
@@ -294,6 +300,7 @@ function createWebGateway(options = {}) {
           if (graspController?.status().active) {
             writeJson(response, 409, {error:'grasp_active'}); return;
           }
+          if(tcpStateSource?.snapshot().teachActive||tcpStateSource?.teachTransition){writeJson(response,409,{error:'tcp_calibration_teaching'});return;}
           if (!exactKeys(body, ['stableId']) || !Number.isSafeInteger(body.stableId)
               || body.stableId < 1 || body.stableId > 5) {
             writeJson(response, 400, { error: 'request_invalid' });
@@ -398,7 +405,7 @@ function createWebGateway(options = {}) {
       socket.send(JSON.stringify(coordinator.status()));
     }
     if (socket.readyState === socket.OPEN) {
-      socket.send(JSON.stringify(graspConfig));
+      socket.send(JSON.stringify(graspConfiguration()));
       if (graspController) socket.send(JSON.stringify(graspController.status()));
     }
   });

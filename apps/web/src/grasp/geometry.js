@@ -15,10 +15,15 @@ function validateConfig(c){
  if(!Array.isArray(c.jointLimits)||c.jointLimits.length!==6||c.jointLimits.some(x=>!vector(x,2)||x[0]>=x[1]))fail('grasp_config_invalid');
  if(c.legacyGraspEnabled===true)fail('legacy_grasp_must_stay_disabled');return c;
 }
+function gripTransform(config){return validateRigidTransform(config.T_flange_grasp_tcp||translation(config.gripOffsetM));}
+function currentGripPose(robot,config){
+ const flange=gripTargetToFlangePose({positionM:robot.flange_position_m,eulerRad:robot.flange_euler_rad},translation(config.sdkToolOffsetM));
+ return flangeToGripPose(flange,gripTransform(config));
+}
 function inside(p,c){return vector(p)&&['x','y','z'].every((axis,i)=>p[i]>=c.workspace[axis][0]&&p[i]<=c.workspace[axis][1]);}
 function getGripPosition(robot,config){
  if(!vector(robot?.flange_position_m)||!vector(robot?.flange_euler_rad))fail('robot_pose_invalid');
- return gripTargetToFlangePose({positionM:robot.flange_position_m,eulerRad:robot.flange_euler_rad},translation(config.sdkToolOffsetM-config.gripOffsetM)).positionM.map(rounded);
+ return currentGripPose(robot,config).positionM.map(rounded);
 }
 function segments(from,to,config){
  const distance=Math.hypot(...to.position.map((x,i)=>x-from[i]));const count=Math.max(1,Math.ceil(distance/config.segmentM));
@@ -41,8 +46,8 @@ function buildGraspGeometry({observation,stableId,robot,config,now=Date.now()}){
  if(!vector(robot?.flange_position_m)||!vector(robot?.flange_euler_rad)||!validateJoints(robot.joints_deg,config.jointLimits))fail('robot_pose_invalid');
  const width=observation.pose?.width_m;
  const widthM=Number.isFinite(width)&&width>=0.008&&width<=0.072?width:null;
- const desired={positionM:targetM,eulerRad:[...robot.flange_euler_rad]};
- const flange=gripTargetToFlangePose(desired,translation(config.gripOffsetM));
+ const desired={positionM:targetM,eulerRad:currentGripPose(robot,config).eulerRad};
+ const flange=gripTargetToFlangePose(desired,gripTransform(config));
  const sdk=flangeToGripPose(flange,translation(config.sdkToolOffsetM));
  const currentGrip=getGripPosition(robot,config);
  const currentFlange=gripTargetToFlangePose({positionM:robot.flange_position_m,eulerRad:robot.flange_euler_rad},translation(config.sdkToolOffsetM)).positionM;

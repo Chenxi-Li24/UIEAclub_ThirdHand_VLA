@@ -17,6 +17,10 @@ function createFromFile(file,{ownerToken=null,webUrl=null,tcpStore=null}={}){
   calibration.numerically_validated!==true||calibration.frame_normalization?.policy_id!==config.framePolicyId)throw new Error('frame_binding_mismatch');
  const {loadPolicy}=require('../../../../services/vision/src/frames/robot_frame_normalization');
  if(loadPolicy(path.resolve(path.dirname(file),config.framePolicyFile)).id!==config.framePolicyId)throw new Error('frame_binding_mismatch');
+ if(!tcpStore){
+  const {TcpCalibrationArtifactStore}=require('../tcp-calibration/artifact-store');
+  tcpStore=new TcpCalibrationArtifactStore({root:path.resolve(path.dirname(file),config.tcpArtifactRoot||'../../../runtime/tcp-calibration')});
+ }
  // This hash-bound bridge intentionally publishes feedback only at motion boundaries.
  const robotClient=new WebRobotClient({url:config.webUrl.replace(/^http/,'ws')+'/ws',jointLimits:config.jointLimits,stateMaxAgeMs:config.stateMaxAgeMs,deferConnect:true,terminalFeedbackOnly:true,ownerToken});
  const visionClient=new VisionClient({baseUrl:config.webUrl});
@@ -24,7 +28,8 @@ function createFromFile(file,{ownerToken=null,webUrl=null,tcpStore=null}={}){
  const depthCoordinator=new ActiveDepthCoordinator({visionClient,executionClient:robotClient,getRobotState:()=>robotClient.state({idle:true}),mount,
   limits:{...DEFAULT_LIMITS,maxStepDeg:1,maxArmStepDeg:0.5,maxCumulativeJointDeg:10,maxArmCumulativeJointDeg:5,jointLimitsDeg:config.jointLimits}});
  const auditDir=path.resolve(path.dirname(file),'../../../runtime/web-grasp/sessions');fs.mkdirSync(auditDir,{recursive:true,mode:0o700});
- const controller=new GraspCoordinator({config,robotClient,visionClient,depthCoordinator,audit:event=>{
+ const controller=new GraspCoordinator({config,robotClient,visionClient,depthCoordinator,
+  resolveTcp:()=>tcpStore.activeTcp(config.framePolicyId),audit:event=>{
   if(event.sessionId)fs.appendFileSync(path.join(auditDir,event.sessionId+'.jsonl'),JSON.stringify(event)+'\n');
  }});
  return controller;

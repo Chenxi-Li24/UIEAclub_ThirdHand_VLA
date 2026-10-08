@@ -5,7 +5,7 @@ const {createWebGateway}=require('../../../apps/web/src/server');
 function wait(socket,predicate,send){return new Promise((resolve,reject)=>{const timer=setTimeout(()=>{socket.off('message',on);reject(new Error('message timeout'));},1500);const on=b=>{const m=JSON.parse(b);if(predicate(m)){clearTimeout(timer);socket.off('message',on);resolve(m);}};socket.on('message',on);send();});}
 test('active owner blocks competing motion but preserves stop and owner forwarding',async t=>{
  const received=[],upstream=new WebSocketServer({port:0});await new Promise(r=>upstream.once('listening',r));
- upstream.on('connection',s=>s.on('message',b=>{const m=JSON.parse(b);received.push(m);s.send(JSON.stringify({type:'test_echo',request_id:m.request_id}));}));
+ upstream.on('connection',s=>s.on('message',b=>{const m=JSON.parse(b);received.push(m);s.send(JSON.stringify(m.type==='capability_request'?{type:'capability_response',nonce:m.nonce}:{type:'test_echo',request_id:m.request_id}));}));
  const c=new EventEmitter();c.status=()=>({active:true,sessionId:'owner',phase:'approach',gripOffsetM:0.06});c.close=async()=>{};
  const temp=fs.mkdtempSync(path.join(os.tmpdir(),'grasp-owner-'));
  const gateway=createWebGateway({host:'127.0.0.1',port:0,robotWsUrl:`ws://127.0.0.1:${upstream.address().port}/ws`,graspOwnerToken:'private-test-owner',
@@ -19,6 +19,8 @@ test('active owner blocks competing motion but preserves stop and owner forwardi
  assert.equal(forged.code,'grasp_active');assert.equal(received.some(m=>m.request_id==='forged'),false);
  await wait(owner,m=>m.request_id==='owned',()=>owner.send(JSON.stringify({cmd:'gripper',position:0,source:'web-grasp:owner',request_id:'owned'})));
  await wait(browser,m=>m.request_id==='stop',()=>browser.send(JSON.stringify({cmd:'software_stop',request_id:'stop'})));
+ await wait(browser,m=>m.type==='capability_response'&&m.nonce==='calibration-state',()=>browser.send(JSON.stringify({type:'capability_request',schema:'thirdhand-robot-capability-v1',nonce:'calibration-state'})));
+ await wait(browser,m=>m.request_id==='feedback',()=>browser.send(JSON.stringify({cmd:'get_state',request_id:'feedback'})));
  assert.equal(received.some(m=>m.request_id==='owned'),true);assert.equal(received.some(m=>m.request_id==='stop'),true);
 });
 test('queued and language sends recheck ownership at the actual send boundary',()=>{

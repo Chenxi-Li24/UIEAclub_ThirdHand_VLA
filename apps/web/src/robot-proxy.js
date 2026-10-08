@@ -29,6 +29,10 @@ const ROBOT_COMMANDS = new Set([
   'software_stop',
   'estop',
   'ping',
+  'get_state',
+  'teach_start',
+  'teach_hold',
+  'teach_keepalive',
 ]);
 
 function sendJson(socket, message) {
@@ -41,6 +45,11 @@ function parseJson(data) {
   } catch {
     return null;
   }
+}
+
+function isCapabilityRequest(message){
+  return message?.type==='capability_request'&&message.schema==='thirdhand-robot-capability-v1'
+    &&Object.keys(message).length===3&&typeof message.nonce==='string'&&message.nonce.length>0&&message.nonce.length<=128;
 }
 
 class RobotProxy {
@@ -216,7 +225,8 @@ class RobotProxy {
 
   _mayForward(session, message) {
     return !this.graspInterlock?.()?.active || session?.graspOwner === true
-      || ['software_stop','estop','status','ping','preview_ik'].includes(message.cmd);
+      || isCapabilityRequest(message)
+      || ['software_stop','estop','status','ping','get_state','preview_ik'].includes(message.cmd);
   }
 
   _sendLanguageRobot(command) {
@@ -384,7 +394,8 @@ class RobotProxy {
         return;
       }
 
-      if (!ROBOT_COMMANDS.has(message.cmd)) {
+      const capabilityRequest=isCapabilityRequest(message);
+      if (!capabilityRequest&&!ROBOT_COMMANDS.has(message.cmd)) {
         sendJson(browser, {
           type: 'error',
           code: 'service_unavailable',

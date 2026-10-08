@@ -11,7 +11,7 @@ function digest(value){
  return JSON.stringify(value);
 }
 
-function createTcpCalibrationRoutes({session,store,stateSource}={}){
+function createTcpCalibrationRoutes({session,store,stateSource,canMutate=()=>true,onArtifactsChanged=()=>{}}={}){
  if(!session||typeof session.status!=='function'||typeof session.handle!=='function'||!store||!stateSource)throw new TypeError('tcp_calibration_routes_invalid');
  const replays=new Map();
  const config=()=>({ready:true,page:'/tcp-calibration.html'});
@@ -53,6 +53,9 @@ function createTcpCalibrationRoutes({session,store,stateSource}={}){
   if(!originAllowed(request)){writeJson(response,403,{error:'origin_not_allowed'});return true;}
   let body;try{body=await readJson(request);}catch(error){writeJson(response,error.code==='body_too_large'?413:400,{error:error.code||'request_invalid'});return true;}
   const requestId=body?.requestId;const key=`${request.method} ${pathname} ${requestId}`;
+  if(pathname!=='/api/tcp-calibration/software-stop'&&!canMutate()){
+   writeJson(response,409,{error:'robot_control_busy'});return true;
+  }
   if(typeof requestId==='string'&&respondReplay(key,body,response))return true;
   if(pathname==='/api/tcp-calibration/software-stop'){
    if(!exact(body,['requestId'])||typeof requestId!=='string'||!requestId){writeJson(response,400,{error:'request_invalid'});return true;}
@@ -97,11 +100,11 @@ function createTcpCalibrationRoutes({session,store,stateSource}={}){
   }
   if(pathname==='/api/tcp-calibration/activate'){
    if(!exact(body,['sessionId','expectedRevision','requestId','candidateId','expectedActiveId','confirm'])||body.confirm!==true){writeJson(response,400,{error:'request_invalid'});return true;}
-   try{const manifest=store.activate({candidateId:body.candidateId,expectedActiveId:body.expectedActiveId});remember(key,body,200,manifest,response);}catch(error){storeFailure(error,response);}return true;
+   try{const manifest=store.activate({candidateId:body.candidateId,expectedActiveId:body.expectedActiveId});onArtifactsChanged();remember(key,body,200,manifest,response);}catch(error){storeFailure(error,response);}return true;
   }
   if(pathname==='/api/tcp-calibration/rollback'){
    if(!exact(body,['sessionId','expectedRevision','requestId','expectedActiveId','confirm'])||body.confirm!==true){writeJson(response,400,{error:'request_invalid'});return true;}
-   try{const manifest=store.rollback({expectedActiveId:body.expectedActiveId});remember(key,body,200,manifest,response);}catch(error){storeFailure(error,response);}return true;
+   try{const manifest=store.rollback({expectedActiveId:body.expectedActiveId});onArtifactsChanged();remember(key,body,200,manifest,response);}catch(error){storeFailure(error,response);}return true;
   }
   return true;
  }

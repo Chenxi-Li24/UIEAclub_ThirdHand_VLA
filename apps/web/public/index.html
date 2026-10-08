@@ -274,7 +274,7 @@
             <div class="vision-empty">等待识别结果</div>
           </div>
           <div class="vision-lock" id="vision-lock-reason" role="status">
-            夹取锁定：等待标定和硬件验证
+            等待抓取服务状态
           </div>
           <section class="active-depth-panel" aria-labelledby="active-depth-title">
             <div class="active-depth-heading">
@@ -294,16 +294,27 @@
               <button class="action-btn" id="btn-active-depth-stop" disabled>停止对准</button>
             </div>
           </section>
-          <div class="vision-segment" role="group" aria-label="夹取执行模式">
-            <button type="button" class="vision-segment-btn active" data-grasp-mode="step"
-                    aria-pressed="true">分步</button>
-            <button type="button" class="vision-segment-btn" data-grasp-mode="auto"
-                    aria-pressed="false">自动</button>
-          </div>
+          <section class="web-grasp-panel" aria-label="一键抓取进度" aria-live="polite">
+            <strong id="grasp-phase">待机</strong>
+            <ol class="grasp-stages">
+              <li id="grasp-stage-depth_acquiring">获取深度</li>
+              <li id="grasp-stage-path_checking">路径检查</li>
+              <li id="grasp-stage-opening">张开夹爪</li>
+              <li id="grasp-stage-preapproach">预接近</li>
+              <li id="grasp-stage-target_refresh">刷新目标</li>
+              <li id="grasp-stage-approach">接近目标</li>
+              <li id="grasp-stage-closing">闭合夹爪</li>
+              <li id="grasp-stage-lifting">抬升</li>
+            </ol>
+            <div id="grasp-tcp">TCP：等待配置</div>
+            <div>基坐标目标（mm）：<span id="grasp-target-position">--</span></div>
+            <div>深度：<span id="grasp-depth">0 / 3</span> · 分段：<span id="grasp-progress">--</span></div>
+            <div>SDK 接近终点（mm）：<span id="grasp-contact-position">--</span></div>
+            <div id="grasp-result">选定目标后一次执行到抬升；不自动松爪</div>
+          </section>
           <div class="vision-actions">
-            <button class="action-btn action-primary" id="btn-grasp-start" disabled>开始夹取</button>
-            <button class="action-btn" id="btn-grasp-next" disabled>下一步</button>
-            <button class="action-btn" id="btn-grasp-cancel" disabled>取消</button>
+            <button class="action-btn action-primary" id="btn-grasp-start" disabled>一键抓取</button>
+            <button class="action-btn" id="btn-grasp-cancel" disabled>停止流程</button>
           </div>
           <button class="action-btn" id="btn-camera-refresh">重新连接视频</button>
         </div>

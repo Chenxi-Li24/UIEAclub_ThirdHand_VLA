@@ -3,6 +3,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
+const {validateRigidTransform}=require('../../../../skills/manipulation/bottlegrasp/src/thirdhand_va/action/grasp/grip_transform');
 
 function codedError(code) {
   const error = new Error(code);
@@ -177,6 +178,21 @@ class TcpCalibrationArtifactStore {
       activeId: active?.activeId || null,
       previousActiveId: active?.previousActiveId || null,
     };
+  }
+
+  activeTcp(framePolicyId) {
+    const active=this._active();if(!active)return null;
+    const document=this._candidate(active.activeId),session=document.session;
+    if(session.stage!=='ready_to_finalize'||session.solveReport?.accepted!==true
+        ||session.derivedTcp?.schema!=='thirdhand-grasp-tcp-derived-v1')throw codedError('candidate_unverified');
+    if(session.framePolicyId!==framePolicyId)throw codedError('tcp_frame_policy_mismatch');
+    let matrix;
+    try{matrix=validateRigidTransform(session.derivedTcp.T_flange_grasp_tcp);}
+    catch{throw codedError('tcp_transform_invalid');}
+    if(Math.hypot(...matrix.slice(0,3).map(row=>row[3]))>0.3)throw codedError('tcp_transform_invalid');
+    matrix.forEach(Object.freeze);Object.freeze(matrix);
+    return Object.freeze({id:active.activeId,source:'measured',T_flange_grasp_tcp:matrix,
+      activatedAt:active.activatedAt,framePolicyId});
   }
 
   activate({candidateId,expectedActiveId}) {

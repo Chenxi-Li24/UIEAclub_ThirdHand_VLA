@@ -48,6 +48,26 @@ test('horizontal depth delegates acquisition to the horizontal coordinator befor
  assert.equal(s.phase,'complete',s.reason);assert.equal(alignment,1);
  assert.equal(events.some(e=>e.cmd==='servo'),false);
 });
+test('temporarily invalid calibrated projection waits for fresh frames without starting depth correction',async()=>{
+ const {c}=await setup({config:{orientationMode:'horizontal'}});
+ const snapshot=c.visionClient.snapshot;let observations=0,corrections=0;
+ c.visionClient.snapshot=async id=>{const s=await snapshot(id);if(++observations<=2)s.observation.frame_projection={status:'invalid',reason:'robot_not_stationary_or_healthy'};return s;};
+ c.depthCoordinator.start=async()=>{corrections++;};
+ await c.start(2,'projection-passive-wait');const status=await finish(c);
+ assert.equal(status.phase,'complete',status.reason);assert.equal(corrections,0);
+});
+test('a terminal depth failure is published instead of leaving the webpage stuck on moving',async()=>{
+ const {c,events}=await setup({config:{orientationMode:'horizontal'}});
+ const snapshot=c.visionClient.snapshot;
+ c.visionClient.snapshot=async id=>{const s=await snapshot(id);s.observation.targets=s.observation.targets.map(t=>({...t,depth_valid:false}));return s;};
+ let depth={phase:'moving',active:true,completedSteps:0};
+ c.depthCoordinator.status=()=>depth;c.depthCoordinator.start=async()=>{};
+ c.on('status',status=>{if(status.depth?.active)depth={phase:'failed',active:false,completedSteps:1,reason:'ik_invalid'};});
+ await c.start(2,'depth-terminal-status');const status=await finish(c);
+ assert.equal(status.phase,'failed');assert.equal(status.reason,'ik_invalid');
+ assert.equal(status.depth.phase,'failed');assert.equal(status.depth.active,false);assert.equal(status.depth.completedSteps,1);
+ assert.deepEqual(events,[]);
+});
 test('grasp freezes the heading reached by horizontal depth rather than rotating back to the pre-acquisition heading',async()=>{
  const {c,state,events}=await setup({config:{orientationMode:'horizontal',executionMode:'phase_linear'}});
  const snapshot=c.visionClient.snapshot;let observations=0;

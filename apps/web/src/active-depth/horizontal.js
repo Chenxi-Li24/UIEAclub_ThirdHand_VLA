@@ -30,6 +30,9 @@ function planHorizontalDepthStep({robot,startRobot,targetPixel,depthValid=false,
   if(!heading||!startHeading)return {ok:false,reason:'horizontal_configuration_required'};
   const ray=streamPixelToRay(targetPixel),desired=streamPixelToRay(CENTER);
   if(!ray.ok||!desired.ok)return {ok:false,reason:'invalid_target_pixel'};
+  // Calibrated RGB-D coordinates do not require image centering. Stay still
+  // while the coordinator gathers its remaining fresh depth frames.
+  if(depthValid)return {ok:false,reason:'waiting_depth_frames'};
   const current=cameraPose(robot,mount,config),start=cameraPose(startRobot,mount,config);
   const grip=getGripPosition(robot,config),bearingBase=rotate(current.rotation,ray.ray);
   const initialAngularErrorRad=angular(ray.ray,desired.ray);
@@ -63,7 +66,6 @@ function planHorizontalDepthStep({robot,startRobot,targetPixel,depthValid=false,
    const shift=rotate(current.rotation,side.map(x=>STEP_M*x/norm));
    return candidate(grip.map((x,i)=>x+shift[i]),heading[2],'translate')||{ok:false,reason:'camera_limit'};
   }
-  if(depthValid)return {ok:false,reason:'waiting_depth_frames'};
   // A centered bottle may be inside the 150 mm usable-depth edge. Back away,
   // never advance toward a target whose distance has not been measured.
   const back=rotate(current.rotation,[0,0,-STEP_M]);
@@ -73,7 +75,7 @@ function planHorizontalDepthStep({robot,startRobot,targetPixel,depthValid=false,
 class HorizontalDepthCoordinator extends ActiveDepthCoordinator{
  constructor({robotClient,visionClient,mount,getConfig,pollIntervalMs=100}){
   let self;
-  super({visionClient,mount,pollIntervalMs,getRobotState:()=>robotClient.state(),
+  super({visionClient,mount,pollIntervalMs,requireCenteredDepth:false,getRobotState:()=>robotClient.state(),
    planStep:options=>self._plan(options),limits:DEFAULT_LIMITS,
    executionClient:{execute:p=>self._execute(p),stop:()=>robotClient.stop(),close(){}}});
   self=this;Object.assign(this,{robotClient,getConfig});

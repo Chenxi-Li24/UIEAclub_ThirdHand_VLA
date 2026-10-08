@@ -71,7 +71,12 @@ class GraspCoordinator extends EventEmitter{
    const target=(observation.targets||[]).find(t=>Number(t.stable_id??t.stableId)===s.stableId);
    if(Number(observation.selectedStableId??observation.selected_stable_id)!==s.stableId||!target||target.track_state!=='confirmed')throw fault('target_lost');
    if(id<=lastFrame){await this.sleep(100);continue;}lastFrame=id;
-   if(target.depth_valid===true&&vector(target.camera_xyz_m)&&observation.frame_projection?.status==='ready'){
+   // An invalidated projection is not missing depth. Wait for synchronized
+   // stationary evidence rather than starting an unnecessary robot correction.
+   if(observation.frame_projection?.status!=='ready'){
+    count=0;this._publish({depthValidFrames:0});await this.sleep(100);continue;
+   }
+   if(target.depth_valid===true&&vector(target.camera_xyz_m)){
     count++;this._publish({depthValidFrames:count});
     if(count>=3)return observation;
    }else{
@@ -80,6 +85,7 @@ class GraspCoordinator extends EventEmitter{
     await this.depthCoordinator.start(s.stableId);
     while(this.depthCoordinator.status().active&&this.depthCoordinator.status().phase!=='uncertain'){this._alive(s);this._publish({depth:this.depthCoordinator.status()});await this.sleep(100);}
     const depth=this.depthCoordinator.status();
+    this._publish({depth});
     if(depth.phase==='uncertain')s.motionUncertain=true;
     if(depth.phase!=='depth_acquired')throw fault(depth.reason||'depth_acquisition_failed');
    }

@@ -15,8 +15,10 @@ remain unchanged. Deploy only Web and Vision code; do not restart the robot SDK.
   backward moves are at most 5 mm. Camera displacement is at most 10 mm per step
   and 40 mm from its starting position. No forward motion without measured depth.
 - Bearing-only corrections do not fabricate target distance. Three increasing,
-  centered, depth-valid frames, fresh feedback and matching calibrated projection
-  are required before returning acquired depth. Existing workspace/joint checks
+  depth-valid frames, fresh feedback and matching calibrated projection are
+  required before returning horizontal acquired depth; image centering is not
+  required when measured depth is already available. The legacy formal coordinator
+  keeps its centered-depth behavior. Existing workspace/joint checks
   and SDK IK checks still apply. This is not a collision-avoidance certification.
 - The grasp uses the heading reached after each depth acquisition, including the
   preapproach checkpoint, then holds it through contact/lift.
@@ -50,3 +52,28 @@ without hardware calls. Check the existing Web gateway and live RGB-D observatio
 after Web/Vision restart. Restart only when the workflows and robot are idle.
 Do not start depth motion, grasp or gripper commands as part of deployment.
 Hardware depth-acquisition/grasp acceptance remains a separate explicit test.
+
+## 2026-10-08 usable-depth follow-up
+
+The failed bottle session had usable depth about 126 pixels below image center,
+but kept alternating horizontal corrections until IK rejected a waypoint. The
+horizontal planner now proposes no correction for valid depth. Temporary invalid
+projection waits passively for synchronized evidence within the existing depth
+timeout, rather than treating velocity noise as missing depth. The parent grasp
+also publishes the child's terminal depth status instead of retaining `moving`.
+Only Web needs restarting for this follow-up; Vision and Robot stay running.
+
+Four new regressions failed before the change and pass after it. The focused
+coordinator suite passes 84/84; the Node suite excluding `one-click.test.js` passes
+449/449. Full `npm run test:node` reports 456/460 passing, with these existing
+macOS launcher fixture failures, outside this repair:
+
+- `one-click ensures formal and Meituan profiles in order, then validates shared vision`
+- `missing Meituan worktree is reported without running anything in its place`
+- `one-click restores a missing listener on the same trusted vision entry and preserves calibration`
+- `repair refuses a lookalike entry outside the deployments directory without signaling it`
+
+The first two differ on `/var` versus `/private/var`; the latter two encounter
+`ENOENT` in Linux-specific process inspection. The two leaked fake vision children
+created by that test run were stopped so the full runner could exit. No live
+robot service was involved in those tests.

@@ -19,6 +19,11 @@ test('centered missing depth requests a bounded backward move with unchanged att
  assert.ok(p.targetSdkPose.position[0]<data().robot.flange_position_m[0]);
  assert.ok(p.cameraShiftM<=.005001);
 });
+test('valid off-center depth never produces an alignment waypoint',()=>{
+ const p=plan(data([317.3,360.26],true));
+ assert.equal(p.ok,false);assert.equal(p.reason,'waiting_depth_frames');
+ assert.equal(p.targetSdkPose,undefined);
+});
 test('pitch and exhausted camera travel prohibit a depth motion',()=>{
  const pitched=data();pitched.robot.flange_euler_rad=[0,.2,0];assert.equal(plan(pitched).ok,false);
  const exhausted=data([315.5,234]);exhausted.robot.flange_position_m[0]-=.04;
@@ -33,9 +38,24 @@ test('standalone horizontal depth prepares the web client, collects three frames
   evidence_id:'sha256:'+'a'.repeat(64),frame_projection:{status:'ready',robot_frame_policy_id:d.config.framePolicyId,calibration_id:d.config.calibrationId},targets:[{stable_id:2,track_state:'confirmed',centroid_xy:[315.5,234],depth_valid:true,camera_xyz_m:[0,0,.4]}]},
   runtimeEvidence:{camera_mount_id:'mount',registration_id:'reg'}})};
  const c=new implementation.HorizontalDepthCoordinator({robotClient:robot,visionClient:vision,mount:camera,getConfig:()=>d.config,pollIntervalMs:0});
- await c.start(2);for(let i=0;i<100&&c.status().active;i++)await new Promise(r=>setImmediate(r));
+ await c.start(2);await terminal(c);
  assert.equal(c.status().phase,'depth_acquired',c.status().reason);assert.equal(prepared,1);assert.equal(motion,0);
  await c.close();
+});
+test('three fresh off-center depth frames finish horizontal acquisition without IK or motion',async()=>{
+ const d=data([317.3,360.26],true);let frame=0,commands=0,previews=0;
+ const robot={ready:async()=>{},state:()=>({...d.robot,connected:true,stateFresh:true,stateName:'IDLE',motionActive:false}),
+  command:async()=>{commands++;throw Error('unexpected motion');},preview:async()=>{previews++;throw Error('unexpected IK');},stop:async()=>({status:'interrupted'})};
+ const vision={snapshot:async()=>({observation:{frameId:++frame,observedAtMs:Date.now(),selectedStableId:2,
+  evidence_id:'sha256:'+'a'.repeat(64),frame_projection:{status:'ready',robot_frame_policy_id:d.config.framePolicyId,calibration_id:d.config.calibrationId},
+  targets:[{stable_id:2,track_state:'confirmed',centroid_xy:d.targetPixel,depth_valid:true,camera_xyz_m:[0,.06,.165]}]},
+  runtimeEvidence:{camera_mount_id:'mount',registration_id:'reg'}})};
+ const c=new implementation.HorizontalDepthCoordinator({robotClient:robot,visionClient:vision,mount:camera,getConfig:()=>d.config,pollIntervalMs:0});
+ try{
+  await c.start(2);const status=await terminal(c);
+  assert.equal(status.phase,'depth_acquired',status.reason);assert.equal(status.depthValidFrames,3);
+  assert.equal(status.centered,false);assert.equal(previews,0);assert.equal(commands,0);
+ }finally{await c.close();}
 });
 function movingHarness({fault=false,stale=false,transient=false,buffered=false,monotonic=false}={}){
  const d=data();let sequence=1,frame=0,moved=false,stops=0,allowStop=!fault;
@@ -55,7 +75,8 @@ function movingHarness({fault=false,stale=false,transient=false,buffered=false,m
  const c=new implementation.HorizontalDepthCoordinator({robotClient:robot,visionClient:vision,mount:camera,getConfig:()=>d.config,pollIntervalMs:0});
  return {c,sent,get stops(){return stops;},allowStop:()=>allowStop=true,get bufferedSeen(){return bufferedSeen;},releaseFrames:()=>releaseFrames=true};
 }
-async function terminal(c){for(let i=0;i<1000&&!['failed','uncertain','depth_acquired'].includes(c.status().phase);i++)await new Promise(r=>setImmediate(r));return c.status();}
+async function waitUntil(predicate){const until=Date.now()+2000;while(!predicate()&&Date.now()<until)await new Promise(r=>setTimeout(r,1));}
+async function terminal(c){await waitUntil(()=>['failed','uncertain','depth_acquired'].includes(c.status().phase));return c.status();}
 test('horizontal motion stays level through web move_l and tolerates one post-motion redetection frame',async()=>{
  const h=movingHarness({transient:true});await h.c.start(2);const s=await terminal(h.c);
  assert.equal(s.phase,'depth_acquired',s.reason);assert.equal(h.sent.length,1);assert.equal(h.sent[0].cmd,'move_l');
@@ -78,13 +99,13 @@ test('closing uncertain depth retries a stop before releasing the transport',asy
 });
 test('higher-numbered buffered pre-motion frames cannot qualify depth or issue another correction',async()=>{
  const h=movingHarness({buffered:true});await h.c.start(2);
- for(let i=0;i<1000&&h.bufferedSeen<4;i++)await new Promise(r=>setImmediate(r));
+ await waitUntil(()=>h.bufferedSeen>=4);
  assert.ok(h.bufferedSeen>=4);assert.equal(h.c.status().active,true);assert.equal(h.c.status().depthValidFrames,0);assert.equal(h.sent.length,1);
  h.releaseFrames();assert.equal((await terminal(h.c)).phase,'depth_acquired');await h.c.close();
 });
 test('fresh publication timestamps cannot hide capture and projection evidence from before motion',async()=>{
  const h=movingHarness({buffered:true,monotonic:true});await h.c.start(2);
- for(let i=0;i<1000&&h.bufferedSeen<4;i++)await new Promise(r=>setImmediate(r));
+ await waitUntil(()=>h.bufferedSeen>=4);
  assert.ok(h.bufferedSeen>=4);assert.equal(h.c.status().active,true);assert.equal(h.c.status().depthValidFrames,0);assert.equal(h.sent.length,1);
  h.releaseFrames();assert.equal((await terminal(h.c)).phase,'depth_acquired');await h.c.close();
 });

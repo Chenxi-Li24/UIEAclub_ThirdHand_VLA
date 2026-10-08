@@ -63,7 +63,7 @@ function immutableStatus(status) {
 
 class ActiveDepthCoordinator extends EventEmitter {
   constructor({ visionClient, executionClient, getRobotState, mount,
-    planStep = planAlignmentStep, limits = DEFAULT_LIMITS,
+    planStep = planAlignmentStep, limits = DEFAULT_LIMITS, requireCenteredDepth = true,
     pollIntervalMs = 100, now = Date.now, sleep = delay }) {
     super();
     this.visionClient = visionClient;
@@ -72,6 +72,7 @@ class ActiveDepthCoordinator extends EventEmitter {
     this.mount = mount;
     this.planStep = planStep;
     this.limits = limits;
+    this.requireCenteredDepth = requireCenteredDepth;
     this.pollIntervalMs = pollIntervalMs;
     this.now = now;
     this.sleep = sleep;
@@ -186,7 +187,8 @@ class ActiveDepthCoordinator extends EventEmitter {
       const depthValid = target.depth_valid === true && finiteVector(target.camera_xyz_m, 3);
       const pixelError = centerErrorPx(targetPixel);
       const centeredDepth = depthValid && pixelError <= DEPTH_CENTER_TOLERANCE_PX;
-      session.depthValidFrames = centeredDepth ? session.depthValidFrames + 1 : 0;
+      const usableDepth = depthValid && (!this.requireCenteredDepth || centeredDepth);
+      session.depthValidFrames = usableDepth ? session.depthValidFrames + 1 : 0;
       this._publish({
         phase: 'observing', active: true, targetPixel,
         centerErrorPx: pixelError, centered: centeredDepth,
@@ -196,7 +198,7 @@ class ActiveDepthCoordinator extends EventEmitter {
       if (session.depthValidFrames >= 3) {
         this._terminal('depth_acquired', 'depth_valid_three_frames'); return;
       }
-      if (centeredDepth) { await this.sleep(this.pollIntervalMs); continue; }
+      if (usableDepth) { await this.sleep(this.pollIntervalMs); continue; }
 
       let forceArmFallback = false;
       if (session.previousStep) {

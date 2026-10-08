@@ -18,7 +18,10 @@ from typing import Any, Callable, Iterable
 ROOT = Path(os.environ.get(
     "THIRDHAND_LIVE_ROOT", Path(__file__).resolve().parents[3]
 )).resolve()
-sys.path.insert(0, str(ROOT / "services/vision/python"))
+# Resource paths may intentionally point at the original deployment. Python
+# implementations must come from this isolated checkout, not that resource root.
+CODE_ROOT = Path(__file__).resolve().parents[3]
+sys.path.insert(0, str(CODE_ROOT / "services/vision/python"))
 DRIVER_SRC = ROOT / "drivers/xvisio/src"
 if str(DRIVER_SRC) not in sys.path:
     sys.path.insert(0, str(DRIVER_SRC))
@@ -457,11 +460,71 @@ class UnifiedVisionRuntime:
         self.pipeline = VisionPipeline(config, backend)
         self._snapshot_lock = threading.Lock()
         self._pending_projection = None
+        self._motion_lock = threading.Lock()
+        self._last_robot_pose = None
+        self._last_robot_stamp = -1
+        self._camera_moving = False
+        self._settled_hits = 0
+        self._tracking_reset_pending = False
+        self._motion_epoch = 0
+
+    def update_robot_state(self, message):
+        """Track camera motion even when the SDK only sends terminal poses."""
+        import numpy as np
+        try:
+            stamp = int(message["observed_monotonic_ns"])
+            pose = np.asarray([*message["flange_position_m"],
+                               *message["flange_euler_rad"], *message["joints_deg"]], float)
+            if (message.get("type") != "arm_state" or pose.shape != (12,)
+                    or not np.isfinite(pose).all() or message.get("connected") is not True
+                    or message.get("healthy") is not True):
+                return False
+        except (KeyError, ValueError, TypeError):
+            return False
+        with self._motion_lock:
+            if stamp < self._last_robot_stamp or (stamp == self._last_robot_stamp and message.get("stationary") is True):
+                return False
+            previous = self._last_robot_pose
+            changed = previous is not None and (
+                np.linalg.norm(pose[:3]-previous[:3]) > .001
+                or np.max(np.abs(pose[3:6]-previous[3:6])) > .002
+                or np.max(np.abs(pose[6:]-previous[6:])) > .2)
+            moving = message.get("stationary") is not True or changed
+            self._last_robot_pose, self._last_robot_stamp = pose, stamp
+            if moving:
+                if not self._camera_moving:
+                    self._motion_epoch += 1
+                    self._tracking_reset_pending = True
+                self._camera_moving = True
+                self._settled_hits = 0
+            elif self._camera_moving:
+                self._settled_hits += 1
+                if self._settled_hits >= 3:
+                    self._camera_moving = False
+                    self._tracking_reset_pending = True
+        return True
 
     def process_frame(self, frame):
         from thirdhand_va.common.contracts import RgbdFrame
 
         import numpy as np
+
+        with self._motion_lock:
+            moving, reset = self._camera_moving, self._tracking_reset_pending
+            epoch = self._motion_epoch
+            self._tracking_reset_pending = False
+        new_epoch = epoch > getattr(self.pipeline, "motion_epoch", 0)
+        if new_epoch:
+            # Only the inference thread mutates tracking/stability internals.
+            self.pipeline.begin_motion_epoch(epoch, allow_depthless_continuity=True)
+        if reset or moving:
+            reset_backend = getattr(self.pipeline.backend, "reset_tracking", None)
+            if callable(reset_backend):
+                reset_backend()
+            self.pipeline.reset_pose_reference()
+        set_moving = getattr(self.pipeline, "set_camera_moving", None)
+        if callable(set_moving):
+            set_moving(moving or new_epoch)
 
         snapshot = None if self.projection is None else self.projection.snapshot_for_frame(
             int(frame.monotonic_ns), frame_id=int(frame.sequence),
@@ -931,7 +994,9 @@ def run_bridge(args: argparse.Namespace) -> int:
         provenance = FrameProvenance(
             frame_id=int(frame.sequence),
             monotonic_ns=int(frame.monotonic_ns),
-            observed_at_ms=int(time.time_ns() // 1_000_000),
+            # Capture time, not the later inference-publication time. Both this
+            # and frame monotonic provenance must follow a completed movement.
+            observed_at_ms=int(time.time_ns() // 1_000_000 - latency_ms),
         )
         event = build_detection_event(
             decision,
@@ -1038,6 +1103,9 @@ def run_bridge(args: argparse.Namespace) -> int:
                             pending_raw_export["requestId"] = request_id
                 elif message.get("type") == "arm_state" and projection is not None:
                     projection.update(message, time.monotonic_ns())
+                    model = inference_ref.get("model")
+                    if model is not None:
+                        model.update_robot_state(message)
                 elif message.get("type") == "shutdown":
                     stop.set()
                     return

@@ -70,12 +70,12 @@ class VisionPipeline:
             self.selection = None
             self.stability = StabilityWindow(self.config)
 
-    def begin_motion_epoch(self, epoch: int) -> None:
+    def begin_motion_epoch(self, epoch: int, *, allow_depthless_continuity: bool = False) -> None:
         if not isinstance(epoch, int) or epoch <= self.motion_epoch:
             raise ValueError("motion epoch must strictly increase")
         self.motion_epoch = epoch
         self.camera_moving = True
-        self.world_anchor_required = True
+        self.world_anchor_required = not allow_depthless_continuity
         self.stability = StabilityWindow(self.config)
 
     def set_camera_moving(self, moving: bool) -> None:

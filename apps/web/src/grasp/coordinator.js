@@ -76,13 +76,9 @@ class GraspCoordinator extends EventEmitter{
     if(count>=3)return observation;
    }else{
     count=0;
-    if(s.config.orientationMode==='horizontal'){
-     this._publish({depthValidFrames:0,depth:{phase:'observing',active:true,reason:'waiting_static_depth_no_wrist_rotation'}});
-     await this.sleep(100);continue;
-    }
-    if(aligned)throw fault('depth_invalid');aligned=true;
+    if(aligned){this._publish({depthValidFrames:0});await this.sleep(100);continue;}aligned=true;
     await this.depthCoordinator.start(s.stableId);
-    while(this.depthCoordinator.status().active){this._alive(s);this._publish({depth:this.depthCoordinator.status()});await this.sleep(100);}
+    while(this.depthCoordinator.status().active&&this.depthCoordinator.status().phase!=='uncertain'){this._alive(s);this._publish({depth:this.depthCoordinator.status()});await this.sleep(100);}
     const depth=this.depthCoordinator.status();
     if(depth.phase==='uncertain')s.motionUncertain=true;
     if(depth.phase!=='depth_acquired')throw fault(depth.reason||'depth_acquisition_failed');
@@ -178,13 +174,17 @@ class GraspCoordinator extends EventEmitter{
   await this.robotClient.ready();this._alive(s);
   const horizontal=assertHorizontal(this.robotClient.state({idle:true}),s.config);
   if(horizontal)s.config.horizontalYawRad=horizontal[2];
-  const observation=await this._depth(s);this._publish({phase:'planning'});
+  const observation=await this._depth(s);
+  if(horizontal)s.config.horizontalYawRad=assertHorizontal(this.robotClient.state({idle:true}),s.config)[2];
+  this._publish({phase:'planning'});
   let g=this._geometry(observation,s);this._publishPlan(g);this._publish({phase:'path_checking'});
   await this._check([...g.paths.preapproach,...g.paths.approach,...g.paths.lift],s);
   await this._target(s);this._publish({phase:'opening'});await this._command({cmd:'gripper',position:1},s);
   if((await this._stable(s)).gripper_width_m<0.074)throw fault('gripper_not_open');
   await this._move(g.paths.preapproach,'preapproach',s);this._publish({phase:'target_refresh',depthValidFrames:0});
-  const refreshed=await this._depth(s),updated=this._geometry(refreshed,s);
+  const refreshed=await this._depth(s);
+  if(horizontal)s.config.horizontalYawRad=assertHorizontal(this.robotClient.state({idle:true}),s.config)[2];
+  const updated=this._geometry(refreshed,s);
   if(distance(updated.targetM,g.targetM)>0.04)throw fault('target_moved');g=updated;
   this._publishPlan(g);
   const approach=this._path(this.robotClient.state({idle:true}).flange_position_m,g.contact);

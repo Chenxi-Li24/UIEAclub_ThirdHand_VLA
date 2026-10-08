@@ -47,3 +47,14 @@ test('separate depth start is rejected while a grasp owns the arm',async t=>{
  assert.equal((await post(url,'/api/active-depth/start',{stableId:2})).status,409);
  assert.equal((await post(url,'/api/grasp/stop',{sessionId:'s1'})).status,200);
 });
+test('horizontal depth uses the same web client despite the legacy 5 percent readiness rejection',async t=>{
+ const c=new Controller(),depth=new EventEmitter();let depthStatus={type:'active_depth.status',phase:'idle',active:false};depth.status=()=>depthStatus;
+ depth.start=async id=>(depthStatus={type:'active_depth.status',phase:'observing',active:true,stableId:id});depth.close=async()=>{};
+ c.depthCoordinator=depth;c.motionConfiguration=()=>({orientationMode:'horizontal'});
+ const {url,proxy}=await setup(t,c);proxy.getRobotState=()=>({connected:false,stateFresh:true,stateName:'IDLE',speedScale:.1});
+ assert.equal((await post(url,'/api/active-depth/start',{stableId:2},'https://attacker.invalid')).status,403);
+ const r=await post(url,'/api/active-depth/start',{stableId:2});assert.equal(r.status,202);
+ assert.equal((await r.json()).phase,'observing');
+ assert.equal(proxy.interlock().active,true);
+ for(const route of ['/api/vision/select','/api/vision/release'])assert.equal((await post(url,route,{stableId:1})).status,409);
+});

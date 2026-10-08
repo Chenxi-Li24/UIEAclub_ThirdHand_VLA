@@ -135,6 +135,11 @@ class NorfairTrackerAdapter:
             current.candidate.mask,
             previous.candidate.mask,
         )
+        # With no shared base-depth anchor, an appearance match alone must not
+        # transfer the selected ID across disjoint masks during a camera move.
+        if world_distance is None and (current.camera_moving or previous.camera_moving) and not unanchored_continuity(
+            current.candidate, previous.candidate, self.max_center_distance_px):
+            return 1_000_000.0
         center_distance = min(
             1.0,
             float(np.linalg.norm(
@@ -156,6 +161,13 @@ class NorfairTrackerAdapter:
             + 0.25 * descriptor_distance
             + 0.10 * point_term
         )
+
+
+def unanchored_continuity(current: MaskCandidate, previous: MaskCandidate, max_center_distance_px: float) -> bool:
+    return (_mask_iou(current.mask, previous.mask) >= 0.2
+            and _cosine_distance(current.descriptor, previous.descriptor) <= 0.3
+            and np.linalg.norm(np.asarray(tracking_centroid(current.mask))
+                - np.asarray(tracking_centroid(previous.mask))) <= min(40.0, max_center_distance_px))
 
 
 def _mask_iou(left: np.ndarray, right: np.ndarray) -> float:

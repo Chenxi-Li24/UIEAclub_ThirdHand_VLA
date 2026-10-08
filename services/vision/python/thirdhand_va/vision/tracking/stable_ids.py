@@ -8,7 +8,7 @@ from typing import Mapping
 from thirdhand_va.common.config import VisionConfig
 from thirdhand_va.common.contracts import MaskCandidate, TrackedBottle
 
-from .norfair_adapter import NorfairTrackerAdapter, Point3, tracking_centroid
+from .norfair_adapter import NorfairTrackerAdapter, Point3, tracking_centroid, unanchored_continuity
 
 
 @dataclass(slots=True)
@@ -49,6 +49,7 @@ class StableTrackManager:
         self._records: dict[int, _TrackRecord] = {}
         self._reservation: tuple[int, str] | None = None
         self._reserved_world_anchor: Point3 | None = None
+        self._reserved_continuity_lost = False
 
     @classmethod
     def from_config(cls, config: VisionConfig) -> "StableTrackManager":
@@ -93,6 +94,13 @@ class StableTrackManager:
             raise ValueError("now_ns must be a non-negative integer")
         world_points = world_points or {}
         candidates = self._reject_ambiguous_world_associations(candidates, world_points)
+        if camera_moving and self._reservation is not None and self._reserved_world_anchor is None:
+            reserved = self._track_by_stable_id(self._reservation[0])
+            plausible = () if reserved is None else tuple(c for c in candidates if unanchored_continuity(
+                c, reserved.candidate, self._adapter.max_center_distance_px))
+            if len(plausible) > 1:
+                self._reserved_continuity_lost = True
+                candidates = tuple(c for c in candidates if all(c is not p for p in plausible))
         associations = self._adapter.update(
             candidates,
             camera_moving=camera_moving,
@@ -104,6 +112,9 @@ class StableTrackManager:
         for association in associations:
             world_point = world_points.get(association.candidate.detection_id)
             existing = self._records.get(association.backend_track_id)
+            if (self._reserved_continuity_lost and self._reservation is not None
+                    and existing is not None and existing.stable_id == self._reservation[0]):
+                continue
             if (
                 self._reservation is not None
                 and existing is not None
@@ -173,6 +184,12 @@ class StableTrackManager:
         for backend_id, record in self._records.items():
             if backend_id in seen:
                 continue
+            if (camera_moving and self._reservation is not None
+                    and record.stable_id == self._reservation[0]
+                    and self._reserved_world_anchor is None):
+                # Without a base-depth anchor, a gap cannot be bridged using
+                # appearance alone. Keep ownership, require explicit reselection.
+                self._reserved_continuity_lost = True
             elapsed = now_ns - record.last_seen_ns
             if elapsed <= self._lost_timeout_ns:
                 record.state = "occluded" if record.stable_id is not None else "tentative"
@@ -203,6 +220,7 @@ class StableTrackManager:
             return False
         self._reservation = (stable_id, request_id)
         self._reserved_world_anchor = record.world_point
+        self._reserved_continuity_lost = False
         return True
 
     def release(self, request_id: str) -> None:
@@ -211,6 +229,7 @@ class StableTrackManager:
         stable_id = self._reservation[0]
         self._reservation = None
         self._reserved_world_anchor = None
+        self._reserved_continuity_lost = False
         for backend_id, record in tuple(self._records.items()):
             if record.stable_id == stable_id and record.state in {"lost", "retired"}:
                 self._records.pop(backend_id, None)

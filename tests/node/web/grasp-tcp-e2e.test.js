@@ -1,6 +1,6 @@
 'use strict';
 const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),os=require('node:os'),path=require('node:path'),http=require('node:http');
-const {once}=require('node:events');
+const {once,EventEmitter}=require('node:events');
 const {WebSocket,WebSocketServer}=require('ws');
 const {createWebGateway}=require('../../../apps/web/src/server');
 const {GraspCoordinator}=require('../../../apps/web/src/grasp/coordinator');
@@ -61,7 +61,7 @@ test('HTTP target selection and one start traverse actual gateway sockets to mea
   response.setHeader('content-type','application/json');response.end(JSON.stringify(payload));frame++;
  });await new Promise(r=>vision.listen(0,'127.0.0.1',r));
  const client=new WebRobotClient({url:'ws://127.0.0.1:1/ws',ownerToken:'offline-owner',deferConnect:true,jointLimits:config.jointLimits});
- const depth={status:()=>({active:false}),async close(){},async start(){throw Error('unexpected depth fallback: synthetic depth is valid');}};
+ const depth=Object.assign(new EventEmitter(),{status:()=>({active:false}),async close(){},async start(){throw Error('unexpected depth fallback: synthetic depth is valid');}});
  const visionClient=new VisionClient({baseUrl:'http://127.0.0.1:1'});
  const controller=new GraspCoordinator({config,robotClient:client,visionClient,depthCoordinator:depth,
   resolveTcp:()=>store.activeTcp(policyId),sleep:async()=>wait(2)});

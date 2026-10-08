@@ -39,20 +39,37 @@ test('phase-linear mode executes three native trajectories while checking every 
  assert.ok(previews>30,'IK sampling must not be replaced with endpoint-only checking');
  assert.equal(s.completedSegments,3);
 });
-test('horizontal depth waits for fresh depth without issuing wrist or arm alignment',async()=>{
+test('horizontal depth delegates acquisition to the horizontal coordinator before any grasp command',async()=>{
  const {c,events}=await setup({config:{orientationMode:'horizontal',horizontalToleranceRad:.05}});
  const snapshot=c.visionClient.snapshot;let observations=0,alignment=0;
  c.visionClient.snapshot=async id=>{const s=await snapshot(id);if(++observations<=2)s.observation.targets=s.observation.targets.map(t=>({...t,depth_valid:false}));return s;};
- c.depthCoordinator.start=async()=>{alignment++;throw Error('wrist_rotation_forbidden');};
+ c.depthCoordinator.start=async()=>{alignment++;};
  await c.start(2,'static-depth');const s=await finish(c);
- assert.equal(s.phase,'complete',s.reason);assert.equal(alignment,0);
+ assert.equal(s.phase,'complete',s.reason);assert.equal(alignment,1);
  assert.equal(events.some(e=>e.cmd==='servo'),false);
+});
+test('grasp freezes the heading reached by horizontal depth rather than rotating back to the pre-acquisition heading',async()=>{
+ const {c,state,events}=await setup({config:{orientationMode:'horizontal',executionMode:'phase_linear'}});
+ const snapshot=c.visionClient.snapshot;let observations=0;
+ c.visionClient.snapshot=async id=>{const s=await snapshot(id);if(++observations===1)s.observation.targets=s.observation.targets.map(t=>({...t,depth_valid:false}));return s;};
+ c.depthCoordinator.start=async()=>{state.flange_euler_rad=[0,0,.017];};
+ await c.start(2,'depth-heading');const s=await finish(c);assert.equal(s.phase,'complete',s.reason);
+ assert.ok(events.filter(e=>e.cmd==='move_l').every(e=>Math.abs(e.euler[2]-.017)<1e-9));
 });
 test('pitched start in horizontal mode never opens the gripper or moves the robot',async()=>{
  const {c,state,events}=await setup({config:{orientationMode:'horizontal',horizontalToleranceRad:.05}});
  state.flange_euler_rad=[0,.49,0];
  await c.start(2,'pitched-start');const s=await finish(c);
  assert.equal(s.reason,'tool_not_horizontal');assert.deepEqual(events,[]);
+});
+test('checkpoint depth reacquisition refreshes horizontal heading for approach and lift',async()=>{
+ const {c,state,events}=await setup({config:{orientationMode:'horizontal',executionMode:'phase_linear'}});
+ const snapshot=c.visionClient.snapshot;let alignment=0;
+ c.visionClient.snapshot=async id=>{const r=await snapshot(id);if(c.status().phase==='target_refresh'&&!alignment)r.observation.targets=r.observation.targets.map(t=>({...t,depth_valid:false}));return r;};
+ c.depthCoordinator.start=async()=>{alignment++;state.flange_euler_rad=[0,0,.017];};
+ await c.start(2,'checkpoint-depth-heading');assert.equal((await finish(c)).phase,'complete');assert.equal(alignment,1);
+ const moves=events.filter(e=>e.cmd==='move_l');assert.equal(moves[0].euler[2],0);
+ assert.ok(moves.slice(1).every(e=>Math.abs(e.euler[2]-.017)<1e-9));
 });
 test('loss of selected target during a continuous preapproach stops the in-flight trajectory',async()=>{
  let moving=false,unblock;

@@ -29,10 +29,14 @@ function createFromFile(file,{ownerToken=null,webUrl=null,tcpStore=null}={}){
  const robotClient=new WebRobotClient({url:config.webUrl.replace(/^http/,'ws')+'/ws',jointLimits:config.jointLimits,stateMaxAgeMs:config.stateMaxAgeMs,deferConnect:true,terminalFeedbackOnly:true,ownerToken});
  const visionClient=new VisionClient({baseUrl:config.webUrl});
  const mount={matrix_4x4:calibration.T_flange_camera.matrix_4x4,...calibration.camera};
- const depthCoordinator=new ActiveDepthCoordinator({visionClient,executionClient:robotClient,getRobotState:()=>robotClient.state({idle:true}),mount,
-  limits:{...DEFAULT_LIMITS,maxStepDeg:1,maxArmStepDeg:0.5,maxCumulativeJointDeg:10,maxArmCumulativeJointDeg:5,jointLimitsDeg:config.jointLimits}});
+ let controller;
+ const depthCoordinator=config.orientationMode==='horizontal'
+  ?new(require('../active-depth/horizontal').HorizontalDepthCoordinator)({robotClient,visionClient,mount,
+   getConfig:()=>controller?.status().active?controller.session.config:{...config,T_flange_grasp_tcp:controller.tcpConfiguration().T_flange_grasp_tcp}})
+  :new ActiveDepthCoordinator({visionClient,executionClient:robotClient,getRobotState:()=>robotClient.state({idle:true}),mount,
+   limits:{...DEFAULT_LIMITS,maxStepDeg:1,maxArmStepDeg:0.5,maxCumulativeJointDeg:10,maxArmCumulativeJointDeg:5,jointLimitsDeg:config.jointLimits}});
  const auditDir=path.resolve(path.dirname(file),'../../../runtime/web-grasp/sessions');fs.mkdirSync(auditDir,{recursive:true,mode:0o700});
- const controller=new GraspCoordinator({config,robotClient,visionClient,depthCoordinator,
+ controller=new GraspCoordinator({config,robotClient,visionClient,depthCoordinator,
   resolveTcp:()=>{const tcp=tcpStore.activeTcp(tcpPolicy.sourceId);return tcp&&{...tcp,runtimeFramePolicyId:tcpPolicy.runtimeId};},audit:event=>{
   if(event.sessionId)fs.appendFileSync(path.join(auditDir,event.sessionId+'.jsonl'),JSON.stringify(event)+'\n');
  }});

@@ -105,7 +105,7 @@ class ActiveDepthCoordinator extends EventEmitter {
     }
     const sessionId = randomUUID();
     this.session = {
-      sessionId, stableId, startedAtMs: this.now(), startJointsDeg: [...robot.jointsDeg],
+      sessionId, stableId, startedAtMs: this.now(), startJointsDeg: [...robot.jointsDeg], startRobot:structuredClone(robot),
       completedSteps: 0, depthValidFrames: 0, lastFrameId: null,
       stopRequested: false, inFlight: false, terminal: false,
       previousStep: null, noProgressSteps: 0,
@@ -144,9 +144,21 @@ class ActiveDepthCoordinator extends EventEmitter {
       if (session.completedSteps >= 20) { this._terminal('failed', 'step_limit'); return; }
       let snapshot;
       try { snapshot = await this.visionClient.snapshot(session.stableId); }
-      catch (error) { this._terminal('failed', error.code || 'vision_unavailable'); return; }
+      catch (error) {
+        if(this.session.reacquireUntil>this.now()&&['vision_target_mismatch','vision_evidence_mismatch','vision_projection_mismatch'].includes(error.code)){
+          await this.sleep(this.pollIntervalMs);continue;
+        }
+        this._terminal('failed', error.code || 'vision_unavailable'); return;
+      }
       if (session.stopRequested || session.terminal) return;
       const { observation, runtimeEvidence = {} } = snapshot;
+      if(this.validateObservation){
+        const rejection=this.validateObservation(observation);
+        if(rejection){
+          if(session.reacquireUntil>this.now()&&['vision_projection_unavailable','vision_pre_motion'].includes(rejection)){await this.sleep(this.pollIntervalMs);continue;}
+          this._terminal('failed',rejection);return;
+        }
+      }
       const frameId = Number(observation?.frameId ?? observation?.frame_id);
       if (!Number.isSafeInteger(frameId) || frameId < 0) {
         this._terminal('failed', 'vision_frame_invalid'); return;
@@ -157,8 +169,12 @@ class ActiveDepthCoordinator extends EventEmitter {
       }
       session.lastFrameId = frameId;
       const target = this._targetFor(observation, session.stableId);
-      if (!target) { this._terminal('failed', 'target_switched'); return; }
+      if (!target) {
+        if(session.reacquireUntil>this.now()&&Number(observation.selectedStableId)===session.stableId){await this.sleep(this.pollIntervalMs);continue;}
+        this._terminal('failed', 'target_switched'); return;
+      }
       if (target.track_state !== undefined && target.track_state !== 'confirmed') {
+        if(target.track_state==='occluded'&&session.reacquireUntil>this.now()){await this.sleep(this.pollIntervalMs);continue;}
         this._terminal('failed', 'target_not_confirmed'); return;
       }
       if ((runtimeEvidence.camera_mount_id || observation.camera_mount_id) !== this.mount.camera_mount_id
@@ -203,12 +219,14 @@ class ActiveDepthCoordinator extends EventEmitter {
       if (!robotReady(robot)) {
         this._terminal('failed', 'robot_not_stationary'); return;
       }
-      const plan = this.planStep({
+      const plan = await this.planStep({
+        robot, startRobot:session.startRobot, depthValid,
         targetPixel, jointsDeg: robot.jointsDeg, startJointsDeg: session.startJointsDeg,
         tFlangeCamera: this.mount.matrix_4x4,
         limits: { ...this.limits, jointLimitsDeg: robot.jointLimitsDeg || this.limits.jointLimitsDeg },
         completedSteps: session.completedSteps, elapsedMs, forceArmFallback,
       });
+      if(session.stopRequested||session.terminal)return;
       if (!plan.ok) { this._terminal('failed', plan.reason || 'no_candidate'); return; }
       const primitiveId = randomUUID();
       const planDigest = `sha256:${createHash('sha256').update(JSON.stringify(plan)).digest('hex')}`;
@@ -225,6 +243,7 @@ class ActiveDepthCoordinator extends EventEmitter {
           evidenceId, motionEpoch: Number(observation.motion_epoch ?? observation.motionEpoch ?? 0),
           tier: plan.tier, wristExhausted: plan.wristExhausted,
           startJointsDeg: [...robot.jointsDeg], targetJointsDeg: [...plan.targetJointsDeg],
+          ...(plan.targetSdkPose?{targetSdkPose:plan.targetSdkPose,startSdkPose:plan.startSdkPose}:{}),
           timeoutMs: 5000,
         },
       };
@@ -249,6 +268,12 @@ class ActiveDepthCoordinator extends EventEmitter {
         return;
       }
       session.completedSteps += 1;
+      if(plan.tier==='horizontal'){
+        session.reacquireUntil=this.now()+3000;
+        session.minimumCaptureMs=result.completedAfterMs;
+        session.minimumRobotMonotonicNs=result.completedRobotMonotonicNs;
+        session.depthValidFrames=0;
+      }
       session.previousStep = { beforeAngularError: bearingError(targetPixel), tier: plan.tier };
       await this.sleep(this.pollIntervalMs);
     }

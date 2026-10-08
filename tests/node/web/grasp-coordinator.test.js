@@ -83,14 +83,72 @@ test('pitched start in horizontal mode never opens the gripper or moves the robo
  await c.start(2,'pitched-start');const s=await finish(c);
  assert.equal(s.reason,'tool_not_horizontal');assert.deepEqual(events,[]);
 });
-test('checkpoint depth reacquisition refreshes horizontal heading for approach and lift',async()=>{
- const {c,state,events}=await setup({config:{orientationMode:'horizontal',executionMode:'phase_linear'}});
- const snapshot=c.visionClient.snapshot;let alignment=0;
- c.visionClient.snapshot=async id=>{const r=await snapshot(id);if(c.status().phase==='target_refresh'&&!alignment)r.observation.targets=r.observation.targets.map(t=>({...t,depth_valid:false}));return r;};
- c.depthCoordinator.start=async()=>{alignment++;state.flange_euler_rad=[0,0,.017];};
- await c.start(2,'checkpoint-depth-heading');assert.equal((await finish(c)).phase,'complete');assert.equal(alignment,1);
- const moves=events.filter(e=>e.cmd==='move_l');assert.equal(moves[0].euler[2],0);
- assert.ok(moves.slice(1).every(e=>Math.abs(e.euler[2]-.017)<1e-9));
+test('depth loss after preapproach completes against the initial base target without another correction',async()=>{
+ const {c,events}=await setup({config:{orientationMode:'horizontal',executionMode:'phase_linear'}});
+ const snapshot=c.visionClient.snapshot;let reachedCheckpoint=false,alignment=0;
+ c.on('status',s=>{if(s.phase==='target_refresh')reachedCheckpoint=true;});
+ const read=async id=>{const r=await snapshot(id);if(reachedCheckpoint)r.observation.targets=r.observation.targets.map(t=>({...t,depth_valid:false,camera_xyz_m:null,base_xyz_m:null}));return r;};
+ c.visionClient.snapshot=read;c.visionClient.trackingSnapshot=read;
+ c.depthCoordinator.start=async()=>{alignment++;};
+ c.depthCoordinator.status=()=>({phase:'failed',active:false,reason:'unexpected_depth_reacquisition'});
+ await c.start(2,'checkpoint-depth-loss');const status=await finish(c);
+ assert.equal(status.phase,'complete',status.reason);assert.equal(alignment,0);
+ assert.equal(status.depthValidFrames,3);assert.equal(status.frameId,13);
+ assert.deepEqual(status.targetM,[.4,0,.2]);
+ assert.deepEqual(events.filter(e=>e.cmd==='move_l').map(e=>e.position),[[.41334,0,.2],[.51334,0,.2],[.51334,0,.25]]);
+ assert.equal(events.some(e=>e.cmd==='software_stop'),false);
+});
+test('checkpoint confirmation uses fresh RGB identity without requiring a new calibrated snapshot',async()=>{
+ const {c,events}=await setup({config:{orientationMode:'horizontal',executionMode:'phase_linear'}});
+ const snapshot=c.visionClient.snapshot;let reachedCheckpoint=false;
+ c.on('status',s=>{if(s.phase==='target_refresh')reachedCheckpoint=true;});
+ c.visionClient.snapshot=async id=>{if(reachedCheckpoint)throw Object.assign(Error('stationary projection unavailable'),{code:'vision_evidence_mismatch'});return snapshot(id);};
+ c.visionClient.trackingSnapshot=async id=>{const r=await snapshot(id);r.observation.frame_projection={status:'invalid'};r.observation.targets=r.observation.targets.map(t=>({...t,depth_valid:false,camera_xyz_m:null}));return r;};
+ await c.start(2,'checkpoint-rgb-only');const status=await finish(c);
+ assert.equal(status.phase,'complete',status.reason);
+ assert.equal(events.filter(e=>e.cmd==='move_l').length,3);
+ assert.equal(events.some(e=>e.cmd==='software_stop'),false);
+});
+test('fresh calibrated evidence of the same bottle moving still prevents approach to the cached point',async()=>{
+ const {c,events}=await setup({config:{orientationMode:'horizontal',executionMode:'phase_linear'}});
+ const snapshot=c.visionClient.snapshot;
+ c.visionClient.snapshot=async id=>{const r=await snapshot(id);if(c.status().phase==='target_refresh')r.observation.targets=r.observation.targets.map(t=>({...t,camera_xyz_m:[.26,0,.2],base_xyz_m:[.46,0,.2]}));return r;};
+ await c.start(2,'checkpoint-bottle-moved');const status=await finish(c);
+ assert.equal(status.phase,'failed');assert.equal(status.reason,'target_moved');
+ assert.deepEqual(status.targetM,[.4,0,.2]);assert.equal(events.filter(e=>e.cmd==='move_l').length,1);
+ assert.deepEqual(events.filter(e=>e.cmd==='gripper').map(e=>e.position),[1]);
+});
+test('small fresh depth variation never changes the locked contact or lift coordinates',async()=>{
+ const {c,events}=await setup({config:{orientationMode:'horizontal',executionMode:'phase_linear'}});
+ const snapshot=c.visionClient.snapshot;
+ c.visionClient.snapshot=async id=>{const r=await snapshot(id);if(c.status().phase==='target_refresh')r.observation.targets=r.observation.targets.map(t=>({...t,camera_xyz_m:[.22,0,.2],base_xyz_m:[.42,0,.2]}));return r;};
+ await c.start(2,'checkpoint-depth-noise');const status=await finish(c);
+ assert.equal(status.phase,'complete',status.reason);assert.deepEqual(status.targetM,[.4,0,.2]);
+ assert.deepEqual(events.filter(e=>e.cmd==='move_l').map(e=>e.position),[[.41334,0,.2],[.51334,0,.2],[.51334,0,.25]]);
+});
+test('a delayed optional depth read cannot authorize approach with an expired RGB identity frame',async()=>{
+ const {c,events}=await setup({config:{orientationMode:'horizontal',executionMode:'phase_linear'}});
+ const snapshot=c.visionClient.snapshot;let now=1000;c.now=()=>now;
+ c.visionClient.trackingSnapshot=snapshot;
+ c.visionClient.snapshot=async id=>{const r=await snapshot(id);if(c.status().phase==='target_refresh'){now=3500;r.observation.targets=r.observation.targets.map(t=>({...t,depth_valid:false,camera_xyz_m:null}));}return r;};
+ await c.start(2,'checkpoint-expired-rgb');const status=await finish(c);
+ assert.equal(status.phase,'failed');assert.equal(status.reason,'vision_stale');
+ assert.equal(events.filter(e=>e.cmd==='move_l').length,1);
+ assert.deepEqual(events.filter(e=>e.cmd==='gripper').map(e=>e.position),[1]);
+});
+for(const [name,change,reason] of [
+ ['lost identity',o=>o.targets=o.targets.map(t=>({...t,track_state:'lost'})),'target_lost'],
+ ['switched selection',o=>o.selectedStableId=1,'target_lost'],
+ ['stale RGB',o=>o.ts=-3000,'vision_stale'],
+])test(`cached depth does not ignore checkpoint ${name}`,async()=>{
+ const {c,events}=await setup({config:{orientationMode:'horizontal',executionMode:'phase_linear'}});
+ const snapshot=c.visionClient.snapshot;
+ c.visionClient.trackingSnapshot=async id=>{const r=await snapshot(id);if(c.status().phase==='target_refresh')change(r.observation);return r;};
+ await c.start(2,'checkpoint-invalid-'+name.replaceAll(' ','-'));const status=await finish(c);
+ assert.equal(status.phase,'failed');assert.equal(status.reason,reason);
+ assert.equal(events.filter(e=>e.cmd==='move_l').length,1);
+ assert.deepEqual(events.filter(e=>e.cmd==='gripper').map(e=>e.position),[1]);
+ assert.equal(events.some(e=>e.cmd==='software_stop'),false);
 });
 test('loss of selected target during a continuous preapproach stops the in-flight trajectory',async()=>{
  let moving=false,unblock;

@@ -119,3 +119,42 @@ The reproduced projection-loss regression now completes without software stop.
 Stale RGB, lost identity and selection-switch regressions still confirm exactly
 one stop. Focused tests pass 59/59; full Node regression reports 466/470 passing,
 with only the same four macOS launcher fixture failures listed above.
+
+## 2026-10-08 fixed initial-depth target follow-up
+
+The grasp now freezes the base-frame bottle target, measured TCP and horizontal
+heading from the initial three calibrated depth frames. The compatible
+`target_refresh` checkpoint requires only fresh RGB target identity; it no longer
+requires another calibrated depth snapshot, resets the initial depth count, or
+starts a second active-depth correction after preapproach. Its UI label is now
+"确认固定目标". Contact and lift remain planned against the original base target.
+
+This is a stationary-bottle workflow, not dynamic object following. Fresh target
+identity, timestamp/selection checks, horizontal pose checks, actual-start path
+sampling, joint limits/continuity, command completion and gripper contact checks
+remain enforced. Only Web is restarted; deployment does not start a grasp or
+restart/reconnect the Robot or Vision service. Other deployed i18n changes remain
+untouched.
+
+A single passive, 1.5-second bounded calibrated snapshot may still prove that
+the same bottle moved more than the existing 40 mm threshold; this fails with
+`target_moved` before approach. Missing depth/projection evidence does not block
+the cached target. Even a usable small depth variation never replaces the locked
+contact, lift, heading or TCP. No depth correction or re-aiming is issued.
+Fresh RGB identity is checked again after that passive read, including its
+timeout/missing-depth branches, so the wait cannot authorize an approach with an
+expired identity frame.
+
+Five checkpoint regressions, the same-ID movement regression and delayed missing-
+depth RGB-expiry regression failed before their fixes and pass after them. Local
+focused tests pass 104/104, including the socket/TCP end-to-end fixture. Remote
+focused tests pass 103/103. The remote test named "HTTP target selection and one
+start traverse actual gateway sockets to measured TCP contact and lift" is blocked
+by `frame_policy_source_changed` while loading its checked-in policy fixture,
+before any coordinator execution. The deployment's existing runtime-rebound
+calibration is not overwritten to make that fixture pass.
+
+Full local Node regression reports 473/477 passing. The same four macOS launcher
+fixture failures named above remain; no additional failure was introduced. Only
+the two temporary fake vision children from this test run were stopped so the
+runner could exit. No physical grasp test was started by this change.

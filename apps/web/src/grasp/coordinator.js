@@ -177,6 +177,25 @@ class GraspCoordinator extends EventEmitter{
   if(!Number.isFinite(ts)||this.now()-ts>this.config.visionMaxAgeMs||ts-this.now()>500)throw fault('vision_stale');
   if(Number(observation.selectedStableId??observation.selected_stable_id)!==s.stableId||!target||target.track_state!=='confirmed')throw fault('target_lost');
  }
+ async _confirmFrozenTarget(s,g){
+  await this._target(s,true);
+  let snapshot,timer;
+  try{
+   // One passive, bounded read can prove movement, but missing calibrated
+   // evidence must never require depth acquisition or alter the locked plan.
+   snapshot=await Promise.race([this.visionClient.snapshot(s.stableId),
+    new Promise(resolve=>{timer=setTimeout(()=>resolve(null),1500);})]);
+  }catch(error){
+   if(!['vision_evidence_mismatch','vision_projection_mismatch'].includes(error.code))throw error;
+  }finally{clearTimeout(timer);}
+  this._alive(s);
+  // The passive read may outlive the RGB frame checked on entry.
+  await this._target(s,true);
+  if(!snapshot)return;
+  const o=snapshot.observation,t=(o.targets||[]).find(t=>Number(t.stable_id??t.stableId)===s.stableId);
+  if(o.frame_projection?.status!=='ready'||t?.depth_valid!==true||!vector(t.camera_xyz_m))return;
+  if(distance(this._geometry(o,s).targetM,g.targetM)>0.04)throw fault('target_moved');
+ }
  async _run(s){
   await this.robotClient.ready();this._alive(s);
   const horizontal=assertHorizontal(this.robotClient.state({idle:true}),s.config);
@@ -184,16 +203,15 @@ class GraspCoordinator extends EventEmitter{
   const observation=await this._depth(s);
   if(horizontal)s.config.horizontalYawRad=assertHorizontal(this.robotClient.state({idle:true}),s.config)[2];
   this._publish({phase:'planning'});
-  let g=this._geometry(observation,s);this._publishPlan(g);this._publish({phase:'path_checking'});
+  const g=this._geometry(observation,s);this._publishPlan(g);this._publish({phase:'path_checking'});
   await this._check([...g.paths.preapproach,...g.paths.approach,...g.paths.lift],s);
   await this._target(s);this._publish({phase:'opening'});await this._command({cmd:'gripper',position:1},s);
   if((await this._stable(s)).gripper_width_m<0.074)throw fault('gripper_not_open');
-  await this._move(g.paths.preapproach,'preapproach',s);this._publish({phase:'target_refresh',depthValidFrames:0});
-  const refreshed=await this._depth(s);
-  if(horizontal)s.config.horizontalYawRad=assertHorizontal(this.robotClient.state({idle:true}),s.config)[2];
-  const updated=this._geometry(refreshed,s);
-  if(distance(updated.targetM,g.targetM)>0.04)throw fault('target_moved');g=updated;
-  this._publishPlan(g);
+  await this._move(g.paths.preapproach,'preapproach',s);this._publish({phase:'target_refresh'});
+  // The stationary bottle target is fixed in the base frame by the initial
+  // calibrated depth. Confirm fresh RGB identity here, not a second depth
+  // acquisition/camera correction. Keep the same TCP, target and heading.
+  await this._confirmFrozenTarget(s,g);
   const approach=this._path(this.robotClient.state({idle:true}).flange_position_m,g.contact);
   if(distance(this.robotClient.state().flange_position_m,g.contact.position)>(this.config.maxApproachM??0.14))throw fault('approach_distance_changed');
   await this._check([...approach,...g.paths.lift],s);await this._move(approach,'approach',s);

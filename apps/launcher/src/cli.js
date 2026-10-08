@@ -6,6 +6,7 @@ const { loadRuntimeConfig } = require('./service-config');
 const { ServiceSupervisor, probeConfiguredService } = require('./service-supervisor');
 const { CanInterfaceManager } = require('./can-interface');
 const { ensureRuntime } = require('./runtime-ensure');
+const { ensureOneClick } = require('./one-click');
 const { discoverSkills } = require('../../../platform/skill_registry/src/registry');
 
 const ROOT = path.resolve(__dirname, '../../..');
@@ -160,14 +161,15 @@ function printHuman(report) {
 
 async function main() {
   const args = parseArgs(process.argv.slice(2));
-  const allowed = new Set(['start', 'ensure', 'stop', 'status', 'doctor', 'verify-assets']);
+  const allowed = new Set(['start', 'ensure', 'ensure-all', 'stop', 'status', 'doctor', 'verify-assets']);
   if (!allowed.has(args.command)) {
-    throw new Error('usage: ./thirdhand start|ensure|stop|status|doctor|verify-assets [--profile NAME] [--json]');
+    throw new Error('usage: ./thirdhand start|ensure|ensure-all|stop|status|doctor|verify-assets [--profile NAME] [--json]');
   }
 
   let report;
   let code = 0;
   if (['start', 'ensure', 'stop', 'status'].includes(args.command)) report = await lifecycle(args.command, args.profile);
+  else if (args.command === 'ensure-all') report = await ensureOneClick({ quiet: args.json });
   else if (args.command === 'doctor') report = doctor(args.profile);
   else ({ report, code } = verifyAssets(args.json));
 

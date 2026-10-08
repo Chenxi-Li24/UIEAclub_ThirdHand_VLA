@@ -5,3 +5,4 @@ torch
 transformers
 Pillow
 norfair==2.3.0
+ikpy==4.1.0

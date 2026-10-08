@@ -1,0 +1,80 @@
+{
+  "schema": "thirdhand-robot-frame-policy-v1",
+  "source_semantics": "sdk_tool_mislabeled_as_robot_flange",
+  "T_flange_sdk_tool": [
+    [
+      1,
+      0,
+      0,
+      0.17334
+    ],
+    [
+      0,
+      1,
+      0,
+      0
+    ],
+    [
+      0,
+      0,
+      1,
+      0
+    ],
+    [
+      0,
+      0,
+      0,
+      1
+    ]
+  ],
+  "sdk_config_path": "/home/nieqingcao/ThirdHand/UIEAclub_ThirdHand_VLA/local/generated/startouch-python/startouch_sdk/src/config/robot_kinematics.yaml",
+  "bindings": [
+    {
+      "path": "/home/nieqingcao/ThirdHand/UIEAclub_ThirdHand_VLA/local/sdk/startouch/src/config/robot_kinematics.yaml",
+      "sha256": "e88cbf578f1262386adcf7edf40a5638513cdc59a5da4fe938e88a31addd35ce"
+    },
+    {
+      "path": "/home/nieqingcao/ThirdHand/UIEAclub_ThirdHand_VLA/services/robot/src/robot-controller.js",
+      "sha256": "fb7bf003446b724746efcdf22833982a3c85b9425e9b7a1c4ecbb668c1219522"
+    },
+    {
+      "path": "/home/nieqingcao/ThirdHand/UIEAclub_ThirdHand_VLA/services/robot/src/startouch_bridge.py",
+      "sha256": "be807a257b8cb70766b5a7f8aab1b3fa9e826002298c83d6c5d07cbe7e70d4d3"
+    },
+    {
+      "path": "/home/nieqingcao/ThirdHand/deployments/grasp-prototype-1894746-20261004/assets/robot/startouch-v3/FastTouchV3.SLDASM.urdf",
+      "sha256": "0e52a6ed086e87b2d3dc24391874ab433e7e9cc33b6b0fc995370cf9e37dea86"
+    },
+    {
+      "path": "/home/nieqingcao/ThirdHand/UIEAclub_ThirdHand_VLA/local/generated/startouch-python/startouch_sdk/src/config/robot_kinematics.yaml",
+      "sha256": "f84dd8da8206169bc97d72c35f6a9ec058e79cc5ccf68e14c3b0c102dc5cd9d1"
+    },
+    {
+      "path": "/home/nieqingcao/ThirdHand/UIEAclub_ThirdHand_VLA/local/generated/startouch-python/startouch_sdk/interface_py/libstartouch.so",
+      "sha256": "8284d216ab4e7b0195ffaf8e7fc70ee160b834511b9c05e77c0ba33ad545e24b"
+    },
+    {
+      "path": "/home/nieqingcao/ThirdHand/UIEAclub_ThirdHand_VLA/local/generated/startouch-python/startouch_sdk/src/config/FastTouchV2.SLDASM.urdf",
+      "sha256": "1b62917312850bdb390f5e51009d88ffe392ac2c9ff6115c2a29ad7aeb39d165"
+    },
+    {
+      "path": "/home/nieqingcao/ThirdHand/UIEAclub_ThirdHand_VLA/local/generated/startouch-python/startouch_sdk/interface_py/startouchclass.py",
+      "sha256": "0f4b5f72241392f8a9faf20cc0e42917197a8d417e4db3de8380f0eb01b88be9"
+    },
+    {
+      "path": "/home/nieqingcao/ThirdHand/UIEAclub_ThirdHand_VLA/local/generated/startouch-python/startouch_sdk/interface_py/startouch.cpython-311-x86_64-linux-gnu.so",
+      "sha256": "56627356e9cf751dade7ddec2f45849cebf0519b06a76886dee7761f65ddbd08"
+    }
+  ],
+  "legacy_calibration_sha256": "d2e322dec9c6dab109212188ccc87b714bbd7f3cd9b0de9f22169cc576764a5b",
+  "physical_grasp_tcp_measured": false,
+  "read_only": true,
+  "runtime_provenance": {
+    "module_path": "/home/nieqingcao/ThirdHand/UIEAclub_ThirdHand_VLA/local/generated/startouch-python/startouch_sdk/interface_py",
+    "library": "/home/nieqingcao/ThirdHand/UIEAclub_ThirdHand_VLA/local/generated/startouch-python/startouch_sdk/interface_py/libstartouch.so",
+    "kinematics": "/home/nieqingcao/ThirdHand/UIEAclub_ThirdHand_VLA/local/generated/startouch-python/startouch_sdk/src/config/robot_kinematics.yaml",
+    "urdf": "/home/nieqingcao/ThirdHand/UIEAclub_ThirdHand_VLA/local/generated/startouch-python/startouch_sdk/src/config/FastTouchV2.SLDASM.urdf",
+    "configuration_scope": "restored_original_sdk_configuration",
+    "physical_path_qualified": false
+  }
+}

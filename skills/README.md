@@ -6,7 +6,7 @@
 |---|---|---|
 | `vision/inspect-scene` | `vision_inspect_scene` | 已接入 3004 Controller；只读获取现有 3100 原始帧，交由 `deepseek-flash` 描述，不控制相机或机器人 |
 | `vision/` 其他目录 | `describe-scene`、`detect-objects`、`supervise-execution` | 协议已定义；基础视觉在线，执行 Worker 不一定可用 |
-| `manipulation/bottlegrasp` | 取放适配入口 | `manual-control` profile 在 8766 启动；默认不自行打开相机或机器人，尚非通用自主抓取闭环 |
+| `manipulation/bottlegrasp` | 取放适配与监督会话 | `manual-control` profile 在 8766 启动；默认不自行打开相机或机器人，尚非通用自主抓取闭环 |
 | `manipulation/` 其他目录 | `pick-and-place` | 协议已定义；自动夹取执行 Worker 待迁移 |
 | `policies/` | `vla`、`act`、`diffusion-policy` | manifest 已定义；模型 Worker 待迁移 |
 

@@ -78,6 +78,31 @@ test('execution primitive rejects undeclared operations and extra fields', () =>
   }).ok, false);
 });
 
+test('execution primitive accepts only a tightly bounded pregrasp move', () => {
+  const contracts = createContractValidator();
+  const primitive = {
+    schema: 'thirdhand.execution-primitive.v1', primitiveId: 'pregrasp-1',
+    traceId: 'trace-1', taskId: 'task-1', authorizationId: 'operator-approval-1',
+    planDigest: `sha256:${'c'.repeat(64)}`, operation: 'grasp.pregrasp',
+    parameters: {
+      sessionId: 'session-1', stableId: 1, frameId: 84416,
+      evidenceId: `sha256:${'d'.repeat(64)}`, motionEpoch: 0,
+      minimumStateSequence: 10, minimumProducerMonotonicNs: 100,
+      startJointsDeg: [0, 1, 2, 3, 4, 5],
+      targetJointsDeg: [1, 2, 3, 4, 5, 6], speedScale: 0.01,
+      pregraspTcpPositionM: [0.36, -0.05, 0.10], operationMode: 'pregrasp_only',
+      timeoutMs: 30000,
+    },
+  };
+  assert.equal(contracts.validate('thirdhand.execution-primitive.v1', primitive).ok, true);
+  assert.equal(contracts.validate('thirdhand.execution-primitive.v1', {
+    ...primitive, parameters: { ...primitive.parameters, speedScale: 0.051 },
+  }).ok, false);
+  assert.equal(contracts.validate('thirdhand.execution-primitive.v1', {
+    ...primitive, parameters: { ...primitive.parameters, closeGripper: true },
+  }).ok, false);
+});
+
 test('plan proposal contains an immutable server plan and readiness snapshot', () => {
   const contracts = createContractValidator();
   const result = contracts.validate('thirdhand.plan-proposal.v1', {

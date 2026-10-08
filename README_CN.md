@@ -21,7 +21,7 @@
 | Ubuntu 语音与 LLM Controller | 已接入 | `127.0.0.1:3004`；普通文本用 `deepseek-v4-pro` |
 | XVisio RGB-D 与检测 | 已迁移 | `127.0.0.1:3100` |
 | `inspect-scene` 视觉问答 | 已接入，只读 | 复用 3100 原始画面；图片仅发往 `deepseek-flash` API，无新监听端口 |
-| BottleGrasp 取放适配入口 | 已接入 profile；非自主抓取闭环 | `127.0.0.1:8766`；默认不自行打开相机或机器人 |
+| BottleGrasp 取放适配与监督会话 | 已接入 profile；非自主抓取闭环 | `127.0.0.1:8766`；默认不自行打开相机或机器人 |
 | 统一 launcher | 已迁移 | `./thirdhand` |
 | 通用监督执行与自主夹取闭环 | 尚未完成 | 无独立正式端口 |
 | VLA、ACT、DP Worker | 待迁移 | 无 |

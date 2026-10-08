@@ -49,6 +49,14 @@ function validTransferSegments(value, prePlaceM, totalTimeSec) {
     sameVector(value.at(-1).position, prePlaceM);
 }
 
+function validPregraspSegments(value) {
+  return value === undefined || (Array.isArray(value) && value.length >= 1 &&
+    value.length <= 64 && value.every(segment => segment &&
+      typeof segment === 'object' && !Array.isArray(segment) &&
+      vector3(segment.position) && Number.isFinite(segment.timeSec) &&
+      segment.timeSec >= 0.001 && segment.timeSec <= 30));
+}
+
 function validPlan(plan) {
   return plan && plan.schema === 'thirdhand-execution-plan-v2' &&
     Number.isSafeInteger(plan.stableId) && plan.stableId >= 1 && plan.stableId <= 5 &&
@@ -64,11 +72,11 @@ function validPlan(plan) {
     vector6(plan.homeJointsDeg) &&
     Number.isFinite(plan.homeToleranceDeg) && plan.homeToleranceDeg > 0 &&
     plan.homeToleranceDeg <= 2.0 &&
-    Number.isFinite(plan.widthM) && plan.widthM > 0 && plan.widthM <= 0.072 &&
+    Number.isFinite(plan.widthM) && plan.widthM > 0 && plan.widthM <= 0.080 &&
     Number.isFinite(plan.contactMinWidthM) && plan.contactMinWidthM >= 0 &&
     Number.isFinite(plan.contactMaxWidthM) &&
     plan.contactMaxWidthM >= plan.contactMinWidthM &&
-    plan.contactMaxWidthM <= 0.072 &&
+    plan.contactMaxWidthM <= 0.080 &&
     Number.isFinite(plan.releaseMinWidthM) &&
     plan.releaseMinWidthM > plan.contactMaxWidthM &&
     Number.isFinite(plan.releaseMaxWidthM) &&
@@ -78,10 +86,12 @@ function validPlan(plan) {
     validTransferSegments(
       plan.transferSegments, plan.prePlaceM, plan.timeSecByPhase?.transfer
     ) &&
+    validPregraspSegments(plan.pregraspSegments) &&
     Number.isFinite(plan.openPosition) && plan.openPosition >= 0 && plan.openPosition <= 1 &&
     Number.isFinite(plan.closePosition) && plan.closePosition >= 0 && plan.closePosition <= 1 &&
     plan.closePosition < plan.openPosition &&
-    typeof plan.pathValidationId === 'string' && SHA256_ID.test(plan.pathValidationId);
+    (['lift_only', 'pregrasp_only'].includes(plan.mode) ? plan.pathValidationId === null
+      : typeof plan.pathValidationId === 'string' && SHA256_ID.test(plan.pathValidationId));
 }
 
 function freezePlan(plan) {
@@ -100,6 +110,12 @@ function freezePlan(plan) {
       position: Object.freeze([...segment.position]),
       timeSec: segment.timeSec,
     }))),
+    ...(plan.pregraspSegments === undefined ? {} : {
+      pregraspSegments: Object.freeze(plan.pregraspSegments.map(segment => Object.freeze({
+        position: Object.freeze([...segment.position]),
+        timeSec: segment.timeSec,
+      }))),
+    }),
   };
   return Object.freeze(clone);
 }
@@ -126,7 +142,9 @@ class GraspController {
     this.failedPhase = null;
     this.inFlight = null;
     this.holdingObject = false;
+    this.pregraspSegmentIndex = 0;
     this.transferSegmentIndex = 0;
+    this.supervised = false;
   }
 
   get active() {
@@ -145,14 +163,17 @@ class GraspController {
       reason: this.reason,
       failedPhase: this.failedPhase,
       holdingObject: this.holdingObject,
+      pregraspSegmentIndex: this.phase === 'pregrasp'
+        ? this.pregraspSegmentIndex : null,
       transferSegmentIndex: this.phase === 'transfer'
         ? this.transferSegmentIndex : null,
       inFlightRequestId: this.inFlight?.requestId ?? null,
+      awaiting_confirmation: this.supervised && this.active && this.inFlight === null,
       robot_control_enabled: this.active,
     });
   }
 
-  start(plan = {}) {
+  start(plan = {}, { supervised = false } = {}) {
     if (this.active) return { accepted: false, reason: 'grasp_active' };
     if (plan.executionEnabled === false) {
       return { accepted: false, reason: 'execution_disabled' };
@@ -169,10 +190,26 @@ class GraspController {
     this.failedPhase = null;
     this.inFlight = null;
     this.holdingObject = false;
+    this.pregraspSegmentIndex = 0;
     this.transferSegmentIndex = 0;
+    this.supervised = supervised === true;
+    if (this.supervised) {
+      this._publish();
+      return { accepted: true, phase: this.phase, requestId: this.plan.requestId };
+    }
     const sent = this._sendCurrentPhase();
     if (!sent.accepted) return sent;
     return { accepted: true, phase: this.phase, requestId: this.plan.requestId };
+  }
+
+  advanceSupervised(expectedPhase) {
+    if (!this.supervised || !this.active || this.inFlight !== null) {
+      return { accepted: false, reason: 'not_awaiting_confirmation' };
+    }
+    if (this.phase !== expectedPhase) {
+      return { accepted: false, reason: 'phase_mismatch' };
+    }
+    return this._sendCurrentPhase();
   }
 
   onRobotEvent(event = {}) {
@@ -226,12 +263,37 @@ class GraspController {
         return this._fail('home_not_verified');
       }
     }
+    if (completedPhase === 'pregrasp') {
+      const segments = this.plan.pregraspSegments ?? [];
+      if (this.pregraspSegmentIndex + 1 < segments.length) {
+        this.pregraspSegmentIndex += 1;
+        this._publish();
+        return { handled: true, accepted: true, phase: this.phase };
+      }
+      if (this.plan.mode === 'pregrasp_only') {
+        this.phase = 'complete';
+        this.reason = null;
+        this._publish();
+        return { handled: true, accepted: true, phase: 'complete' };
+      }
+      this.phase = 'final_approach';
+      this._publish();
+      return { handled: true, accepted: true, phase: this.phase };
+    }
     if (completedPhase === 'transfer' &&
         this.transferSegmentIndex + 1 < this.plan.transferSegments.length) {
       this.transferSegmentIndex += 1;
+      if (this.supervised) {
+        this._publish();
+        return { handled: true, accepted: true, phase: this.phase };
+      }
       return this._sendCurrentPhase();
     }
-    const next = NEXT_PHASE[completedPhase];
+    const next = this.plan.mode === 'lift_only' && completedPhase === 'lift'
+      ? 'complete'
+      : this.supervised && completedPhase === 'open' &&
+      Array.isArray(this.plan.pregraspSegments) && this.plan.pregraspSegments.length > 0
+      ? 'pregrasp' : NEXT_PHASE[completedPhase];
     if (next === 'complete') {
       this.phase = 'complete';
       this.reason = null;
@@ -239,6 +301,10 @@ class GraspController {
       return { handled: true, accepted: true, phase: 'complete' };
     }
     this.phase = next;
+    if (this.supervised) {
+      this._publish();
+      return { handled: true, accepted: true, phase: this.phase };
+    }
     return this._sendCurrentPhase();
   }
 
@@ -285,19 +351,22 @@ class GraspController {
       return { cmd: 'preset', name: this.plan.homePreset, ...common };
     }
     const pointByPhase = {
+      pregrasp: this.plan.pregraspSegments?.[this.pregraspSegmentIndex]?.position,
       final_approach: this.plan.finalApproachM,
       lift: this.plan.liftM,
       transfer: this.plan.transferSegments[this.transferSegmentIndex].position,
       lower: this.plan.placeM,
       retreat: this.plan.retreatM,
     };
-    const euler = ['final_approach', 'lift'].includes(phase)
+    const euler = ['pregrasp', 'final_approach', 'lift'].includes(phase)
       ? this.plan.graspEulerRad : this.plan.placeEulerRad;
     return {
       cmd: 'move_l',
       position: [...pointByPhase[phase]],
       euler: [...euler],
-      time_sec: phase === 'transfer'
+      time_sec: phase === 'pregrasp'
+        ? this.plan.pregraspSegments[this.pregraspSegmentIndex].timeSec
+        : phase === 'transfer'
         ? this.plan.transferSegments[this.transferSegmentIndex].timeSec
         : this.plan.timeSecByPhase[phase],
       ...common,

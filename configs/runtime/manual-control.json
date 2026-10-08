@@ -63,6 +63,15 @@
       "env": {
         "VISION_HOST": "127.0.0.1",
         "VISION_PORT": "3100",
+        "MEITUAN_VISION_HOST": "192.168.58.68",
+        "MEITUAN_VISION_PORT": "1035",
+        "MEITUAN_BATTERY_ENABLE": "1",
+        "MEITUAN_WORKTREE": "${ROOT}",
+        "MEITUAN_BATTERY_MODULE": "${ROOT}/services/vision/python/thirdhand_va/vision/perception/meituan_battery.py",
+        "VISION_BRIDGE_SCRIPT": "${ROOT}/services/vision/python/camera_bridge_with_frames.py",
+        "THIRDHAND_LIVE_ROOT": "${ROOT}",
+        "THIRDHAND_VA_HANDEYE": "${ROOT}/configs/vision/evidence/deployment_20261006/handeye-flange-normalized.json",
+        "THIRDHAND_ROBOT_URDF": "${ROOT}/assets/robot/startouch-v3/FastTouchV3.SLDASM.urdf",
         "VISION_PYTHON": "${ROOT}/local/runtimes/vision-python/bin/python",
         "VISION_CONFIG": "${ROOT}/configs/vision.yaml",
         "XVISIO_STREAM_EXECUTABLE": "${ROOT}/runtime/build/xvisio/xvisio_rgbd_stream"
@@ -116,6 +125,7 @@
         "LANGUAGE_REAL_CONTROL": "1",
         "DIRECTIONAL_CONTROL_ENABLED": "1",
         "DIRECTIONAL_REAL_CONTROL": "1",
+        "CAMERA_X_REAL_CONTROL": "1",
         "VISION_HTTP_URL": "http://127.0.0.1:3100",
         "VISION_WS_URL": "ws://127.0.0.1:3100/ws",
         "VA_HTTP_URL": "http://127.0.0.1:8766"

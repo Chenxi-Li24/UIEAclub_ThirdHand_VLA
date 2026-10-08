@@ -21,7 +21,7 @@ class FakeSocket extends EventEmitter {
   close() { this.readyState = 3; this.emit('close'); }
 }
 
-function completeHandshake() {
+function completeHandshake(overrides = {}) {
   const request = FakeSocket.instance.sent.at(-1);
   assert.equal(request.type, 'capability_request');
   const response = {
@@ -43,6 +43,7 @@ function completeHandshake() {
     },
     state_sequence: 0,
     producer_monotonic_ns: 500,
+    ...overrides,
   };
   FakeSocket.instance.emit('message', Buffer.from(JSON.stringify(response)));
   return response;
@@ -102,6 +103,35 @@ test('robot state is normalized for controllers and camera timestamps', () => {
     gripperWidthM: 0.06, stateSequence: 1, producerMonotonicNs: 600,
     observedMonotonicNs: 900,
   });
+});
+
+test('robot websocket polls state after the capability handshake', () => {
+  const client = new RobotWebSocketClient({
+    WebSocketImpl: FakeSocket, url: 'ws://127.0.0.1:3000/ws',
+  });
+  client.connect();
+  FakeSocket.instance.emit('open');
+  completeHandshake();
+
+  assert.equal(FakeSocket.instance.sent.at(-1).cmd, 'get_state');
+  assert.notEqual(client.statePollTimer, null);
+  client.shutdown();
+  assert.equal(client.statePollTimer, null);
+});
+
+test('capability handshake accepts robot services with additional unsupported commands', () => {
+  const client = new RobotWebSocketClient({
+    WebSocketImpl: FakeSocket, url: 'ws://127.0.0.1:3000/ws',
+  });
+  client.connect();
+  FakeSocket.instance.emit('open');
+  completeHandshake({
+    commands: ['move_l', 'move_joint', 'gripper', 'preset', 'software_stop',
+      'get_state', 'preview_ik'],
+  });
+
+  assert.equal(client.protocolReady, true);
+  assert.equal(client.send({ cmd: 'preview_ik', request_id: 'ik-1' }), false);
 });
 
 test('capability handshake rejects an implicit pose frame', () => {

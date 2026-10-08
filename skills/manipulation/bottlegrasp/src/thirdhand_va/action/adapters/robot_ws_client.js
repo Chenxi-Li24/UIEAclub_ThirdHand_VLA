@@ -27,6 +27,7 @@ class RobotWebSocketClient extends EventEmitter {
     nowNs = process.hrtime.bigint,
     gripperMaxWidthM = 0.080,
     maxStateAgeMs = 250,
+    statePollMs = 100,
     maxStationaryJointSpeedDegS = 0.5,
     nonceFactory = randomUUID,
   } = {}) {
@@ -45,6 +46,9 @@ class RobotWebSocketClient extends EventEmitter {
     if (!Number.isFinite(maxStateAgeMs) || maxStateAgeMs <= 0 ||
         maxStateAgeMs > 10000) throw new TypeError('maxStateAgeMs is invalid');
     this.maxStateAgeMs = maxStateAgeMs;
+    if (!Number.isFinite(statePollMs) || statePollMs <= 0 ||
+        statePollMs > 10000) throw new TypeError('statePollMs is invalid');
+    this.statePollMs = statePollMs;
     if (!Number.isFinite(maxStationaryJointSpeedDegS) ||
         maxStationaryJointSpeedDegS <= 0 || maxStationaryJointSpeedDegS > 1.0) {
       throw new TypeError('maxStationaryJointSpeedDegS is invalid');
@@ -64,6 +68,7 @@ class RobotWebSocketClient extends EventEmitter {
     this.handshakeProducerNs = null;
     this.lastStateSequence = null;
     this.lastProducerMonotonicNs = null;
+    this.statePollTimer = null;
   }
 
   connect() {
@@ -102,6 +107,7 @@ class RobotWebSocketClient extends EventEmitter {
       this.handshakeProducerNs = null;
       this.lastStateSequence = null;
       this.lastProducerMonotonicNs = null;
+      this._stopStatePolling();
       this.robotState = null;
       this.ws = null;
       this.inFlight = null;
@@ -165,6 +171,7 @@ class RobotWebSocketClient extends EventEmitter {
     if (!this.ws) return;
     const socket = this.ws;
     this.ws = null;
+    this._stopStatePolling();
     this.inFlight = null;
     this.stopInFlight = null;
     try { socket.close(); } catch {}
@@ -193,7 +200,6 @@ class RobotWebSocketClient extends EventEmitter {
         message.nonce === this.handshakeNonce &&
         message.protocol_version === 'thirdhand-robot-lowlevel-v1' &&
         message.pose_frame === 'robot_flange' &&
-        commands.length === expectedCommands.length &&
         expectedCommands.every(command => commandSet.has(command)) &&
         message.correlated_completions === true &&
         message.software_stop_ack === true && units?.position === 'm' &&
@@ -211,7 +217,10 @@ class RobotWebSocketClient extends EventEmitter {
       this.handshakeProducerNs = valid ? message.producer_monotonic_ns : null;
       this.lastStateSequence = valid ? message.state_sequence : null;
       this.lastProducerMonotonicNs = valid ? message.producer_monotonic_ns : null;
-      if (valid) this.handshakeNonce = null;
+      if (valid) {
+        this.handshakeNonce = null;
+        this._startStatePolling();
+      }
       this._emit({
         type: 'protocol', ready: valid,
         reason: valid ? null : 'capability_handshake_invalid',
@@ -400,6 +409,21 @@ class RobotWebSocketClient extends EventEmitter {
         !Number.isSafeInteger(this.handshakeProducerNs)) return NaN;
     return ((currentNs - this.handshakeReceivedNs) -
       (producerMonotonicNs - this.handshakeProducerNs)) / 1_000_000;
+  }
+
+  _startStatePolling() {
+    this._stopStatePolling();
+    this.send({ cmd: 'get_state' });
+    this.statePollTimer = setInterval(() => {
+      this.send({ cmd: 'get_state' });
+    }, this.statePollMs);
+    this.statePollTimer.unref?.();
+  }
+
+  _stopStatePolling() {
+    if (this.statePollTimer === null) return;
+    clearInterval(this.statePollTimer);
+    this.statePollTimer = null;
   }
 
   _emit(event) {

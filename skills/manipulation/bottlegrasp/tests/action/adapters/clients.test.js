@@ -71,6 +71,9 @@ test('vision client emits only fail-closed versioned results', () => {
       detection_id: 77, label: 'bottle', score: 0.9,
       bbox_xyxy: [1, 2, 8, 20], centroid_xy: [4.5, 11],
       selected: true, depth_valid: true, blockers: [],
+      camera_xyz_m: [0.01, 0.02, 0.30],
+      base_xyz_m: [0.40, -0.05, 0.18],
+      position_std_m: [0.001, 0.001, 0.002],
     }],
   };
   assert.equal(client.accept(valid), true);
@@ -78,6 +81,9 @@ test('vision client emits only fail-closed versioned results', () => {
   assert.equal(received[0].frameId, 7);
   assert.equal(received[0].selectedStableId, 2);
   assert.equal(received[0].targets[0].stableId, 2);
+  assert.deepEqual(received[0].targets[0].cameraXyzM, [0.01, 0.02, 0.30]);
+  assert.deepEqual(received[0].targets[0].baseXyzM, [0.40, -0.05, 0.18]);
+  assert.deepEqual(received[0].targets[0].positionStdM, [0.001, 0.001, 0.002]);
   assert.equal(Object.isFrozen(received[0]), true);
   assert.equal(client.accept({
     ...valid,

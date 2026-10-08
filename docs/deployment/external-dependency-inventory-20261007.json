@@ -1,0 +1,604 @@
+{
+  "origins": {
+    "meituan": "/home/nieqingcao/ThirdHand/worktrees/cyb_branch/meituan",
+    "projection": "/home/nieqingcao/ThirdHand/deployments/grasp-prototype-1894746-20261004"
+  },
+  "note": "Hashes identify captured source bytes, not modified destination bytes. Calibration evidence is byte-preserved; paths/imports/text formatting were adapted elsewhere. This inventory does not approve hardware use.",
+  "files": [
+    {
+      "origin": "meituan",
+      "source": "apps/web/package.json",
+      "destination": "apps/meituan/package.json",
+      "source_sha256": "e800ee0235bfed9a9b59e458642e04e7e512a685dc7e7a53f8baaaa294c4ec26",
+      "preserved_bytes": false
+    },
+    {
+      "origin": "meituan",
+      "source": "apps/web/public/active-view-demo.js",
+      "destination": "apps/meituan/public/active-view-demo.js",
+      "source_sha256": "a2685677fae27e47e7d59fb66151318ea56ff4b81af1e8a785d6913e1026ec8d",
+      "preserved_bytes": false
+    },
+    {
+      "origin": "meituan",
+      "source": "apps/web/public/camera-test.html",
+      "destination": "apps/meituan/public/camera-test.html",
+      "source_sha256": "cb1b888f6e8bbc7cfa4efeacf2e054eb6c9985fc29070a60ae33439a4f45d443",
+      "preserved_bytes": false
+    },
+    {
+      "origin": "meituan",
+      "source": "apps/web/public/index.html",
+      "destination": "apps/meituan/public/index.html",
+      "source_sha256": "d20c5438bc48931cdda6748ff93bc352d4b3e9d3fc693c39a656826bb559e0d2",
+      "preserved_bytes": false
+    },
+    {
+      "origin": "meituan",
+      "source": "apps/web/public/live-camera-streams.js",
+      "destination": "apps/meituan/public/live-camera-streams.js",
+      "source_sha256": "3a57a99b5953bb2cb7f1ad7d58d51c23bb59afb86c5eae57dd4ddb283e1a0372",
+      "preserved_bytes": false
+    },
+    {
+      "origin": "meituan",
+      "source": "apps/web/public/css/meituan-panel.css",
+      "destination": "apps/meituan/public/css/meituan-panel.css",
+      "source_sha256": "607fc89e2b0ef9c96b0086749cb3a7844d826a326d012706a6cb986464a9b4d8",
+      "preserved_bytes": false
+    },
+    {
+      "origin": "meituan",
+      "source": "apps/web/public/css/style.css",
+      "destination": "apps/meituan/public/css/style.css",
+      "source_sha256": "8263af66c3fabc64d18f060af2f07ce8a85734f23d09904882223f6f94a4b748",
+      "preserved_bytes": false
+    },
+    {
+      "origin": "meituan",
+      "source": "apps/web/public/js/main.js",
+      "destination": "apps/meituan/public/js/main.js",
+      "source_sha256": "de24b5a70338feca358998df607515baabc0a118c167a467596d8f4a70ccd287",
+      "preserved_bytes": false
+    },
+    {
+      "origin": "meituan",
+      "source": "apps/web/public/js/meituan-panel.js",
+      "destination": "apps/meituan/public/js/meituan-panel.js",
+      "source_sha256": "0ab0187b4b71c9d70426ec2e4276cae60412d5c0a46ca112650326b5c3908823",
+      "preserved_bytes": false
+    },
+    {
+      "origin": "meituan",
+      "source": "apps/web/public/js/meituan-vision.js",
+      "destination": "apps/meituan/public/js/meituan-vision.js",
+      "source_sha256": "bc29d8f4f61998535152ee0ba9fba4f26d6c76e61162df0525e76794092750d7",
+      "preserved_bytes": false
+    },
+    {
+      "origin": "meituan",
+      "source": "apps/web/public/js/pcm-worklet.js",
+      "destination": "apps/meituan/public/js/pcm-worklet.js",
+      "source_sha256": "0206bef9cb335e9ed0244280eaae440cc9bbc80031b3b5791f7181698fc40501",
+      "preserved_bytes": false
+    },
+    {
+      "origin": "meituan",
+      "source": "apps/web/public/js/runtime-endpoints.js",
+      "destination": "apps/meituan/public/js/runtime-endpoints.js",
+      "source_sha256": "9750eb3f1a1d6b3783291303efa6f6d6b2e1d568d20fbf2644e6a04547d472d2",
+      "preserved_bytes": false
+    },
+    {
+      "origin": "meituan",
+      "source": "apps/web/public/js/tts-player.js",
+      "destination": "apps/meituan/public/js/tts-player.js",
+      "source_sha256": "76e0f70962f2f72f83b2af66fb22c4a4c2523f6e7449801bf3ba35d900e6d4e9",
+      "preserved_bytes": false
+    },
+    {
+      "origin": "meituan",
+      "source": "apps/web/public/js/voice-control.js",
+      "destination": "apps/meituan/public/js/voice-control.js",
+      "source_sha256": "0c4e1631a5aa7babec8fe3f8f2fd1a166078a68263ff88b00e615aa8b1787563",
+      "preserved_bytes": false
+    },
+    {
+      "origin": "meituan",
+      "source": "apps/web/public/js/lib/three.js",
+      "destination": "apps/meituan/public/js/lib/three.js",
+      "source_sha256": "7c685edbb993d2fd593a611ca8d24d278ca8005be8a6f0d473ab3bf63b025932",
+      "preserved_bytes": false
+    },
+    {
+      "origin": "meituan",
+      "source": "apps/web/public/js/lib/three.min.js",
+      "destination": "apps/meituan/public/js/lib/three.min.js",
+      "source_sha256": "5d1d75b702f13e1bb14ff8d52cac1690acacec3a15821af7fe482a79afda5b99",
+      "preserved_bytes": false
+    },
+    {
+      "origin": "meituan",
+      "source": "apps/web/public/js/lib/three.module.js",
+      "destination": "apps/meituan/public/js/lib/three.module.js",
+      "source_sha256": "ca330dc6b8e6a0a88a0b707e40a5191110c3e86842c7c6431a7a7a2e972f08f5",
+      "preserved_bytes": false
+    },
+    {
+      "origin": "meituan",
+      "source": "apps/web/public/js/lib/URDFLoader.js",
+      "destination": "apps/meituan/public/js/lib/URDFLoader.js",
+      "source_sha256": "1eeda5b0d2085fd18266d14481f33ce9a96c15745107a699916406e24ccacdbf",
+      "preserved_bytes": false
+    },
+    {
+      "origin": "meituan",
+      "source": "apps/web/public/js/lib/controls/OrbitControls.js",
+      "destination": "apps/meituan/public/js/lib/controls/OrbitControls.js",
+      "source_sha256": "f260591ef315aa04888152e7f121865214e33fb54727145cf4e4445058db1297",
+      "preserved_bytes": false
+    },
+    {
+      "origin": "meituan",
+      "source": "apps/web/public/js/lib/loaders/ColladaLoader.js",
+      "destination": "apps/meituan/public/js/lib/loaders/ColladaLoader.js",
+      "source_sha256": "f188ae4f2891b9c689ab9b7c5ece2722e149f5d69b8ec6d43a474e510b3c88b1",
+      "preserved_bytes": false
+    },
+    {
+      "origin": "meituan",
+      "source": "apps/web/public/js/lib/loaders/STLLoader.js",
+      "destination": "apps/meituan/public/js/lib/loaders/STLLoader.js",
+      "source_sha256": "896d006a48b8f125385a485ccae154dadee801a953f0b45ceffe7ddd8a29ca93",
+      "preserved_bytes": false
+    },
+    {
+      "origin": "meituan",
+      "source": "apps/web/public/js/lib/loaders/TGALoader.js",
+      "destination": "apps/meituan/public/js/lib/loaders/TGALoader.js",
+      "source_sha256": "ce938459ed99d5234f9665270cca8552464d0d1703a094e49760631e6b14c7a3",
+      "preserved_bytes": false
+    },
+    {
+      "origin": "meituan",
+      "source": "apps/web/src/config.js",
+      "destination": "apps/meituan/src/config.js",
+      "source_sha256": "e909ffaf9a69b622ea70b67d42272e9d27fedcd625a58d382aa9ad79e9d25bba",
+      "preserved_bytes": false
+    },
+    {
+      "origin": "meituan",
+      "source": "apps/web/src/http-proxy.js",
+      "destination": "apps/meituan/src/http-proxy.js",
+      "source_sha256": "3003caee6504d55b17c64054ea1330105373ee57f107b437b5a0cc075f3ff0fe",
+      "preserved_bytes": false
+    },
+    {
+      "origin": "meituan",
+      "source": "apps/web/src/meituan-points.js",
+      "destination": "apps/meituan/src/meituan-points.js",
+      "source_sha256": "65a3825df5c64478c87f85bedf43f3b01f05adddb403d7f411ce3c96f65fcc91",
+      "preserved_bytes": false
+    },
+    {
+      "origin": "meituan",
+      "source": "apps/web/src/robot-proxy.js",
+      "destination": "apps/meituan/src/robot-proxy.js",
+      "source_sha256": "80d67508d1a3c8937914d7a560d5063a30bd08b79391cd881856f1efe38e9610",
+      "preserved_bytes": false
+    },
+    {
+      "origin": "meituan",
+      "source": "apps/web/src/server.js",
+      "destination": "apps/meituan/src/server.js",
+      "source_sha256": "fd644a1cc5c874f7fb7945372571850abebc1973a933136b958ac3e8182f0434",
+      "preserved_bytes": false
+    },
+    {
+      "origin": "meituan",
+      "source": "apps/web/src/static-server.js",
+      "destination": "apps/meituan/src/static-server.js",
+      "source_sha256": "e2cd227f0ec123eade75fd163a924802d5f222607c1c419e06684f84ea3d44bc",
+      "preserved_bytes": false
+    },
+    {
+      "origin": "meituan",
+      "source": "apps/web/src/vision-proxy.js",
+      "destination": "apps/meituan/src/vision-proxy.js",
+      "source_sha256": "a5137b42be97028fb1fe866c78b43c090ca20a41f8c325d3b972cbc0f8b932f9",
+      "preserved_bytes": false
+    },
+    {
+      "origin": "meituan",
+      "source": "apps/web/src/websocket-proxy.js",
+      "destination": "apps/meituan/src/websocket-proxy.js",
+      "source_sha256": "8e23cca1a843734c9efb0a82ef4c59c05f4de245d6607460e1c7c6134f8ff54f",
+      "preserved_bytes": false
+    },
+    {
+      "origin": "meituan",
+      "source": "apps/web/src/active-depth/candidate.js",
+      "destination": "apps/meituan/src/active-depth/candidate.js",
+      "source_sha256": "47c18c1daae94e85ac1aaed6eeb2b2422fa8dfd64c1e03481d2a45a9e1b8f2dd",
+      "preserved_bytes": false
+    },
+    {
+      "origin": "meituan",
+      "source": "apps/web/src/active-depth/coordinator.js",
+      "destination": "apps/meituan/src/active-depth/coordinator.js",
+      "source_sha256": "b055d66abed68760e09d48a53774fb063b01ffb4ecab90b5ea34b05bbb55e77f",
+      "preserved_bytes": false
+    },
+    {
+      "origin": "meituan",
+      "source": "apps/web/src/active-depth/execution-client.js",
+      "destination": "apps/meituan/src/active-depth/execution-client.js",
+      "source_sha256": "ee7b6aabd124624b80e7a80fad38fa00ad2bee566936abb02e4215e8b55134f5",
+      "preserved_bytes": false
+    },
+    {
+      "origin": "meituan",
+      "source": "apps/web/src/active-depth/fisheye.js",
+      "destination": "apps/meituan/src/active-depth/fisheye.js",
+      "source_sha256": "14e065e25cbdd2f38a09cc143f2aaf556d71b0dc3c18b92b0822bf29fce4b0ad",
+      "preserved_bytes": false
+    },
+    {
+      "origin": "meituan",
+      "source": "apps/web/src/active-depth/flange-pose.js",
+      "destination": "apps/meituan/src/active-depth/flange-pose.js",
+      "source_sha256": "8710ed02d5242ac3344591ddb0461498106e9422ae05630aff787757421e9f9a",
+      "preserved_bytes": false
+    },
+    {
+      "origin": "meituan",
+      "source": "apps/web/src/active-depth/preview.js",
+      "destination": "apps/meituan/src/active-depth/preview.js",
+      "source_sha256": "d2703c885c62ecc9bdb1ecd3571f886973d1d580f097e3bc8de3fd40c9b9eb73",
+      "preserved_bytes": false
+    },
+    {
+      "origin": "meituan",
+      "source": "apps/web/src/active-depth/vision-client.js",
+      "destination": "apps/meituan/src/active-depth/vision-client.js",
+      "source_sha256": "acfa4e43b5eb0a512a6ee4434db30ad3e3608705e737e836f4f06286f04b05cd",
+      "preserved_bytes": false
+    },
+    {
+      "origin": "meituan",
+      "source": "apps/web/src/language/bottle-pick-adapter.js",
+      "destination": "apps/meituan/src/language/bottle-pick-adapter.js",
+      "source_sha256": "367df873545d81ca7e2f1d9052501009885e5045c429c900264407091b52f0e9",
+      "preserved_bytes": false
+    },
+    {
+      "origin": "meituan",
+      "source": "apps/web/src/language/camera-x-step.js",
+      "destination": "apps/meituan/src/language/camera-x-step.js",
+      "source_sha256": "ad81a545e91d7aa417289a81d67d23b052152d34d8134b18821e2e849d7b7f92",
+      "preserved_bytes": false
+    },
+    {
+      "origin": "meituan",
+      "source": "apps/web/src/language/directional-joint-control.js",
+      "destination": "apps/meituan/src/language/directional-joint-control.js",
+      "source_sha256": "fc90b7ff7fd400ae5323efcdefed33a97843a8250ff88dbbf10395f821383a96",
+      "preserved_bytes": false
+    },
+    {
+      "origin": "meituan",
+      "source": "apps/web/src/language/language-upstream-bridge.js",
+      "destination": "apps/meituan/src/language/language-upstream-bridge.js",
+      "source_sha256": "33368336145a1ecf2c1124cb431780b7651e1078a83509886d7560fabc511317",
+      "preserved_bytes": false
+    },
+    {
+      "origin": "meituan",
+      "source": "apps/web/src/language/manual-joint-control.js",
+      "destination": "apps/meituan/src/language/manual-joint-control.js",
+      "source_sha256": "ea2e0a0e4cc7903631c5d9a5bc2c49a19cf7a290be162a1432dddd7dd6586a9c",
+      "preserved_bytes": false
+    },
+    {
+      "origin": "meituan",
+      "source": "apps/web/src/language/skill-executor-registry.js",
+      "destination": "apps/meituan/src/language/skill-executor-registry.js",
+      "source_sha256": "d7abb1487d9f2db6ee9c83138c20a3ec7363f881871252aa89fa763412635bc2",
+      "preserved_bytes": false
+    },
+    {
+      "origin": "meituan",
+      "source": "apps/web/src/language/startouch-forward-kinematics.js",
+      "destination": "apps/meituan/src/language/startouch-forward-kinematics.js",
+      "source_sha256": "4df09638f03fccee9dd968984e2d497f06a43050bf56ccbbb0fd411f9bc675a6",
+      "preserved_bytes": false
+    },
+    {
+      "origin": "meituan",
+      "source": "apps/web/src/language/test/directional-joint-control-smoke.js",
+      "destination": "apps/meituan/src/language/test/directional-joint-control-smoke.js",
+      "source_sha256": "31fc749d50381f32d37bf06bd1adada986a0e082f6db0dc6c042ac683318a81d",
+      "preserved_bytes": false
+    },
+    {
+      "origin": "meituan",
+      "source": "apps/web/src/language/test/language-upstream-bridge-smoke.js",
+      "destination": "apps/meituan/src/language/test/language-upstream-bridge-smoke.js",
+      "source_sha256": "8462c91b0258a85a5ffb508db21c77a2d481f4e81fe8f185e984a75f4d26019e",
+      "preserved_bytes": false
+    },
+    {
+      "origin": "meituan",
+      "source": "apps/web/src/language/test/manual-joint-control-smoke.js",
+      "destination": "apps/meituan/src/language/test/manual-joint-control-smoke.js",
+      "source_sha256": "9d6fa0a892a25cbfeb8b2fa53b6263760d8ce12ef51cce3fcabd64819c517e1a",
+      "preserved_bytes": false
+    },
+    {
+      "origin": "meituan",
+      "source": "apps/web/src/language/test/skill-executor-registry-smoke.js",
+      "destination": "apps/meituan/src/language/test/skill-executor-registry-smoke.js",
+      "source_sha256": "32980df8d5150e6d7723cadc60b70c9f4b6ea2612d80d38ef0b6cb086bd5fb06",
+      "preserved_bytes": false
+    },
+    {
+      "origin": "meituan",
+      "source": "configs/meituan/vision.json",
+      "destination": "configs/meituan/vision.json",
+      "source_sha256": "a85f41e80ae40126ffb667f689af85a0eb1f89d9b10417ff5da33cf5b0f131a2",
+      "preserved_bytes": false
+    },
+    {
+      "origin": "meituan",
+      "source": "configs/runtime/meituan-web.json",
+      "destination": "configs/runtime/meituan-web.json",
+      "source_sha256": "ad86c7ab1de3b703bbec0d4bdaa90ef1accd07857022f280fced896b2f0304d6",
+      "preserved_bytes": false
+    },
+    {
+      "origin": "meituan",
+      "source": "services/vision/python/thirdhand_va/vision/perception/meituan_battery.py",
+      "destination": "services/vision/python/thirdhand_va/vision/perception/meituan_battery.py",
+      "source_sha256": "6d2131f7805fc78719804929740dfea41111b683a54c5b1b2bf9f36b3a3481ad",
+      "preserved_bytes": false
+    },
+    {
+      "origin": "meituan",
+      "source": "services/vision/src/meituan-raw-view.js",
+      "destination": "services/vision/src/meituan-raw-view.js",
+      "source_sha256": "1b2591cb3052627917cbce9430c876a60108c13090b903f92a747236427ca775",
+      "preserved_bytes": false
+    },
+    {
+      "origin": "meituan",
+      "source": "services/vision/src/meituan-recognition.js",
+      "destination": "services/vision/src/meituan-recognition.js",
+      "source_sha256": "9e7600f213b2b6fa35702a1f42ecc3cc650d60151ad032a645da4495a62bede0",
+      "preserved_bytes": false
+    },
+    {
+      "origin": "meituan",
+      "source": "skills/manipulation/meituan_battery_pnp/manifest.yaml",
+      "destination": "skills/manipulation/meituan_battery_pnp/manifest.yaml",
+      "source_sha256": "08aacdb19bc2291ae54d8e752305b48173416ec981b2e44edb29abeff618dd9e",
+      "preserved_bytes": false
+    },
+    {
+      "origin": "meituan",
+      "source": "skills/manipulation/meituan_battery_pnp/points.md",
+      "destination": "skills/manipulation/meituan_battery_pnp/points.md",
+      "source_sha256": "4612222683e14531fb0b4f519769c91a213d00c5231366ff15d5e258c1dbd8d3",
+      "preserved_bytes": false
+    },
+    {
+      "origin": "meituan",
+      "source": "skills/manipulation/meituan_battery_pnp/SKILL.md",
+      "destination": "skills/manipulation/meituan_battery_pnp/SKILL.md",
+      "source_sha256": "c42c595b0c0fb5d946fa2b5f3838bc4af914d23e22fbe3944fbbe894d23e7904",
+      "preserved_bytes": false
+    },
+    {
+      "origin": "meituan",
+      "source": "skills/manipulation/meituan_battery_pnp/schemas/input.json",
+      "destination": "skills/manipulation/meituan_battery_pnp/schemas/input.json",
+      "source_sha256": "31d93f1f819d0f4b2007d92dc43f55762dec53abc84da207db863cd1b0965c80",
+      "preserved_bytes": false
+    },
+    {
+      "origin": "meituan",
+      "source": "skills/manipulation/meituan_battery_pnp/schemas/plan.json",
+      "destination": "skills/manipulation/meituan_battery_pnp/schemas/plan.json",
+      "source_sha256": "9d0f0f6fad181596a9abc6ec80f73cd39e3670e95ca594170a9d0bebcd35eb82",
+      "preserved_bytes": false
+    },
+    {
+      "origin": "meituan",
+      "source": "skills/manipulation/meituan_battery_pnp/schemas/result.json",
+      "destination": "skills/manipulation/meituan_battery_pnp/schemas/result.json",
+      "source_sha256": "1e8d83658d28d4802d69ddc38ab3ebf2607d0dfaaf92eab60f0587617819127a",
+      "preserved_bytes": false
+    },
+    {
+      "origin": "meituan",
+      "source": "skills/manipulation/meituan_battery_pnp/src/executor.js",
+      "destination": "skills/manipulation/meituan_battery_pnp/src/executor.js",
+      "source_sha256": "34b1f4c1e67321658348f7ddadeaec831150eb84eff8a918c85ca2d143a3b01a",
+      "preserved_bytes": false
+    },
+    {
+      "origin": "meituan",
+      "source": "skills/manipulation/meituan_battery_pnp/src/safe-poses.js",
+      "destination": "skills/manipulation/meituan_battery_pnp/src/safe-poses.js",
+      "source_sha256": "b42784a2ff6d420783b99ece845822a749257748eac1f3c77961a1fa18218c83",
+      "preserved_bytes": false
+    },
+    {
+      "origin": "meituan",
+      "source": "skills/manipulation/meituan_battery_pnp/src/sdk-model.js",
+      "destination": "skills/manipulation/meituan_battery_pnp/src/sdk-model.js",
+      "source_sha256": "11fd4ae9e3b36b24a9e7507a425c239c84be9429b56b80db1aa9cd4e9d9e99a6",
+      "preserved_bytes": false
+    },
+    {
+      "origin": "meituan",
+      "source": "skills/manipulation/meituan_battery_pnp/src/worker.js",
+      "destination": "skills/manipulation/meituan_battery_pnp/src/worker.js",
+      "source_sha256": "dd5cf5e3f43b2c2e6eb775cdb2af988f4fbac2e14de1bc664b7c40d2a9cb1cb6",
+      "preserved_bytes": false
+    },
+    {
+      "origin": "meituan",
+      "source": "tests/node/vision_service/meituan-events.test.js",
+      "destination": "tests/node/vision_service/meituan-events.test.js",
+      "source_sha256": "29f94d142efed06dd454f8797d8b5de09a10aaee8475d5ab1d92b19bfbf29d2a",
+      "preserved_bytes": false
+    },
+    {
+      "origin": "meituan",
+      "source": "tests/node/vision_service/meituan-raw-view.test.js",
+      "destination": "tests/node/vision_service/meituan-raw-view.test.js",
+      "source_sha256": "92c63db5b1da6e3c26eb0d9f2c59d4b21b1f28828c67d7ad0a31d20119294590",
+      "preserved_bytes": false
+    },
+    {
+      "origin": "meituan",
+      "source": "tests/node/vision_service/meituan-recognition.test.js",
+      "destination": "tests/node/vision_service/meituan-recognition.test.js",
+      "source_sha256": "25642c94a66bab27941699ed1a8f95cb43bba85304f8bbeab11242f793acc53d",
+      "preserved_bytes": false
+    },
+    {
+      "origin": "meituan",
+      "source": "tests/python/vision_service/test_meituan_battery.py",
+      "destination": "tests/python/vision_service/test_meituan_battery.py",
+      "source_sha256": "05e6669f78a731ca9ff73ff25e7f9774279cc5f836b81743883cc9aa187fdba9",
+      "preserved_bytes": false
+    },
+    {
+      "origin": "meituan",
+      "source": "tests/python/vision_service/test_meituan_mailbox.py",
+      "destination": "tests/python/vision_service/test_meituan_mailbox.py",
+      "source_sha256": "8f6f5193c58ab948252c7a55f46b0a54bb1d314667a0bff0047a651ed91a031e",
+      "preserved_bytes": false
+    },
+    {
+      "origin": "projection",
+      "source": "artifacts/diagnostics/safety-recovery-20261006/rollback-bZZV2w/handeye-flange-normalized.json",
+      "destination": "configs/vision/evidence/deployment_20261006/handeye-flange-normalized.json",
+      "source_sha256": "7010358a7404a1d929d140fe64413b1794da95be3045d9efa8507cc603a0017d",
+      "preserved_bytes": true
+    },
+    {
+      "origin": "projection",
+      "source": "artifacts/diagnostics/safety-recovery-20261006/rollback-bZZV2w/sdk-tool-frame-policy.json",
+      "destination": "configs/vision/evidence/deployment_20261006/sdk-tool-frame-policy.json",
+      "source_sha256": "832c52da1f9f8a4aa33c1ca4c9ab0aee176b590d8f26a2da8a6bf7b62c0d7e83",
+      "preserved_bytes": true
+    },
+    {
+      "origin": "projection",
+      "source": "tools/frames/robot_frame_normalization.js",
+      "destination": "services/vision/src/frames/robot_frame_normalization.js",
+      "source_sha256": "a74b030438fdd90472106851a7d173a25c5979ef64148f516b9fce0802180d31",
+      "preserved_bytes": false
+    },
+    {
+      "origin": "projection",
+      "source": "tools/frames/test_frame_normalization.js",
+      "destination": "tests/node/vision_service/frame-normalization.test.js",
+      "source_sha256": "f9321711faf135f366193c027de31df73534f4987fd75610111f7b0cf7651801",
+      "preserved_bytes": false
+    },
+    {
+      "origin": "projection",
+      "source": "tools/vision/camera_bridge_with_frames.py",
+      "destination": "services/vision/python/camera_bridge_with_frames.py",
+      "source_sha256": "eadaf5dcd87bd0e56e48e0190c1a139fbb590bc1b9b53b68f10c0e5b437ac0e1",
+      "preserved_bytes": false
+    },
+    {
+      "origin": "projection",
+      "source": "tools/vision/handeye_projection_with_frames.py",
+      "destination": "services/vision/python/handeye_projection_with_frames.py",
+      "source_sha256": "f918f195c80bd588763ff0bb67695bfb1afdcb5239c85b7f9f339ba9d9054be6",
+      "preserved_bytes": false
+    },
+    {
+      "origin": "projection",
+      "source": "tools/vision/pipeline_with_quality.py",
+      "destination": "services/vision/python/pipeline_with_quality.py",
+      "source_sha256": "431a8779100787f540396e6373df503f44c3e2f00c81f2a2f4e97848235795d6",
+      "preserved_bytes": false
+    },
+    {
+      "origin": "projection",
+      "source": "tools/vision/robot_state_relay.js",
+      "destination": "services/vision/src/robot-state-relay.js",
+      "source_sha256": "62fc6f47f9df51da577e107717c64ca7dbdb786cd53d85a91cda6cd492c570ee",
+      "preserved_bytes": false
+    },
+    {
+      "origin": "projection",
+      "source": "tools/vision/robot_state_relay.test.js",
+      "destination": "tests/node/vision_service/robot-state-relay.test.js",
+      "source_sha256": "c9477e4b736ec41e1088b71be1f57f461695c7a722635155f3f10f45f07487d4",
+      "preserved_bytes": false
+    },
+    {
+      "origin": "projection",
+      "source": "tools/vision/test_geometry_quality.py",
+      "destination": "tests/python/vision_service/test_geometry_quality.py",
+      "source_sha256": "7c61a728c030c2a63e549662dfc4662df4c7fea8f61c293c1faeb469ffbde17b",
+      "preserved_bytes": false
+    },
+    {
+      "origin": "projection",
+      "source": "tools/vision/test_projection_frames.py",
+      "destination": "tests/python/vision_service/test_projection_frames.py",
+      "source_sha256": "3e880780f2c563d4ecf382cc57609bc58b881f158e40ef571bd88339b2f51013",
+      "preserved_bytes": false
+    },
+    {
+      "origin": "projection",
+      "source": "tools/vision/test_projection_runtime.py",
+      "destination": "tests/python/vision_service/test_projection_runtime.py",
+      "source_sha256": "999dcebb88749864a8926d2265cda69a326de30bded3e0eafe94740d6103fcda",
+      "preserved_bytes": false
+    },
+    {
+      "origin": "projection",
+      "source": "tools/vision/test_projection_snapshot.py",
+      "destination": "tests/python/vision_service/test_projection_snapshot.py",
+      "source_sha256": "798ff9627aa9d7bc850736ca9b55b7e6222cf23d1152b57fc84af0f5f5597e54",
+      "preserved_bytes": false
+    },
+    {
+      "origin": "projection",
+      "source": "tools/vision/geometry_quality/__init__.py",
+      "destination": "services/vision/python/geometry_quality/__init__.py",
+      "source_sha256": "60084c2cabd3c2833e1f7038eda2afe6f041bf8597dc2276c0a29bf229cb5b7e",
+      "preserved_bytes": false
+    },
+    {
+      "origin": "projection",
+      "source": "tools/vision/geometry_quality/grasp_candidates.py",
+      "destination": "services/vision/python/geometry_quality/grasp_candidates.py",
+      "source_sha256": "d34cf5764da445af114b3a70e2d5d528dad66742e684b2d454933e1feec4b75e",
+      "preserved_bytes": false
+    },
+    {
+      "origin": "projection",
+      "source": "tools/vision/geometry_quality/grasp_pose.py",
+      "destination": "services/vision/python/geometry_quality/grasp_pose.py",
+      "source_sha256": "973e52912d4644181ff760e822f6b98bf1ff26e0bae7eaa9b3c531e4615c8a21",
+      "preserved_bytes": false
+    },
+    {
+      "origin": "projection",
+      "source": "tools/vision/geometry_quality/pointcloud.py",
+      "destination": "services/vision/python/geometry_quality/pointcloud.py",
+      "source_sha256": "e9d0b9f3c7c56002eab9b2d931388dd733543f446ef7d3474f58b5037e311bf6",
+      "preserved_bytes": false
+    }
+  ]
+}

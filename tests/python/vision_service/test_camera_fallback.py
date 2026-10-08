@@ -8,6 +8,9 @@ import sys
 from types import SimpleNamespace
 import time
 
+import numpy as np
+import pytest
+
 
 ROOT = Path(__file__).resolve().parents[3]
 MODULE = ROOT / "services/vision/python/camera_bridge.py"
@@ -132,3 +135,133 @@ def test_vision_service_source_has_no_robot_control_dependency() -> None:
         "software_stop",
     ):
         assert forbidden not in source
+
+
+def selected_snapshot_fixture(*, state="confirmed", depth_supported=True, mask=None):
+    if mask is None:
+        mask = np.array([[False, True], [True, False]], dtype=bool)
+    rgb = np.arange(12, dtype=np.uint8).reshape(2, 2, 3)
+    depth = np.array([[0.1, 0.2], [0.3, 0.4]], dtype=np.float32)
+    xyz = np.dstack((depth, depth + 1, depth + 2)).astype(np.float32)
+    candidate = SimpleNamespace(
+        detection_id=7,
+        label="bottle",
+        score=0.91,
+        bbox_xyxy=(1.0, 2.0, 3.0, 4.0),
+        mask=mask,
+    )
+    track = SimpleNamespace(
+        stable_id=2,
+        state=state,
+        depth_supported=depth_supported,
+        blockers=() if depth_supported else ("depth_invalid",),
+        candidate=candidate,
+    )
+    decision = SimpleNamespace(
+        selected_stable_id=2,
+        status="ready",
+        reasons=(),
+        tracks=(track,),
+    )
+    frame = SimpleNamespace(
+        sequence=42,
+        monotonic_ns=123456789,
+        camera_serial="lumos-test",
+        rgb=rgb,
+        depth_m=depth,
+        xyz_camera_m=xyz,
+    )
+    return frame, decision
+
+
+def test_selected_target_snapshot_writes_same_frame_arrays_and_metadata(tmp_path) -> None:
+    module = load_module()
+    frame, decision = selected_snapshot_fixture()
+
+    result = module.write_selected_target_snapshot(
+        frame,
+        decision,
+        request_id="snapshot-1",
+        output_dir=tmp_path,
+        observed_at_ms=987654,
+    )
+
+    assert result["ok"] is True
+    assert result["schema"] == "thirdhand-selected-target-bundle-v1"
+    assert result["frame_id"] == 42
+    with np.load(result["path"], allow_pickle=False) as bundle:
+        np.testing.assert_array_equal(bundle["rgb"], frame.rgb)
+        np.testing.assert_array_equal(bundle["depth_m"], frame.depth_m)
+        np.testing.assert_array_equal(bundle["xyz_camera_m"], frame.xyz_camera_m)
+        np.testing.assert_array_equal(
+            bundle["mask"], np.array([[False, True], [True, False]])
+        )
+        metadata = __import__("json").loads(str(bundle["metadata_json"]))
+    assert metadata == {
+        "bbox_xyxy": [1.0, 2.0, 3.0, 4.0],
+        "blockers": [],
+        "camera_serial": "lumos-test",
+        "depth_valid": True,
+        "frame_id": 42,
+        "length_unit": "m",
+        "monotonic_ns": 123456789,
+        "observed_at_ms": 987654,
+        "point_frame": "xvisio_color",
+        "request_id": "snapshot-1",
+        "schema": "thirdhand-selected-target-bundle-v1",
+        "selected_stable_id": 2,
+        "status": "ready",
+        "track_state": "confirmed",
+    }
+
+
+def test_raw_frame_snapshot_writes_aligned_arrays(tmp_path) -> None:
+    module = load_module()
+    frame, _ = selected_snapshot_fixture()
+    result = module.write_raw_frame_snapshot(
+        frame, request_id="raw-1", output_dir=tmp_path, observed_at_ms=987654,
+    )
+    assert result["ok"] is True
+    assert result["schema"] == "thirdhand-raw-rgbd-frame-v1"
+    with np.load(result["path"], allow_pickle=False) as bundle:
+        np.testing.assert_array_equal(bundle["rgb"], frame.rgb)
+        np.testing.assert_array_equal(bundle["depth_m"], frame.depth_m)
+        np.testing.assert_array_equal(bundle["xyz_camera_m"], frame.xyz_camera_m)
+        metadata = __import__("json").loads(str(bundle["metadata_json"]))
+    assert metadata["frame_id"] == 42
+    assert metadata["point_frame"] == "xvisio_color"
+    assert metadata["length_unit"] == "m"
+
+
+@pytest.mark.parametrize(
+    ("state", "depth_supported", "mask", "code"),
+    [
+        ("lost", True, None, "selected_target_lost"),
+        ("confirmed", False, None, "selected_target_depth_invalid"),
+        ("confirmed", True, np.zeros((2, 2), dtype=bool), "selected_target_mask_invalid"),
+        ("confirmed", True, np.ones((1, 2), dtype=bool), "selected_target_mask_invalid"),
+    ],
+)
+def test_selected_target_snapshot_rejects_invalid_target_without_file(
+    tmp_path, state, depth_supported, mask, code
+) -> None:
+    module = load_module()
+    frame, decision = selected_snapshot_fixture(
+        state=state, depth_supported=depth_supported, mask=mask
+    )
+
+    result = module.write_selected_target_snapshot(
+        frame,
+        decision,
+        request_id="snapshot-invalid",
+        output_dir=tmp_path,
+        observed_at_ms=987654,
+    )
+
+    assert result == {
+        "type": "selected_target_export_result",
+        "requestId": "snapshot-invalid",
+        "ok": False,
+        "code": code,
+    }
+    assert list(tmp_path.iterdir()) == []

@@ -30,7 +30,7 @@ set "THIRDHAND_LOG=%LOCALAPPDATA%\ThirdHand\last-run.log"
 
 echo ThirdHand One-Click Launcher 2026.09.18-3
 echo Checking ThirdHand services on ${UbuntuUser}@${UbuntuHost}...
-ssh.exe -o BatchMode=yes -o ConnectTimeout=8 ${UbuntuUser}@${UbuntuHost} "cd '${RemoteRoot}' && ./thirdhand ensure --profile manual-control"
+ssh.exe -o BatchMode=yes -o ConnectTimeout=8 ${UbuntuUser}@${UbuntuHost} "cd '${RemoteRoot}' && ./thirdhand ensure-all"
 set "THIRDHAND_EXIT=%ERRORLEVEL%"
 >> "%THIRDHAND_LOG%" echo [%DATE% %TIME%] SSH ensure exit code: %THIRDHAND_EXIT%
 

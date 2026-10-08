@@ -4,6 +4,7 @@ const fs = require('node:fs');
 const crypto = require('node:crypto');
 const path = require('node:path');
 const YAML = require('yaml');
+const { validateRigidTransform } = require('./grasp/grip_transform');
 
 const ROOT_KEYS = [
   'schema', 'execution_enabled', 'robot', 'workflow_timeout_ms',
@@ -20,12 +21,17 @@ const ROBOT_KEYS = [
 const MOTION_KEYS = [
   'pregrasp_offset_m', 'lift_height_m', 'safe_transit_z_m',
   'max_refine_step_m', 'linear_speed_m_s', 'grasp_euler_rad',
+  'fixed_table_grasp',
+];
+const FIXED_TABLE_GRASP_KEYS = [
+  'enabled', 'table_z_base_m', 'grasp_height_m', 'width_m', 'pregrasp_only',
 ];
 const GRIPPER_KEYS = [
   'physical_max_width_m', 'execution_max_width_m',
   'contact_min_width_m', 'contact_max_width_m', 'release_min_width_m',
 ];
-const GRASP_KEYS = ['flange_offset_base_m', 'offset_validated'];
+const GRASP_KEYS = ['flange_offset_base_m', 'offset_validated', 'grip_transform'];
+const GRIP_TRANSFORM_KEYS = ['measured', 'validation_id', 'matrix_4x4'];
 const PLACE_KEYS = [
   'strategy', 'validated', 'fixed_xy_m', 'euler_rad', 'grasp_z_range_m',
   'vertical_clearance_m', 'source_observation_path_validation_id', 'home_preset',
@@ -289,11 +295,40 @@ function loadActionConfig(filePath, { env = process.env } = {}) {
     z: range(raw.workspace_m.z, 'workspace_m.z'),
   };
   assertExactKeys(raw.motion, MOTION_KEYS, 'motion.');
-  const motionScalarKeys = MOTION_KEYS.filter(key => key !== 'grasp_euler_rad');
+  const motionScalarKeys = MOTION_KEYS.filter(key =>
+    !['grasp_euler_rad', 'fixed_table_grasp'].includes(key)
+  );
   const motion = Object.fromEntries(motionScalarKeys.map(key => [
     key, finitePositive(raw.motion[key], `motion.${key}`),
   ]));
   motion.grasp_euler_rad = vector(raw.motion.grasp_euler_rad, 'motion.grasp_euler_rad');
+  assertExactKeys(raw.motion.fixed_table_grasp, FIXED_TABLE_GRASP_KEYS,
+    'motion.fixed_table_grasp.');
+  motion.fixed_table_grasp = {
+    enabled: raw.motion.fixed_table_grasp.enabled === true,
+    table_z_base_m: raw.motion.fixed_table_grasp.table_z_base_m,
+    grasp_height_m: raw.motion.fixed_table_grasp.grasp_height_m,
+    width_m: raw.motion.fixed_table_grasp.width_m,
+    pregrasp_only: raw.motion.fixed_table_grasp.pregrasp_only === true,
+  };
+  if (typeof raw.motion.fixed_table_grasp.enabled !== 'boolean') {
+    throw new TypeError('motion.fixed_table_grasp.enabled must be boolean');
+  }
+  if (typeof raw.motion.fixed_table_grasp.pregrasp_only !== 'boolean') {
+    throw new TypeError('motion.fixed_table_grasp.pregrasp_only must be boolean');
+  }
+  if (!Number.isFinite(motion.fixed_table_grasp.table_z_base_m)) {
+    throw new TypeError('motion.fixed_table_grasp.table_z_base_m must be finite');
+  }
+  if (motion.fixed_table_grasp.enabled) {
+    finitePositive(motion.fixed_table_grasp.grasp_height_m,
+      'motion.fixed_table_grasp.grasp_height_m');
+    finitePositive(motion.fixed_table_grasp.width_m, 'motion.fixed_table_grasp.width_m');
+    if (motion.fixed_table_grasp.grasp_height_m < 0.04 ||
+        motion.fixed_table_grasp.grasp_height_m > 0.30) {
+      throw new TypeError('motion.fixed_table_grasp.grasp_height_m outside safe range');
+    }
+  }
   if (motion.max_refine_step_m > 0.005) {
     throw new TypeError('motion.max_refine_step_m exceeds 0.005 m');
   }
@@ -319,6 +354,10 @@ function loadActionConfig(filePath, { env = process.env } = {}) {
       gripper.execution_max_width_m > gripper.physical_max_width_m) {
     throw new TypeError('execution gripper width exceeds 72 mm safe limit');
   }
+  if (motion.fixed_table_grasp.enabled &&
+      motion.fixed_table_grasp.width_m > gripper.execution_max_width_m) {
+    throw new TypeError('motion.fixed_table_grasp.width_m exceeds execution gripper limit');
+  }
   if (gripper.contact_min_width_m > gripper.contact_max_width_m ||
       gripper.contact_max_width_m > gripper.execution_max_width_m) {
     throw new TypeError('gripper contact width range is invalid');
@@ -332,11 +371,34 @@ function loadActionConfig(filePath, { env = process.env } = {}) {
   if (typeof raw.grasp.offset_validated !== 'boolean') {
     throw new TypeError('grasp.offset_validated must be boolean');
   }
+  assertExactKeys(raw.grasp.grip_transform, GRIP_TRANSFORM_KEYS,
+    'grasp.grip_transform.');
+  if (typeof raw.grasp.grip_transform.measured !== 'boolean') {
+    throw new TypeError('grasp.grip_transform.measured must be boolean');
+  }
+  let gripTransform;
+  if (raw.grasp.grip_transform.measured) {
+    if (!SHA256_ID.test(raw.grasp.grip_transform.validation_id || '')) {
+      throw new TypeError('grasp grip transform validation ID is invalid');
+    }
+    gripTransform = {
+      validated: true,
+      validation_id: raw.grasp.grip_transform.validation_id,
+      matrix_4x4: validateRigidTransform(raw.grasp.grip_transform.matrix_4x4),
+    };
+  } else {
+    if (raw.grasp.grip_transform.validation_id !== null ||
+        raw.grasp.grip_transform.matrix_4x4 !== null) {
+      throw new TypeError('unvalidated grip transform must not carry executable data');
+    }
+    gripTransform = { validated: false, validation_id: null, matrix_4x4: null };
+  }
   const grasp = {
     flange_offset_base_m: vector(
       raw.grasp.flange_offset_base_m, 'grasp.flange_offset_base_m'
     ),
     offset_validated: raw.grasp.offset_validated,
+    grip_transform: gripTransform,
   };
   if (Math.hypot(...grasp.flange_offset_base_m) > 0.20) {
     throw new TypeError('grasp flange offset exceeds 0.20 m');

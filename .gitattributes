@@ -5,6 +5,8 @@ History/legacy-web/**/web/js/lib/** -whitespace
 # Preserve imported and retired source snapshots byte-for-byte.
 History/source-snapshots/** -whitespace
 History/retired/** -whitespace
+# Preserve the original Markdown hard breaks in this hashed historical handover.
+History/legacy-calibration-20261008/source/HANDOVER.md whitespace=-blank-at-eol
 
 # Explicit runtime payloads; configuration and URDF remain ordinary Git text.
 local/** -text

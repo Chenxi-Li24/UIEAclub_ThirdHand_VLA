@@ -1,0 +1,740 @@
+{
+  "snapshot": "727aa2cac9d9d5d69a8c8daa17d8b0626a6a7c1c",
+  "files": [
+    {
+      "status": "M",
+      "source": "README.md",
+      "destination": "README.md"
+    },
+    {
+      "status": "M",
+      "source": "README_CN.md",
+      "destination": "README_CN.md"
+    },
+    {
+      "status": "M",
+      "source": "apps/README.md",
+      "destination": "apps/README.md"
+    },
+    {
+      "status": "A",
+      "source": "apps/dummy/apps/calibrate_axis_response.py",
+      "destination": "apps/dummy/experiments/deployment_20260915/apps/calibrate_axis_response.py"
+    },
+    {
+      "status": "A",
+      "source": "apps/dummy/apps/calibrate_touch_r1_gimbal.py",
+      "destination": "apps/dummy/experiments/deployment_20260915/apps/calibrate_touch_r1_gimbal.py"
+    },
+    {
+      "status": "A",
+      "source": "apps/dummy/apps/diagnose_follow_window.py",
+      "destination": "apps/dummy/experiments/deployment_20260915/apps/diagnose_follow_window.py"
+    },
+    {
+      "status": "A",
+      "source": "apps/dummy/apps/run_1023_gateway.py",
+      "destination": "apps/dummy/experiments/deployment_20260915/apps/run_1023_gateway.py"
+    },
+    {
+      "status": "A",
+      "source": "apps/dummy/apps/run_dume_follow_touch_r1.py",
+      "destination": "apps/dummy/experiments/deployment_20260915/apps/run_dume_follow_touch_r1.py"
+    },
+    {
+      "status": "A",
+      "source": "apps/dummy/apps/run_follow_stack.py",
+      "destination": "apps/dummy/experiments/deployment_20260915/apps/run_follow_stack.py"
+    },
+    {
+      "status": "A",
+      "source": "apps/dummy/apps/run_head_body_follow.py",
+      "destination": "apps/dummy/experiments/deployment_20260915/apps/run_head_body_follow.py"
+    },
+    {
+      "status": "A",
+      "source": "apps/dummy/apps/visualize_head_body_window.py",
+      "destination": "apps/dummy/experiments/deployment_20260915/apps/visualize_head_body_window.py"
+    },
+    {
+      "status": "M",
+      "source": "apps/dummy/configs/dum_e_touch_r1.yaml",
+      "destination": "apps/dummy/experiments/deployment_20260915/configs/dum_e_touch_r1.yaml"
+    },
+    {
+      "status": "A",
+      "source": "apps/dummy/logs/axis-response.json",
+      "destination": "apps/dummy/experiments/deployment_20260915/configs/calibration/axis-response.json"
+    },
+    {
+      "status": "M",
+      "source": "apps/dummy/src/dummy/director.py",
+      "destination": "apps/dummy/experiments/deployment_20260915/src/dummy_legacy/director.py"
+    },
+    {
+      "status": "A",
+      "source": "apps/dummy/src/dummy/distance_aware_follow.py",
+      "destination": "apps/dummy/experiments/deployment_20260915/src/dummy_legacy/distance_aware_follow.py"
+    },
+    {
+      "status": "A",
+      "source": "apps/dummy/src/dummy/dume_touch_r1_follow.py",
+      "destination": "apps/dummy/experiments/deployment_20260915/src/dummy_legacy/dume_touch_r1_follow.py"
+    },
+    {
+      "status": "A",
+      "source": "apps/dummy/src/dummy/follow3d/__init__.py",
+      "destination": "apps/dummy/experiments/deployment_20260915/src/dummy_legacy/follow3d/__init__.py"
+    },
+    {
+      "status": "A",
+      "source": "apps/dummy/src/dummy/follow3d/contracts.py",
+      "destination": "apps/dummy/experiments/deployment_20260915/src/dummy_legacy/follow3d/contracts.py"
+    },
+    {
+      "status": "A",
+      "source": "apps/dummy/src/dummy/follow3d/controller.py",
+      "destination": "apps/dummy/experiments/deployment_20260915/src/dummy_legacy/follow3d/controller.py"
+    },
+    {
+      "status": "A",
+      "source": "apps/dummy/src/dummy/follow3d/depth_estimator.py",
+      "destination": "apps/dummy/experiments/deployment_20260915/src/dummy_legacy/follow3d/depth_estimator.py"
+    },
+    {
+      "status": "A",
+      "source": "apps/dummy/src/dummy/follow3d/diagnostics.py",
+      "destination": "apps/dummy/experiments/deployment_20260915/src/dummy_legacy/follow3d/diagnostics.py"
+    },
+    {
+      "status": "A",
+      "source": "apps/dummy/src/dummy/follow3d/distance_policy.py",
+      "destination": "apps/dummy/experiments/deployment_20260915/src/dummy_legacy/follow3d/distance_policy.py"
+    },
+    {
+      "status": "A",
+      "source": "apps/dummy/src/dummy/follow3d/handeye_projector.py",
+      "destination": "apps/dummy/experiments/deployment_20260915/src/dummy_legacy/follow3d/handeye_projector.py"
+    },
+    {
+      "status": "A",
+      "source": "apps/dummy/src/dummy/follow3d/mink_backend.py",
+      "destination": "apps/dummy/experiments/deployment_20260915/src/dummy_legacy/follow3d/mink_backend.py"
+    },
+    {
+      "status": "A",
+      "source": "apps/dummy/src/dummy/follow3d/target_projector.py",
+      "destination": "apps/dummy/experiments/deployment_20260915/src/dummy_legacy/follow3d/target_projector.py"
+    },
+    {
+      "status": "A",
+      "source": "apps/dummy/src/dummy/follow_loop_state.py",
+      "destination": "apps/dummy/experiments/deployment_20260915/src/dummy_legacy/follow_loop_state.py"
+    },
+    {
+      "status": "A",
+      "source": "apps/dummy/src/dummy/gateway_1023.py",
+      "destination": "apps/dummy/experiments/deployment_20260915/src/dummy_legacy/gateway_1023.py"
+    },
+    {
+      "status": "A",
+      "source": "apps/dummy/src/dummy/head_body_controller.py",
+      "destination": "apps/dummy/experiments/deployment_20260915/src/dummy_legacy/head_body_controller.py"
+    },
+    {
+      "status": "A",
+      "source": "apps/dummy/src/dummy/head_body_visualizer.py",
+      "destination": "apps/dummy/experiments/deployment_20260915/src/dummy_legacy/head_body_visualizer.py"
+    },
+    {
+      "status": "A",
+      "source": "apps/dummy/src/dummy/image_jacobian_servo.py",
+      "destination": "apps/dummy/experiments/deployment_20260915/src/dummy_legacy/image_jacobian_servo.py"
+    },
+    {
+      "status": "A",
+      "source": "apps/dummy/src/dummy/mink_lookat_controller.py",
+      "destination": "apps/dummy/experiments/deployment_20260915/src/dummy_legacy/mink_lookat_controller.py"
+    },
+    {
+      "status": "A",
+      "source": "apps/dummy/src/dummy/person_lock_tracker.py",
+      "destination": "apps/dummy/experiments/deployment_20260915/src/dummy_legacy/person_lock_tracker.py"
+    },
+    {
+      "status": "A",
+      "source": "apps/dummy/src/dummy/rgbd_target.py",
+      "destination": "apps/dummy/experiments/deployment_20260915/src/dummy_legacy/rgbd_target.py"
+    },
+    {
+      "status": "M",
+      "source": "apps/dummy/src/dummy/robot_ws_client.py",
+      "destination": "apps/dummy/experiments/deployment_20260915/src/dummy_legacy/robot_ws_client.py"
+    },
+    {
+      "status": "M",
+      "source": "apps/dummy/src/dummy/touch_r1_adapter.py",
+      "destination": "apps/dummy/experiments/deployment_20260915/src/dummy_legacy/touch_r1_adapter.py"
+    },
+    {
+      "status": "A",
+      "source": "apps/dummy/src/dummy/touch_r1_gimbal_mapper.py",
+      "destination": "apps/dummy/experiments/deployment_20260915/src/dummy_legacy/touch_r1_gimbal_mapper.py"
+    },
+    {
+      "status": "A",
+      "source": "apps/dummy/src/dummy/virtual_3d_target.py",
+      "destination": "apps/dummy/experiments/deployment_20260915/src/dummy_legacy/virtual_3d_target.py"
+    },
+    {
+      "status": "M",
+      "source": "apps/dummy/src/dummy/vision_service_tracker.py",
+      "destination": "apps/dummy/experiments/deployment_20260915/src/dummy_legacy/vision_service_tracker.py"
+    },
+    {
+      "status": "A",
+      "source": "apps/dummy/src/dummy/visual_servo_gaze.py",
+      "destination": "apps/dummy/experiments/deployment_20260915/src/dummy_legacy/visual_servo_gaze.py"
+    },
+    {
+      "status": "A",
+      "source": "apps/dummy/src/dummy/workspace_guard.py",
+      "destination": "apps/dummy/experiments/deployment_20260915/src/dummy_legacy/workspace_guard.py"
+    },
+    {
+      "status": "A",
+      "source": "apps/dummy/src/dummy/yolo_person_detector.py",
+      "destination": "apps/dummy/experiments/deployment_20260915/src/dummy_legacy/yolo_person_detector.py"
+    },
+    {
+      "status": "A",
+      "source": "apps/dummy/tests/test_1023_gateway.py",
+      "destination": "apps/dummy/experiments/deployment_20260915/tests/test_1023_gateway.py"
+    },
+    {
+      "status": "A",
+      "source": "apps/dummy/tests/test_distance_aware_follow.py",
+      "destination": "apps/dummy/experiments/deployment_20260915/tests/test_distance_aware_follow.py"
+    },
+    {
+      "status": "A",
+      "source": "apps/dummy/tests/test_dume_touch_r1_follow_control.py",
+      "destination": "apps/dummy/experiments/deployment_20260915/tests/test_dume_touch_r1_follow_control.py"
+    },
+    {
+      "status": "A",
+      "source": "apps/dummy/tests/test_follow3d_depth_estimator.py",
+      "destination": "apps/dummy/experiments/deployment_20260915/tests/test_follow3d_depth_estimator.py"
+    },
+    {
+      "status": "A",
+      "source": "apps/dummy/tests/test_follow3d_diagnostics.py",
+      "destination": "apps/dummy/experiments/deployment_20260915/tests/test_follow3d_diagnostics.py"
+    },
+    {
+      "status": "A",
+      "source": "apps/dummy/tests/test_follow3d_handeye_projector.py",
+      "destination": "apps/dummy/experiments/deployment_20260915/tests/test_follow3d_handeye_projector.py"
+    },
+    {
+      "status": "A",
+      "source": "apps/dummy/tests/test_follow3d_modularity.py",
+      "destination": "apps/dummy/experiments/deployment_20260915/tests/test_follow3d_modularity.py"
+    },
+    {
+      "status": "A",
+      "source": "apps/dummy/tests/test_follow_loop_state.py",
+      "destination": "apps/dummy/experiments/deployment_20260915/tests/test_follow_loop_state.py"
+    },
+    {
+      "status": "A",
+      "source": "apps/dummy/tests/test_head_body_controller.py",
+      "destination": "apps/dummy/experiments/deployment_20260915/tests/test_head_body_controller.py"
+    },
+    {
+      "status": "A",
+      "source": "apps/dummy/tests/test_head_body_visualizer.py",
+      "destination": "apps/dummy/experiments/deployment_20260915/tests/test_head_body_visualizer.py"
+    },
+    {
+      "status": "M",
+      "source": "apps/dummy/tests/test_offline.py",
+      "destination": "apps/dummy/experiments/deployment_20260915/tests/test_offline.py"
+    },
+    {
+      "status": "A",
+      "source": "apps/dummy/tests/test_person_lock_tracker.py",
+      "destination": "apps/dummy/experiments/deployment_20260915/tests/test_person_lock_tracker.py"
+    },
+    {
+      "status": "A",
+      "source": "apps/dummy/tests/test_rgbd_target.py",
+      "destination": "apps/dummy/experiments/deployment_20260915/tests/test_rgbd_target.py"
+    },
+    {
+      "status": "A",
+      "source": "apps/dummy/tests/test_robot_ws_client.py",
+      "destination": "apps/dummy/experiments/deployment_20260915/tests/test_robot_ws_client.py"
+    },
+    {
+      "status": "A",
+      "source": "apps/dummy/tests/test_virtual_3d_target_projector.py",
+      "destination": "apps/dummy/experiments/deployment_20260915/tests/test_virtual_3d_target_projector.py"
+    },
+    {
+      "status": "A",
+      "source": "apps/dummy/tests/test_workspace_guard.py",
+      "destination": "apps/dummy/experiments/deployment_20260915/tests/test_workspace_guard.py"
+    },
+    {
+      "status": "A",
+      "source": "apps/dummy/tests/test_yolo_person_detector.py",
+      "destination": "apps/dummy/experiments/deployment_20260915/tests/test_yolo_person_detector.py"
+    },
+    {
+      "status": "M",
+      "source": "apps/launcher/src/cli.js",
+      "destination": "apps/launcher/src/cli.js"
+    },
+    {
+      "status": "A",
+      "source": "apps/launcher/src/meituan-vision-repair.js",
+      "destination": "apps/launcher/src/meituan-vision-repair.js"
+    },
+    {
+      "status": "A",
+      "source": "apps/launcher/src/one-click.js",
+      "destination": "apps/launcher/src/one-click.js"
+    },
+    {
+      "status": "M",
+      "source": "apps/web/public/css/style.css",
+      "destination": "apps/web/public/css/style.css"
+    },
+    {
+      "status": "M",
+      "source": "apps/web/public/index.html",
+      "destination": "apps/web/public/index.html"
+    },
+    {
+      "status": "M",
+      "source": "apps/web/public/js/main.js",
+      "destination": "apps/web/public/js/main.js"
+    },
+    {
+      "status": "M",
+      "source": "apps/web/public/js/voice-control.js",
+      "destination": "apps/web/public/js/voice-control.js"
+    },
+    {
+      "status": "M",
+      "source": "apps/web/src/config.js",
+      "destination": "apps/web/src/config.js"
+    },
+    {
+      "status": "A",
+      "source": "apps/web/src/language/camera-x-step.js",
+      "destination": "apps/web/src/language/camera-x-step.js"
+    },
+    {
+      "status": "M",
+      "source": "apps/web/src/language/directional-joint-control.js",
+      "destination": "apps/web/src/language/directional-joint-control.js"
+    },
+    {
+      "status": "M",
+      "source": "apps/web/src/language/language-upstream-bridge.js",
+      "destination": "apps/web/src/language/language-upstream-bridge.js"
+    },
+    {
+      "status": "M",
+      "source": "apps/web/src/language/manual-joint-control.js",
+      "destination": "apps/web/src/language/manual-joint-control.js"
+    },
+    {
+      "status": "M",
+      "source": "apps/web/src/robot-proxy.js",
+      "destination": "apps/web/src/robot-proxy.js"
+    },
+    {
+      "status": "M",
+      "source": "apps/web/src/server.js",
+      "destination": "apps/web/src/server.js"
+    },
+    {
+      "status": "M",
+      "source": "apps/web/src/websocket-proxy.js",
+      "destination": "apps/web/src/websocket-proxy.js"
+    },
+    {
+      "status": "M",
+      "source": "configs/README.md",
+      "destination": "configs/README.md"
+    },
+    {
+      "status": "M",
+      "source": "configs/runtime/manual-control.json",
+      "destination": "configs/runtime/manual-control.json"
+    },
+    {
+      "status": "A",
+      "source": "docs/services/BOTTLE_PREVIEW.md",
+      "destination": "docs/services/BOTTLE_PREVIEW.md"
+    },
+    {
+      "status": "A",
+      "source": "fixed_tcp_demo.py",
+      "destination": "apps/fixed_tcp_demo/fixed_tcp_demo.py"
+    },
+    {
+      "status": "A",
+      "source": "fixed_tcp_demo/README.md",
+      "destination": "apps/fixed_tcp_demo/README.md"
+    },
+    {
+      "status": "A",
+      "source": "fixed_tcp_demo/arm.py",
+      "destination": "History/fixed-tcp-before-port3000/arm.py"
+    },
+    {
+      "status": "A",
+      "source": "fixed_tcp_demo/demo.py",
+      "destination": "apps/fixed_tcp_demo/demo.py"
+    },
+    {
+      "status": "A",
+      "source": "fixed_tcp_demo/fixed_tcp_demo.py",
+      "destination": "apps/fixed_tcp_demo/fixed_tcp_demo.py"
+    },
+    {
+      "status": "A",
+      "source": "fixed_tcp_demo/logger.py",
+      "destination": "apps/fixed_tcp_demo/logger.py"
+    },
+    {
+      "status": "A",
+      "source": "fixed_tcp_demo/safety.py",
+      "destination": "apps/fixed_tcp_demo/safety.py"
+    },
+    {
+      "status": "A",
+      "source": "fixed_tcp_demo/trajectory.py",
+      "destination": "apps/fixed_tcp_demo/trajectory.py"
+    },
+    {
+      "status": "M",
+      "source": "platform/contracts/schemas/execution-primitive.schema.json",
+      "destination": "platform/contracts/schemas/execution-primitive.schema.json"
+    },
+    {
+      "status": "M",
+      "source": "services/README.md",
+      "destination": "services/README.md"
+    },
+    {
+      "status": "A",
+      "source": "services/robot/config/formal-pregrasp-speed.patch",
+      "destination": "services/robot/config/formal-pregrasp-speed.patch"
+    },
+    {
+      "status": "A",
+      "source": "services/robot/config/sdk-joint-speed.patch",
+      "destination": "services/robot/config/sdk-joint-speed.patch"
+    },
+    {
+      "status": "A",
+      "source": "services/robot/src/joint_speed_policy.py",
+      "destination": "services/robot/src/joint_speed_policy.py"
+    },
+    {
+      "status": "M",
+      "source": "services/robot/src/robot-controller.js",
+      "destination": "services/robot/src/robot-controller.js"
+    },
+    {
+      "status": "M",
+      "source": "services/robot/src/startouch-bridge.js",
+      "destination": "services/robot/src/startouch-bridge.js"
+    },
+    {
+      "status": "M",
+      "source": "services/robot/src/startouch_bridge.py",
+      "destination": "services/robot/src/startouch_bridge.py"
+    },
+    {
+      "status": "M",
+      "source": "services/speech/README.md",
+      "destination": "services/speech/README.md"
+    },
+    {
+      "status": "M",
+      "source": "services/speech/src/voice_agent.py",
+      "destination": "services/speech/src/voice_agent.py"
+    },
+    {
+      "status": "M",
+      "source": "services/speech/src/voice_bridge.py",
+      "destination": "services/speech/src/voice_bridge.py"
+    },
+    {
+      "status": "M",
+      "source": "services/vision/python/camera_bridge.py",
+      "destination": "services/vision/python/camera_bridge.py"
+    },
+    {
+      "status": "A",
+      "source": "services/vision/python/handeye_projection.py",
+      "destination": "services/vision/python/handeye_projection.py"
+    },
+    {
+      "status": "M",
+      "source": "services/vision/src/camera-process.js",
+      "destination": "services/vision/src/camera-process.js"
+    },
+    {
+      "status": "M",
+      "source": "services/vision/src/config.js",
+      "destination": "services/vision/src/config.js"
+    },
+    {
+      "status": "A",
+      "source": "services/vision/src/meituan-raw-view.js",
+      "destination": "services/vision/src/meituan-raw-view.js"
+    },
+    {
+      "status": "M",
+      "source": "services/vision/src/server.js",
+      "destination": "services/vision/src/server.js"
+    },
+    {
+      "status": "M",
+      "source": "skills/README.md",
+      "destination": "skills/README.md"
+    },
+    {
+      "status": "A",
+      "source": "skills/manipulation/bottlegrasp/apps/bottle_pick/kinematic_preview.js",
+      "destination": "skills/manipulation/bottlegrasp/apps/bottle_pick/kinematic_preview.js"
+    },
+    {
+      "status": "A",
+      "source": "skills/manipulation/bottlegrasp/apps/bottle_pick/preview_ik.py",
+      "destination": "skills/manipulation/bottlegrasp/apps/bottle_pick/preview_ik.py"
+    },
+    {
+      "status": "A",
+      "source": "skills/manipulation/bottlegrasp/apps/bottle_pick/test_kinematic_preview.py",
+      "destination": "skills/manipulation/bottlegrasp/apps/bottle_pick/test_kinematic_preview.py"
+    },
+    {
+      "status": "M",
+      "source": "skills/manipulation/bottlegrasp/apps/bottle_pick/web_server.js",
+      "destination": "skills/manipulation/bottlegrasp/apps/bottle_pick/web_server.js"
+    },
+    {
+      "status": "M",
+      "source": "skills/manipulation/bottlegrasp/configs/action.yaml",
+      "destination": "skills/manipulation/bottlegrasp/configs/action.yaml"
+    },
+    {
+      "status": "A",
+      "source": "skills/manipulation/bottlegrasp/configs/action/evidence/urdf-grip-transform-candidate-20261002.json",
+      "destination": "skills/manipulation/bottlegrasp/configs/action/evidence/urdf-grip-transform-candidate-20261002.json"
+    },
+    {
+      "status": "A",
+      "source": "skills/manipulation/bottlegrasp/docs/action/grip-live-demo.md",
+      "destination": "skills/manipulation/bottlegrasp/docs/action/grip-live-demo.md"
+    },
+    {
+      "status": "A",
+      "source": "skills/manipulation/bottlegrasp/docs/action/supervised-test-grasp.md",
+      "destination": "skills/manipulation/bottlegrasp/docs/action/supervised-test-grasp.md"
+    },
+    {
+      "status": "A",
+      "source": "skills/manipulation/bottlegrasp/scripts/action/grip_live_demo.js",
+      "destination": "skills/manipulation/bottlegrasp/scripts/action/grip_live_demo.js"
+    },
+    {
+      "status": "A",
+      "source": "skills/manipulation/bottlegrasp/scripts/action/supervised_test_grasp.js",
+      "destination": "skills/manipulation/bottlegrasp/scripts/action/supervised_test_grasp.js"
+    },
+    {
+      "status": "M",
+      "source": "skills/manipulation/bottlegrasp/src/thirdhand_va/action/adapters/robot_ws_client.js",
+      "destination": "skills/manipulation/bottlegrasp/src/thirdhand_va/action/adapters/robot_ws_client.js"
+    },
+    {
+      "status": "M",
+      "source": "skills/manipulation/bottlegrasp/src/thirdhand_va/action/adapters/vision_client.js",
+      "destination": "skills/manipulation/bottlegrasp/src/thirdhand_va/action/adapters/vision_client.js"
+    },
+    {
+      "status": "M",
+      "source": "skills/manipulation/bottlegrasp/src/thirdhand_va/action/adapters/vision_service_client.js",
+      "destination": "skills/manipulation/bottlegrasp/src/thirdhand_va/action/adapters/vision_service_client.js"
+    },
+    {
+      "status": "M",
+      "source": "skills/manipulation/bottlegrasp/src/thirdhand_va/action/config.js",
+      "destination": "skills/manipulation/bottlegrasp/src/thirdhand_va/action/config.js"
+    },
+    {
+      "status": "M",
+      "source": "skills/manipulation/bottlegrasp/src/thirdhand_va/action/grasp/grasp_controller.js",
+      "destination": "skills/manipulation/bottlegrasp/src/thirdhand_va/action/grasp/grasp_controller.js"
+    },
+    {
+      "status": "A",
+      "source": "skills/manipulation/bottlegrasp/src/thirdhand_va/action/grasp/grip_transform.js",
+      "destination": "skills/manipulation/bottlegrasp/src/thirdhand_va/action/grasp/grip_transform.js"
+    },
+    {
+      "status": "A",
+      "source": "skills/manipulation/bottlegrasp/src/thirdhand_va/action/grasp/lift_only_plan.js",
+      "destination": "skills/manipulation/bottlegrasp/src/thirdhand_va/action/grasp/lift_only_plan.js"
+    },
+    {
+      "status": "A",
+      "source": "skills/manipulation/bottlegrasp/src/thirdhand_va/action/operator/supervised_preview.js",
+      "destination": "skills/manipulation/bottlegrasp/src/thirdhand_va/action/operator/supervised_preview.js"
+    },
+    {
+      "status": "A",
+      "source": "skills/manipulation/bottlegrasp/src/thirdhand_va/action/operator/supervised_test_session.js",
+      "destination": "skills/manipulation/bottlegrasp/src/thirdhand_va/action/operator/supervised_test_session.js"
+    },
+    {
+      "status": "M",
+      "source": "skills/manipulation/bottlegrasp/tests/action/adapters/clients.test.js",
+      "destination": "skills/manipulation/bottlegrasp/tests/action/adapters/clients.test.js"
+    },
+    {
+      "status": "M",
+      "source": "skills/manipulation/bottlegrasp/tests/action/adapters/robot_ws_client.test.js",
+      "destination": "skills/manipulation/bottlegrasp/tests/action/adapters/robot_ws_client.test.js"
+    },
+    {
+      "status": "M",
+      "source": "skills/manipulation/bottlegrasp/tests/action/adapters/vision_service_client.test.js",
+      "destination": "skills/manipulation/bottlegrasp/tests/action/adapters/vision_service_client.test.js"
+    },
+    {
+      "status": "M",
+      "source": "skills/manipulation/bottlegrasp/tests/action/config.test.js",
+      "destination": "skills/manipulation/bottlegrasp/tests/action/config.test.js"
+    },
+    {
+      "status": "M",
+      "source": "skills/manipulation/bottlegrasp/tests/action/grasp/grasp_controller.test.js",
+      "destination": "skills/manipulation/bottlegrasp/tests/action/grasp/grasp_controller.test.js"
+    },
+    {
+      "status": "A",
+      "source": "skills/manipulation/bottlegrasp/tests/action/grasp/grip_transform.test.js",
+      "destination": "skills/manipulation/bottlegrasp/tests/action/grasp/grip_transform.test.js"
+    },
+    {
+      "status": "A",
+      "source": "skills/manipulation/bottlegrasp/tests/action/grasp/lift_only_plan.test.js",
+      "destination": "skills/manipulation/bottlegrasp/tests/action/grasp/lift_only_plan.test.js"
+    },
+    {
+      "status": "A",
+      "source": "skills/manipulation/bottlegrasp/tests/action/grip_live_demo.test.js",
+      "destination": "skills/manipulation/bottlegrasp/tests/action/grip_live_demo.test.js"
+    },
+    {
+      "status": "A",
+      "source": "skills/manipulation/bottlegrasp/tests/action/operator/supervised_preview.test.js",
+      "destination": "skills/manipulation/bottlegrasp/tests/action/operator/supervised_preview.test.js"
+    },
+    {
+      "status": "A",
+      "source": "skills/manipulation/bottlegrasp/tests/action/operator/supervised_test_grasp.test.js",
+      "destination": "skills/manipulation/bottlegrasp/tests/action/operator/supervised_test_grasp.test.js"
+    },
+    {
+      "status": "A",
+      "source": "skills/manipulation/bottlegrasp/tests/action/operator/supervised_test_session.test.js",
+      "destination": "skills/manipulation/bottlegrasp/tests/action/operator/supervised_test_session.test.js"
+    },
+    {
+      "status": "A",
+      "source": "skills/manipulation/bottlegrasp/tests/action/operator/web_server.test.js",
+      "destination": "skills/manipulation/bottlegrasp/tests/action/operator/web_server.test.js"
+    },
+    {
+      "status": "M",
+      "source": "skills/manipulation/bottlegrasp/tests/fixtures/action/handeye-clearance.json",
+      "destination": "skills/manipulation/bottlegrasp/tests/fixtures/action/handeye-clearance.json"
+    },
+    {
+      "status": "M",
+      "source": "tests/node/contracts/contracts.test.js",
+      "destination": "tests/node/contracts/contracts.test.js"
+    },
+    {
+      "status": "A",
+      "source": "tests/node/launcher/one-click.test.js",
+      "destination": "tests/node/launcher/one-click.test.js"
+    },
+    {
+      "status": "M",
+      "source": "tests/node/robot_service/config.test.js",
+      "destination": "tests/node/robot_service/config.test.js"
+    },
+    {
+      "status": "M",
+      "source": "tests/node/robot_service/execution-gateway.test.js",
+      "destination": "tests/node/robot_service/execution-gateway.test.js"
+    },
+    {
+      "status": "M",
+      "source": "tests/node/vision_service/camera-process.test.js",
+      "destination": "tests/node/vision_service/camera-process.test.js"
+    },
+    {
+      "status": "M",
+      "source": "tests/node/vision_service/server.test.js",
+      "destination": "tests/node/vision_service/server.test.js"
+    },
+    {
+      "status": "A",
+      "source": "tests/python/fixed_tcp_demo/test_fixed_tcp_demo.py",
+      "destination": "tests/python/fixed_tcp_demo/test_fixed_tcp_demo.py"
+    },
+    {
+      "status": "M",
+      "source": "tests/python/vision_service/test_camera_fallback.py",
+      "destination": "tests/python/vision_service/test_camera_fallback.py"
+    },
+    {
+      "status": "A",
+      "source": "tests/python/vision_service/test_handeye_projection.py",
+      "destination": "tests/python/vision_service/test_handeye_projection.py"
+    },
+    {
+      "status": "A",
+      "source": "tests/python/vision_service/test_runtime_confidence.py",
+      "destination": "tests/pending/vision/test_runtime_confidence.py"
+    },
+    {
+      "status": "A",
+      "source": "tools/launcher/README.md",
+      "destination": "tools/launcher/README.md"
+    },
+    {
+      "status": "M",
+      "source": "tools/launcher/ubuntu/start-thirdhand.sh",
+      "destination": "tools/launcher/ubuntu/start-thirdhand.sh"
+    },
+    {
+      "status": "M",
+      "source": "tools/launcher/windows/install-thirdhand-shortcut.ps1",
+      "destination": "tools/launcher/windows/install-thirdhand-shortcut.ps1"
+    }
+  ]
+}

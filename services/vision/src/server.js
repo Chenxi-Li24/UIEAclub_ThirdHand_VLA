@@ -7,6 +7,7 @@ const http = require('node:http');
 const path = require('node:path');
 const { WebSocket, WebSocketServer } = require('ws');
 const { CameraProcess } = require('./camera-process');
+const { createMeituanRawView } = require('./meituan-raw-view');
 const { loadConfig } = require('./config');
 
 const STREAMS = new Map([
@@ -85,12 +86,16 @@ function streamUnavailable(status, kind) {
 function createVisionService(options = {}) {
   const config = { ...loadConfig(options.env), ...options };
   const camera = options.camera || new CameraProcess(config);
+  const meituanView = config.meituanPort == null ? null : createMeituanRawView({
+    camera, host: config.meituanHost, port: config.meituanPort
+  });
   let closing = false;
 
   const server = http.createServer(async (request, response) => {
     const pathname = new URL(request.url, 'http://localhost').pathname;
     if (request.method === 'GET' &&
-        (pathname === '/health' || pathname === '/api/vision/status')) {
+        (pathname === '/health' || pathname === '/api/vision/status' ||
+         pathname === '/api/vision/person-follow/status')) {
       writeJson(response, 200, {
         status: 'ready',
         serviceId: 'vision',
@@ -100,12 +105,14 @@ function createVisionService(options = {}) {
       return;
     }
 
-    if (request.method === 'GET' && pathname === '/api/vision/observation') {
+    if (request.method === 'GET' &&
+        (pathname === '/api/vision/observation' ||
+         pathname === '/api/vision/person-follow/observation')) {
       const observation = camera.observation?.() || null;
-      writeJson(response, observation ? 200 : 503, observation || {
-        code: 'observation_unavailable',
+      writeJson(response, observation ? 200 : 503, observation ? {
+        ...observation,
         robotControlEnabled: false,
-      });
+      } : { code: 'observation_unavailable', robotControlEnabled: false });
       return;
     }
 
@@ -138,6 +145,76 @@ function createVisionService(options = {}) {
         return;
       }
       response.on('close', () => camera.unsubscribe(kind, response));
+      return;
+    }
+
+    if (request.method === 'GET' &&
+        pathname === '/api/vision/selected-target/export') {
+      let exported = null;
+      try {
+        exported = await camera.exportSelectedTarget();
+        const body = await fs.promises.readFile(exported.path);
+        if (response.destroyed || response.writableEnded) return;
+        response.writeHead(200, {
+          'content-type': 'application/x-npz',
+          'content-length': body.length,
+          'content-disposition': 'attachment; filename="selected-target.npz"',
+          'cache-control': 'no-store',
+          'x-thirdhand-schema': exported.metadata.schema,
+          'x-thirdhand-frame-id': String(exported.metadata.frame_id),
+          'x-thirdhand-length-unit': exported.metadata.length_unit,
+          'x-thirdhand-point-frame': exported.metadata.point_frame,
+        });
+        response.end(body);
+      } catch (error) {
+        if (!response.destroyed && !response.writableEnded) {
+          writeJson(response, error.statusCode || 500, {
+            code: error.code || 'selected_target_export_failed',
+            msg: error.message,
+            robotControlEnabled: false,
+          });
+        }
+      } finally {
+        if (exported?.path) {
+          try {
+            await fs.promises.unlink(exported.path);
+          } catch (error) {
+            if (error.code !== 'ENOENT') {
+              console.error(`failed to remove selected-target export: ${error.message}`);
+            }
+          }
+        }
+      }
+      return;
+    }
+
+    if (request.method === 'GET' && pathname === '/api/vision/raw-frame/export') {
+      let exported = null;
+      try {
+        exported = await camera.exportRawFrame();
+        const body = await fs.promises.readFile(exported.path);
+        if (response.destroyed || response.writableEnded) return;
+        response.writeHead(200, {
+          'content-type': 'application/x-npz', 'content-length': body.length,
+          'content-disposition': 'attachment; filename="raw-rgbd-frame.npz"',
+          'cache-control': 'no-store',
+          'x-thirdhand-schema': exported.metadata.schema,
+          'x-thirdhand-frame-id': String(exported.metadata.frame_id),
+          'x-thirdhand-length-unit': exported.metadata.length_unit,
+          'x-thirdhand-point-frame': exported.metadata.point_frame,
+        });
+        response.end(body);
+      } catch (error) {
+        if (!response.destroyed && !response.writableEnded) writeJson(response, error.statusCode || 500, {
+          code: error.code || 'raw_frame_export_failed', msg: error.message,
+          robotControlEnabled: false,
+        });
+      } finally {
+        if (exported?.path) {
+          try { await fs.promises.unlink(exported.path); }
+          catch (error) { if (error.code !== 'ENOENT') console.error(`failed to remove raw export: ${error.message}`); }
+        }
+      }
       return;
     }
 
@@ -229,6 +306,8 @@ function createVisionService(options = {}) {
           type: 'release_target',
           requestId: message.requestId,
         });
+      } else if (message?.type === 'arm_state') {
+        accepted = camera.status()?.camera?.status === 'ready' && camera.send(message);
       }
       if (!accepted && socket.readyState === WebSocket.OPEN) {
         socket.send(JSON.stringify({
@@ -260,6 +339,14 @@ function createVisionService(options = {}) {
         server.once('error', reject);
         server.listen(config.port, config.host, resolve);
       });
+      if (meituanView) {
+        try {
+          const address = await meituanView.start();
+          console.log(`[Meituan Vision] shared raw view on http://${address.address}:${address.port}`);
+        } catch (error) {
+          console.error(`[Meituan Vision] optional listener unavailable: ${error.message}`);
+        }
+      }
       fs.mkdirSync(path.dirname(config.readyFile), { recursive: true });
       const temporary = `${config.readyFile}.tmp`;
       fs.writeFileSync(temporary, `${JSON.stringify({
@@ -271,12 +358,15 @@ function createVisionService(options = {}) {
       return server.address();
     },
 
+    meituanAddress() { return meituanView?.address() || null; },
+
     async close() {
       if (closing) return;
       closing = true;
       camera.off?.('event', broadcast);
       for (const client of wss.clients) client.terminate();
       await new Promise(resolve => wss.close(resolve));
+      await meituanView?.close();
       await camera.close();
       await new Promise(resolve => {
         if (server.listening) server.close(resolve);

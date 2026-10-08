@@ -127,7 +127,7 @@ function createWebGateway(options = {}) {
     try{tcp=graspController?.tcpConfiguration?.()||null;}catch(error){reason=error.code||error.message||'tcp_unavailable';}
     return {type:'grasp.config',enabled:Boolean(graspController)&&!reason,
       gripOffsetM:graspController?.status().gripOffsetM||null,legacyGraspEnabled:false,
-      startEndpoint:'/api/grasp/start',reason,tcp,calibrationPage:'/tcp-calibration.html'};
+      startEndpoint:'/api/grasp/start',reason,tcp,motion:graspController?.motionConfiguration?.()||null,calibrationPage:'/tcp-calibration.html'};
   }
   robotProxy.setGraspInterlock?.(() => graspController?.status());
   visionProxy.canForward = browser => {

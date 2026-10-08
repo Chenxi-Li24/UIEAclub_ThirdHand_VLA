@@ -4,11 +4,13 @@ import math
 from pathlib import Path
 import threading
 import sys
+import os
 import pytest
 
 ROOT = Path(__file__).resolve().parents[3]
-sys.path.insert(0, str(ROOT / "services/robot/src"))
-spec = importlib.util.spec_from_file_location("speed_bridge", ROOT / "services/robot/src/startouch_bridge.py")
+SOURCE = Path(os.environ.get("ROBOT_OVERLAY_SRC", ROOT / "services/robot/src"))
+sys.path.insert(0, str(SOURCE))
+spec = importlib.util.spec_from_file_location("speed_bridge", SOURCE / "startouch_bridge.py")
 bridge_module = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(bridge_module)
 
@@ -80,3 +82,31 @@ def test_bad_runtime_reference_is_rejected_without_sdk_construction(tmp_path):
     config.write_text("joint_trajectory:\n  max_vel_limits: [5.5,5.5,5.5,20.9,20.9,20.9]\n")
     with pytest.raises(ValueError, match="speed reference"):
         validate_sdk_speed_reference(str(sdk))
+
+def test_explicit_ten_percent_policy_allows_only_the_approved_ceiling():
+    from joint_speed_policy import bounded_speed_percent
+    assert bounded_speed_percent(0.1) == 0.1
+    assert bounded_speed_percent(1) == 0.1
+    assert bounded_speed_percent() == 0.05
+
+def test_explicit_ten_percent_reaches_sdk_linear_planner(monkeypatch):
+    monkeypatch.setattr(bridge_module, "SPEED_PERCENT", 0.1)
+    events, calls, done = [], [], threading.Event()
+    monkeypatch.setattr(bridge_module, "SIMULATE", True)
+    monkeypatch.setattr(bridge_module, "emit", lambda event, **data: (events.append((event, data)), done.set() if event == "command_complete" else None))
+    monkeypatch.setattr(bridge_module.RobotBridge, "publish_state", lambda self, **kwargs: None)
+    class Arm:
+        def get_joint_positions(self): return [0.1,0.1,-0.1,0.1,0.1,0.1]
+        def move_l(self, targets, **kwargs): calls.append(kwargs); return 1
+    robot = bridge_module.RobotBridge()
+    robot.arm = Arm(); robot.connected = robot.state_ready = True
+    robot.last_valid_joints = [0.1,0.1,-0.1,0.1,0.1,0.1]
+    try:
+        robot.move_linear({"position":[0.4,0,0.3],"euler":[0,0,0],"speed_percent":0.1,
+                           "position_tolerance_m":0.015,"orientation_tolerance_rad":0.05,"request_id":"explicit-speed"})
+        assert done.wait(2), events
+        assert calls[0]["speed_percent"] == 0.1
+        assert calls[0]["position_tolerance_m"] == 0.015
+        assert calls[0]["orientation_tolerance_rad"] == 0.05
+    finally:
+        robot.shutdown_requested.set(); robot.motion_thread.join(1); robot.state_thread.join(1)

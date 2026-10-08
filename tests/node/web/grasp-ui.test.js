@@ -47,3 +47,9 @@ test('pending stop displays confirmation in progress and retains workflow contro
  assert.match(get('grasp-phase').textContent,/等待.*确认/);
  assert.equal(get('btn-grasp-start').disabled,true);assert.equal(get('btn-grasp-cancel').disabled,false);
 });
+test('horizontal continuous mode and requested speed are visible without pretending measured speed',()=>{
+ const {c,get}=ui();c.webGraspConfig={motion:{orientationMode:'horizontal',executionMode:'phase_linear',sampleM:.005,requestedSpeedScale:.1}};
+ c._renderWebGrasp();assert.match(get('grasp-motion-mode').textContent,/水平.*连续.*5.*10%/);
+ c.webGraspStatus={phase:'failed',reason:'tool_not_horizontal'};c._renderWebGrasp();
+ assert.match(get('grasp-result').textContent,/尚未水平.*调平/);
+});

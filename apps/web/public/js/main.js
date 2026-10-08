@@ -1422,10 +1422,12 @@ class UIControls {
     const tcp=state.tcp||this.webGraspConfig?.tcp;
     const translation=tcp?.T_flange_grasp_tcp?.slice(0,3).map(row=>row[3]);
     set('grasp-tcp',tcp?`${state.tcp?'本次':'下次'} TCP：${tcp.source==='measured'?'实测':'近似'} [${mm(translation)}] mm${tcp.id?' · '+tcp.id:''} · 水平退让 ${((tcp.forwardBackoffM||0)*1000).toFixed(0)} mm`:'TCP：等待配置');
+    const motion=this.webGraspConfig?.motion;
+    set('grasp-motion-mode',motion?`${motion.orientationMode==='horizontal'?'水平锁定':'保持当前姿态'} · ${motion.executionMode==='phase_linear'?'阶段连续移动':'分段移动'} · ${(motion.sampleM*1000).toFixed(0)} mm 路径检查${Number.isFinite(motion.requestedSpeedScale)?' · 请求限速 '+(motion.requestedSpeedScale*100).toFixed(0)+'%':''}`:'运动配置：等待服务');
     set('grasp-target-position',mm(state.targetM));set('grasp-contact-position',mm(state.plan?.contact?.position));
     set('grasp-depth',`${state.depthValidFrames||0} / 3`);
     set('grasp-progress',state.progress?`${state.progress.completed} / ${state.progress.total}（累计 ${state.completedSegments||0}）`:'--');
-    set('grasp-result',this.webGraspError||state.reason|| (phase==='complete'
+    set('grasp-result',this.webGraspError||(state.reason==='tool_not_horizontal'?'末端尚未水平，请在安全高度调平；不会自动扫过桌面。':state.reason)|| (phase==='complete'
       ?'流程完成，夹爪保持；实物抓取未确认，请现场观察。'
       :state.holding?'夹爪保持，不自动松爪。':'选定目标后一次执行到抬升；不自动松爪'));
     const stages=['depth_acquiring','path_checking','opening','preapproach','target_refresh','approach','closing','lifting'];

@@ -35,7 +35,7 @@
     },
     {
       "path": "../../services/robot/src/robot-controller.js",
-      "sha256": "27fb71ee9d7b400eb9f84a9cbfc46a309ecf5dd8afcd00042a9fb04971a825dc"
+      "sha256": "843d18d85141b007785af953969c660b773a25a55476c0e61d78d595da7cf680"
     },
     {
       "path": "../../services/robot/src/startouch_bridge.py",

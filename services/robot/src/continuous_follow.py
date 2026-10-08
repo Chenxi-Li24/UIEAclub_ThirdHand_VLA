@@ -7,7 +7,8 @@ from joint_speed_policy import REFERENCE_DEG_S, bounded_speed_percent
 class ContinuousFollow:
     def __init__(self, guard, speed_percent=0.05, watchdog_s=0.5, j1_speed_deg_s=50):
         self.guard = guard
-        self.speed = [math.radians(v * bounded_speed_percent(speed_percent)) for v in REFERENCE_DEG_S]
+        # Manual/grasp 10% approval does not enlarge this independent follow envelope.
+        self.speed = [math.radians(v * min(.05, bounded_speed_percent(speed_percent))) for v in REFERENCE_DEG_S]
         self.acceleration = [v / 0.3 for v in self.speed]
         self.jerk = [a / 0.1 for a in self.acceleration]
         j1_speed = float(j1_speed_deg_s)

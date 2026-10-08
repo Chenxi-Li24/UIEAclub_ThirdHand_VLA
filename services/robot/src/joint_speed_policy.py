@@ -5,9 +5,9 @@ from pathlib import Path
 import re
 
 REFERENCE_DEG_S = (300, 300, 300, 1000, 1000, 1000)
-MAX_SPEED_PERCENT = 0.05
+MAX_SPEED_PERCENT = 0.10
 
-def bounded_speed_percent(value=MAX_SPEED_PERCENT):
+def bounded_speed_percent(value=0.05):
     speed = float(value)
     if not math.isfinite(speed) or speed <= 0:
         raise ValueError("speed percent must be finite and positive")

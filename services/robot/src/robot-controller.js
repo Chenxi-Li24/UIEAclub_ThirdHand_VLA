@@ -219,9 +219,9 @@ class RobotController extends EventEmitter {
       motion: {
         jointMaxSpeedsDegS: DEFAULT_MAX_SPEEDS_DEG_S,
         planningMode: 'sdk_joint_speed',
-        speedScale: Math.min(0.05, this.config.speedScale ?? 0.05),
+        speedScale: Math.min(0.10, this.config.speedScale ?? 0.05),
         commandedSpeedsDegS: DEFAULT_MAX_SPEEDS_DEG_S.map(
-          speed => speed * Math.min(0.05, this.config.speedScale ?? 0.05),
+          speed => speed * Math.min(0.10, this.config.speedScale ?? 0.05),
         ),
         minMoveTimeSec: this.config.minMoveTimeSec,
         maxMoveTimeSec: this.config.maxMoveTimeSec,
@@ -487,7 +487,7 @@ class RobotController extends EventEmitter {
     const sent = this.bridge.send({
       cmd: 'move_joint',
       joints_rad: alignment.joints.map(value => value * Math.PI / 180),
-      speed_percent: Math.min(0.05, this.config.speedScale ?? 0.05),
+      speed_percent: Math.min(0.10, this.config.speedScale ?? 0.05),
       request_id: pending.requestId,
       source: `vision-align:${primitive.parameters.tier}`,
     });
@@ -627,7 +627,7 @@ class RobotController extends EventEmitter {
     const sent = this.bridge.send({
       cmd: 'move_joint',
       joints_rad: validation.joints.map(value => value * Math.PI / 180),
-      speed_percent: Math.min(0.05, this.config.speedScale ?? 0.05),
+      speed_percent: Math.min(0.10, this.config.speedScale ?? 0.05),
       request_id: requestId,
       source,
     });
@@ -690,7 +690,7 @@ class RobotController extends EventEmitter {
       cmd: 'move_l',
       position: [...message.position],
       euler: [...message.euler],
-      speed_percent: Math.min(0.05, this.config.speedScale ?? 0.05),
+      speed_percent: Math.min(0.10, this.config.speedScale ?? 0.05),
       request_id: requestId,
       source: message.source || 'robot-service',
       ...precision,

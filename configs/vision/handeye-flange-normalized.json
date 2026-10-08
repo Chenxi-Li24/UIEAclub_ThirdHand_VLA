@@ -113,7 +113,7 @@
     "camera_mount_binding_retained_from_existing_runtime_not_physically_revalidated"
   ],
   "frame_normalization": {
-    "policy_id": "sha256:0555f23dca6c01425caaa09325c10f5a97520e6991f68d6dac6bff6c454e4d11",
+    "policy_id": "sha256:f5dd0a13c629c65007d696327aa6f1e65949d5cb00dda103c29d9f331ed96b29",
     "source_calibration_sha256": "d2e322dec9c6dab109212188ccc87b714bbd7f3cd9b0de9f22169cc576764a5b",
     "source_extrinsic_semantics": "T_sdk_tool_camera",
     "T_flange_sdk_tool": [

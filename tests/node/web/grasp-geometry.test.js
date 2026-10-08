@@ -1,7 +1,7 @@
 'use strict';
 const test=require('node:test');
 const assert=require('node:assert/strict');
-const {buildGraspGeometry,getGripPosition,validateJoints}=require('../../../apps/web/src/grasp/geometry');
+const {buildGraspGeometry,getGripPosition,validateJoints,validateConfig}=require('../../../apps/web/src/grasp/geometry');
 const policy='sha256:'+ 'a'.repeat(64), calibration='sha256:'+'b'.repeat(64);
 function fixture(){return {
  config:{gripOffsetM:0.060,sdkToolOffsetM:0.17334,preapproachM:0.100,liftM:0.050,segmentM:0.005,
@@ -52,6 +52,29 @@ test('invalid joint solutions cannot silently pass hard physical limits',()=>{
  for(const q of [[0,0,1,0,0,0],[0,0,NaN,0,0,0],[0,0,-1]])assert.equal(validateJoints(q,limits),false);
 });
 module.exports={fixture};
+test('horizontal grasp keeps roll and pitch level and preserves horizontal heading',()=>{
+ const f=fixture();f.config.orientationMode='horizontal';f.config.horizontalToleranceRad=.05;
+ f.robot.flange_euler_rad=[.01,-.02,Math.PI/2];
+ const g=buildGraspGeometry(f);
+ for(const waypoint of [g.preapproach,g.contact,g.lift]){assert.equal(waypoint.euler[0],0);assert.equal(waypoint.euler[1],0);assert.ok(Math.abs(waypoint.euler[2]-Math.PI/2)<1e-11);}
+ assert.equal(g.contact.gripM[2],.2);assert.equal(g.contact.position[2],.2);
+});
+test('horizontal grasp rejects an initially pitched tool before planning a leveling sweep',()=>{
+ const f=fixture();f.config.orientationMode='horizontal';f.config.horizontalToleranceRad=.05;
+ f.robot.flange_euler_rad=[0,.49,0];
+ assert.throws(()=>buildGraspGeometry(f),/tool_not_horizontal/);
+});
+test('horizontal heading stays frozen across target refresh instead of following yaw drift',()=>{
+ const f=fixture();f.config.orientationMode='horizontal';f.config.horizontalYawRad=.2;
+ f.robot.flange_euler_rad=[0,0,.22];
+ assert.ok(Math.abs(buildGraspGeometry(f).contact.euler[2]-.2)<1e-11);
+});
+test('motion modes and their bounds cannot silently fall back on malformed configuration',()=>{
+ for(const override of [{orientationMode:'horzontal'},{executionMode:'phase-linar'},
+  {orientationMode:'horizontal',horizontalToleranceRad:.5},{depthTimeoutMs:0},{horizontalYawRad:NaN}]){
+  assert.throws(()=>validateConfig({...fixture().config,...override}),/grasp_config_invalid/);
+ }
+});
 test('farther preapproach preserves current SDK height for eye-in-hand visibility',()=>{
  const f=fixture();f.config.preapproachM=0.18;f.config.keepPreapproachSdkHeight=true;f.robot.flange_position_m[2]=0.15;
  const g=buildGraspGeometry(f);

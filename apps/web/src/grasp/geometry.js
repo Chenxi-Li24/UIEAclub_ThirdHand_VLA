@@ -6,6 +6,11 @@ function fail(code){const e=new Error(code);e.code=code;throw e;}
 function translation(x){return [[1,0,0,x],[0,1,0,0],[0,0,1,0],[0,0,0,1]];}
 function validateJoints(q,limits){return vector(q,6)&&Array.isArray(limits)&&limits.length===6&&q.every((x,i)=>vector(limits[i],2)&&x>=limits[i][0]&&x<=limits[i][1]);}
 function validateConfig(c){
+ if(c?.orientationMode!==undefined&&!['preserve','horizontal'].includes(c.orientationMode))fail('grasp_config_invalid');
+ if(c?.executionMode!==undefined&&!['segmented','phase_linear'].includes(c.executionMode))fail('grasp_config_invalid');
+ if(c?.horizontalToleranceRad!==undefined&&(!Number.isFinite(c.horizontalToleranceRad)||c.horizontalToleranceRad<=0||c.horizontalToleranceRad>.1))fail('grasp_config_invalid');
+ if(c?.horizontalYawRad!==undefined&&!Number.isFinite(c.horizontalYawRad))fail('grasp_config_invalid');
+ if(c?.depthTimeoutMs!==undefined&&(!Number.isFinite(c.depthTimeoutMs)||c.depthTimeoutMs<1000||c.depthTimeoutMs>95000))fail('grasp_config_invalid');
  for(const k of ['gripOffsetM','sdkToolOffsetM','preapproachM','liftM','segmentM','visionMaxAgeMs'])if(!Number.isFinite(c?.[k])||c[k]<=0)fail('grasp_config_invalid');
  if(c.segmentM>0.005||c.gripOffsetM>0.3||c.sdkToolOffsetM>0.3||c.preapproachM>0.2||c.liftM>0.1)fail('grasp_config_invalid');
  if(c.maxApproachM!==undefined&&(!Number.isFinite(c.maxApproachM)||c.maxApproachM<c.preapproachM||c.maxApproachM>0.25))fail('grasp_config_invalid');
@@ -20,10 +25,23 @@ function currentGripPose(robot,config){
  const flange=gripTargetToFlangePose({positionM:robot.flange_position_m,eulerRad:robot.flange_euler_rad},translation(config.sdkToolOffsetM));
  return flangeToGripPose(flange,gripTransform(config));
 }
+function assertHorizontal(robot,config){
+ if(config.orientationMode!=='horizontal')return;
+ const euler=currentGripPose(robot,config).eulerRad,tolerance=config.horizontalToleranceRad??.05;
+ if(!Number.isFinite(tolerance)||tolerance<=0||tolerance>.1)fail('grasp_config_invalid');
+ if(euler.slice(0,2).some(angle=>Math.abs(Math.atan2(Math.sin(angle),Math.cos(angle)))>tolerance))fail('tool_not_horizontal');
+ return [0,0,euler[2]];
+}
 function inside(p,c){return vector(p)&&['x','y','z'].every((axis,i)=>p[i]>=c.workspace[axis][0]&&p[i]<=c.workspace[axis][1]);}
 function getGripPosition(robot,config){
  if(!vector(robot?.flange_position_m)||!vector(robot?.flange_euler_rad))fail('robot_pose_invalid');
  return currentGripPose(robot,config).positionM.map(rounded);
+}
+function assertMotionStart(robot,config){
+ if(!validateJoints(robot.joints_deg,config.jointLimits))fail('robot_pose_invalid');
+ const grip=getGripPosition(robot,config);
+ const flange=gripTargetToFlangePose({positionM:robot.flange_position_m,eulerRad:robot.flange_euler_rad},translation(config.sdkToolOffsetM)).positionM;
+ for(const point of [grip,flange,robot.flange_position_m])if(!inside(point,config))fail('workspace_limit');
 }
 function segments(from,to,config){
  const distance=Math.hypot(...to.position.map((x,i)=>x-from[i]));const count=Math.max(1,Math.ceil(distance/config.segmentM));
@@ -46,7 +64,9 @@ function buildGraspGeometry({observation,stableId,robot,config,now=Date.now()}){
  if(!vector(robot?.flange_position_m)||!vector(robot?.flange_euler_rad)||!validateJoints(robot.joints_deg,config.jointLimits))fail('robot_pose_invalid');
  const width=observation.pose?.width_m;
  const widthM=Number.isFinite(width)&&width>=0.008&&width<=0.072?width:null;
- const desired={positionM:targetM,eulerRad:currentGripPose(robot,config).eulerRad};
+ assertHorizontal(robot,config);
+ const currentEuler=currentGripPose(robot,config).eulerRad;
+ const desired={positionM:targetM,eulerRad:config.orientationMode==='horizontal'?[0,0,config.horizontalYawRad??currentEuler[2]]:currentEuler};
  const flange=gripTargetToFlangePose(desired,gripTransform(config));
  const sdk=flangeToGripPose(flange,translation(config.sdkToolOffsetM));
  const currentGrip=getGripPosition(robot,config);
@@ -71,4 +91,4 @@ function buildGraspGeometry({observation,stableId,robot,config,now=Date.now()}){
  return {targetM,widthM,forwardBackoffM:backoff,frameId:observation.frameId??observation.frame_id,contact,preapproach,lift,
   paths:{preapproach:segments(robot.flange_position_m,preapproach,config),approach:segments(preapproach.position,contact,config),lift:segments(contact.position,lift,config)}};
 }
-module.exports={buildGraspGeometry,getGripPosition,validateConfig,validateJoints,vector};
+module.exports={buildGraspGeometry,getGripPosition,validateConfig,validateJoints,vector,assertHorizontal,assertMotionStart};

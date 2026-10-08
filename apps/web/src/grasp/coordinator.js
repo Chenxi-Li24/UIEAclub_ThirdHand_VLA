@@ -1,7 +1,7 @@
 'use strict';
 const {EventEmitter}=require('node:events');
 const {randomUUID}=require('node:crypto');
-const {buildGraspGeometry,validateConfig,validateJoints,vector,getGripPosition}=require('./geometry');
+const {buildGraspGeometry,validateConfig,validateJoints,vector,getGripPosition,assertHorizontal,assertMotionStart}=require('./geometry');
 const delay=ms=>new Promise(r=>setTimeout(r,ms));
 function fault(code){const e=new Error(code);e.code=code;return e;}
 const distance=(a,b)=>Math.hypot(...a.map((x,i)=>x-b[i]));
@@ -11,6 +11,8 @@ class GraspCoordinator extends EventEmitter{
   this.requests=new Map();this.session=null;this.current={type:'grasp.status',phase:'idle',active:false,sessionId:null,gripOffsetM:config.gripOffsetM,legacyGraspEnabled:false};
  }
  status(){return JSON.parse(JSON.stringify(this.current));}
+ motionConfiguration(){return {orientationMode:this.config.orientationMode||'preserve',executionMode:this.config.executionMode||'segmented',
+  sampleM:this.config.segmentM,requestedSpeedScale:this.config.requestedSpeedScale??null};}
  tcpConfiguration(){
   if(this.current.active&&this.current.tcp)return structuredClone(this.current.tcp);
   const measured=this.resolveTcp();
@@ -60,7 +62,7 @@ class GraspCoordinator extends EventEmitter{
   }throw fault('vision_evidence_timeout');
  }
  async _depth(s){
-  let count=0,lastFrame=-1,aligned=false;const until=this.now()+95000;
+  let count=0,lastFrame=-1,aligned=false;const until=this.now()+(s.config.depthTimeoutMs??95000);
   while(this.now()<until){
    this._alive(s);const {observation}=await this._snapshot(s);
    this._alive(s);const id=Number(observation.frameId??observation.frame_id);
@@ -74,6 +76,10 @@ class GraspCoordinator extends EventEmitter{
     if(count>=3)return observation;
    }else{
     count=0;
+    if(s.config.orientationMode==='horizontal'){
+     this._publish({depthValidFrames:0,depth:{phase:'observing',active:true,reason:'waiting_static_depth_no_wrist_rotation'}});
+     await this.sleep(100);continue;
+    }
     if(aligned)throw fault('depth_invalid');aligned=true;
     await this.depthCoordinator.start(s.stableId);
     while(this.depthCoordinator.status().active){this._alive(s);this._publish({depth:this.depthCoordinator.status()});await this.sleep(100);}
@@ -114,6 +120,7 @@ class GraspCoordinator extends EventEmitter{
  _path(from,to){const n=Math.max(1,Math.ceil(distance(from,to.position)/this.config.segmentM));if(n>200)throw fault('path_too_long');
   return Array.from({length:n},(_,i)=>({position:from.map((x,j)=>Number((x+(to.position[j]-x)*(i+1)/n).toFixed(12))),euler:[...to.euler]}));}
  async _move(path,phase,s){
+  if(s.config.executionMode==='phase_linear')return this._moveLinear(path,phase,s);
   this._publish({phase,progress:{stage:phase,completed:0,total:path.length}});
   for(const pose of path){
    if(phase==='preapproach')await this._target(s);
@@ -131,6 +138,36 @@ class GraspCoordinator extends EventEmitter{
    await this.sleep(Math.max(0,this.config.stepIntervalMs-(this.now()-started)));
   }
  }
+ async _moveLinear(path,phase,s){
+  if(!path.length)throw fault('path_invalid');
+  const before=this.robotClient.state({idle:true});assertHorizontal(before,s.config);assertMotionStart(before,s.config);
+  if(distance(before.flange_position_m,path[0].position)>this.config.segmentM+this.config.positionToleranceM)throw fault('segment_start_changed');
+  path=this._path(before.flange_position_m,path.at(-1));
+  this._publish({phase,progress:{stage:phase,completed:0,total:1,checkedSamples:path.length}});
+  if(phase==='preapproach')await this._target(s);
+  // The 5mm path is still checked in full. It is sampling, not a queue of
+  // independently stopping actuator commands. SDK move_l owns interpolation.
+  await this._check(path,s);
+  if(phase==='preapproach')await this._target(s);
+  const start=this.robotClient.state({idle:true});assertHorizontal(start,s.config);assertMotionStart(start,s.config);
+  if(distance(start.flange_position_m,before.flange_position_m)>.001||start.joints_deg.some((x,i)=>Math.abs(x-before.joints_deg[i])>.3))throw fault('segment_start_changed');
+  const pose=path.at(-1);
+  let finished=false;
+  const command=this._command({cmd:'move_l',position:pose.position,euler:pose.euler,
+   position_tolerance_m:this.config.positionToleranceM,orientation_tolerance_rad:this.config.orientationToleranceRad},s);
+  const watch=async()=>{
+   while(!finished){
+    await this.sleep(100);if(finished)return;
+    try{await this._target(s);}catch(error){if(finished)return;s.motionUncertain=true;throw error;}
+   }
+  };
+  try{await (phase==='preapproach'?Promise.race([command,watch()]):command);}
+  finally{finished=true;}
+  const after=await this._stable(s);assertHorizontal(after,s.config);
+  if(distance(after.flange_position_m,pose.position)>this.config.positionToleranceM||after.flange_euler_rad.some((x,i)=>Math.abs(Math.atan2(Math.sin(x-pose.euler[i]),Math.cos(x-pose.euler[i])))>this.config.orientationToleranceRad))throw fault('pose_not_reached');
+  this._record('actual_pose',{state:after});this._publish({completedSegments:this.current.completedSegments+1,
+   progress:{stage:phase,completed:1,total:1,checkedSamples:path.length}});
+ }
  async _target(s){
   this._alive(s);const {observation}=await this._snapshot(s);this._alive(s);
   const ts=Number(observation.observedAtMs??observation.ts),target=(observation.targets||[]).find(t=>Number(t.stable_id??t.stableId)===s.stableId);
@@ -139,6 +176,8 @@ class GraspCoordinator extends EventEmitter{
  }
  async _run(s){
   await this.robotClient.ready();this._alive(s);
+  const horizontal=assertHorizontal(this.robotClient.state({idle:true}),s.config);
+  if(horizontal)s.config.horizontalYawRad=horizontal[2];
   const observation=await this._depth(s);this._publish({phase:'planning'});
   let g=this._geometry(observation,s);this._publishPlan(g);this._publish({phase:'path_checking'});
   await this._check([...g.paths.preapproach,...g.paths.approach,...g.paths.lift],s);

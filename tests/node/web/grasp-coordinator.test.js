@@ -30,6 +30,52 @@ test('one start runs depth through contact and lift without confirmations or rel
  assert.deepEqual(events.filter(e=>e.cmd==='move_l').at(-1).position,[0.51334,0,0.25]);
  assert.equal(events.some(e=>['connect','disconnect','software_stop'].includes(e.cmd)),false);
 });
+test('phase-linear mode executes three native trajectories while checking every 5mm sample',async()=>{
+ const {c,events,robot}=await setup({config:{executionMode:'phase_linear',orientationMode:'horizontal',horizontalToleranceRad:.05}});
+ let previews=0;const preview=robot.preview;robot.preview=async pose=>{previews++;return preview(pose);};
+ await c.start(2,'continuous-horizontal');const s=await finish(c);
+ assert.equal(s.phase,'complete',s.reason);
+ assert.deepEqual(events.filter(e=>e.cmd==='move_l').map(e=>e.position),[[.41334,0,.2],[.51334,0,.2],[.51334,0,.25]]);
+ assert.ok(previews>30,'IK sampling must not be replaced with endpoint-only checking');
+ assert.equal(s.completedSegments,3);
+});
+test('horizontal depth waits for fresh depth without issuing wrist or arm alignment',async()=>{
+ const {c,events}=await setup({config:{orientationMode:'horizontal',horizontalToleranceRad:.05}});
+ const snapshot=c.visionClient.snapshot;let observations=0,alignment=0;
+ c.visionClient.snapshot=async id=>{const s=await snapshot(id);if(++observations<=2)s.observation.targets=s.observation.targets.map(t=>({...t,depth_valid:false}));return s;};
+ c.depthCoordinator.start=async()=>{alignment++;throw Error('wrist_rotation_forbidden');};
+ await c.start(2,'static-depth');const s=await finish(c);
+ assert.equal(s.phase,'complete',s.reason);assert.equal(alignment,0);
+ assert.equal(events.some(e=>e.cmd==='servo'),false);
+});
+test('pitched start in horizontal mode never opens the gripper or moves the robot',async()=>{
+ const {c,state,events}=await setup({config:{orientationMode:'horizontal',horizontalToleranceRad:.05}});
+ state.flange_euler_rad=[0,.49,0];
+ await c.start(2,'pitched-start');const s=await finish(c);
+ assert.equal(s.reason,'tool_not_horizontal');assert.deepEqual(events,[]);
+});
+test('loss of selected target during a continuous preapproach stops the in-flight trajectory',async()=>{
+ let moving=false,unblock;
+ const {c,events,robot}=await setup({config:{executionMode:'phase_linear',orientationMode:'horizontal'},
+  command:async(cmd,state)=>{if(cmd.cmd==='gripper'){state.gripper_width_m=.08;return {reached:true};}
+   moving=true;return new Promise(resolve=>{unblock=resolve;});}});
+ const snapshot=c.visionClient.snapshot;
+ c.visionClient.snapshot=async id=>{const result=await snapshot(id);if(moving)result.observation.targets=[];return result;};
+ await c.start(2,'continuous-target-loss');const s=await finish(c);
+ if(unblock)unblock({reached:false});
+ assert.equal(s.phase,'failed',s.reason);assert.equal(s.reason,'target_lost');
+ assert.equal(events.filter(e=>e.cmd==='software_stop').length,1);
+ assert.equal(events.filter(e=>e.cmd==='move_l').length,1);
+});
+test('continuous phase previews the fresh actual-start line rather than an obsolete nominal line',async()=>{
+ let opened=false;const checked=[];
+ const {c,robot,state}=await setup({config:{executionMode:'phase_linear',orientationMode:'horizontal'}});
+ const command=robot.command,preview=robot.preview;
+ robot.command=async cmd=>{const result=await command(cmd);if(cmd.cmd==='gripper'&&cmd.position===1){opened=true;state.flange_position_m[1]=.012;}return result;};
+ robot.preview=async pose=>{if(opened)checked.push(structuredClone(pose));return preview(pose);};
+ await c.start(2,'fresh-start-path');const s=await finish(c);assert.equal(s.phase,'complete',s.reason);
+ assert.ok(checked[0].position[1]>.01,'fresh lateral offset must be present in actual trajectory samples');
+});
 test('duplicate request never repeats real commands',async()=>{
  const {c,events}=await setup();await c.start(2,'same');await finish(c);const before=events.length;
  await c.start(2,'same');await pause();assert.equal(events.length,before);

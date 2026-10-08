@@ -1,5 +1,6 @@
 'use strict';
 
+const { randomUUID } = require('crypto');
 const { WebSocket } = require('ws');
 const fs = require('fs');
 const { cameraXTarget, normalizeCameraXStep } = require('./language/camera-x-step');
@@ -23,6 +24,7 @@ const ROBOT_COMMANDS = new Set([
   'move_l',
   'preview_ik',
   'preset',
+  'fixed_tcp_demo',
   'gripper',
   'software_stop',
   'estop',
@@ -60,6 +62,8 @@ class RobotProxy {
       // A missing mount or direction proof leaves real camera-frame motion disabled.
     }
     this.sessions = new Set();
+    this.forwardedMotion = new Map();
+    this.controlUncertainAtMs = null;
     this.languageCandidateOwners = new Map();
     this.skillExecutors = new SkillExecutorRegistry();
     this.skillExecutors.register(PICK_SKILL, new BottlePickAdapter({
@@ -99,7 +103,7 @@ class RobotProxy {
       stateMaxAgeMs: languageConfig.stateMaxAgeMs,
       jointToleranceDeg: languageConfig.jointToleranceDeg,
       moveTimeFor,
-      sendRobot: command => this.languageUpstream.send(command),
+      sendRobot: command => this._sendLanguageRobot(command),
       softwareStop: () => this.languageUpstream.softwareStop(),
       getRobotState: () => this.languageUpstream.getRobotState(),
       onMessage: (browser, message) => sendJson(browser, message),
@@ -128,6 +132,7 @@ class RobotProxy {
     });
 
     this.languageUpstream.on('message', message => {
+      this._reconcileControl(message);
       this.languageController.handleBridgeEvent(message);
       this.directionalController.handleBridgeEvent(message);
     });
@@ -207,9 +212,80 @@ class RobotProxy {
     return this.languageUpstream.getRobotState();
   }
 
-  attach(browser) {
+  setGraspInterlock(getStatus) { this.graspInterlock = getStatus; }
+
+  _mayForward(session, message) {
+    return !this.graspInterlock?.()?.active || session?.graspOwner === true
+      || ['software_stop','estop','status','ping','preview_ik'].includes(message.cmd);
+  }
+
+  _sendLanguageRobot(command) {
+    if (!this._mayForward(null,command)) return false;
+    return this.languageUpstream.send(command);
+  }
+
+  hasActiveControl() {
+    return Boolean(this.languageController.active || this.directionalController.active
+      || this.controlUncertainAtMs !== null || this.forwardedMotion.size
+      || [...this.sessions].some(s => s.queue.some(raw =>
+        ['servo','move_l','preset','gripper','fixed_tcp_demo'].includes(parseJson(raw)?.cmd))));
+  }
+
+  _abandonControl(session, reason, confirmed = false) {
+    let abandoned = false;
+    for (const [requestId, owner] of this.forwardedMotion) {
+      if (session && owner !== session) continue;
+      this.forwardedMotion.delete(requestId);
+      sendJson(owner.browser, { type: 'error', request_id: requestId,
+        code: confirmed ? 'motion_cancelled' : 'execution_uncertain', msg: reason });
+      abandoned = true;
+    }
+    for (const owner of this.sessions) {
+      if (session && owner !== session) continue;
+      owner.queue.length = 0;
+    }
+    if (confirmed) this.controlUncertainAtMs = null;
+    else if (abandoned) this.controlUncertainAtMs = Date.now();
+  }
+
+  _reconcileControl(message, session = null) {
+    if (message?.request_id && (message.type === 'error'
+        || message.type === 'command_status' && message.status === 'complete')) {
+      this.forwardedMotion.delete(message.request_id);
+    }
+    if ((message?.type === 'software_stop' && message.complete === true
+        && message.depowered === true) || message?.type === 'software_stop_complete') {
+      this._abandonControl(null, 'Robot Service confirmed software stop', true);
+    } else if (message?.type === 'connection' && message.connected === false) {
+      this._abandonControl(session, 'Robot connection lost');
+    } else if (message?.type === 'robot_state' && this.controlUncertainAtMs !== null
+        && message.observedAtMs > this.controlUncertainAtMs) {
+      const state = this.languageUpstream.getRobotState();
+      if (state.connected && state.stateFresh && state.stateName === 'IDLE'
+          && !state.motionActive) this.controlUncertainAtMs = null;
+    }
+  }
+
+  _forward(session, message) {
+    if (!this._mayForward(session,message)) {
+      sendJson(session.browser,{type:'error',code:'grasp_active',request_id:message.request_id,
+        msg:'抓取流程正在控制机械臂；可使用软件停止'});
+      return false;
+    }
+    if (['servo','move_l','preset','gripper','fixed_tcp_demo'].includes(message.cmd)) {
+      message = {...message,request_id:message.request_id || randomUUID()};
+      this.forwardedMotion.set(message.request_id,session);
+    }
+    session.upstream.send(JSON.stringify(message));return true;
+  }
+
+  _flushQueued(session) {
+    for (const raw of session.queue.splice(0)) this._forward(session,parseJson(raw));
+  }
+
+  attach(browser, {graspOwner=false} = {}) {
     const upstream = new WebSocket(this.robotWsUrl);
-    const session = { browser, upstream, queue: [] };
+    const session = { browser, upstream, queue: [], graspOwner };
     this.sessions.add(session);
 
     sendJson(browser, {
@@ -218,12 +294,13 @@ class RobotProxy {
     });
 
     upstream.on('open', () => {
-      for (const payload of session.queue.splice(0)) upstream.send(payload);
+      this._flushQueued(session);
     });
     upstream.on('message', (data, isBinary) => {
       let payload = data;
       if (!isBinary) {
         const message = parseJson(data);
+        this._reconcileControl(message, session);
         if (message?.type === 'config') {
           payload = JSON.stringify({
             ...message,
@@ -241,6 +318,7 @@ class RobotProxy {
       });
     });
     upstream.on('close', () => {
+      this._abandonControl(session, 'Robot Service transport lost');
       if (browser.readyState === WebSocket.OPEN) {
         sendJson(browser, {
           type: 'connection',
@@ -262,6 +340,10 @@ class RobotProxy {
       }
 
       if (message.type === 'skill.candidate') {
+        if (this.graspInterlock?.()?.active) {
+          sendJson(browser, {type:'error',code:'grasp_active',msg:'抓取流程正在控制机械臂'});
+          return;
+        }
         const candidate = message.candidate || message.payload;
         let owners = this.languageCandidateOwners.get(browser);
         if (!owners) {
@@ -287,6 +369,10 @@ class RobotProxy {
       }
 
       if (message.type === 'confirmation.decision') {
+        if (this.graspInterlock?.()?.active) {
+          sendJson(browser, {type:'error',code:'grasp_active',msg:'抓取流程正在控制机械臂'});
+          return;
+        }
         const owners = this.languageCandidateOwners.get(browser);
         const owner = owners?.get(message.candidateId);
         if (owner === DIRECTIONAL_SKILL) {
@@ -306,8 +392,13 @@ class RobotProxy {
         });
         return;
       }
+      if (!this._mayForward(session,message)) {
+        sendJson(browser, {type:'error',code:'grasp_active',request_id:message.request_id,
+          msg:'抓取流程正在控制机械臂；可使用软件停止'});
+        return;
+      }
       const payload = JSON.stringify(message);
-      if (upstream.readyState === WebSocket.OPEN) upstream.send(payload);
+      if (upstream.readyState === WebSocket.OPEN) this._forward(session,message);
       else if (upstream.readyState === WebSocket.CONNECTING) session.queue.push(payload);
       else {
         sendJson(browser, {
@@ -319,6 +410,7 @@ class RobotProxy {
     });
 
     browser.on('close', () => {
+      this._abandonControl(session, 'Browser disconnected');
       this.languageController.disconnect(browser);
       this.directionalController.disconnect(browser);
       this.languageCandidateOwners.delete(browser);

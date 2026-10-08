@@ -1,0 +1,96 @@
+{
+  "sourceDeploymentCommit": "522cd2bc9c7c53d0091a7442c1ca4d3a73936a04",
+  "previousSnapshot": "727aa2c",
+  "commits": [
+    "e1c0e9b",
+    "179fec2",
+    "522cd2b"
+  ],
+  "historyStatus": "Pending ordinary merge ancestry; index supplement only, not a cherry-pick commit.",
+  "files": [
+    {
+      "status": "M",
+      "source": "apps/web/public/index.html",
+      "destination": "apps/web/public/index.html",
+      "disposition": "merged_or_adapted"
+    },
+    {
+      "status": "M",
+      "source": "apps/web/public/js/main.js",
+      "destination": "apps/web/public/js/main.js",
+      "disposition": "merged_or_adapted"
+    },
+    {
+      "status": "M",
+      "source": "apps/web/src/robot-proxy.js",
+      "destination": "apps/web/src/robot-proxy.js",
+      "disposition": "merged_or_adapted"
+    },
+    {
+      "status": "M",
+      "source": "fixed_tcp_demo/README.md",
+      "destination": "apps/fixed_tcp_demo/README.md",
+      "disposition": "merged_or_adapted"
+    },
+    {
+      "status": "D",
+      "source": "fixed_tcp_demo/arm.py",
+      "destination": "History/fixed-tcp-before-port3000/arm.py",
+      "disposition": "archived_obsolete_entry"
+    },
+    {
+      "status": "M",
+      "source": "fixed_tcp_demo/demo.py",
+      "destination": "apps/fixed_tcp_demo/demo.py",
+      "disposition": "merged_or_adapted"
+    },
+    {
+      "status": "M",
+      "source": "fixed_tcp_demo/fixed_tcp_demo.py",
+      "destination": "apps/fixed_tcp_demo/fixed_tcp_demo.py",
+      "disposition": "merged_or_adapted"
+    },
+    {
+      "status": "M",
+      "source": "fixed_tcp_demo/safety.py",
+      "destination": "apps/fixed_tcp_demo/safety.py",
+      "disposition": "merged_or_adapted"
+    },
+    {
+      "status": "A",
+      "source": "fixed_tcp_demo/test_fixed_tcp_plan.py",
+      "destination": "apps/fixed_tcp_demo/test_fixed_tcp_plan.py",
+      "disposition": "merged_or_adapted"
+    },
+    {
+      "status": "M",
+      "source": "services/robot/src/robot-controller.js",
+      "destination": "services/robot/src/robot-controller.js",
+      "disposition": "merged_or_adapted"
+    },
+    {
+      "status": "M",
+      "source": "services/robot/src/server.js",
+      "destination": "services/robot/src/server.js",
+      "disposition": "merged_or_adapted"
+    },
+    {
+      "status": "M",
+      "source": "services/robot/src/startouch_bridge.py",
+      "destination": "services/robot/src/startouch_bridge.py",
+      "disposition": "merged_or_adapted"
+    },
+    {
+      "status": "A",
+      "source": "services/robot/src/test_fixed_tcp_bridge.py",
+      "destination": "services/robot/src/test_fixed_tcp_bridge.py",
+      "disposition": "merged_or_adapted"
+    },
+    {
+      "status": "A",
+      "source": "services/robot/src/test_fixed_tcp_controller.js",
+      "destination": "services/robot/src/test_fixed_tcp_controller.js",
+      "disposition": "merged_or_adapted"
+    }
+  ]
+}

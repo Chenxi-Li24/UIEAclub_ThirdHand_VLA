@@ -6,7 +6,10 @@
 |---|---|---|
 | `launcher/` | 按 profile 启停服务、记录 PID/ready/log、检查进程所有权 | `./thirdhand`、`apps/launcher/src/cli.js` |
 | `web/` | 9983 局域网页面、Three.js/URDF 展示及 Robot/Speech/Vision/BottleGrasp 代理 | `apps/web/src/server.js` |
-| `dummy/` | Dum-E 个性状态机、人物跟随与手势实验应用；当前仅手动启动 | `apps/dummy/apps/run_dummy.py`、`apps/dummy/apps/run_person_follow.py` |
+| `meituan/` | 1034 页面及电池识别；本轮只读迁移，不启用运动/夹爪/抓取。按 `meituan-web` profile 启动 | `apps/meituan/src/server.js` |
+| `dummy/` | 正式 YuNet 人脸跟随、BODY 补偿、J1/J4 连续控制与关键词动作；由网页授权启停，直连 3000 | `apps/dummy/apps/run_head_body_follow.py` |
+| `dummy/experiments/deployment_20260915/` | 旧网关、Mink/全臂跟随和校准实验；独立 `dummy_legacy` 包，不默认启动 | 实验目录内 `apps/` |
+| `fixed_tcp_demo/` | 可选固定 TCP 演示；CLI/9983 请求 3000 唯一 SDK 所有者，不默认执行 | `apps/fixed_tcp_demo/fixed_tcp_demo.py` |
 
 边界：`apps/web` 不直接加载 Startouch SDK，也不直接访问 `can0`。语音与文字请求经 3004 的 LLM Controller；视觉问答只读取现有 3100 视频流。机器人命令仍必须经过确认与 Robot Service；LLM 不能直接执行动作。
 

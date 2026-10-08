@@ -37,6 +37,17 @@ test('real config uses portable runtime defaults and remains inactive', () => {
   assert.equal(path.basename(config.robot.bridge_path), 'startouch_bridge.py');
   assert.deepEqual(config.grasp.flange_offset_base_m, [0.0475, 0.01, 0]);
   assert.equal(config.grasp.offset_validated, false);
+  assert.equal(config.motion.fixed_table_grasp.pregrasp_only, true);
+  assert.deepEqual(config.grasp.grip_transform, {
+    validated: true,
+    validation_id: 'sha256:0c4e4f4a9aa6c026a147d5ec9b6c45c0aa69a06a4bc14a9b4dc97c10cad8e716',
+    matrix_4x4: [
+      [1, 0, 0, 0.18134],
+      [0, 1, 0, 0],
+      [0, 0, 1, 0],
+      [0, 0, 0, 1],
+    ],
+  });
   assert.equal(config.place.validated, false);
   assert.equal(config.place.path_validation_id, null);
   assert.equal(config.place.startup_home_validated, false);

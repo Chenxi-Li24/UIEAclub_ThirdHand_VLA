@@ -40,6 +40,12 @@ motion:
   max_refine_step_m: 0.005
   linear_speed_m_s: 0.03
   grasp_euler_rad: [0.052626251, -0.083733625, 0.492493650]
+  fixed_table_grasp:
+    enabled: true
+    table_z_base_m: 0.0
+    grasp_height_m: 0.11
+    width_m: 0.055
+    pregrasp_only: true
 gripper:
   physical_max_width_m: 0.080
   execution_max_width_m: 0.072
@@ -49,6 +55,15 @@ gripper:
 grasp:
   flange_offset_base_m: [0.0475, 0.0100, 0.0]
   offset_validated: false
+  # T_flange_grip. This URDF-derived candidate is limited to pregrasp-only dry runs.
+  grip_transform:
+    measured: true
+    validation_id: "sha256:0c4e4f4a9aa6c026a147d5ec9b6c45c0aa69a06a4bc14a9b4dc97c10cad8e716"
+    matrix_4x4:
+      - [1.0, 0.0, 0.0, 0.18134]
+      - [0.0, 1.0, 0.0, 0.0]
+      - [0.0, 0.0, 1.0, 0.0]
+      - [0.0, 0.0, 0.0, 1.0]
 place:
   strategy: "fixed_xy_keep_grasp_z"
   validated: false

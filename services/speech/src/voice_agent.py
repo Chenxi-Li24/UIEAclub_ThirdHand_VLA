@@ -765,6 +765,34 @@ VISION_INSPECT_TOOL = {
 
 AGENT_TOOLS = [*ROBOT_TOOLS, VISION_INSPECT_TOOL]
 
+
+MEITUAN_TRANSFER_TOOL = {
+    "name": "meituan_battery_transfer",
+    "description": (
+        "Select the Meituan battery transfer Skill for one explicitly named "
+        "source slot A/B/C/D and destination T0/P1/P2/P3. "
+        "The browser asks once for confirmation of the complete route. "
+        "Only A may go to T0. Do not infer a slot from battery color."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "source": {"type": "string", "enum": ["A", "B", "C", "D"]},
+            "destination": {"type": "string", "enum": ["T0", "P1", "P2", "P3"]},
+        },
+        "required": ["source", "destination"],
+        "additionalProperties": False,
+    },
+}
+
+MEITUAN_PROMPT = (
+    "\nMeituan mode: For an explicit request to move battery A/B/C/D to "
+    "T0/P1/P2/P3, call meituan_battery_transfer once. Do not invent a "
+    "source slot from a color. The tool only proposes the full route; "
+    "never claim that the robot moved before browser confirmation and "
+    "execution feedback.\n"
+)
+
 SYSTEM_PROMPT = f"""You are a bilingual (EN/ZH) voice assistant for a desktop robot arm. The user speaks English or Chinese; you understand both and reply in the same language they used.
 
 Robot capabilities:
@@ -846,6 +874,7 @@ class ThirdHandController:
         self._vision_skill = vision_skill
         self._history = []
         self._visual_summary: str | None = None
+        self._task_context: str | None = None
         info = f"provider={self.provider}, model={self.model}"
         if self._base_url:
             info += f", base_url={self._base_url}"
@@ -957,11 +986,12 @@ class ThirdHandController:
         return list(self._history[start:])
 
     def _create_message(self):
+        meituan = self._task_context == "meituan"
         return self._client.messages.create(
             model=self.model,
             max_tokens=1024,
-            system=SYSTEM_PROMPT,
-            tools=AGENT_TOOLS,
+            system=SYSTEM_PROMPT + MEITUAN_PROMPT if meituan else SYSTEM_PROMPT,
+            tools=[*AGENT_TOOLS, MEITUAN_TRANSFER_TOOL] if meituan else AGENT_TOOLS,
             messages=self._history_window(),
         )
 
@@ -987,8 +1017,9 @@ class ThirdHandController:
                     return value
         return f"已生成 {len(actions)} 个待确认操作，请在页面确认后再执行。"
 
-    def chat(self, user_text: str) -> Dict:
+    def chat(self, user_text: str, *, task_context: str | None = None) -> Dict:
         """Run one controller turn, including at most one visual Skill call."""
+        self._task_context = task_context
         self._init_client()
         if self._client is None:
             return {

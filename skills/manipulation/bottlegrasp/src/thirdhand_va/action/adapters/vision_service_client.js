@@ -102,7 +102,7 @@ class VisionServiceClient extends EventEmitter {
 
   sendArmState(
     flangePosition, flangeEuler, jointsDeg, velocitiesDegS,
-    stationary, observedAtNs,
+    stationary, observedAtNs, state = {},
   ) {
     return this.send({
       type: 'arm_state',
@@ -112,6 +112,8 @@ class VisionServiceClient extends EventEmitter {
       joints_deg: jointsDeg,
       velocities_deg_s: velocitiesDegS,
       stationary,
+      connected: state.connected === true,
+      healthy: state.healthy === true,
       observed_monotonic_ns: observedAtNs,
     });
   }

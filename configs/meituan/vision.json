@@ -1,0 +1,9 @@
+{
+  "prompt": "battery .",
+  "boxThreshold": 0.3,
+  "textThreshold": 0.25,
+  "minMaskPixels": 200,
+  "minColoredFraction": 0.15,
+  "minColorMargin": 0.12,
+  "erosionPixels": 1
+}

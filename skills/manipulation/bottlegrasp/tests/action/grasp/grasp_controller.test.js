@@ -105,6 +105,29 @@ test('one accepted plan completes grasp place retreat and home', () => {
   );
 });
 
+test('pregrasp-only plan completes after high approach and never descends or closes', () => {
+  const h = harness();
+  const started = h.controller.start(plan({
+    mode: 'pregrasp_only',
+    pathValidationId: null,
+    pregraspSegments: [{ position: [0.40, 0.05, 0.28], timeSec: 3.0 }],
+  }), { supervised: true });
+  assert.equal(started.accepted, true);
+  assert.equal(h.controller.snapshot().phase, 'open');
+
+  assert.equal(h.controller.advanceSupervised('open').accepted, true);
+  h.complete();
+  assert.equal(h.controller.snapshot().phase, 'pregrasp');
+
+  assert.equal(h.controller.advanceSupervised('pregrasp').accepted, true);
+  h.complete();
+
+  assert.equal(h.controller.snapshot().phase, 'complete');
+  assert.deepEqual(h.sent.map(command => command.source), [
+    'grasp:open', 'grasp:pregrasp',
+  ]);
+});
+
 test('controller completes every protocol-safe transfer segment before lowering', () => {
   const h = harness();
   const started = h.controller.start(plan({

@@ -1,0 +1,217 @@
+{
+  "origin": "/home/nieqingcao/ThirdHand/UIEAclub_ThirdHand_VLA/local/calibration/source",
+  "sourceDeploymentCommit": "522cd2bc9c7c53d0091a7442c1ca4d3a73936a04",
+  "note": "Historical values are byte-preserved, not approved or loaded. Model/sample payloads stay local.",
+  "files": [
+    {
+      "source": "HANDOVER.md",
+      "destination": "History/legacy-calibration-20261008/source/HANDOVER.md",
+      "size": 3518,
+      "sha256": "7bd154a2cf6b16d2c26fafed1a4d1f6b6a6aace16a585c02e658f55dea55d58d",
+      "git_disposition": "archived_source"
+    },
+    {
+      "source": "aruco_detect.py",
+      "destination": "History/legacy-calibration-20261008/source/aruco_detect.py",
+      "size": 10232,
+      "sha256": "f0b098340f15262f8f67fcb28f882118871f7445125f217a2bc8d5f51338869c",
+      "git_disposition": "archived_source"
+    },
+    {
+      "source": "bottle_grasp.py",
+      "destination": "History/legacy-calibration-20261008/source/bottle_grasp.py",
+      "size": 5860,
+      "sha256": "e8d3a558ebf8d503196b445d19e03c493902036f57aa53493c033b73f0fbd057",
+      "git_disposition": "archived_source"
+    },
+    {
+      "source": "bottle_grasp_server.py",
+      "destination": "History/legacy-calibration-20261008/source/bottle_grasp_server.py",
+      "size": 37726,
+      "sha256": "a11567caaeb12cc36cba1f87886bed28f9dfe2fd9a5ec364a1a27e00bd78cbfd",
+      "git_disposition": "archived_source"
+    },
+    {
+      "source": "calib_web.py",
+      "destination": "History/legacy-calibration-20261008/source/calib_web.py",
+      "size": 16246,
+      "sha256": "44697f88ef3f9ce05b68b8e932630aac4fa6d730baf013d4e6d6bb4978c2bc71",
+      "git_disposition": "archived_source"
+    },
+    {
+      "source": "calibrate.py",
+      "destination": "History/legacy-calibration-20261008/source/calibrate.py",
+      "size": 6842,
+      "sha256": "8e26eb48adb2a60914ec9177467ceaba67f589494861c5421e4e17e65994eac2",
+      "git_disposition": "archived_source"
+    },
+    {
+      "source": "camera_params.py",
+      "destination": "History/legacy-calibration-20261008/source/camera_params.py",
+      "size": 1795,
+      "sha256": "1d274ebf0c7cddedce9c2e2502391616c884a6fe3789b09f647eaabdc3a176a1",
+      "git_disposition": "archived_source"
+    },
+    {
+      "source": "captured_images/img_0001.npz",
+      "destination": "History/legacy-calibration-20261008/source/captured_images/img_0001.npz",
+      "size": 3098,
+      "sha256": "c67784f3dac60c9a4ffa8bb25012b72a27fa9fdfd0e7acff6fbda5a54ad15af8",
+      "git_disposition": "manifest_only_local_payload"
+    },
+    {
+      "source": "charuco_calib_result.json",
+      "destination": "History/legacy-calibration-20261008/source/charuco_calib_result.json",
+      "size": 358,
+      "sha256": "ac396d887ea07f74fa5571ae4f2fcd7da008e322254a35cb801395d7650ebf34",
+      "git_disposition": "archived_source"
+    },
+    {
+      "source": "charuco_calibrate.py",
+      "destination": "History/legacy-calibration-20261008/source/charuco_calibrate.py",
+      "size": 15307,
+      "sha256": "b95009437bc24ceabca90843635c35a3a23be0c28d67d279edaa35691d130f29",
+      "git_disposition": "archived_source"
+    },
+    {
+      "source": "coordinate_transform.py",
+      "destination": "History/legacy-calibration-20261008/source/coordinate_transform.py",
+      "size": 8369,
+      "sha256": "20441cc6f88a2923604c0dd47ee5510deb71a833c0ab9fc235d1713a43a66126",
+      "git_disposition": "archived_source"
+    },
+    {
+      "source": "d435_calibrate.py",
+      "destination": "History/legacy-calibration-20261008/source/d435_calibrate.py",
+      "size": 13928,
+      "sha256": "0210d40f6cf6823264b9e999fd9ef67699fcb6b29999863bd84a2f7f159ebaca",
+      "git_disposition": "archived_source"
+    },
+    {
+      "source": "d435_grasp.py",
+      "destination": "History/legacy-calibration-20261008/source/d435_grasp.py",
+      "size": 27320,
+      "sha256": "ddae84ea5b7380b40b17f6982dd6dc517d0942755457bbbe71dc0b326fb0f4fe",
+      "git_disposition": "archived_source"
+    },
+    {
+      "source": "d435_handeye_result.json",
+      "destination": "History/legacy-calibration-20261008/source/d435_handeye_result.json",
+      "size": 508,
+      "sha256": "5d60783075151d2b3e8bd82b0ad4b79252ea1c86bad437e4dff78eacc01421f8",
+      "git_disposition": "archived_source"
+    },
+    {
+      "source": "d435_test.py",
+      "destination": "History/legacy-calibration-20261008/source/d435_test.py",
+      "size": 5733,
+      "sha256": "04446c05832d7d479ef5b44e0d58099ba322cb8a5d18ada806c96a450087200c",
+      "git_disposition": "archived_source"
+    },
+    {
+      "source": "d435_validate.py",
+      "destination": "History/legacy-calibration-20261008/source/d435_validate.py",
+      "size": 14151,
+      "sha256": "1c892a673265579ed7851196a363ae593bd98fa339dfb8f8b65f8d012dca26da",
+      "git_disposition": "archived_source"
+    },
+    {
+      "source": "demo_bg_detect.py",
+      "destination": "History/legacy-calibration-20261008/source/demo_bg_detect.py",
+      "size": 7412,
+      "sha256": "75fbf1b41e264c4b33e31454284e508c3b3285c7fe6ee1e21c932523da7a3884",
+      "git_disposition": "archived_source"
+    },
+    {
+      "source": "demo_detect.py",
+      "destination": "History/legacy-calibration-20261008/source/demo_detect.py",
+      "size": 4757,
+      "sha256": "bb82cb5ce8f1feb67c390f4164542188ac57f71aedb7769a4a5b1e4e5bc61c68",
+      "git_disposition": "archived_source"
+    },
+    {
+      "source": "demo_pick_place.py",
+      "destination": "History/legacy-calibration-20261008/source/demo_pick_place.py",
+      "size": 6432,
+      "sha256": "29e0e4fb5d6b3cb8e0146c6341b911853c3dfe2373b9d87bc4db6e47dcd2bc68",
+      "git_disposition": "archived_source"
+    },
+    {
+      "source": "demo_yolo_detect.py",
+      "destination": "History/legacy-calibration-20261008/source/demo_yolo_detect.py",
+      "size": 6947,
+      "sha256": "8d4e9f8f89e421de76b4c9cff747f64b713aad4f4e9df20fc6193110a1e33e13",
+      "git_disposition": "archived_source"
+    },
+    {
+      "source": "demo_yolo_fast.py",
+      "destination": "History/legacy-calibration-20261008/source/demo_yolo_fast.py",
+      "size": 6336,
+      "sha256": "40ef2fc66dfeebe7763f63589e068927acca219a45de3edcea3caa7e29b99ebf",
+      "git_disposition": "archived_source"
+    },
+    {
+      "source": "desk_ref.json",
+      "destination": "History/legacy-calibration-20261008/source/desk_ref.json",
+      "size": 444,
+      "sha256": "275ccc56a2b500b8a5ecac7f297156c7c1289c0b2a7b446c6c73309405032819",
+      "git_disposition": "archived_source"
+    },
+    {
+      "source": "desktop_calib_result.json",
+      "destination": "History/legacy-calibration-20261008/source/desktop_calib_result.json",
+      "size": 158,
+      "sha256": "96a591c2c38eb1857d6bf1df36beecaba03e9edde3246b5329bf8c2eec6df803",
+      "git_disposition": "archived_source"
+    },
+    {
+      "source": "handeye_calib.py",
+      "destination": "History/legacy-calibration-20261008/source/handeye_calib.py",
+      "size": 13352,
+      "sha256": "07994d8ed448721fcc2b9fb1f39e29682fad04a9985452ca684ef784323d3011",
+      "git_disposition": "archived_source"
+    },
+    {
+      "source": "handeye_result.json",
+      "destination": "History/legacy-calibration-20261008/source/handeye_result.json",
+      "size": 463,
+      "sha256": "be423a4819ac35cde9e68bda793ac5850b5a5844e1b93c4dcebf81ace9c10ede",
+      "git_disposition": "archived_source"
+    },
+    {
+      "source": "ros2_depth_bridge.py",
+      "destination": "History/legacy-calibration-20261008/source/ros2_depth_bridge.py",
+      "size": 5730,
+      "sha256": "baea679829e0690ba3fca6ee0e058106a12b08b3dacb6705fce99125c3937389",
+      "git_disposition": "archived_source"
+    },
+    {
+      "source": "seucm_model.py",
+      "destination": "History/legacy-calibration-20261008/source/seucm_model.py",
+      "size": 6177,
+      "sha256": "64685d20da53f2c98b6094358406e6cacad496de8adc98e2a32ff50bf9f945d2",
+      "git_disposition": "archived_source"
+    },
+    {
+      "source": "visual_grasp.py",
+      "destination": "History/legacy-calibration-20261008/source/visual_grasp.py",
+      "size": 9106,
+      "sha256": "185be6914bc8c7eb29fb9bc3fb5e69e020ef44a61142ad6a82cd54e277b0bdf7",
+      "git_disposition": "archived_source"
+    },
+    {
+      "source": "yolov8n.onnx",
+      "destination": "History/legacy-calibration-20261008/source/yolov8n.onnx",
+      "size": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "git_disposition": "manifest_only_local_payload"
+    },
+    {
+      "source": "yolov8n.pt",
+      "destination": "History/legacy-calibration-20261008/source/yolov8n.pt",
+      "size": 6549796,
+      "sha256": "f59b3d833e2ff32e194b5bb8e08d211dc7c5bdf144b90d2c8412c47ccfc83b36",
+      "git_disposition": "manifest_only_local_payload"
+    }
+  ]
+}

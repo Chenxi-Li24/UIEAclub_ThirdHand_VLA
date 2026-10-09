@@ -23,6 +23,7 @@ class YoloPersonTracker(YoloPersonDetector):
         super().__init__(config, model=model)
         self.tracker_path = str(APP_ROOT / "configs" / "person-botsort.yaml")
         self.last_frame_at = None
+        self.epoch = 0
         self.inference_ms = 0.0
         self.detection_iou = float(config.get("person_tracking", {}).get("detection_iou", .45))
 
@@ -38,6 +39,7 @@ class YoloPersonTracker(YoloPersonDetector):
         if not self.enabled or not self.available:
             raise RuntimeError(self.error or "person tracking unavailable")
         if self.last_frame_at is not None and received_at - self.last_frame_at > 1.0:
+            self.epoch += 1
             for tracker in getattr(getattr(self.model, "predictor", None), "trackers", []):
                 tracker.reset()
         self.last_frame_at = received_at

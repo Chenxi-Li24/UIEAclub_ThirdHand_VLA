@@ -1,0 +1,12 @@
+{
+  "path": "local/models/vision/YOLOv10n_gestures.pt",
+  "sha256": "bf628ce3a1638ab19a7ab635c0f674cfec2988989f42f1eef394a6dce5a35b9f",
+  "bytes": 22442394,
+  "url": "https://rndml-team-cv.obs.ru-moscow-1.hc.sbercloud.ru/datasets/hagrid_v2/models/YOLOv10n_gestures.pt",
+  "upstream": "https://github.com/hukenovs/hagrid",
+  "upstream_revision": "080e18917376ec935e453cd0e599c23478c7e98f",
+  "class": "palm",
+  "observed_class_id": 20,
+  "license_reference": "https://github.com/hukenovs/hagrid/blob/master/license/en_us.pdf",
+  "note": "Official checkpoint; label is resolved from model.names at runtime. Consult upstream license terms before redistributing weights."
+}

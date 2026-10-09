@@ -100,6 +100,33 @@ person_tracking:
   overlap_pause_iou: 0.35
   # Suppress duplicate boxes for one person before BoT-SORT association.
   detection_iou: 0.45
+ok_switch:
+  # Identity selection only. Shares Dummy RGB frames; no camera/motor owner.
+  # Legacy section name; the trigger is now palm (open hand), not OK.
+  enabled: true
+  model_path: "local/models/vision/YOLOv10n_gestures.pt"
+  device: "cpu"
+  imgsz: 640
+  hz: 8
+  min_confidence: 0.65
+  hold_s: 0.10
+  confirm_frames: 3
+  # Three accepted same-owner palms in the last four distinct results;
+  # the latest result must be accepted. A missing hand is a negative vote.
+  confirmation_window_frames: 4
+  max_confirmation_gap_s: 0.35
+  max_result_age_s: 0.50
+  release_s: 0.30
+  cooldown_s: 1.00
+  # Same-frame shoulder/elbow/wrist chain. Never fall back to hand-in-body ROI.
+  pose_model_path: "local/models/vision/yolov8n-pose.pt"
+  pose_keypoint_min_confidence: 0.35
+  pose_body_min_iou: 0.45
+  pose_body_iou_margin: 0.15
+  wrist_hand_padding: 0.35
+  # A real observed face may briefly disappear; body identity must stay unique.
+  face_binding_ttl_s: 0.80
+  face_min_confidence: 0.80
 face_lock:
   # Pause on missing/ambiguous frames. Confirmed loss can select another face.
   auto_reacquire: true

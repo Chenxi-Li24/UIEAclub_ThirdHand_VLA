@@ -18,6 +18,7 @@ function loadConfig(env = process.env) {
     host: env.VISION_HOST || '127.0.0.1',
     port: parsePort(env.VISION_PORT, 3100),
     meituanHost: env.MEITUAN_VISION_HOST || '127.0.0.1',
+    meituanWorktree: env.MEITUAN_WORKTREE || null,
     meituanPort: env.MEITUAN_VISION_PORT == null || env.MEITUAN_VISION_PORT === ''
       ? null : parsePort(env.MEITUAN_VISION_PORT, 1035),
     readyFile: env.THIRDHAND_READY_FILE ||

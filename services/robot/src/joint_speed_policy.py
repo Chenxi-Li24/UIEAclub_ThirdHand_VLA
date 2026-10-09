@@ -13,8 +13,8 @@ def bounded_speed_percent(value=MAX_SPEED_PERCENT):
         raise ValueError("speed percent must be finite and positive")
     return min(speed, MAX_SPEED_PERCENT)
 
-def validate_sdk_speed_reference(sdk_path):
-    text = (Path(sdk_path) / "src/config/robot_kinematics.yaml").read_text()
+def _validate_config_reference(config_path):
+    text = config_path.read_text()
     section = re.search(r"^joint_trajectory:\s*\n((?:[ \t].*\n|\n)*)", text, re.M)
     match = re.search(r"^  max_vel_limits:\s*(\[[^\n]+?\])", section.group(1), re.M) if section else None
     try:
@@ -25,4 +25,21 @@ def validate_sdk_speed_reference(sdk_path):
     except (ValueError, TypeError):
         valid = False
     if not valid:
-        raise ValueError("SDK joint speed reference must match 300/1000 deg/s before hardware connection")
+        raise ValueError(
+            f"SDK joint speed reference must match 300/1000 deg/s before hardware connection: {config_path}"
+        )
+
+
+def validate_sdk_speed_reference(sdk_path, module_path=None):
+    source_config = Path(sdk_path) / "src/config/robot_kinematics.yaml"
+    _validate_config_reference(source_config)
+    if module_path is None:
+        return
+    # stage_runtime packages the binding beside startouch_sdk/src/config.
+    runtime_config = Path(module_path).resolve().parent / "src/config/robot_kinematics.yaml"
+    _validate_config_reference(runtime_config)
+    if runtime_config.read_bytes() != source_config.read_bytes():
+        raise ValueError(
+            "SDK runtime configuration differs from canonical source; "
+            f"synchronize {runtime_config} from {source_config} before hardware connection"
+        )

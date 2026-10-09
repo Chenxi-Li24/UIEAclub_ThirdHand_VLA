@@ -495,8 +495,8 @@
     },
     {
       "path": "local/generated/startouch-python/startouch_sdk/src/config/robot_kinematics.yaml",
-      "size": 12167,
-      "sha256": "f84dd8da8206169bc97d72c35f6a9ec058e79cc5ccf68e14c3b0c102dc5cd9d1"
+      "size": 12251,
+      "sha256": "e88cbf578f1262386adcf7edf40a5638513cdc59a5da4fe938e88a31addd35ce"
     },
     {
       "path": "local/models/asr/high/Qwen3-0.6B/config.json",

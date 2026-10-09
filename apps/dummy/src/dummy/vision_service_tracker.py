@@ -13,7 +13,7 @@ from PIL import Image
 
 from .filters import OneEuro
 from .face_lock_tracker import FaceLockTracker
-from .face_person_selector import FacePersonSelector
+from .face_person_selector import FacePersonSelector, overlap
 from .mediapipe_face import MediaPipeFaceDetector
 from .person_lock_tracker import Candidate, PersonLockTracker
 from .rgbd_target import RgbdTargetBuilder
@@ -21,6 +21,8 @@ from .tracker import Target
 from .yolo_person_detector import YoloPersonDetector
 from .yolo_person_tracker import YoloPersonTracker
 from .yunet_face import YuNetFaceDetector
+from .ok_gesture import GestureWorker, HagridDetector, OkSwitch
+from .person_pose import PoseDetector
 
 
 class MjpegReader:
@@ -178,6 +180,18 @@ class VisionServiceTracker:
         self.yolo_person = (YoloPersonTracker(person_config) if self.person_tracking_enabled
                             else YoloPersonDetector(person_config))
         self._last_frame_sequence = None
+        self.ok_options = config.get("ok_switch", {})
+        self.ok_enabled = self.person_tracking_enabled and bool(self.ok_options.get("enabled", False))
+        self.ok_worker = None
+        self.ok_switch = OkSwitch(self.ok_options)
+        self.ok_error = None
+        self._ok_lock = threading.Lock()
+        self._ok_allowed = True
+        self._ok_epoch = 0
+        self._ok_resume_after = 0.
+        self._person_epoch = 0
+        self._closed = threading.Event()
+        self._lifecycle_lock = threading.Lock()
         self.face = None
         self.upperbody = None
         if hasattr(cv2, "CascadeClassifier"):
@@ -217,25 +231,134 @@ class VisionServiceTracker:
         return None
 
     def open(self):
-        self.reader.start()
+        if self.ok_enabled:
+            try:
+                detector = HagridDetector(self.ok_options)
+                with self._lifecycle_lock:
+                    if self._closed.is_set():
+                        return False
+                pose_detector = PoseDetector(self.ok_options)
+                with self._lifecycle_lock:
+                    if self._closed.is_set():
+                        return False
+                    self.ok_worker = GestureWorker(detector, hz=self.ok_options.get("hz", 8),
+                                                   pose_detector=pose_detector)
+                    self.ok_worker.start()
+            except Exception as exc:
+                self.ok_error = str(exc)
+        with self._lifecycle_lock:
+            if self._closed.is_set():
+                return False
+            self.reader.start()
         deadline = time.time() + 5
         while time.time() < deadline:
+            if self._closed.is_set():
+                return False
             frame, error = self.reader.latest()
             if frame is not None:
                 return True
-            time.sleep(0.1)
+            self._closed.wait(0.1)
         return False
 
     def close(self):
-        self.reader.close()
-        if self.yunet_face is not None:
-            self.yunet_face.close()
-        if self.mediapipe_face is not None:
-            self.mediapipe_face.close()
+        with self._lifecycle_lock:
+            self._closed.set()
+        errors = []
+        for resource in (self.reader, self.ok_worker, self.yunet_face, self.mediapipe_face):
+            if resource is not None:
+                try:
+                    resource.close()
+                except Exception as exc:
+                    errors.append(exc)
+        if errors:
+            raise RuntimeError("Dummy resource cleanup failed") from errors[0]
+
+    def close_background_workers(self):
+        with self._lifecycle_lock:
+            self._closed.set()
+        if self.ok_worker is not None:
+            self.ok_worker.close()
+
+    def set_switching_allowed(self, allowed):
+        with self._ok_lock:
+            if self._ok_allowed != bool(allowed):
+                self._ok_allowed = bool(allowed)
+                self._ok_epoch += 1
+                if allowed:
+                    self._ok_resume_after = time.time()
+                self.ok_switch.reset_confirmation("keyword_busy" if not allowed else "waiting_for_gesture")
+                if self.face_person is not None:
+                    self.face_person.invalidate_body_binding()
+
+    def _process_ok(self, frame, faces, bodies, received_at):
+        worker = self.ok_worker
+        if worker is None or worker.error or self._last_frame_sequence is None:
+            return {"enabled": self.ok_enabled, "reason": self.ok_error or
+                    (worker.error if worker else None) or "disabled", "progress": 0.}
+        with self._ok_lock:
+            if self._ok_allowed and received_at < self._ok_resume_after:
+                self.ok_switch.reject_uncertain("keyword_frame_before_resume")
+                return {"enabled": True, **self.ok_switch.debug}
+            result = worker.latest()
+            identity = self.ok_switch.update(result, now=time.time(), bodies=bodies,
+                                             faces=faces, epoch=self._ok_epoch, allowed=self._ok_allowed,
+                                             scene_epoch=self._person_epoch, observed_at=received_at)
+            debug = dict(self.ok_switch.debug)
+            debug.update(enabled=True, gesture_frame_id=result.frame_id if result else None,
+                         ok_count=len(result.hands) if result else 0,
+                         inference_ms=result.inference_ms if result else None,
+                         pose_inference_ms=result.pose_inference_ms if result else None,
+                         receive_age_ms=(time.time()-result.received_at)*1000 if result else None)
+            if identity is not None:
+                previous_generation = self.face_person.generation
+                switched = self.face_person.switch_to_person(identity, faces, bodies, now=received_at)
+                debug["reason"] = ("switched" if self.face_person.generation != previous_generation
+                                   else "already_selected") if switched else "current_association_rejected"
+            debug["hands"] = self._preview_hands(result, bodies)
+            if self._ok_allowed:
+                worker.submit(frame, self._last_frame_sequence, received_at, self._ok_epoch, bodies, faces)
+            return debug
+
+    def _preview_hands(self, result, bodies):
+        # This body-relative mapping is display-only, never switching evidence.
+        if (result is None or result.epoch != self._ok_epoch or not self._ok_allowed
+                or not 0 <= time.time()-result.received_at <= self.ok_switch.max_age_s):
+            return []
+        previews = []
+        for hand in result.hands:
+            old = self.ok_switch.owner(hand, result.bodies, result.poses)
+            evidence = list(self.ok_switch.pose_matcher.evidence)
+            raw = dict(x=hand.x, y=hand.y, w=hand.w, h=hand.h, score=hand.score, label=hand.label,
+                       projected=result.frame_id != self._last_frame_sequence,
+                       source_frame_id=result.frame_id, person_track_id=None,
+                       raw_bbox=[hand.x, hand.y, hand.w, hand.h], arms=[])
+            if len(old) != 1:
+                previews.append(raw)
+                continue
+            current = [b for b in bodies if b.track_id == old[0].track_id]
+            if len(current) != 1 or overlap(old[0], current[0]) < .5:
+                previews.append(raw)
+                continue
+            old, body = old[0], current[0]
+            projected = result.frame_id != self._last_frame_sequence
+            sx, sy = body.w/old.w, body.h/old.h
+            arms = [[(body.x+(x-old.x)*sx, body.y+(y-old.y)*sy) for x, y in e['arm_xy']]
+                    for e in evidence if e['person_track_id'] == body.track_id]
+            previews.append(dict(x=body.x+(hand.x-old.x)*sx, y=body.y+(hand.y-old.y)*sy,
+                                 w=hand.w*sx, h=hand.h*sy, score=hand.score, label=hand.label,
+                                 projected=projected, source_frame_id=result.frame_id,
+                                 person_track_id=body.track_id, raw_bbox=raw['raw_bbox'], arms=arms))
+        return previews
 
     @property
     def face_detector(self):
         return self.yunet_face if self.face_detector_backend == "yunet" else self.mediapipe_face
+
+    def _invalidate_camera_evidence(self, reason):
+        if self.face_person is not None:
+            with self._ok_lock:
+                self.face_person.invalidate_body_binding()
+                self.ok_switch.invalidate_observations(reason, time.time())
 
     def read_frame(self):
         if hasattr(self.reader, "latest_packet"):
@@ -244,16 +367,19 @@ class VisionServiceTracker:
             frame, error = self.reader.latest()
             sequence, received_at = None, time.time()
         if frame is None:
+            self._invalidate_camera_evidence('vision_stream_unavailable')
             if self.allow_health_fallback and not self.face_only:
                 target, health_error = self._read_health_target()
                 return target, None, error or health_error
             return Target(False, w=self.width, h=self.height, kind="vision_stream_unavailable", ts=time.time()), None, error
         now = time.time()
         frame_age = now - float(received_at or 0.0)
+        self.last_debug = {**self.last_debug, 'frame_received_at': received_at}
         if received_at and frame_age > self.max_frame_age_s:
+            self._invalidate_camera_evidence('vision_frame_stale')
             stale_error = f"camera frame stale ({frame_age:.2f}s)"
             return (
-                Target(False, w=frame.shape[1], h=frame.shape[0], kind="vision_frame_stale", ts=now),
+                Target(False, w=frame.shape[1], h=frame.shape[0], kind="vision_frame_stale", ts=received_at),
                 frame,
                 error or stale_error,
             )
@@ -294,13 +420,27 @@ class VisionServiceTracker:
             candidates.append(Candidate(target.u, target.v, bbox[2], bbox[3], target.score, target.kind))
         if self.face_person is not None:
             bodies = self.yolo_person.track(frame, received_at=received_at)
-            target = self.face_person.update(candidates, bodies, now=received_at, frame_size=(w, h))
+            epoch = getattr(self.yolo_person, "epoch", 0)
+            if epoch != self._person_epoch:
+                self._person_epoch = epoch
+                with self._ok_lock:
+                    self._ok_epoch += 1
+                    generation = self.face_person.generation
+                    self.face_person = FacePersonSelector(self.face_person.config)
+                    self.face_person.generation = generation
+            ok_debug = self._process_ok(frame, candidates, bodies, received_at)
+            with self._ok_lock:
+                target = self.face_person.update(candidates, bodies, now=received_at, frame_size=(w, h),
+                                                  selection_allowed=self._ok_allowed
+                                                  and received_at >= self._ok_resume_after)
             self.last_debug = dict(self.face_person.last_debug)
+            self.last_debug["ok_switch"] = ok_debug
             self.last_debug["person_detection_ms"] = self.yolo_person.inference_ms
         else:
             target = self.face_lock.update(candidates, now=received_at, frame_size=(w, h))
             self.last_debug = dict(self.face_lock.last_debug)
         self.last_debug["face_detector"] = self.face_detector_backend
+        self.last_debug['frame_received_at'] = received_at
         self.last_target = target
         return target
 

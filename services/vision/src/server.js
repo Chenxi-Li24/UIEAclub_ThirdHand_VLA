@@ -7,7 +7,6 @@ const http = require('node:http');
 const path = require('node:path');
 const { WebSocket, WebSocketServer } = require('ws');
 const { CameraProcess } = require('./camera-process');
-const { createMeituanRawView } = require('./meituan-raw-view');
 const { loadConfig } = require('./config');
 
 const STREAMS = new Map([
@@ -86,9 +85,20 @@ function streamUnavailable(status, kind) {
 function createVisionService(options = {}) {
   const config = { ...loadConfig(options.env), ...options };
   const camera = options.camera || new CameraProcess(config);
-  const meituanView = config.meituanPort == null ? null : createMeituanRawView({
-    camera, host: config.meituanHost, port: config.meituanPort
-  });
+  let meituanView = null;
+  if (config.meituanPort != null) {
+    try {
+      if (!config.meituanWorktree) throw new Error('MEITUAN_WORKTREE is required for the optional listener');
+      const { createMeituanRawView } = require(path.join(
+        config.meituanWorktree, 'services/vision/src/meituan-raw-view',
+      ));
+      meituanView = createMeituanRawView({
+        camera, host: config.meituanHost, port: config.meituanPort,
+      });
+    } catch (error) {
+      console.error('[Meituan Vision] optional listener unavailable: ' + (error.stack || error.message));
+    }
+  }
   let closing = false;
 
   const server = http.createServer(async (request, response) => {

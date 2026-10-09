@@ -45,6 +45,7 @@ test('3100 and Meituan receive the same raw frame from one camera owner', async 
   const camera = new SharedCamera();
   const service = createVisionService({
     camera, host: '127.0.0.1', port: 0,
+    meituanWorktree: path.resolve(__dirname, '../../..'),
     meituanHost: '127.0.0.1', meituanPort: 0,
     readyFile: path.join(runtime, 'vision.ready')
   });
@@ -113,6 +114,7 @@ test('occupied Meituan port does not take down the existing vision listener', as
   const camera = new SharedCamera();
   const service = createVisionService({
     camera, host: '127.0.0.1', port: 0,
+    meituanWorktree: path.resolve(__dirname, '../../..'),
     meituanHost: '127.0.0.1', meituanPort: occupied.address().port,
     readyFile: path.join(runtime, 'vision.ready')
   });

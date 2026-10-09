@@ -80,3 +80,90 @@ def test_bad_runtime_reference_is_rejected_without_sdk_construction(tmp_path):
     config.write_text("joint_trajectory:\n  max_vel_limits: [5.5,5.5,5.5,20.9,20.9,20.9]\n")
     with pytest.raises(ValueError, match="speed reference"):
         validate_sdk_speed_reference(str(sdk))
+
+
+def _sdk_config_pair(tmp_path, runtime_text=None):
+    import json
+    reference = [math.radians(value) for value in (300, 300, 300, 1000, 1000, 1000)]
+    text = "kinematics:\n  tool: unchanged\njoint_trajectory:\n  max_vel_limits: " + json.dumps(reference) + "\n"
+    sdk = tmp_path / "sdk"
+    module = tmp_path / "generated/startouch_sdk/interface_py"
+    source = sdk / "src/config/robot_kinematics.yaml"
+    runtime = module.parent / "src/config/robot_kinematics.yaml"
+    source.parent.mkdir(parents=True)
+    runtime.parent.mkdir(parents=True)
+    module.mkdir()
+    source.write_text(text)
+    runtime.write_text(text if runtime_text is None else runtime_text)
+    return sdk, module, source, runtime
+
+
+def test_generated_speed_reference_is_checked_with_canonical_source(tmp_path):
+    from joint_speed_policy import validate_sdk_speed_reference
+    sdk, module, _, _ = _sdk_config_pair(
+        tmp_path, "joint_trajectory:\n  max_vel_limits: [5.5,5.5,5.5,20.9,20.9,20.9]\n"
+    )
+    with pytest.raises(ValueError, match="speed reference"):
+        validate_sdk_speed_reference(sdk, module_path=module)
+
+
+def test_matching_generated_config_is_accepted(tmp_path):
+    from joint_speed_policy import validate_sdk_speed_reference
+    sdk, module, _, _ = _sdk_config_pair(tmp_path)
+    validate_sdk_speed_reference(sdk, module_path=module)
+
+
+def test_generated_non_speed_config_drift_is_rejected(tmp_path):
+    from joint_speed_policy import validate_sdk_speed_reference
+    sdk, module, source, runtime = _sdk_config_pair(tmp_path)
+    runtime.write_text(source.read_text().replace("tool: unchanged", "tool: drifted"))
+    with pytest.raises(ValueError, match="configuration differs"):
+        validate_sdk_speed_reference(sdk, module_path=module)
+
+
+def test_missing_generated_config_is_rejected(tmp_path):
+    from joint_speed_policy import validate_sdk_speed_reference
+    sdk, module, _, runtime = _sdk_config_pair(tmp_path)
+    runtime.unlink()
+    with pytest.raises(FileNotFoundError):
+        validate_sdk_speed_reference(sdk, module_path=module)
+
+
+def test_bridge_rejects_generated_drift_before_constructing_sdk(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+    sdk, module, _, _ = _sdk_config_pair(
+        tmp_path, "joint_trajectory:\n  max_vel_limits: [5.5,5.5,5.5,20.9,20.9,20.9]\n"
+    )
+    calls, events = [], []
+
+    def construct(**kwargs):
+        calls.append(kwargs)
+        raise RuntimeError("fake constructor reached")
+
+    monkeypatch.setitem(sys.modules, "startouchclass", SimpleNamespace(SingleArm=construct))
+    monkeypatch.setattr(bridge_module, "SDK_PATH", str(sdk))
+    monkeypatch.setattr(bridge_module, "MODULE_PATH", str(module))
+    monkeypatch.setattr(bridge_module, "SIMULATE", False)
+    monkeypatch.setattr(bridge_module, "DRY_RUN", True)
+    monkeypatch.setattr(bridge_module, "REQUIRE_CAN_RX", False)
+    monkeypatch.setattr(bridge_module, "emit", lambda event, **data: events.append((event, data)))
+    monkeypatch.setattr(bridge_module.RobotBridge, "_acquire_control_lock", lambda self: None)
+    monkeypatch.setattr(bridge_module.RobotBridge, "_release_control_lock", lambda self: None)
+    monkeypatch.setattr(bridge_module.RobotBridge, "_read_can_rx_packets", lambda self: 0)
+    robot = bridge_module.RobotBridge()
+    try:
+        robot.connect()
+        assert calls == [], "Mismatched generated config must never reach the SDK constructor"
+        assert robot.connected is False
+        failure = next(data for event, data in events if event == "connection" and not data["connected"])
+        assert "speed reference" in failure["error"]
+    finally:
+        robot.shutdown_requested.set()
+        robot.motion_thread.join(1)
+        robot.state_thread.join(1)
+
+
+def test_delivered_generated_config_matches_canonical_sdk():
+    source = ROOT / "local/sdk/startouch/src/config/robot_kinematics.yaml"
+    generated = ROOT / "local/generated/startouch-python/startouch_sdk/src/config/robot_kinematics.yaml"
+    assert generated.read_bytes() == source.read_bytes()

@@ -743,7 +743,7 @@ class RobotBridge:
                     )
                 if module_path not in sys.path:
                     sys.path.insert(0, module_path)
-                validate_sdk_speed_reference(SDK_PATH)
+                validate_sdk_speed_reference(SDK_PATH, module_path=module_path)
                 from startouchclass import SingleArm
 
                 arm = SingleArm(

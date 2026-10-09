@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { STLLoader } from 'three/addons/loaders/STLLoader.js';
 import { ColladaLoader } from 'three/addons/loaders/ColladaLoader.js';
-import { VoiceControl } from './voice-control.js?v=11';
+import { VoiceControl } from './voice-control.js?v=12';
 console.log('[main.js] Modules imported, THREE keys:', Object.keys(THREE).length);
 
 function formatAgentTrace(payload) {
@@ -660,7 +660,8 @@ class UIControls {
           Number(input.max),
           `J${i + 1}`,
         );
-        input.setCustomValidity(validation.message);
+        if (globalThis.ThirdHandI18n) globalThis.ThirdHandI18n.setValidity(input, validation.message);
+        else input.setCustomValidity(validation.message);
         row.classList.toggle('control-invalid', !validation.valid);
         error.textContent = validation.message;
         if (!validation.valid) {
@@ -746,7 +747,8 @@ class UIControls {
     const gripperError = document.getElementById('gripper-error');
     const applyGripperPercent = (rawValue, { report = false } = {}) => {
       const validation = boundedNumberValidation(rawValue, 0, 100, '夹爪开度');
-      this.gripperInput.setCustomValidity(validation.message);
+      if (globalThis.ThirdHandI18n) globalThis.ThirdHandI18n.setValidity(this.gripperInput, validation.message);
+      else this.gripperInput.setCustomValidity(validation.message);
       this.gripperInput.closest('.sec-body')?.classList.toggle('control-invalid', !validation.valid);
       if (gripperError) gripperError.textContent = validation.message;
       if (!validation.valid) {
@@ -2108,7 +2110,8 @@ class UIControls {
         Number(input.max),
         `J${index + 1}`,
       );
-      input.setCustomValidity(validation.message);
+      if (globalThis.ThirdHandI18n) globalThis.ThirdHandI18n.setValidity(input, validation.message);
+      else input.setCustomValidity(validation.message);
       this.inputErrors[index].textContent = validation.message;
       input.closest('.joint-row')?.classList.toggle('control-invalid', !validation.valid);
       if (!validation.valid) {

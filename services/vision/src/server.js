@@ -100,6 +100,9 @@ function createVisionService(options = {}) {
     }
   }
   let closing = false;
+  let stateRelay=null;
+  const framePolicy=config.robotFramePolicyFile
+    ?require('./frames/robot_frame_normalization').loadPolicy(config.robotFramePolicyFile):null;
 
   const server = http.createServer(async (request, response) => {
     const pathname = new URL(request.url, 'http://localhost').pathname;
@@ -349,6 +352,12 @@ function createVisionService(options = {}) {
         server.once('error', reject);
         server.listen(config.port, config.host, resolve);
       });
+      if(framePolicy){
+        const address=server.address();
+        const host=['0.0.0.0','::'].includes(config.host)?'127.0.0.1':config.host;
+        stateRelay=require('./robot-state-relay').startRelay({robotUrl:config.robotWsUrl,
+          visionUrl:`ws://${host}:${address.port}/ws`,policy:framePolicy});
+      }
       if (meituanView) {
         try {
           const address = await meituanView.start();
@@ -373,6 +382,7 @@ function createVisionService(options = {}) {
     async close() {
       if (closing) return;
       closing = true;
+      stateRelay?.close();
       camera.off?.('event', broadcast);
       for (const client of wss.clients) client.terminate();
       await new Promise(resolve => wss.close(resolve));

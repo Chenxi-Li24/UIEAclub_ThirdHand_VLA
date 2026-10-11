@@ -2,8 +2,10 @@
 
 All Robot service joint, preset, alignment, and Cartesian motion routes use
 SDK speed-mode trajectory planning. The maximum commanded joint velocities
-are J1–J3: 15 degrees/s and J4–J6: 50 degrees/s. A lower configured speed scale
-remains lower; a higher scale is capped at 0.05. Legacy `time_sec` inputs
+are J1–J3: 30 degrees/s and J4–J6: 100 degrees/s at the explicitly authorized
+10% ceiling. The default remains 5% (15/50 degrees/s); a lower configured scale
+remains lower and a higher scale is capped at 0.10. Formal pregrasp and follow
+guards retain their separate 5% bounds. Legacy `time_sec` inputs
 cannot override this policy. Cartesian commands remain `move_l`; the separate
 20/30 mm/s and Cartesian angular-duration formulas are no longer applied.
 The SDK plans the complete joint trajectory, not just endpoint deltas, and
@@ -13,7 +15,8 @@ reports its planned duration on command completion.
 
 The SDK is an external, ignored runtime asset, not a bundled copy. Its
 `joint_trajectory.max_vel_limits` reference must be 300/1000 degrees/s
-(in radians). Scaling that reference by 0.05 gives the 15/50 degrees/s caps.
+(in radians). Scaling that reference by 0.05 gives 15/50 degrees/s, and by
+0.10 gives the approved 30/100 degrees/s ceiling.
 The Robot bridge checks the reference before constructing the hardware SDK
 and refuses connection if it does not match. This check is skipped in simulation.
 

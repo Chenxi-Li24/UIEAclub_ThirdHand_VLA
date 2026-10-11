@@ -1,6 +1,6 @@
 'use strict';
 // Pure pose conversion plus a content-bound configuration loader. No robot API.
-const fs=require('node:fs'),crypto=require('node:crypto'),YAML=require('yaml');
+const fs=require('node:fs'),path=require('node:path'),crypto=require('node:crypto'),YAML=require('yaml');
 const {validateRigidTransform,gripTargetToFlangePose,flangeToGripPose}=require('../../../../skills/manipulation/bottlegrasp/src/thirdhand_va/action/grasp/grip_transform');
 const hash=bytes=>crypto.createHash('sha256').update(bytes).digest('hex');
 function validatePolicy(policy){
@@ -15,6 +15,9 @@ function loadPolicy(filename){
   const raw=fs.readFileSync(filename),policy=JSON.parse(raw);
   policy.id='sha256:'+hash(raw);validatePolicy(policy);
   if(!Array.isArray(policy.bindings)||!policy.bindings.length)throw Error('frame_policy_bindings_required');
+  const resolve=source=>path.resolve(path.dirname(filename),source);
+  policy.sdk_config_path=resolve(policy.sdk_config_path);
+  policy.bindings=policy.bindings.map(binding=>({...binding,path:resolve(binding.path)}));
   for(const binding of policy.bindings){
     if(hash(fs.readFileSync(binding.path))!==binding.sha256)throw Error('frame_policy_source_changed');
   }

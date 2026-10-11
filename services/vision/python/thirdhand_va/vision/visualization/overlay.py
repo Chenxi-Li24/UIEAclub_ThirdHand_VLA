@@ -70,6 +70,8 @@ def render_overlay(
             labels.add("DEPTH ROI")
     selected_center: tuple[int, int] | None = None
     for index, track in enumerate(decision.tracks):
+        if track.state in {"occluded", "lost", "retired"}:
+            continue
         candidate = track.candidate
         blockers = list(track.blockers)
         if track.state != "confirmed":

@@ -17,6 +17,9 @@ function mapState(message,now=clock(),policy=null) {
       !finiteVector(message.joints_deg,6) || !finiteVector(message.velocities_deg_s,6)) return null;
   return {type:'arm_state',pose_frame:'robot_flange',connected:true,healthy:true,
     stationary:message.moving===false && message.velocities_deg_s.every(v=>Math.abs(v)<=2),
+    // Preserve the strict stationary geometry test, but distinguish an actual
+    // motion command from a velocity-only noise spike for segmentation resets.
+    motion_active:message.moving,feedback_invalidated:false,
     flange_position_m:[...message.flange_position_m],flange_euler_rad:[...message.flange_euler_rad],
     frame_normalization:{...message.frame_normalization},
     joints_deg:[...message.joints_deg],observed_monotonic_ns:message.producer_monotonic_ns};
@@ -32,7 +35,7 @@ function startRelay({robotUrl='ws://127.0.0.1:3000/ws',visionUrl='ws://127.0.0.1
   };
   const invalidate=()=>{
     if (last && !invalidated) {
-      send({...last,stationary:false});invalidated=true;stats.invalidations++;
+      send({...last,stationary:false,feedback_invalidated:true});invalidated=true;stats.invalidations++;
     }
   };
   const retry=callback=>{

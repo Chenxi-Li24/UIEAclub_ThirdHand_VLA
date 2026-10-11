@@ -98,23 +98,43 @@ function createWebGateway(options = {}) {
       activeDepthReason = error.code || 'active_depth_configuration_invalid';
     }
   }
-  const activeDepthReady = Boolean(coordinator);
+  let activeDepthReady = Boolean(coordinator);
   const graspEnv = options.env || process.env;
   const graspOwnerToken = options.graspOwnerToken || randomUUID();
   let graspController = options.graspController || null;
   let graspReason = null;
+  const webUrl=graspEnv.WEB_GRASP_WEB_URL || `http://${['0.0.0.0','::'].includes(config.host)?'127.0.0.1':config.host}:${config.port}`;
+  let tcpCalibrationRoutes=options.tcpCalibrationRoutes||null;
+  let tcpStore=options.tcpStore||null;
+  let tcpStateSource=null;
+  let tcpCalibrationReason=tcpCalibrationRoutes?null:'tcp_calibration_disabled';
+  if(!tcpCalibrationRoutes&&config.tcpCalibrationEnabled){
+    try{
+      const tcp=require('./tcp-calibration').createCalibration(config,{webUrl,
+        onArtifactsChanged:()=>robotProxy.broadcast(graspConfiguration()),
+        canMutate:()=>!graspController?.status().active&&!coordinator?.status().active&&!robotProxy.hasActiveControl?.()});
+      tcpCalibrationRoutes=tcp.routes;tcpStore=tcp.store;tcpStateSource=tcp.stateSource;tcpCalibrationReason=null;
+    }catch(error){tcpCalibrationReason=error.code||error.message||'tcp_calibration_configuration_invalid';}
+  }
   if (!graspController && graspEnv.WEB_GRASP_CONFIG) {
     try {
       const factory = require(graspEnv.WEB_GRASP_MODULE || './grasp');
-      graspController = factory.createFromFile(graspEnv.WEB_GRASP_CONFIG,{ownerToken:graspOwnerToken});
+      graspController = factory.createFromFile(graspEnv.WEB_GRASP_CONFIG,{ownerToken:graspOwnerToken,webUrl,tcpStore});
     } catch (error) { graspReason = error.code || error.message || 'grasp_configuration_invalid'; }
   }
-  const graspConfig = { type: 'grasp.config', enabled: Boolean(graspController),
-    gripOffsetM: graspController?.status().gripOffsetM || null, legacyGraspEnabled: false,
-    startEndpoint: '/api/grasp/start', reason: graspReason };
-  robotProxy.setGraspInterlock?.(() => graspController?.status());
+  if(graspController?.motionConfiguration?.().orientationMode==='horizontal'&&graspController.depthCoordinator){
+    coordinator?.close();coordinator=graspController.depthCoordinator;activeDepthReady=true;activeDepthReason=null;
+  }
+  function graspConfiguration(){
+    let tcp=null,reason=graspReason;
+    try{tcp=graspController?.tcpConfiguration?.()||null;}catch(error){reason=error.code||error.message||'tcp_unavailable';}
+    return {type:'grasp.config',enabled:Boolean(graspController)&&!reason,
+      gripOffsetM:graspController?.status().gripOffsetM||null,legacyGraspEnabled:false,
+      startEndpoint:'/api/grasp/start',reason,tcp,motion:graspController?.motionConfiguration?.()||null,calibrationPage:'/tcp-calibration.html'};
+  }
+  robotProxy.setGraspInterlock?.(() => graspController?.status().active?graspController.status():coordinator?.status());
   visionProxy.canForward = browser => {
-    if (!graspController?.status().active) return true;
+    if (!graspController?.status().active&&!coordinator?.status().active) return true;
     if (browser.readyState === browser.OPEN) browser.send(JSON.stringify({type:'error',code:'grasp_active'}));
     return false;
   };
@@ -133,7 +153,8 @@ function createWebGateway(options = {}) {
         activeDepth: { ready: activeDepthReady, startEndpoint: '/api/active-depth/start' },
         dummy: { statusEndpoint: '/api/dummy/status', startEndpoint: '/api/dummy/start',
           stopEndpoint: '/api/dummy/stop', frameEndpoint: '/api/dummy/frame' },
-        grasp: graspConfig,
+        grasp: graspConfiguration(),
+        tcpCalibration: tcpCalibrationRoutes?.config()||{ready:false,reason:tcpCalibrationReason,page:'/tcp-calibration.html'},
         language: {
           executionBackend: 'formal-3000-upstream',
           directional: {
@@ -154,7 +175,8 @@ function createWebGateway(options = {}) {
           voice: { url: config.voiceWsUrl },
           bottlePick: { url: config.language.vaHttpUrl },
           activeDepth: { ready: activeDepthReady, reason: activeDepthReason },
-          grasp: graspConfig,
+          grasp: graspConfiguration(),
+          tcpCalibration: tcpCalibrationRoutes?.config()||{ready:false,reason:tcpCalibrationReason},
         },
       });
       return;
@@ -220,6 +242,10 @@ function createWebGateway(options = {}) {
       });
       return;
     }
+    if(pathname.startsWith('/api/tcp-calibration/')){
+      if(!tcpCalibrationRoutes){writeJson(response,503,{error:tcpCalibrationReason});return;}
+      await tcpCalibrationRoutes.handle(request,response,pathname);return;
+    }
     if (request.method === 'POST' && ['/api/grasp/start', '/api/grasp/stop'].includes(pathname)) {
       if (request.headers.origin) {
         try {
@@ -241,6 +267,7 @@ function createWebGateway(options = {}) {
             writeJson(response, 400, {error:'request_invalid'}); return;
           }
           if (coordinator?.status().active) { writeJson(response, 409, {error:'active_depth_active'}); return; }
+          if(tcpStateSource?.snapshot().teachActive||tcpStateSource?.teachTransition){writeJson(response,409,{error:'tcp_calibration_teaching'});return;}
           writeJson(response, 202, await graspController.start(body.stableId,body.requestId));
         } else {
           if (!exactKeys(body, ['sessionId']) || typeof body.sessionId !== 'string' || !body.sessionId) {
@@ -251,7 +278,8 @@ function createWebGateway(options = {}) {
       } catch (error) {
         const status = error.code === 'body_too_large' ? 413
           : ['grasp_active','request_id_conflict'].includes(error.code) ? 409
-          : ['request_invalid','invalid_json'].includes(error.code) ? 400 : 500;
+          : ['request_invalid','invalid_json'].includes(error.code) ? 400
+          : /artifact|candidate|tcp_/.test(error.code||error.message||'') ? 503 : 500;
         writeJson(response,status,{error:error.code || error.message || 'grasp_error'});
       }
       return;
@@ -265,6 +293,10 @@ function createWebGateway(options = {}) {
     }
     if (request.method === 'POST'
         && (pathname === '/api/active-depth/start' || pathname === '/api/active-depth/stop')) {
+      if(request.headers.origin){
+        try{if(new URL(request.headers.origin).host!==request.headers.host){writeJson(response,403,{error:'origin_not_allowed'});return;}}
+        catch{writeJson(response,403,{error:'origin_not_allowed'});return;}
+      }
       if (!coordinator) {
         writeJson(response, 503, { error: activeDepthReason || 'active_depth_unavailable' });
         return;
@@ -275,6 +307,8 @@ function createWebGateway(options = {}) {
           if (graspController?.status().active) {
             writeJson(response, 409, {error:'grasp_active'}); return;
           }
+          if(robotProxy.hasActiveControl?.()){writeJson(response,409,{error:'robot_control_busy'});return;}
+          if(tcpStateSource?.snapshot().teachActive||tcpStateSource?.teachTransition){writeJson(response,409,{error:'tcp_calibration_teaching'});return;}
           if (!exactKeys(body, ['stableId']) || !Number.isSafeInteger(body.stableId)
               || body.stableId < 1 || body.stableId > 5) {
             writeJson(response, 400, { error: 'request_invalid' });
@@ -313,7 +347,7 @@ function createWebGateway(options = {}) {
       && /^[1-5]$/.test(pathname.slice('/api/vision/targets/'.length));
     if ((request.method === 'GET' && (visionGetRoutes.has(pathname) || isVisionTargetRoute)) ||
         (request.method === 'POST' && visionPostRoutes.has(pathname))) {
-      if (request.method === 'POST' && graspController?.status().active) {
+      if (request.method === 'POST' && (graspController?.status().active||coordinator?.status().active)) {
         writeJson(response,409,{error:'grasp_active'});return;
       }
       proxyHttpRequest(request, response, config.visionHttpUrl, pathname);
@@ -379,7 +413,7 @@ function createWebGateway(options = {}) {
       socket.send(JSON.stringify(coordinator.status()));
     }
     if (socket.readyState === socket.OPEN) {
-      socket.send(JSON.stringify(graspConfig));
+      socket.send(JSON.stringify(graspConfiguration()));
       if (graspController) socket.send(JSON.stringify(graspController.status()));
     }
   });
@@ -398,12 +432,18 @@ function createWebGateway(options = {}) {
         serviceId: 'web',
         pid: process.pid,
       })}\n`);
+      if(tcpStateSource&&config.port===0){
+        const address=server.address(),host=['0.0.0.0','::'].includes(config.host)?'127.0.0.1':config.host;
+        tcpStateSource.client.url=`ws://${host}:${address.port}/ws`;
+      }
+      tcpCalibrationRoutes?.connect?.();
       return server.address();
     },
     async close() {
       if (closing) return;
       closing = true;
     await dummyController.close();
+    await tcpCalibrationRoutes?.close?.();
     if (graspController) await graspController.close();
       if (coordinator) await coordinator.close();
       robotProxy.close();

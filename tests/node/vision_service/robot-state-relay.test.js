@@ -15,7 +15,7 @@ const state = (now,sequence=1) => ({type:'robot_state',connected:true,healthy:tr
 
 test('maps fresh SDK tool telemetry into canonical flange without changing timestamp or units', () => {
   assert.deepEqual(mapState(state(1000000000),1000000010,policy),{
-    type:'arm_state',pose_frame:'robot_flange',connected:true,healthy:true,stationary:true,
+    type:'arm_state',pose_frame:'robot_flange',connected:true,healthy:true,stationary:true,motion_active:false,feedback_invalidated:false,
     flange_position_m:[0.12666,0,0.18],flange_euler_rad:[0,0,0],joints_deg:[0,0,0,0,0,0],
     frame_normalization:{policy_id:policy.id,source_pose_frame:'sdk_tool',destination_pose_frame:'robot_flange'},
     observed_monotonic_ns:1000000000});
@@ -31,7 +31,9 @@ test('rejects invalid stale future and unmeasured telemetry', () => {
 });
 test('moving or nonstationary telemetry cannot establish stationary geometry', () => {
   assert.equal(mapState({...state(100),moving:true},100,policy).stationary,false);
+  assert.equal(mapState({...state(100),moving:true},100,policy).motion_active,true);
   assert.equal(mapState({...state(100),velocities_deg_s:[0,0,3,0,0,0]},100,policy).stationary,false);
+  assert.equal(mapState({...state(100),velocities_deg_s:[0,0,3,0,0,0]},100,policy).motion_active,false);
 });
 
 test('real sockets forward only state, reject replay and invalidate on source disconnect', async t => {
@@ -60,6 +62,7 @@ test('real sockets forward only state, reject replay and invalidate on source di
   r.send(JSON.stringify(state(clock(),1)));
   await waitFor(()=>incoming.length===2);
   assert.equal(incoming[1].stationary,false);
+  assert.equal(incoming[1].feedback_invalidated,true);
   r.send(JSON.stringify(state(clock(),2)));
   await waitFor(()=>incoming.length===3);
   assert.equal(incoming[2].stationary,true);

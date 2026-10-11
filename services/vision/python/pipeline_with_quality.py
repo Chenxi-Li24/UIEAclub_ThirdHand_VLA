@@ -70,12 +70,12 @@ class VisionPipeline:
             self.selection = None
             self.stability = StabilityWindow(self.config)
 
-    def begin_motion_epoch(self, epoch: int) -> None:
+    def begin_motion_epoch(self, epoch: int, *, allow_depthless_continuity: bool = False) -> None:
         if not isinstance(epoch, int) or epoch <= self.motion_epoch:
             raise ValueError("motion epoch must strictly increase")
         self.motion_epoch = epoch
         self.camera_moving = True
-        self.world_anchor_required = True
+        self.world_anchor_required = not allow_depthless_continuity
         self.stability = StabilityWindow(self.config)
 
     def set_camera_moving(self, moving: bool) -> None:
@@ -121,8 +121,14 @@ class VisionPipeline:
         for candidate in candidates:
             if candidate.mask.shape == frame.xyz_camera_m.shape[:2]:
                 tracking_points = frame.xyz_camera_m[candidate.mask]
+                tracking_depth = frame.depth_m[candidate.mask]
                 tracking_points = tracking_points[
                     np.isfinite(tracking_points).all(axis=1)
+                    & np.isfinite(tracking_depth)
+                    & (tracking_depth >= self.config.min_depth_m)
+                    & (tracking_depth <= self.config.max_depth_m)
+                    & (tracking_points[:, 2] >= self.config.min_depth_m)
+                    & (tracking_points[:, 2] <= self.config.max_depth_m)
                 ]
                 if len(tracking_points) >= self.config.min_depth_points:
                     tracking_point = np.median(tracking_points, axis=0)

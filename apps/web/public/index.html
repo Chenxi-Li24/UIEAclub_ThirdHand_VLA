@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>ThirdHand - Startouch 机械臂控制</title>
-  <link rel="stylesheet" href="css/style.css?v=7">
+  <link rel="stylesheet" href="css/style.css?v=8">
   <link rel="stylesheet" href="css/i18n.css?v=2">
   <script defer src="js/i18n-catalog.js?v=1"></script>
   <script defer src="js/i18n-voice-catalog.js?v=1"></script>
@@ -40,6 +40,7 @@
       </div>
 
       <div class="topbar-actions">
+        <a href="tcp-calibration.html" class="action-btn">TCP标定</a>
         <select id="language-select" title="Interface Language" aria-label="Interface Language" data-i18n-skip>
           <option value="en" selected>English</option>
           <option value="zh-CN">中文</option>
@@ -281,7 +282,7 @@
             <div class="vision-empty">等待识别结果</div>
           </div>
           <div class="vision-lock" id="vision-lock-reason" role="status">
-            夹取锁定：等待标定和硬件验证
+            等待抓取服务状态
           </div>
           <section class="active-depth-panel" aria-labelledby="active-depth-title">
             <div class="active-depth-heading">
@@ -301,16 +302,28 @@
               <button class="action-btn" id="btn-active-depth-stop" disabled>停止对准</button>
             </div>
           </section>
-          <div class="vision-segment" role="group" aria-label="夹取执行模式">
-            <button type="button" class="vision-segment-btn active" data-grasp-mode="step"
-                    aria-pressed="true">分步</button>
-            <button type="button" class="vision-segment-btn" data-grasp-mode="auto"
-                    aria-pressed="false">自动</button>
-          </div>
+          <section class="web-grasp-panel" aria-label="一键抓取进度" aria-live="polite">
+            <strong id="grasp-phase">待机</strong>
+            <ol class="grasp-stages">
+              <li id="grasp-stage-depth_acquiring">获取深度</li>
+              <li id="grasp-stage-path_checking">路径检查</li>
+              <li id="grasp-stage-opening">张开夹爪</li>
+              <li id="grasp-stage-preapproach">预接近</li>
+              <li id="grasp-stage-target_refresh">确认固定目标</li>
+              <li id="grasp-stage-approach">接近目标</li>
+              <li id="grasp-stage-closing">闭合夹爪</li>
+              <li id="grasp-stage-lifting">抬升</li>
+            </ol>
+            <div id="grasp-tcp">TCP：等待配置</div>
+            <div id="grasp-motion-mode">运动配置：等待服务</div>
+            <div>基坐标目标（mm）：<span id="grasp-target-position">--</span></div>
+            <div>深度：<span id="grasp-depth">0 / 3</span> · 分段：<span id="grasp-progress">--</span></div>
+            <div>SDK 接近终点（mm）：<span id="grasp-contact-position">--</span></div>
+            <div id="grasp-result">选定目标后一次执行到抬升；不自动松爪</div>
+          </section>
           <div class="vision-actions">
-            <button class="action-btn action-primary" id="btn-grasp-start" disabled>开始夹取</button>
-            <button class="action-btn" id="btn-grasp-next" disabled>下一步</button>
-            <button class="action-btn" id="btn-grasp-cancel" disabled>取消</button>
+            <button class="action-btn action-primary" id="btn-grasp-start" disabled>一键抓取</button>
+            <button class="action-btn" id="btn-grasp-cancel" disabled>停止流程</button>
           </div>
           <button class="action-btn" id="btn-camera-refresh">重新连接视频</button>
         </div>
@@ -521,6 +534,6 @@
   </script>
   <script src="js/runtime-endpoints.js?v=1"></script>
   <script src="js/dummy-control.js?v=1" defer></script>
-  <script type="module" src="js/main.js?v=13"></script>
+  <script type="module" src="js/main.js?v=14"></script>
 </body>
 </html>

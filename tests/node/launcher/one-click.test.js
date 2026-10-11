@@ -254,3 +254,24 @@ test('repair refuses a lookalike entry outside the deployments directory without
   assert.equal(report.services['meituan-vision'].repairReason, 'vision_entry_unrecognized');
   assert.equal((await fetch('http://127.0.0.1:' + mainPort + '/health').then(r => r.json())).pid, child.pid);
 });
+
+test('one-click defaults 1034 to the original external worktree, not the formal checkout', unix, async t => {
+  const f = await fixture(t);
+  const external = path.resolve(f.formalRoot, '../worktrees/cyb_branch/meituan');
+  fs.mkdirSync(path.dirname(external), { recursive: true });
+  fs.renameSync(f.meituanRoot, external);
+  const previous = process.env.THIRDHAND_MEITUAN_ROOT;
+  delete process.env.THIRDHAND_MEITUAN_ROOT;
+  try {
+    const report = await loadEnsure()({ formalRoot: f.formalRoot, quiet: true });
+    assert.equal(report.overall, 'ready');
+    assert.equal(report.services['meituan-web'].root, external);
+    assert.deepEqual(fs.readFileSync(f.calls, 'utf8').trim().split('\n'), [
+      f.formalRoot + ':ensure --profile manual-control',
+      external + ':ensure --profile meituan-web'
+    ]);
+  } finally {
+    if (previous === undefined) delete process.env.THIRDHAND_MEITUAN_ROOT;
+    else process.env.THIRDHAND_MEITUAN_ROOT = previous;
+  }
+});

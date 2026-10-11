@@ -11,7 +11,7 @@ from thirdhand_va.vision.perception.interfaces import RawCandidate
 from thirdhand_va.vision.visualization.overlay import render_overlay, RenderMetrics
 from camera_bridge_with_frames import UnifiedVisionRuntime
 
-ROOT = Path(os.environ['THIRDHAND_LIVE_ROOT'])
+ROOT = Path(os.environ.get("THIRDHAND_LIVE_ROOT", Path(__file__).resolve().parents[3]))
 
 class Backend:
     def __init__(self):

@@ -6,7 +6,7 @@ The Ubuntu desktop shortcut and Windows `Start ThirdHand.lnk` use
 The command preserves the existing launcher behavior:
 
 1. Ensure `manual-control` in the formal checkout (3000, 3004, 3100, 8766, 9983).
-2. Ensure `meituan-web` in the same checkout, using `apps/meituan` (1034).
+2. Ensure `meituan-web` in the existing `../worktrees/cyb_branch/meituan` checkout (1034).
 3. Check 1035; if its listener is missing, start or repair only its shared Vision owner.
 
 1035 is a second listener in the **existing 3100 vision process**. It uses the
@@ -38,7 +38,9 @@ formal checkout's ignored `runtime/` directory, never in source commits.
 Default locations are project-local:
 
 - Formal checkout: derived from the launcher location.
-- Meituan app: `apps/meituan`; its profile is `configs/runtime/meituan-web.json`.
+- Meituan checkout: `../worktrees/cyb_branch/meituan`; use its own `configs/runtime/meituan-web.json`.
+- The optional 1035 adapter and battery Python module are loaded from that checkout via
+  `MEITUAN_WORKTREE` and `MEITUAN_BATTERY_MODULE`; the formal checkout keeps only shared hooks.
 
 The formal checkout is derived from the launcher location. Override
 `THIRDHAND_FORMAL_ROOT` or `THIRDHAND_MEITUAN_ROOT` for an explicit alternate checkout.

@@ -1,6 +1,11 @@
 # Dummy: Dum-E personality for ThirdHand Touch R1
 
 This experimental application lives in `apps/dummy/` and talks to the existing ThirdHand Robot Service at `ws://127.0.0.1:3000/ws`.
+
+Face/body follow now supports an opt-in-at-launch HaGRID palm gesture selection
+path. The default config enables the detector when verified weights are present;
+it never starts Dummy or motion on its own. See [palm gesture switching](OK_GESTURE_SWITCH.md)
+for model preparation, selection rules, read-only tests and shutdown behavior.
 It does not import Startouch SDK and does not open CAN directly.
 It is not part of the default launcher profile and must be started explicitly.
 
@@ -28,7 +33,8 @@ The default follow target is now a selected **face center**, using the existing
 OpenCV YuNet model rather than a torso/body/motion box. Startup selects one face
 automatically; short loss pauses, and confirmed loss automatically selects a new
 visible face. Prepare its verified local model with `apps/prepare_face_model.py`.
-OK-based explicit switching is not connected yet.
+Holding an open palm selects its uniquely associated person; OK no longer
+triggers selection. The legacy `ok_switch` key is retained for compatibility.
 See [face-follow.md](docs/face-follow.md) for detection limitations and verification.
 
 The J1/J4 path now uses Robot Service continuous follow, not repeated blocking

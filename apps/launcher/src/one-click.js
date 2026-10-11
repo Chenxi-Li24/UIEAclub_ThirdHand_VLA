@@ -28,7 +28,7 @@ function ensureProfile(root, profile, quiet) {
 async function ensureOneClick(options = {}) {
   const formalRoot = options.formalRoot || process.env.THIRDHAND_FORMAL_ROOT || ROOT;
   const meituanRoot = options.meituanRoot || process.env.THIRDHAND_MEITUAN_ROOT
-    || formalRoot;
+    || path.resolve(formalRoot, '..', 'worktrees', 'cyb_branch', 'meituan');
   const config = loadRuntimeConfig(path.join(formalRoot, 'configs/runtime/manual-control.json'),
     { root: formalRoot, nodePath: process.execPath });
   const visionEnv = config.services.find(service => service.id === 'vision')?.env || {};

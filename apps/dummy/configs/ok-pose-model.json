@@ -1,0 +1,10 @@
+{
+  "name": "Ultralytics YOLOv8n COCO person pose",
+  "path": "local/models/vision/yolov8n-pose.pt",
+  "url": "https://github.com/ultralytics/assets/releases/download/v8.3.0/yolov8n-pose.pt",
+  "bytes": 6832633,
+  "sha256": "c6fa93dd1ee4a2c18c900a45c1d864a1c6f7aba75d84f91648a30b7fb641d212",
+  "source": "https://github.com/ultralytics/assets",
+  "license": "AGPL-3.0; verify model redistribution terms before publishing weights",
+  "role": "Same-frame wrist/elbow/shoulder evidence for OK owner selection only"
+}

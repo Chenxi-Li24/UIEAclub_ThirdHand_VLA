@@ -1,5 +1,16 @@
 'use strict';
 const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),vm=require('node:vm');
+test('merged control page keeps bilingual controls, TCP calibration and the Xavier grasp workflow',()=>{
+ const html=fs.readFileSync(path.join(__dirname,'../../../apps/web/public/index.html'),'utf8');
+ assert.match(html,/<html lang="en">/);
+ for(const asset of ['css/i18n.css','js/i18n-catalog.js','js/i18n-voice-catalog.js','js/i18n.js'])assert.ok(html.includes(asset),asset);
+ assert.match(html,/id="language-select"/);
+ assert.match(html,/<option value="en" selected>/);
+ assert.match(html,/href="tcp-calibration.html"/);
+ for(const id of ['grasp-phase','grasp-tcp','grasp-motion-mode','grasp-target-position','grasp-depth','grasp-progress','grasp-contact-position','grasp-result'])assert.ok(html.includes(`id="${id}"`),id);
+ assert.equal((html.match(/type="module" src="js\/main\.js/g)||[]).length,1);
+ assert.doesNotMatch(html,/^(?:<<<<<<<|=======|>>>>>>>)/m);
+});
 function ui({fetchImpl}={}){
  const elements=new Map();const get=id=>{if(!elements.has(id))elements.set(id,{disabled:false,textContent:'',classList:{toggle(){}}});return elements.get(id);};
  const sent=[];const context={console:{log(){},warn(){},error(){}},THREE:{},window:{},

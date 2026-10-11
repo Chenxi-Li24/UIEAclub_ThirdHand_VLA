@@ -8,14 +8,15 @@ const { once } = require('node:events');
 const { WebSocket, WebSocketServer } = require('ws');
 const { createVisionService } = require('../../../services/vision/src/server');
 
-test('configured vision service automatically relays canonical feedback without robot commands',async t=>{
+test('configured vision service automatically relays canonical feedback without robot commands',{timeout:5000},async t=>{
  const temp=fs.mkdtempSync(path.join(os.tmpdir(),'vision-auto-relay-'));
  const robot=new WebSocketServer({host:'127.0.0.1',port:0});await once(robot,'listening');
  const received=[],commands=[];
- const service=createVisionService({env:{THIRDHAND_ROBOT_FRAME_POLICY:path.resolve(__dirname,'../../../configs/vision/sdk-tool-frame-policy.json'),ROBOT_WS_URL:`ws://127.0.0.1:${robot.address().port}`},
+ let service;
+ t.after(async()=>{if(service)await service.close();for(const s of robot.clients)s.terminate();await new Promise(r=>robot.close(r));fs.rmSync(temp,{recursive:true,force:true});});
+ service=createVisionService({env:{THIRDHAND_ROBOT_FRAME_POLICY:path.resolve(__dirname,'../../../configs/vision/sdk-tool-frame-policy.json'),ROBOT_WS_URL:`ws://127.0.0.1:${robot.address().port}`},
   host:'127.0.0.1',port:0,readyFile:path.join(temp,'ready'),
   camera:{start(){},async close(){},status:()=>({camera:{status:'ready'}}),send:m=>{received.push(m);return true;}}});
- t.after(async()=>{await service.close();for(const s of robot.clients)s.terminate();await new Promise(r=>robot.close(r));fs.rmSync(temp,{recursive:true,force:true});});
  const connected=once(robot,'connection');await service.start();
  const connection=await Promise.race([connected,new Promise(r=>setTimeout(()=>r(null),750))]);assert.ok(connection,'automatic feedback relay missing');
  const [socket]=connection;socket.on('message',m=>commands.push(m));

@@ -59,15 +59,26 @@ class TrackerWorker:
 
     def close(self):
         self.stop.set()
-        try:
-            if hasattr(self.tracker, "reader"):
-                self.tracker.reader.close()
-        finally:
-            if self.thread is not None:
-                self.thread.join(timeout=8.0)
-                if self.thread.is_alive():
-                    raise RuntimeError("Dummy detection worker did not stop; shared services were not stopped")
-            self.tracker.close()
+        errors = []
+        close_background = getattr(self.tracker, "close_background_workers", None)
+        close_reader = self.tracker.reader.close if hasattr(self.tracker, "reader") else None
+        for close in (close_background, close_reader):
+            if close is not None:
+                try:
+                    close()
+                except Exception as exc:
+                    errors.append(exc)
+        if self.thread is not None:
+            self.thread.join(timeout=8.0)
+        if self.thread is not None and self.thread.is_alive():
+            errors.append(RuntimeError("Dummy detection worker did not stop; shared services were not stopped"))
+        else:
+            try:
+                self.tracker.close()
+            except Exception as exc:
+                errors.append(exc)
+        if errors:
+            raise RuntimeError("Dummy cleanup failed: "+"; ".join(map(str, errors))) from errors[0]
 
 
 class PersonFollowRuntime:
@@ -98,6 +109,8 @@ class PersonFollowRuntime:
         self.mode = "IDLE"
         self.last_reason = "waiting_for_observation"
         self.metrics = {}
+        self._selection_generation = None
+        self._selection_gate = None
         self.continuous = bool(getattr(adapter, "continuous_follow", False))
         self.servo.reset(self.joints)
 
@@ -154,6 +167,7 @@ class PersonFollowRuntime:
         self._consumed = observation.sequence
         self.metrics.update(observation_sequence=observation.sequence, receive_age_ms=age * 1000,
                             detection_ms=observation.detection_ms)
+        self._reset_for_selection(observation)
         started = time.monotonic()
         command = self.servo.update(joints, target, dt_s=self.period_s)
         self.metrics["controller_ms"] = (time.monotonic() - started) * 1000
@@ -169,6 +183,28 @@ class PersonFollowRuntime:
             return None
         return desired
 
+    def _reset_for_selection(self, observation):
+        generation = (observation.debug or {}).get("selection_generation")
+        if generation is not None and generation != self._selection_generation:
+            # Clear old-target error, but keep the original excursion envelope.
+            self.servo.reset()
+            self._selection_generation = generation
+            self.metrics["selection_generation"] = generation
+
+    async def _run_keyword(self, name, current):
+        if self._selection_gate is not None:
+            self._selection_gate(False)
+        try:
+            if self.continuous:
+                await self.adapter.pause_follow()
+                current = list((await self.adapter.wait_idle()).joints_deg)
+            return await self._gesture(name, current)
+        finally:
+            with self._lock:
+                self._consumed = self._sequence
+            if self._selection_gate is not None:
+                self._selection_gate(True)
+
     async def step(self):
         current = await self._measured_joints()
         if self.stopping.is_set():
@@ -176,10 +212,7 @@ class PersonFollowRuntime:
         while self._keywords:
             name, received_at = self._keywords.popleft()
             if time.monotonic() - received_at <= 3.0:
-                if self.continuous:
-                    await self.adapter.pause_follow()
-                    current = list((await self.adapter.wait_idle()).joints_deg)
-                return await self._gesture(name, current)
+                return await self._run_keyword(name, current)
         with self._lock:
             observation = self._latest
         if observation is None or observation.sequence <= self._consumed:
@@ -197,6 +230,7 @@ class PersonFollowRuntime:
             if self.continuous:
                 await self.adapter.pause_follow()
             return False
+        self._reset_for_selection(observation)
         command = self.servo.update(current, target, dt_s=self.period_s)
         self.last_reason = command.reason
         if not command.ok or max(abs(a - b) for a, b in zip(current, command.joints_deg)) < 1e-5:
@@ -265,6 +299,7 @@ class PersonFollowRuntime:
             self.mode = "IDLE"
 
     async def run(self, *, tracker=None, keywords=None, max_steps=0):
+        self._selection_gate = getattr(tracker, "set_switching_allowed", None)
         worker = TrackerWorker(tracker, self.publish, self.period_s) if tracker is not None else None
         producer = None
         async def collect_keywords():

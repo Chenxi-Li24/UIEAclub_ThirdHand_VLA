@@ -976,7 +976,9 @@ export class VoiceControl {
     }
     for (const device of devices) {
       const label = device.label || `扬声器 ${device.deviceId.slice(0, 8)}`;
-      this.speakerSelect.add(new Option(label, device.deviceId));
+      const option = new Option(label, device.deviceId);
+      if (device.label) option.dataset.i18nSkip = '';
+      this.speakerSelect.add(option);
     }
     if ([...this.speakerSelect.options].some(o => o.value === previous)) {
       this.speakerSelect.value = previous;
@@ -999,7 +1001,10 @@ export class VoiceControl {
       ? (this.speakerSelect.selectedOptions[0]?.textContent || deviceId)
       : '系统默认';
     this._showNotice(`已切换音频输出: ${name}`, 'success');
-    document.getElementById('voice-speaker-status').textContent = name;
+    const speakerStatus = document.getElementById('voice-speaker-status');
+    if (deviceId) speakerStatus.dataset.i18nSkip = '';
+    else delete speakerStatus.dataset.i18nSkip;
+    speakerStatus.textContent = name;
   }
 
   _handleSamples(samples, sampleRate) {
@@ -1255,7 +1260,9 @@ export class VoiceControl {
 
     devices.forEach((device, index) => {
       const label = device.label || `麦克风 ${index + 1}`;
-      this.deviceSelect.add(new Option(label, device.deviceId));
+      const option = new Option(label, device.deviceId);
+      if (device.label) option.dataset.i18nSkip = '';
+      this.deviceSelect.add(option);
     });
 
     if ([...this.deviceSelect.options].some(option => option.value === previous)) {

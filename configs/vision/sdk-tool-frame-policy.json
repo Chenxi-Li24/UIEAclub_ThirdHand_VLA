@@ -39,7 +39,7 @@
     },
     {
       "path": "../../services/robot/src/startouch_bridge.py",
-      "sha256": "62f718ce1b2449174940ea90b8694510011ced69401c42882f4452f01f9d9f18"
+      "sha256": "41dda5d6038e39fb44ed31d989618a845b5460f22076dc6e4e8a7d1edffd1ff2"
     },
     {
       "path": "../../assets/robot/startouch-v3/FastTouchV3.SLDASM.urdf",
@@ -47,7 +47,7 @@
     },
     {
       "path": "../../local/generated/startouch-python/startouch_sdk/src/config/robot_kinematics.yaml",
-      "sha256": "f84dd8da8206169bc97d72c35f6a9ec058e79cc5ccf68e14c3b0c102dc5cd9d1"
+      "sha256": "e88cbf578f1262386adcf7edf40a5638513cdc59a5da4fe938e88a31addd35ce"
     },
     {
       "path": "../../local/generated/startouch-python/startouch_sdk/interface_py/libstartouch.so",
@@ -79,6 +79,8 @@
   },
   "rebinding": {
     "source_policy_id": "sha256:832c52da1f9f8a4aa33c1ca4c9ab0aee176b590d8f26a2da8a6bf7b62c0d7e83",
-    "note": "Repository-relative paths and current source hashes; unchanged SDK tool transform, no new physical validation."
+    "note": "Repository-relative paths and current source hashes; unchanged SDK tool transform, no new physical validation.",
+    "previous_runtime_policy_id": "sha256:f5dd0a13c629c65007d696327aa6f1e65949d5cb00dda103c29d9f331ed96b29",
+    "merge_scope": "main SDK speed reference alignment and pre-construction generated configuration validation; no kinematics or calibration matrix change"
   }
 }

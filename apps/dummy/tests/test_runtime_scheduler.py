@@ -123,6 +123,8 @@ def test_keyword_all_joints_exclusive_then_follow_resumes():
         assert rt.queue_keyword("custom")
         assert await rt.step()
         assert adapter.sent == [[1, 2, -3, 4, 5, 6], [0] * 6]
+        assert not await rt.step()  # Do not replay a pre-keyword observation.
+        rt.publish(target())
         assert await rt.step()
         assert adapter.max_depth == 1
     asyncio.run(scenario())

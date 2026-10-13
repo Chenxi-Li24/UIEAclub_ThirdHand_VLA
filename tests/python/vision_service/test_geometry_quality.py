@@ -77,8 +77,8 @@ class QualityTests(unittest.TestCase):
         self.assertFalse(target['depth_valid'])
         self.assertIsNone(target['camera_xyz_m'])
         self.assertIsNone(target['depth_m'])
-        self.assertEqual(target['raw_valid_depth_points'],500)
-        self.assertEqual(target['raw_depth_valid_ratio'],1.)
+        self.assertEqual(target['raw_valid_depth_points'],0)
+        self.assertEqual(target['raw_depth_valid_ratio'],0.)
 
     def test_filtered_ratio_shortage_with_enough_points_fails_closed(self):
         mask=np.ones((100,100),bool)

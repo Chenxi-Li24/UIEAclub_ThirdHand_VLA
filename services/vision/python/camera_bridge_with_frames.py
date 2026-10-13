@@ -627,10 +627,26 @@ def attach_depth_evidence(event, decision, frame, config, projection=None, *, sn
         "physically_validated": False if projection is None else projection.physically_validated,
     }
 
-    tracks = {track.candidate.detection_id: track for track in decision.tracks}
+    tracks = {getattr(track, "backend_track_id", None): track for track in decision.tracks
+              if getattr(track, "backend_track_id", None) is not None}
     for target in event.get("targets", []):
-        track = tracks.get(target.get("detection_id"))
+        depth_authorized = target.get("depth_valid") is True
+        track = tracks.get(target.get("backend_track_id"))
+        if target.get("backend_track_id") is None:
+            # Legacy diagnostic fixtures/events may omit backend IDs. Never
+            # resolve a recycled detection ID when more than one track owns it.
+            matches = [t for t in decision.tracks if t.candidate.detection_id == target.get("detection_id")]
+            track = matches[0] if len(matches) == 1 else None
+        target.update({"stableId": target.get("stable_id"), "depth_valid": False,
+            "depth_valid_ratio": 0., "valid_depth_points": 0,
+            "raw_valid_depth_points": 0, "raw_depth_valid_ratio": 0.,
+            "camera_xyz_m": None, "base_xyz_m": None, "position_std_m": None,
+            "depth_m": None, "base_pose_status": base_status})
         if track is None:
+            continue
+        if track.state in {"occluded", "lost", "retired"}:
+            target["blockers"] = list(dict.fromkeys(
+                [*target.get("blockers", []), f"target_{track.state}"]))
             continue
         mask = np.asarray(track.candidate.mask, dtype=bool)
         if mask.shape != frame.depth_m.shape:
@@ -680,6 +696,7 @@ def attach_depth_evidence(event, decision, frame, config, projection=None, *, sn
                 [*target.get("blockers", []), "insufficient_filtered_depth"]
             ))
             continue
+        target["depth_valid"] = depth_authorized
         if valid_points:
             center = np.median(points, axis=0)
             spread = np.std(points, axis=0)

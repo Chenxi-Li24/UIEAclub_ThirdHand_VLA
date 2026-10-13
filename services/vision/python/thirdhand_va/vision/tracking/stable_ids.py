@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+import math
 from typing import Mapping
 
 from thirdhand_va.common.config import VisionConfig
 from thirdhand_va.common.contracts import MaskCandidate, TrackedBottle
 
-from .norfair_adapter import NorfairTrackerAdapter, Point3, tracking_centroid, unanchored_continuity
+from .norfair_adapter import NorfairTrackerAdapter, Point3, tracking_centroid, unanchored_continuity, _cosine_distance
 
 
 @dataclass(slots=True)
@@ -50,6 +51,9 @@ class StableTrackManager:
         self._reservation: tuple[int, str] | None = None
         self._reserved_world_anchor: Point3 | None = None
         self._reserved_continuity_lost = False
+        self._reserved_backend_ids: set[int] = set()
+        self._reserved_other_bottles: tuple[tuple[Point3 | None, MaskCandidate], ...] = ()
+        self._recovery: tuple[int, int, int] | None = None
 
     @classmethod
     def from_config(cls, config: VisionConfig) -> "StableTrackManager":
@@ -107,6 +111,7 @@ class StableTrackManager:
             camera_points=camera_points,
             world_points=world_points,
         )
+        self._recover_reserved(associations, world_points, now_ns, camera_moving)
         candidate_blockers = candidate_blockers or {}
         seen: set[int] = set()
         for association in associations:
@@ -206,7 +211,63 @@ class StableTrackManager:
                 to_remove.append(backend_id)
         for backend_id in to_remove:
             self._records.pop(backend_id, None)
+        if self._reservation is not None:
+            reserved = self._track_by_stable_id(self._reservation[0])
+            if reserved is not None and reserved.state != "confirmed":
+                reason = ("target_reselection_required" if self._reserved_continuity_lost
+                          else "target_reacquiring" if self._reserved_world_anchor is not None
+                          else "target_occluded")
+                reserved.blockers = tuple(dict.fromkeys(reserved.blockers + (reason,)))
         return self._snapshots()
+
+    def _recover_reserved(self, associations, world_points, now_ns, camera_moving):
+        """Recover expired native IDs only from repeated, unique anchored evidence."""
+        if self._reservation is None:
+            return
+        reserved = self._track_by_stable_id(self._reservation[0])
+        if (reserved is None or camera_moving or self._reserved_continuity_lost
+                or self._reserved_world_anchor is None
+                or any(a.backend_track_id == reserved.backend_track_id for a in associations)):
+            self._recovery = None
+            return
+        plausible = []
+        for association in associations:
+            point = world_points.get(association.candidate.detection_id)
+            appearance = _cosine_distance(association.candidate.descriptor, reserved.candidate.descriptor)
+            if (point is None or len(point) != 3 or not all(math.isfinite(v) for v in point)
+                    or not association.candidate.authorized
+                    or _distance(point, self._reserved_world_anchor) > min(.04, self._adapter.max_point_distance_m)
+                    or not math.isfinite(appearance) or appearance > .15):
+                continue
+            selected_distance = _distance(point, self._reserved_world_anchor)
+            if any(
+                (_distance(point, anchor) <= selected_distance+self._ambiguity_margin_m
+                 if anchor is not None else
+                 _cosine_distance(association.candidate.descriptor, other.descriptor) <= .15)
+                for anchor, other in self._reserved_other_bottles
+            ):
+                continue
+            plausible.append(association)
+        if len(plausible) != 1 or plausible[0].backend_track_id in self._reserved_backend_ids:
+            self._recovery = None
+            return
+        match = plausible[0]
+        previous = self._recovery
+        if previous is not None and now_ns <= previous[2]:
+            return
+        hits = previous[1]+1 if (previous is not None and previous[0] == match.backend_track_id
+                                and now_ns-previous[2] <= 1_000_000_000) else 1
+        self._recovery = (match.backend_track_id, hits, now_ns)
+        if hits < max(3, self._confirmation_hits):
+            return
+        # Remove the duplicate native track before transferring ownership. The
+        # selected stable ID and request never change, and no other old ID is stolen.
+        self._records.pop(reserved.backend_track_id)
+        self._records.pop(match.backend_track_id, None)
+        reserved.backend_track_id = match.backend_track_id
+        reserved.blockers = ()
+        self._records[match.backend_track_id] = reserved
+        self._recovery = None
 
     def reserve(self, stable_id: int, request_id: str) -> bool:
         if not request_id or not isinstance(stable_id, int):
@@ -221,6 +282,13 @@ class StableTrackManager:
         self._reservation = (stable_id, request_id)
         self._reserved_world_anchor = record.world_point
         self._reserved_continuity_lost = False
+        self._reserved_backend_ids = set(self._records)
+        # Preserve competing anchors even if their native tracks later retire.
+        self._reserved_other_bottles = tuple(
+            (other.world_point, other.candidate) for other in self._records.values()
+            if other.backend_track_id != record.backend_track_id
+        )
+        self._recovery = None
         return True
 
     def release(self, request_id: str) -> None:
@@ -230,6 +298,9 @@ class StableTrackManager:
         self._reservation = None
         self._reserved_world_anchor = None
         self._reserved_continuity_lost = False
+        self._reserved_backend_ids.clear()
+        self._reserved_other_bottles = ()
+        self._recovery = None
         for backend_id, record in tuple(self._records.items()):
             if record.stable_id == stable_id and record.state in {"lost", "retired"}:
                 self._records.pop(backend_id, None)
@@ -249,6 +320,12 @@ class StableTrackManager:
             record.world_point
             for record in self._records.values()
             if record.state != "retired" and record.world_point is not None
+            # A reseeded duplicate is evidence for recovery, not a second
+            # independent anchor that makes every subsequent frame ambiguous.
+            and not (self._reserved_world_anchor is not None
+                     and record.backend_track_id not in self._reserved_backend_ids
+                     and _distance(record.world_point, self._reserved_world_anchor)
+                     <= min(.04, self._adapter.max_point_distance_m))
         ]
         rejected_ids: set[int] = set()
         if len(anchors) >= 2:

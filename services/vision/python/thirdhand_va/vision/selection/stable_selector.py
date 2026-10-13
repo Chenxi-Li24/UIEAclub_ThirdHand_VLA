@@ -36,6 +36,9 @@ class StableBottleSelector:
             return StableSelectionResult(None, ("target_id_not_found",))
         track = matches[0]
         if track.state != "confirmed":
+            for reason in ("target_reselection_required", "target_reacquiring"):
+                if reason in track.blockers:
+                    return StableSelectionResult(None, (reason,))
             return StableSelectionResult(None, (f"target_{track.state}",))
         return StableSelectionResult(track, ())
 

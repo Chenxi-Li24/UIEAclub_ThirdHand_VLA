@@ -2,6 +2,7 @@
 const {EventEmitter}=require('node:events');
 const {randomUUID}=require('node:crypto');
 const {buildGraspGeometry,validateConfig,validateJoints,vector,getGripPosition,assertHorizontal,assertMotionStart}=require('./geometry');
+const {buildPreparation,sampleSdkPath}=require('./preparation');
 const delay=ms=>new Promise(r=>setTimeout(r,ms));
 function fault(code){const e=new Error(code);e.code=code;return e;}
 const distance=(a,b)=>Math.hypot(...a.map((x,i)=>x-b[i]));
@@ -12,7 +13,8 @@ class GraspCoordinator extends EventEmitter{
  }
  status(){return JSON.parse(JSON.stringify(this.current));}
  motionConfiguration(){return {orientationMode:this.config.orientationMode||'preserve',executionMode:this.config.executionMode||'segmented',
-  sampleM:this.config.segmentM,requestedSpeedScale:this.config.requestedSpeedScale??null};}
+  sampleM:this.config.segmentM,requestedSpeedScale:this.config.requestedSpeedScale??null,
+  autoLevelBeforeDepth:this.config.autoLevelBeforeDepth===true,safeLevelSdkZM:this.config.safeLevelSdkZM??null};}
  tcpConfiguration(){
   if(this.current.active&&this.current.tcp)return structuredClone(this.current.tcp);
   const measured=this.resolveTcp();
@@ -62,15 +64,24 @@ class GraspCoordinator extends EventEmitter{
   }throw fault('vision_evidence_timeout');
  }
  async _depth(s){
-  let count=0,lastFrame=-1,aligned=false;const until=this.now()+(s.config.depthTimeoutMs??95000);
+  let count=0,lastFrame=s.minDepthFrameId??-1,aligned=false;const until=this.now()+(s.config.depthTimeoutMs??95000);
+  const recoveryUntil=this.now()+10000;
   while(this.now()<until){
    this._alive(s);const {observation}=await this._snapshot(s);
    this._alive(s);const id=Number(observation.frameId??observation.frame_id);
    const ts=Number(observation.observedAtMs??observation.ts);
    if(!Number.isSafeInteger(id)||!Number.isFinite(ts)||this.now()-ts>this.config.visionMaxAgeMs)throw fault('vision_stale');
    const target=(observation.targets||[]).find(t=>Number(t.stable_id??t.stableId)===s.stableId);
-   if(Number(observation.selectedStableId??observation.selected_stable_id)!==s.stableId||!target||target.track_state!=='confirmed')throw fault('target_lost');
+   if(Number(observation.selectedStableId??observation.selected_stable_id)!==s.stableId||!target)throw fault('target_lost');
+   if(target.blockers?.includes('target_reselection_required'))throw fault('target_reselection_required');
+   if(target.track_state!=='confirmed'){
+    if(this.now()<recoveryUntil&&target.blockers?.includes('target_reacquiring')){
+     count=0;this._publish({depthValidFrames:0,reason:'target_reacquiring'});await this.sleep(100);continue;
+    }throw fault('target_lost');
+   }
+   if(ts<(s.depthNotBeforeMs??0)){count=0;await this.sleep(100);continue;}
    if(id<=lastFrame){await this.sleep(100);continue;}lastFrame=id;
+   if(this.current.reason==='target_reacquiring')this._publish({reason:null});
    // An invalidated projection is not missing depth. Wait for synchronized
    // stationary evidence rather than starting an unnecessary robot correction.
    if(observation.frame_projection?.status!=='ready'){
@@ -198,6 +209,7 @@ class GraspCoordinator extends EventEmitter{
  }
  async _run(s){
   await this.robotClient.ready();this._alive(s);
+  await this._prepare(s);
   const horizontal=assertHorizontal(this.robotClient.state({idle:true}),s.config);
   if(horizontal)s.config.horizontalYawRad=horizontal[2];
   const observation=await this._depth(s);
@@ -223,6 +235,48 @@ class GraspCoordinator extends EventEmitter{
   if(final.gripper_width_m<this.config.contactMinM||final.gripper_width_m>this.config.contactMaxM){s.holding=false;throw fault('contact_lost');}
   this._terminal(s,'complete',null,{pipelineComplete:true,physicalGraspVerified:false,targetM:g.targetM,actualSdkM:final.flange_position_m,
    actualGripM:getGripPosition(final,s.config),gripperWidthM:final.gripper_width_m,liftM:this.config.liftM,tcp:this.current.tcp});
+ }
+ async _prepare(s){
+  const initial=this.robotClient.state({idle:true}),phases=buildPreparation(initial,s.config);
+  if(!phases.length)return;
+  // Check selected RGB ownership before a blind preparation move. No depth
+  // read or geometry from this frame is retained for the later grasp.
+  let observation;const until=this.now()+10000;
+  for(let attempt=0;attempt<100;attempt++){
+   this._alive(s);({observation}=await this.visionClient.trackingSnapshot(s.stableId));this._alive(s);
+   const target=(observation.targets||[]).find(t=>Number(t.stable_id??t.stableId)===s.stableId);
+   const ts=Number(observation.observedAtMs??observation.ts);
+   if(Number(observation.selectedStableId??observation.selected_stable_id)!==s.stableId||!target||
+    !Number.isFinite(ts)||this.now()-ts>s.config.visionMaxAgeMs||ts-this.now()>500)throw fault('target_lost');
+   if(target.blockers?.includes('target_reselection_required'))throw fault('target_reselection_required');
+   if(target.track_state==='confirmed')break;
+   if(!target.blockers?.includes('target_reacquiring')||this.now()>=until||attempt===99)throw fault('target_lost');
+   this._publish({phase:'preparation_checking',reason:'target_reacquiring'});await this.sleep(100);
+  }
+  s.minDepthFrameId=Number(observation.frameId??observation.frame_id);
+  if(!Number.isSafeInteger(s.minDepthFrameId))throw fault('vision_stale');
+  this._publish({phase:'preparation_checking',reason:null});await this._check(phases.flatMap(p=>p.path),s);
+  for(const {phase,from,path:nominalPath} of phases){
+   this._alive(s);const before=this.robotClient.state({idle:true});assertMotionStart(before,s.config);
+   if(distance(before.flange_position_m,from.position)>.005||before.flange_euler_rad.some((a,i)=>Math.abs(Math.atan2(Math.sin(a-from.euler[i]),Math.cos(a-from.euler[i])))>.02))throw fault('segment_start_changed');
+   // Match the actual SDK interpolation from fresh feedback, not the nominal
+   // endpoint of the previous phase (which has a finite reach tolerance).
+   const endpoint={...nominalPath.at(-1),...(phase==='preparing_level'?{position:[...before.flange_position_m]}:{})};
+   const path=sampleSdkPath({position:before.flange_position_m,euler:before.flange_euler_rad},endpoint,s.config);
+   for(const pose of path)assertMotionStart({...before,flange_position_m:pose.position,flange_euler_rad:pose.euler},s.config);
+   if(phase==='preparing_level'&&before.flange_position_m[2]<s.config.safeLevelSdkZM)throw fault('safe_height_not_reached');
+   await this._check(path,s);
+   const start=this.robotClient.state({idle:true});
+   if(distance(start.flange_position_m,before.flange_position_m)>.001||start.joints_deg.some((a,i)=>Math.abs(a-before.joints_deg[i])>.3))throw fault('segment_start_changed');
+   const pose=path.at(-1);this._publish({phase,progress:{stage:phase,completed:0,total:1,checkedSamples:path.length}});
+   await this._command({cmd:'move_l',position:pose.position,euler:pose.euler,
+    position_tolerance_m:Math.min(.001,s.config.positionToleranceM),orientation_tolerance_rad:Math.min(.02,s.config.orientationToleranceRad)},s);
+   const after=await this._stable(s);assertMotionStart(after,s.config);
+   if(distance(after.flange_position_m,pose.position)>.005||after.flange_euler_rad.some((a,i)=>Math.abs(Math.atan2(Math.sin(a-pose.euler[i]),Math.cos(a-pose.euler[i])))>.02))throw fault('pose_not_reached');
+   this._record('preparation_pose',{state:after});this._publish({progress:{stage:phase,completed:1,total:1,checkedSamples:path.length}});
+  }
+  assertHorizontal(this.robotClient.state({idle:true}),s.config);
+  s.depthNotBeforeMs=this.now();this._publish({phase:'depth_acquiring',progress:null,depthValidFrames:0});
  }
  _publishPlan(g){this._publish({targetM:g.targetM,widthM:g.widthM,frameId:g.frameId,
   plan:{preapproach:g.preapproach,contact:g.contact,lift:g.lift,

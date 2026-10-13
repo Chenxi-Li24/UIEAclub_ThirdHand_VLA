@@ -1415,7 +1415,7 @@ class UIControls {
 
   _renderWebGrasp() {
     const state=this.webGraspStatus||{},phase=state.phase||'idle';
-    const labels={idle:'待机',unavailable:'服务不可用',depth_acquiring:'获取深度',planning:'坐标规划',path_checking:'路径检查',
+    const labels={idle:'待机',unavailable:'服务不可用',preparation_checking:'检查调平路径',preparing_raise:'抬到安全高度',preparing_level:'自动调平',depth_acquiring:'获取新深度',planning:'坐标规划',path_checking:'路径检查',
       opening:'张开夹爪',preapproach:'预接近',target_refresh:'确认固定目标',approach:'接近目标',closing:'闭合夹爪',
       lifting:'抬升',complete:'流程完成',failed:'执行失败',stopping:'正在停止，等待确认',stopped:'已停止',uncertain:'停止未确认，请现场检查'};
     const set=(id,text)=>{const node=document.getElementById(id);if(node)node.textContent=text;};
@@ -1425,15 +1425,16 @@ class UIControls {
     const translation=tcp?.T_flange_grasp_tcp?.slice(0,3).map(row=>row[3]);
     set('grasp-tcp',tcp?`${state.tcp?'本次':'下次'} TCP：${tcp.source==='measured'?'实测':'近似'} [${mm(translation)}] mm${tcp.id?' · '+tcp.id:''} · 水平退让 ${((tcp.forwardBackoffM||0)*1000).toFixed(0)} mm`:'TCP：等待配置');
     const motion=this.webGraspConfig?.motion;
-    set('grasp-motion-mode',motion?`${motion.orientationMode==='horizontal'?'水平锁定':'保持当前姿态'} · ${motion.executionMode==='phase_linear'?'阶段连续移动':'分段移动'} · ${(motion.sampleM*1000).toFixed(0)} mm 路径检查${Number.isFinite(motion.requestedSpeedScale)?' · 请求限速 '+(motion.requestedSpeedScale*100).toFixed(0)+'%':''}`:'运动配置：等待服务');
+    set('grasp-motion-mode',motion?`${motion.autoLevelBeforeDepth?'先抬至 SDK Z≥'+(motion.safeLevelSdkZM*1000).toFixed(1)+' mm 调平，再测深度':motion.orientationMode==='horizontal'?'水平锁定':'保持当前姿态'} · ${motion.executionMode==='phase_linear'?'阶段连续移动':'分段移动'} · ${(motion.sampleM*1000).toFixed(0)} mm 路径检查${Number.isFinite(motion.requestedSpeedScale)?' · 请求限速 '+(motion.requestedSpeedScale*100).toFixed(0)+'%':''}`:'运动配置：等待服务');
     set('grasp-target-position',mm(state.targetM));set('grasp-contact-position',mm(state.plan?.contact?.position));
     set('grasp-depth',`${state.depthValidFrames||0} / 3`);
     set('grasp-progress',state.progress?`${state.progress.completed} / ${state.progress.total}（累计 ${state.completedSegments||0}）`:'--');
-    set('grasp-result',this.webGraspError||(state.reason==='tool_not_horizontal'?'末端尚未水平，请在安全高度调平；不会自动扫过桌面。':state.reason)|| (phase==='complete'
+    const reasons={tool_not_horizontal:'末端尚未水平，当前配置未启用自动调平。',target_reselection_required:'相机换姿态后缺少可靠的目标关联，请重新选择眼前的瓶子。',target_reacquiring:'正在恢复原目标关联，等待连续三帧确认。',leveling_angle_limit:'调平角度超过 60°，请先手动调整姿态。',safe_height_not_reached:'尚未到达安全高度，已停止调平。'};
+    set('grasp-result',this.webGraspError||reasons[state.reason]||state.reason|| (phase==='complete'
       ?'流程完成，夹爪保持；实物抓取未确认，请现场观察。'
       :state.holding?'夹爪保持，不自动松爪。':'选定目标后一次执行到抬升；不自动松爪'));
-    const stages=['depth_acquiring','path_checking','opening','preapproach','target_refresh','approach','closing','lifting'];
-    const index=phase==='planning'?1:stages.indexOf(phase);
+    const stages=['preparing_raise','preparing_level','depth_acquiring','path_checking','opening','preapproach','target_refresh','approach','closing','lifting'];
+    const index=phase==='preparation_checking'?0:phase==='planning'?3:stages.indexOf(phase);
     stages.forEach((stage,i)=>{const node=document.getElementById(`grasp-stage-${stage}`);if(!node)return;
       node.classList.toggle('current',i===index);node.classList.toggle('done',phase==='complete'||(index>=0&&i<index));});
   }

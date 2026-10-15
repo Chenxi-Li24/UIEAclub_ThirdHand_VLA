@@ -39,6 +39,7 @@ function loadConfig(env = process.env) {
     port: numberFrom(env, 'ROBOT_PORT', 3000, 0, 65535),
     readyFile: env.THIRDHAND_READY_FILE || path.join(ROOT, 'runtime', 'run', 'robot.ready'),
     executionTokenFile: env.ROBOT_EXECUTION_TOKEN_FILE || null,
+    meituanTokenFile: env.MEITUAN_ROBOT_TOKEN_FILE || null,
     robot: {
       python: env.STARTOUCH_PYTHON || (fs.existsSync(localPython) ? localPython : 'python3'),
       sdkPath,

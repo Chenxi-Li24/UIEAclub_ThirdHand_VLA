@@ -13,6 +13,16 @@ def bounded_speed_percent(value=0.05):
         raise ValueError("speed percent must be finite and positive")
     return min(speed, MAX_SPEED_PERCENT)
 
+
+def command_speed_percent(command, default_speed):
+    # Only the authenticated Node gateway supplies this private bridge profile.
+    if command.get("speed_profile") == "meituan_20":
+        speed = float(command.get("speed_percent", 0.20))
+        if not math.isfinite(speed) or speed <= 0:
+            raise ValueError("speed percent must be finite and positive")
+        return min(speed, 0.20)
+    return min(default_speed, bounded_speed_percent(command.get("speed_percent", default_speed)))
+
 def _validate_config_reference(config_path):
     text = config_path.read_text()
     section = re.search(r"^joint_trajectory:\s*\n((?:[ \t].*\n|\n)*)", text, re.M)

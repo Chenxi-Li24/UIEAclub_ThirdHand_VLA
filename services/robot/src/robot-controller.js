@@ -279,7 +279,7 @@ class RobotController extends EventEmitter {
     };
   }
 
-  handleCommand(message, reply, owner = 'local') {
+  handleCommand(message, reply, owner = 'local', meituanAuthorized = false) {
     const originalReply = reply;
     reply = response => originalReply({
       ...response,
@@ -291,6 +291,13 @@ class RobotController extends EventEmitter {
       return;
     }
 
+    if (message.speed_profile !== undefined && (!meituanAuthorized ||
+        message.speed_profile !== 'meituan_20' || !['servo','preset','move_l'].includes(message.cmd))) {
+      reply({type:'error',code:'meituan_speed_unauthorized',msg:'Meituan speed profile requires the private route'});
+      return;
+    }
+    const speedProfile = meituanAuthorized && message.speed_profile === 'meituan_20'
+      ? 'meituan_20' : null;
     switch (message.cmd) {
       case 'follow_start':
       case 'follow_target':
@@ -344,13 +351,13 @@ class RobotController extends EventEmitter {
         }
         this._sendJointMotion(
           target, `preset:${message.name}`, reply,
-          message.request_id, 'preset',
+          message.request_id, 'preset', null, speedProfile,
         );
         return;
       }
       case 'servo':
         this._sendJointMotion(
-          message.joints, 'servo', reply, message.request_id, 'move_joint',
+          message.joints, 'servo', reply, message.request_id, 'move_joint', null, speedProfile,
         );
         return;
       case 'move_joint':
@@ -363,7 +370,7 @@ class RobotController extends EventEmitter {
         this._startFixedTcpDemo(message, reply, owner);
         return;
       case 'move_l':
-        this._sendLinearMotion(message, reply);
+        this._sendLinearMotion(message, reply, speedProfile);
         return;
       case 'preview_ik':
         this._sendIkPreview(message, reply);
@@ -600,7 +607,7 @@ class RobotController extends EventEmitter {
 
   _sendJointMotion(
     joints, source, reply, suppliedRequestId = null,
-    command = 'move_joint', suppliedTimeSec = null,
+    command = 'move_joint', suppliedTimeSec = null, speedProfile = null,
   ) {
     const validation = validateJointTarget(joints);
     if (!validation.ok) {
@@ -627,7 +634,8 @@ class RobotController extends EventEmitter {
     const sent = this.bridge.send({
       cmd: 'move_joint',
       joints_rad: validation.joints.map(value => value * Math.PI / 180),
-      speed_percent: Math.min(0.10, this.config.speedScale ?? 0.05),
+      speed_percent: speedProfile ? 0.20 : Math.min(0.10, this.config.speedScale ?? 0.05),
+      ...(speedProfile ? {speed_profile: speedProfile} : {}),
       request_id: requestId,
       source,
     });
@@ -660,7 +668,7 @@ class RobotController extends EventEmitter {
     }
   }
 
-  _sendLinearMotion(message, reply) {
+  _sendLinearMotion(message, reply, speedProfile = null) {
     const precision = {};
     for (const [field, upper] of [['position_tolerance_m', 0.04], ['orientation_tolerance_rad', 0.4]]) {
       if (message[field] === undefined) continue;
@@ -690,7 +698,8 @@ class RobotController extends EventEmitter {
       cmd: 'move_l',
       position: [...message.position],
       euler: [...message.euler],
-      speed_percent: Math.min(0.10, this.config.speedScale ?? 0.05),
+      speed_percent: speedProfile ? 0.20 : Math.min(0.10, this.config.speedScale ?? 0.05),
+      ...(speedProfile ? {speed_profile: speedProfile} : {}),
       request_id: requestId,
       source: message.source || 'robot-service',
       ...precision,

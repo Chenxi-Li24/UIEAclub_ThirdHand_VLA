@@ -15,7 +15,8 @@ bridge_module = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(bridge_module)
 
 @pytest.mark.parametrize("kind", ["move_joint", "move_joint_path", "move_l", "go_home"])
-def test_all_sdk_routes_ignore_short_time_and_use_capped_speed(monkeypatch, kind):
+@pytest.mark.parametrize("meituan", [False, True])
+def test_all_sdk_routes_ignore_short_time_and_use_capped_speed(monkeypatch, kind, meituan):
     events, calls = [], []
     done = threading.Event()
     monkeypatch.setattr(bridge_module, "SIMULATE", True)
@@ -38,11 +39,13 @@ def test_all_sdk_routes_ignore_short_time_and_use_capped_speed(monkeypatch, kind
                "position": [0.4,0,0.3], "euler": [0,0,0],
                "time_sec": 0.001, "speed_percent": 1, "request_id": "speed-test"}
     try:
+        if meituan:
+            command["speed_profile"] = "meituan_20"
         if kind == "move_l": robot.move_linear(command)
         elif kind == "go_home": robot.go_home("speed-test")
         else: robot.enqueue_motion(command)
         assert done.wait(2), events
-        assert calls[0][2]["speed_percent"] == 0.05
+        assert calls[0][2]["speed_percent"] == (0.20 if meituan and kind != "go_home" else 0.05)
         assert "time_sec" not in calls[0][2]
         assert calls[0][0] == ("linear" if kind == "move_l" else "joint")
         complete = next(data for name, data in events if name == "command_complete")

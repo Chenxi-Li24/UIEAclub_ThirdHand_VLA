@@ -15,7 +15,7 @@ import sys
 import tempfile
 import threading
 import time
-from joint_speed_policy import bounded_speed_percent, validate_sdk_speed_reference
+from joint_speed_policy import bounded_speed_percent, command_speed_percent, validate_sdk_speed_reference
 from continuous_follow import ContinuousFollow
 from typing import Any
 
@@ -942,7 +942,7 @@ class RobotBridge:
             "start_joints_rad": start_joints,
             "joints_rad": target,
             "waypoints_rad": waypoints,
-            "speed_percent": min(SPEED_PERCENT, bounded_speed_percent(command.get("speed_percent", SPEED_PERCENT))),
+            "speed_percent": command_speed_percent(command, SPEED_PERCENT),
             "request_id": command.get("request_id"),
             "source": source,
             "command": command_name,
@@ -1140,7 +1140,7 @@ class RobotBridge:
 
         position = command.get("position")
         euler = command.get("euler")
-        speed_percent = min(SPEED_PERCENT, bounded_speed_percent(command.get("speed_percent", SPEED_PERCENT)))
+        speed_percent = command_speed_percent(command, SPEED_PERCENT)
         request_id = command.get("request_id")
 
         if not isinstance(position, list) or len(position) != 3:

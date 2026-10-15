@@ -33,6 +33,7 @@ function createRobotService(options = {}) {
     token: options.executionToken,
     tokenFile: config.executionTokenFile,
   });
+  const meituanToken = loadExecutionToken({token: options.meituanToken, tokenFile: config.meituanTokenFile});
   const executionGateway = new ExecutionGateway(controller);
   const sockets = new Set();
   const executionSockets = new Set();
@@ -75,14 +76,20 @@ function createRobotService(options = {}) {
       );
       return;
     }
-    if (pathname !== '/ws') {
+    if (pathname === '/meituan') {
+      if (!meituanToken.available || !tokenMatches(meituanToken.token, request.headers['x-thirdhand-meituan-token'])) {
+        socket.write('HTTP/1.1 401 Unauthorized\r\nConnection: close\r\nContent-Length: 0\r\n\r\n');
+        socket.destroy();
+        return;
+      }
+    } else if (pathname !== '/ws') {
       socket.destroy();
       return;
     }
-    wss.handleUpgrade(request, socket, head, ws => wss.emit('connection', ws));
+    wss.handleUpgrade(request, socket, head, ws => wss.emit('connection', ws, pathname === '/meituan'));
   });
 
-  wss.on('connection', socket => {
+  wss.on('connection', (socket, meituanAuthorized) => {
     const owner = randomUUID();
     sockets.add(socket);
     let demoRequestId = null;
@@ -114,7 +121,7 @@ function createRobotService(options = {}) {
       }
       controller.handleCommand(message, reply => {
         if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify(reply));
-      }, owner);
+      }, owner, meituanAuthorized === true);
       if (message?.cmd === 'fixed_tcp_demo'
           && controller.demoActiveRequestId === message.request_id
           && controller.demoActiveOwner === owner) {

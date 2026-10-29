@@ -161,8 +161,8 @@ class SceneManager {
   }
 
   _init() {
-    const w = this.container.clientWidth;
-    const h = this.container.clientHeight;
+    const w = this.container.clientWidth || 640;
+    const h = this.container.clientHeight || 480;
 
     this.scene = new THREE.Scene();
     // 背景色跟随 CSS --bg-primary（通过计算样式获取），默认深空色
@@ -190,22 +190,11 @@ class SceneManager {
       this.controls.maxDistance = 2000;
     }
 
-    this.scene.add(new THREE.AmbientLight(0xffffff, 0.6));
-    this.scene.add(new THREE.HemisphereLight(0xffffff, 0x444444, 0.4));
+    this.scene.add(new THREE.AmbientLight(0xffffff, 0.7));
+    this.scene.add(new THREE.HemisphereLight(0xffffff, 0xd2d7de, 0.65));
+    this.viewLightRig = globalThis.ThirdHandCameraLighting.installCameraLighting(THREE, this.scene, this.camera);
 
-    const dirLight1 = new THREE.DirectionalLight(0xffffff, 0.8);
-    dirLight1.position.set(500, 800, 500);
-    this.scene.add(dirLight1);
-
-    const dirLight2 = new THREE.DirectionalLight(0xffffff, 0.4);
-    dirLight2.position.set(-500, 400, -300);
-    this.scene.add(dirLight2);
-
-    const dirLight3 = new THREE.DirectionalLight(0xffffff, 0.3);
-    dirLight3.position.set(0, -200, 500);
-    this.scene.add(dirLight3);
-
-    this.grid = new THREE.GridHelper(1200, 24, 0x2d3a5c, 0x1a2340);
+    this.grid = new THREE.GridHelper(1200, 24, 0xd8dde4, 0xedf0f4);
     this.scene.add(this.grid);
 
     this.axes = new THREE.Group();
@@ -231,6 +220,8 @@ class SceneManager {
     this.scene.add(this.axes);
 
     window.addEventListener('resize', () => this._onResize());
+    this.resizeObserver = new ResizeObserver(() => this._onResize());
+    this.resizeObserver.observe(this.container);
     // 监听主题切换更新背景色
     const observer = new MutationObserver(() => this._updateBgColor());
     observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
@@ -239,20 +230,7 @@ class SceneManager {
   }
 
   _getComputedBgColor() {
-    const style = getComputedStyle(document.documentElement);
-    const bg = style.getPropertyValue('--bg-primary').trim();
-    // 解析 css var，从 computedStyle 获取实际值
-    const computed = document.documentElement.style.getPropertyValue('--bg-primary');
-    if (computed) {
-      const el = document.createElement('div');
-      el.style.color = computed;
-      document.body.appendChild(el);
-      const color = getComputedStyle(el).color;
-      document.body.removeChild(el);
-      const m = color.match(/(\d+),\s*(\d+),\s*(\d+)/);
-      if (m) return new THREE.Color(+m[1]/255, +m[2]/255, +m[3]/255);
-    }
-    return new THREE.Color(0x0a0e1a);
+    return globalThis.ThirdHandCameraLighting.sceneBackground(THREE, getComputedStyle(document.documentElement));
   }
 
   _updateBgColor() {
@@ -266,9 +244,19 @@ class SceneManager {
   _onResize() {
     const w = this.container.clientWidth;
     const h = this.container.clientHeight;
+    if (w < 1 || h < 1) return;
+    const changed = w !== this.viewWidth || h !== this.viewHeight;
+    this.viewWidth = w; this.viewHeight = h;
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(w, h);
+    if (changed && this.modelObject) this.fitModel();
+  }
+
+  fitModel(object = this.modelObject) {
+    if (!object) return;
+    this.modelObject = object;
+    globalThis.ThirdHandCameraLighting.frameCamera(THREE, this.camera, this.controls, object);
   }
 
   _animate() {
@@ -290,6 +278,7 @@ class SceneManager {
   }
 
   resetView() {
+    if (this.modelObject) { this.fitModel(); return; }
     this.camera.position.set(600, 400, 600);
     if (this.controls) {
       this.controls.target.set(0, 250, 0);
@@ -324,7 +313,10 @@ class ArmModel {
     globalThis.THREE = { ...THREE, STLLoader, ColladaLoader };
     await import('./lib/URDFLoader.js');
 
-    const loader = new globalThis.URDFLoader();
+    const manager = new THREE.LoadingManager();
+    this.geometryReady = new Promise(resolve => { manager.onLoad = resolve; });
+    const loader = new globalThis.URDFLoader(manager);
+    globalThis.ThirdHandCameraLighting.configureModelMaterials(loader);
     loader.packages = {
       'FastTouchV3.SLDASM': './models/startouch-v3',
     };
@@ -332,12 +324,6 @@ class ArmModel {
     robot.name = 'Startouch FastTouchV3';
     robot.scale.setScalar(1000);
     robot.rotation.x = -Math.PI / 2;
-    robot.traverse(object => {
-      if (object.isMesh) {
-        object.castShadow = true;
-        object.receiveShadow = true;
-      }
-    });
 
     this.robot = robot;
     this.mount.add(robot);
@@ -2108,8 +2094,21 @@ class UIControls {
     }, 150);
   }
 
+  selectWorkspaceControl(tab) {
+    this.workspaceManualControl = tab;
+    if (tab !== 'tcp') {
+      clearTimeout(this.tcpPreviewTimer);
+      this.tcpPreviewRequestId = null;
+      this.tcpPreviewOk = false;
+      this.tcpDraftActive = false;
+    }
+  }
+
   _sendSelectedTarget() {
-    if (this.activeManualTarget === 'tcp') this._sendTcp();
+    if (this.workspaceManualControl === 'gripper') return;
+    const target = this.workspaceManualControl === 'tcp' ? 'tcp'
+      : this.workspaceManualControl === 'joints' ? 'joint' : this.activeManualTarget;
+    if (target === 'tcp') this._sendTcp();
     else this._sendServo();
   }
 
@@ -2299,6 +2298,8 @@ function createLocalCandidateSimulator(getUi) {
 
 function startApp() {
   console.log('[App] ThirdHand Web Control starting...');
+  const workspace = globalThis.ThirdHandWorkspace.mountWorkspace(document, window);
+  workspace.installOnboarding(globalThis.ThirdHandOnboarding);
 
   let ui = null;
   const visionWs = new WSClient('/vision', 'Vision WS');
@@ -2345,7 +2346,7 @@ function startApp() {
   // 主题切换
   const themeSelect = document.getElementById('theme-select');
   if (themeSelect) {
-    const saved = localStorage.getItem('theme') || 'deepspace';
+    const saved = workspace ? 'workspace' : localStorage.getItem('theme') || 'deepspace';
     if (saved !== 'deepspace') {
       document.documentElement.setAttribute('data-theme', saved);
     }
@@ -2363,6 +2364,14 @@ function startApp() {
   arm.loadingPromise.then(() => {
     ui.build();
     ui.bindViewControls(scene);
+    workspace.bindRuntime({ ws, ui, voice, scene });
+    arm.geometryReady.then(() => scene.fitModel(arm.mount));
+    let measuredFrame = false;
+    ws.on('robot_state', () => {
+      if (!measuredFrame && ui.robotStateReady && scene.modelObject) {
+        scene.fitModel(); measuredFrame = true;
+      }
+    });
     ws.on('connection', () => voice.handleRobotMessage({ type: 'runtime-readiness' }));
     ws.on('config', () => voice.handleRobotMessage({ type: 'runtime-readiness' }));
     ws.on('robot_state', () => voice.handleRobotMessage({ type: 'runtime-readiness' }));

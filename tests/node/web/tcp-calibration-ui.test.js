@@ -62,6 +62,29 @@ function browser(statuses){
 const state=(overrides={})=>({sessionId:'session-1',revision:3,stage:'collecting_fit',fitSamples:[],validationSamples:[],
  robot:{connected:true,healthy:true,stationary:true,stateFresh:true,locked:false,teachSupported:true,poseFrame:'robot_flange',framePolicyId:`sha256:${'a'.repeat(64)}`,TBaseFlange:[[1,0,0,.2],[0,1,0,.3],[0,0,1,.4],[0,0,0,1]]},...overrides});
 
+test('embedded navigation reports active and pending teaching without issuing any requests',()=>{
+ const {wizard,requests}=browser([state()]);
+ assert.equal(wizard.navigationState().known,false);
+ wizard.state=state();wizard.teaching=true;
+ assert.equal(wizard.navigationState().teachActive,true);
+ wizard.teaching=false;wizard.teachPending=true;
+ assert.equal(wizard.navigationState().teachPending,true);
+ assert.equal(requests.length,0);
+});
+test('an unavailable embedded wizard explains the failure and disables unbound mutations',()=>{
+ const {parseHTML}=require('linkedom');const {document}=parseHTML(html());
+ const context={document,fetch:async()=>{},crypto:{},console};
+ vm.runInNewContext(script()+'\nglobalThis.ExportedWizard=TcpCalibrationWizard;',context);
+ const wizard=new context.ExportedWizard({document,fetch:context.fetch,crypto:context.crypto});
+ wizard.showUnavailable('tcp_calibration_disabled');
+ assert.match(document.getElementById('service-warning').textContent,/tcp_calibration_disabled/);
+ assert.match(document.getElementById('next-step').textContent,/不可用/);
+ assert.ok([...document.querySelectorAll('main button')].every(button=>button.disabled));
+ assert.equal(document.getElementById('software-stop').disabled,true);
+ wizard.bound=true;document.getElementById('software-stop').disabled=false;wizard.showUnavailable('temporary_snapshot_failure');
+ assert.equal(document.getElementById('software-stop').disabled,false,'an already-bound stop must remain available');
+});
+
 test('unsupported teach captures an explicitly held stable pose without mode commands',async()=>{
  const held=state({robot:{...state().robot,teachSupported:false}});
  const {wizard,element,requests}=browser([held]);await wizard.init();element('support-ready').checked=true;

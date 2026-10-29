@@ -24,6 +24,7 @@
   "devDependencies": {
     "ajv": "8.20.0",
     "ajv-formats": "3.0.1",
+    "linkedom": "0.18.14",
     "yaml": "2.9.0"
   }
 }

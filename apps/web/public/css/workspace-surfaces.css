@@ -1,0 +1,77 @@
+/* Decorative surfaces only. Status colors, control behavior and the white 3D canvas stay intact. */
+.workspace #workspace-body {
+ background: radial-gradient(ellipse at 100% 0, #fff8f0 0, #fffdf9 17%, #fff 44%);
+}
+.workspace #workspace-pages {
+ background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='330' height='290' viewBox='0 0 330 290'%3E%3Cg fill='none' stroke='%23e6b68f' stroke-width='1' opacity='.25'%3E%3Ccircle cx='285' cy='35' r='92'/%3E%3Ccircle cx='285' cy='35' r='116'/%3E%3Cpath d='M170 0v104h160M230 0v162h100M206 104v58h24'/%3E%3C/g%3E%3Cg fill='%23dcb38f' opacity='.24'%3E%3Ccircle cx='170' cy='104' r='3'/%3E%3Ccircle cx='230' cy='162' r='3'/%3E%3Ccircle cx='268' cy='220' r='1.2'/%3E%3Ccircle cx='283' cy='220' r='1.2'/%3E%3Ccircle cx='298' cy='220' r='1.2'/%3E%3Ccircle cx='268' cy='235' r='1.2'/%3E%3Ccircle cx='283' cy='235' r='1.2'/%3E%3Ccircle cx='298' cy='235' r='1.2'/%3E%3Ccircle cx='268' cy='250' r='1.2'/%3E%3Ccircle cx='283' cy='250' r='1.2'/%3E%3Ccircle cx='298' cy='250' r='1.2'/%3E%3C/g%3E%3C/svg%3E");
+ background-position: right top; background-repeat: no-repeat; background-size: 330px 290px; background-attachment: local;
+}
+.workspace .workspace-heading { border-bottom-color: #ebdfd325; }
+
+/* Overview: a warm identity tile, a technical tile and two wide information strips. */
+.workspace .overview-card { overflow: hidden; }
+.workspace .overview-card-connection { background: linear-gradient(135deg,#fff0df,#fffaf3 65%,#fff); border-color: #efd1b8; border-radius: 18px 7px 18px 18px; }
+.overview-card-connection::after { content: ''; position: absolute; width: 68px; height: 68px; right: -17px; top: -17px; border: 1px solid #eab58766; border-radius: 50%; box-shadow: 0 0 0 12px #efc39b14,0 0 0 24px #efc39b0c; pointer-events: none; }
+.workspace .overview-card-connection .summary-icon { color: #fff; background: #e98c46; border-color: #e98c46; border-radius: 9px 9px 9px 3px; }
+.workspace .overview-card-connection h2 { color: #ad886a; }
+.workspace .overview-card-connection p { font-size: 15px; color: #6b4c34; }
+.workspace .overview-card-feedback { border-top: 3px solid #bcc8d0; border-radius: 7px 18px 18px 18px; background: radial-gradient(circle,#c3cdd544 .7px,transparent 1px) right 13px top 13px / 10px 10px no-repeat,#fff; }
+.workspace .overview-card-feedback .summary-icon { border-color: #e1e8ed; background: #f5f8fa; color: #8498a5; border-radius: 50%; }
+.workspace .overview-card-feedback p { font-family: ui-monospace,SFMono-Regular,monospace; letter-spacing: -.2px; }
+.workspace .overview-card-vision, .workspace .overview-card-tcp { display: grid; grid-template-columns: 39px minmax(0,1fr); column-gap: 14px; align-content: center; padding: 22px; min-height: 116px; }
+.workspace .overview-card-vision { border-left: 3px solid #eaa675; background: linear-gradient(105deg,#fff 55%,#fff8f1); border-radius: 7px 17px 17px 7px; }
+.workspace .overview-card-tcp { border-style: dashed; border-color: #ccd8df; background: #fafcfd; border-radius: 12px; }
+.workspace .overview-card-vision .summary-icon, .workspace .overview-card-tcp .summary-icon { grid-row: 1 / 3; width: 37px; height: 37px; margin: 3px 0 0; }
+.workspace .overview-card-tcp .summary-icon { border-color: #dce5eb; background: #fff; color: #899ca9; }
+.workspace .overview-card-vision h2, .workspace .overview-card-tcp h2 { grid-column: 2; margin: 0 0 5px; }
+.workspace .overview-card-vision p, .workspace .overview-card-tcp p { grid-column: 2; margin: 0; font-size: 12px; }
+.workspace .overview-card-tcp p { font-family: ui-monospace,SFMono-Regular,monospace; font-size: 11px; }
+
+/* A paper-like starter card is distinct from live feedback. */
+.workspace .onboarding-checklist { position: relative; overflow: hidden; background: linear-gradient(135deg,#fff5e8 0,#fffdf9 28%,#fff 68%); border-color: #efd5bf; border-radius: 20px 20px 20px 6px; box-shadow: 0 5px 24px #9e65200a; }
+.workspace .onboarding-checklist::before { content: ''; position: absolute; right: -19px; top: -19px; width: 75px; height: 75px; border: 1px solid #e9b88f55; border-radius: 50%; box-shadow: 0 0 0 12px #edc7a714; pointer-events: none; }
+.workspace .onboarding-list-heading { padding-right: 36px; }
+.workspace .onboarding-tasks li { border-bottom-color: #eee5db88; }
+.workspace .onboarding-task-open { background: transparent; }
+
+/* Control cards use instrument frames and a separate telemetry band. */
+.workspace .control-card { border-top: 3px solid #e9ae80; border-radius: 15px 15px 12px 12px; box-shadow: 0 7px 25px #2e435009; }
+.workspace .workspace-tabs { background: #fffaf5; }
+.workspace .workspace-tabs button[aria-selected="true"] { background: #fffaf5; }
+.workspace #sec-actions { background: linear-gradient(90deg,#fff9f2,#fff); }
+.workspace #sec-actions .sec-header { background: transparent; }
+.workspace #sec-rt-angles { margin: 14px; border: 1px solid #e1e8ed; border-radius: 10px; background: #f7f9fb; }
+.workspace #sec-rt-angles .sec-header { background: transparent; }
+.workspace #sec-rt-angles .sec-header::before { background: #b4c3ce; }
+.workspace #sec-rt-angles .rt-angle { background: #fff; border-color: #e0e8ee; }
+
+/* Vision, calibration and conversation retain their own visual rhythm. */
+.workspace #sec-xvision > .sec-header { background: #fff8f1; border-bottom: 1px solid #f1e0d1; border-radius: 13px 13px 0 0; margin-bottom: 16px; }
+.workspace .camera-feed-container[data-camera-state="waiting"] { background: radial-gradient(circle,#c6d1d946 .8px,transparent 1px) 0 0 / 15px 15px,#fcfdfd; }
+.workspace .active-depth-panel { border-radius: 7px; border-left: 3px solid #c4d2dc; background: #f8fafc; }
+.workspace .web-grasp-panel { border-radius: 14px; border-top: 3px solid #e9bb98; box-shadow: 0 4px 18px #5d3e2108; }
+.workspace .workspace-calibration-info { background: linear-gradient(110deg,#fff7ee,#fff 75%); border-left: 4px solid #e5a16c; border-radius: 5px 14px 14px 5px; }
+.workspace #workspace-calibration-frame { border-top: 3px solid #cbd7df; border-radius: 12px; }
+.workspace .voice-config-block { background: #f9fbfc; border-radius: 7px; }
+.workspace .voice-capture-block { background: #fff9f3; border-color: #f0dccb; border-radius: 13px 13px 13px 5px; }
+.workspace .voice-conversation-block { background: #fff; border-radius: 15px; box-shadow: 0 5px 18px #26313b06; }
+.workspace #log-panel { border-top: 3px solid #b8c6cf; border-radius: 7px 7px 13px 13px; }
+
+/* Profile is a hero card; preferences are individual rows rather than another big box. */
+.workspace .account-card { --card-x: 32px; --card-y: 28px; overflow: hidden; }
+.workspace #page-account-profile .account-card { border-color: #e8dacd; border-radius: 18px; box-shadow: 0 7px 30px #714c2207; }
+.workspace .account-identity { margin: calc(-1 * var(--card-y)) calc(-1 * var(--card-x)) 0; padding: 28px var(--card-x); border-bottom: 1px solid #f1dfce; background: radial-gradient(circle at 90% 30%,#edc19633 0 30px,transparent 31px 47px,#edc19622 48px 49px,transparent 50px),linear-gradient(115deg,#fff3e4,#fffaf2 64%,#fff); }
+.workspace .account-avatar-large { background: #fff; border-color: #eed4bd; box-shadow: 0 4px 12px #ad784316; }
+.workspace #page-account-preferences .account-card { padding: 0; border: 0; background: transparent; box-shadow: none; overflow: visible; }
+.workspace #page-account-preferences .account-setting-row { padding: 22px 25px; margin: 0 0 13px; border: 1px solid #e5e9ec; border-radius: 12px; background: #fff; box-shadow: 0 3px 12px #26313b03; }
+.workspace #page-account-preferences #account-language-field { border-left: 3px solid #e9ad7e; background: #fffaf5; border-radius: 5px 13px 13px 5px; }
+.workspace #page-account-connections .account-card { border-top: 3px solid #bfccd5; border-radius: 8px 8px 14px 14px; }
+.workspace #page-account-connections .account-connection-row:nth-child(even) { background: #f8fafb; margin-left: -16px; margin-right: -16px; padding-left: 16px; padding-right: 16px; border-radius: 6px; }
+.workspace .account-about { border-color: #efd7c2; background: radial-gradient(circle at 50% 84px,transparent 0 58px,#efcbaa38 59px 60px,transparent 61px 82px,#efcbaa22 83px 84px,transparent 85px),linear-gradient(180deg,#fffaf3,#fff 65%); }
+@media(max-width:650px) {
+ .workspace #workspace-pages { background-size: 230px 203px; }
+ .workspace .account-card { --card-x: 20px; --card-y: 22px; }
+ .workspace .account-identity { padding-top: 24px; padding-bottom: 24px; }
+ .workspace #page-account-preferences .account-setting-row { padding: 20px; }
+ .workspace .overview-card-vision, .workspace .overview-card-tcp { padding: 18px; gap: 0 11px; }
+}

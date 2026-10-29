@@ -49,6 +49,19 @@ test('the single send action submits the edited TCP pose rather than joint servo
   assert.deepEqual(Array.from(sent[0].position), [0.3451, 0.2091, 0.0511]);
 });
 
+test('workspace send follows the visible tab and invalidates hidden TCP preview requests', () => {
+  const classStart = source.indexOf('class UIControls {'), classEnd = source.indexOf('// === App Entry ===', classStart);
+  const UIControls = vm.runInNewContext(source.slice(start, end) + '\n' + source.slice(classStart, classEnd) + '\nUIControls', { console, clearTimeout });
+  const ui = Object.create(UIControls.prototype), calls = [];
+  ui.activeManualTarget = 'tcp'; ui.tcpPreviewOk = true; ui.tcpDraftActive = true; ui.tcpPreviewRequestId = 'old';
+  ui._sendServo = () => calls.push('joint'); ui._sendTcp = () => calls.push('tcp');
+  ui.selectWorkspaceControl('joints'); ui._sendSelectedTarget();
+  assert.equal(ui.tcpPreviewOk, false); assert.equal(ui.tcpPreviewRequestId, null); assert.equal(ui.tcpDraftActive, false);
+  ui.activeManualTarget = 'joint'; ui.selectWorkspaceControl('tcp'); ui._sendSelectedTarget();
+  ui.selectWorkspaceControl('gripper'); ui._sendSelectedTarget();
+  assert.deepEqual(calls, ['joint', 'tcp']);
+});
+
 test('TCP inputs keep measured flange feedback when joint model is only a preview', () => {
   const elements = new Map();
   const document = { getElementById(id) {

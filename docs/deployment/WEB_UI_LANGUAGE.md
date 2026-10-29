@@ -3,11 +3,10 @@
 ## Scope / 范围
 
 The 9983 robot-control page supports English and Simplified Chinese. A browser
-with no saved choice defaults to English. The language selector is in the top
-toolbar. Switching does not reload the page, reconnect the robot, or send motion.
+with no saved choice defaults to English. The language selector is in Account & Settings → Preferences. Switching does not reload the page, reconnect the robot, or send motion.
 
 9983 机械臂控制页支持英文与简体中文。没有保存过语言的浏览器默认英文。
-顶部工具栏可立即切换语言，不刷新网页、不重连机械臂、不发送运动指令。
+左下角“账户与设置 → 偏好设置”可立即切换语言，不刷新网页、不重连机械臂、不发送运动指令。
 
 Covered panels include joints, gripper, TCP labels, vision and grasp progress,
 Dummy controls, voice controls, validation messages, and confirmation dialogs.
@@ -29,7 +28,11 @@ not translated by this control-page language layer.
 - `apps/web/public/js/i18n-voice-catalog.js`: voice-service status and confirmations.
 - `apps/web/public/css/i18n.css`: language selector and responsive text layout.
 - `apps/web/public/index.html`: language assets and selector entry.
-- `apps/web/public/js/main.js`: localized native input-validation messages only.
+- `apps/web/public/js/main.js`: localized native input validation and workspace initialization.
+- `apps/web/public/js/i18n-onboarding-catalog.js`: workspace guide strings.
+- `apps/web/public/js/i18n-account-catalog.js`: account and preference strings.
+- `apps/web/public/js/i18n-status-catalog.js`: live status-lamp strings.
+- `apps/web/public/js/account-settings.js`: hosts the existing language selector in Preferences.
 - `apps/web/public/js/voice-control.js`: literal device-name exclusions only.
 - `tests/node/web/i18n.test.js`: language, storage, literal content, and validation tests.
 
@@ -44,15 +47,16 @@ session only. No translation service, network request, or new dependency is used
 
 ## Verification / 验证
 
-1. Open the control page. A fresh browser shows English. Select 中文, then English;
+1. Open the control page. A fresh browser shows English. Open Account & Settings →
+   Preferences and select 中文, then English;
    labels update immediately and the robot connection/state does not change.
 2. Reload. The selected language remains selected.
 3. Inspect the joint/gripper/TCP, vision, Dummy, and voice panels. Confirm numbers,
    units, input drafts, enabled/disabled states, and target selection are unchanged.
 4. Open the voice panel without enabling the microphone. Its UI follows the
    selected language; user/AI conversation text stays in its original language.
-5. Check desktop and narrow screens: the software-stop button and language
-   selector remain accessible, and English text wraps without covering controls.
+5. Check desktop and narrow screens: the software-stop button remains accessible,
+   Preferences exposes the language selector, and English text wraps without covering controls.
 
 以上步骤仅验证显示，不点击连接、发送运动、夹爪、启动 Dummy 或抓取按钮。
 软停止不等于独立硬件急停；切换语言不会改变任何授权、限位或执行门控。

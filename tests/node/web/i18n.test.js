@@ -16,7 +16,7 @@ function harness(saved, blocked = false) {
       setItem(key, value) { if (blocked) throw new Error('blocked'); writes.push([key, value]); },
     },
   });
-  for (const file of ['i18n-catalog.js', 'i18n-voice-catalog.js', 'i18n.js']) {
+  for (const file of ['i18n-catalog.js', 'i18n-voice-catalog.js', 'i18n-onboarding-catalog.js', 'i18n-account-catalog.js', 'i18n-status-catalog.js', 'i18n.js']) {
     const filename = path.join(publicRoot, 'js', file);
     // An absent language layer is the intended pre-implementation failure.
     if (fs.existsSync(filename)) vm.runInContext(fs.readFileSync(filename, 'utf8'), context);
@@ -34,6 +34,25 @@ test('a fresh browser displays English and an explicit choice persists', () => {
   assert.equal(writes.at(-1)[1], 'zh-CN');
   assert.equal(api.setLocale('invalid'), false);
   assert.equal(api.locale, 'zh-CN');
+});
+test('workspace navigation, send actions and dynamic mode remain bilingual', () => {
+  const { api }=harness('zh-CN');
+  for(const label of ['Overview','Manual control','Vision tasks','Calibration','Assistant','System','Send joint target','Send TCP target','Local simulation']) {
+    assert.notEqual(api.translate(label),label);
+    assert.equal(api.translate(api.translate(label),'en'),label);
+  }
+});
+test('account settings and profile status switch between Chinese and English without losing labels',()=>{
+ const {api}=harness('zh-CN');
+ for(const label of ['Account and settings','Profile','Preferences','Display name','Account data service is not connected.','Back to workspace']){
+  const chinese=api.translate(label);assert.notEqual(chinese,label);assert.equal(api.translate(chinese,'en'),label);
+ }
+});
+test('live status lamp descriptions remain bilingual for offline and waiting states',()=>{
+ const {api}=harness('zh-CN');
+ for(const label of ['SDK online','SDK disconnected','SDK feedback lost','Waiting for SDK feedback','Web control link disconnected']){
+  const chinese=api.translate(label);assert.notEqual(chinese,label);assert.equal(api.translate(chinese,'en'),label);
+ }
 });
 
 test('saved Chinese is restored; unsupported preferences and blocked storage default to English', () => {

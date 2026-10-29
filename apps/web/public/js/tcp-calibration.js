@@ -3,6 +3,8 @@
 class TcpCalibrationWizard{
  constructor({document:doc=document,fetch:fetchImpl=fetch,crypto:cryptoImpl=crypto}={}){this.document=doc;this.fetch=(...args)=>fetchImpl(...args);this.crypto=cryptoImpl;this.state=null;this.pending=null;this.active=null;this.teaching=false;this.teachTimer=null;this.captureHeld=false;}
  el(id){return this.document.getElementById(id);}
+ showUnavailable(reason){this.unavailable=true;this.message(reason);this.el('service-warning').textContent=`标定服务不可用：${reason}`;this.el('next-step').textContent='标定服务不可用，当前页面不能采集或修改标定。';this.document.querySelectorAll('main button').forEach(button=>{button.disabled=true;});if(!this.bound)this.el('software-stop').disabled=true;}
+ navigationState(){return {loaded:this.state!==null,known:Boolean(this.state?.robot?.connected&&this.state.robot.stateFresh),unavailable:this.unavailable===true,bound:this.bound===true,teachActive:this.teaching===true,teachPending:this.teachPending===true};}
  async json(url,options){const response=await this.fetch(url,options);const payload=await response.json();if(!response.ok)throw new Error(payload.reason||payload.error||`http_${response.status}`);return payload;}
  async init(){const runtime=await this.json('/api/runtime-config');if(!runtime.tcpCalibration?.ready)throw new Error(runtime.tcpCalibration?.reason||'tcp_calibration_unavailable');this.bind();return this.refresh();}
  async refresh(){const state=await this.json('/api/tcp-calibration/sessions/current');this.render(state);return state;}
@@ -172,4 +174,7 @@ class TcpCalibrationWizard{
  }
 }
 
-if(typeof document!=='undefined')document.addEventListener('DOMContentLoaded',()=>{const wizard=new TcpCalibrationWizard();wizard.init().then(()=>wizard.startPolling()).catch(error=>wizard.message(error.message));window.addEventListener('pagehide',()=>wizard.stopHeartbeat());});
+if(typeof document!=='undefined')document.addEventListener('DOMContentLoaded',()=>{const wizard=new TcpCalibrationWizard();
+ window.ThirdHandCalibrationNavigationState=()=>wizard.navigationState();
+ if(new URLSearchParams(window.location.search).get('embedded')==='1')document.documentElement.dataset.embedded='true';
+ wizard.init().then(()=>wizard.startPolling()).catch(error=>wizard.showUnavailable(error.message));window.addEventListener('pagehide',()=>wizard.stopHeartbeat());});

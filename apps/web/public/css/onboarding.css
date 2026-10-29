@@ -1,0 +1,71 @@
+/* Optional guide stays inside the functional column; the model and stop remain usable. */
+.workspace #workspace-guide { width: 100%; min-height: 36px; margin-bottom: 6px; font-size: 10px; }
+.onboarding-help-icon { font: 12px ui-monospace, SFMono-Regular, monospace; border: 1px solid #c3cbd1; border-radius: 50%; width: 17px; height: 17px; flex-basis: 17px; margin: 0 1.5px; }
+.workspace .workspace-heading { padding-right: 76px; }
+.onboarding-page-help { position: absolute; right: 0; top: 22px; border: 1px solid #e8edef; border-radius: 6px; background: white; color: #7e8992; padding: 6px 8px; font-size: 9px; cursor: pointer; }
+.onboarding-page-help:hover { border-color: #edc6a9; color: #cf6b24; background: #fffaf6; }
+.onboarding-checklist { border: 1px solid #f0d7c4; border-radius: 13px; background: white; padding: 21px; margin-bottom: 17px; }
+.onboarding-welcome { padding-bottom: 16px; margin-bottom: 15px; border-bottom: 1px solid #f3e9e1; }
+.onboarding-welcome::before { content: ''; display: block; width: 22px; height: 3px; border-radius: 2px; background: #ed8a43; margin-bottom: 13px; }
+.onboarding-welcome h2 { font-size: 20px; font-weight: 600; letter-spacing: -.5px; margin: 0 0 8px; color: #37434d; }
+.onboarding-welcome p { font-size: 11px; line-height: 1.85; color: #7c8791; margin: 0; }
+.onboarding-list-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+.onboarding-list-heading strong { font-size: 11px; font-weight: 600; color: #6a7680; }
+.onboarding-list-heading > span { font: 9px ui-monospace, SFMono-Regular, monospace; color: #a08067; }
+.onboarding-tasks { list-style: none; padding: 0; margin: 0; }
+.onboarding-tasks li { display: flex; align-items: center; gap: 10px; border-bottom: 1px solid #f1f3f5; padding: 10px 0; font-size: 11px; line-height: 1.5; color: #808b94; }
+.onboarding-tasks li:last-child { border-bottom: 0; }
+.onboarding-task-mark { display: grid; place-items: center; flex: 0 0 17px; height: 17px; border: 1px solid #e3e8ec; border-radius: 5px; font-size: 10px; }
+.onboarding-tasks li[data-complete="true"] .onboarding-task-mark { color: #59866b; background: #f0f8f3; border-color: #d5e8dc; }
+.onboarding-task-open { margin-left: auto; flex: 0 0 25px; height: 25px; border: 0; background: white; border-radius: 5px; color: #c28e64; cursor: pointer; }
+.onboarding-task-open:hover { background: #fff6ed; }
+.onboarding-actions { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 10px; margin-top: 15px; }
+.workspace .onboarding-actions .action-btn { width: auto; min-height: 32px; padding: 8px 13px; font-size: 10px; }
+.onboarding-text-button { border: 0; border-radius: 5px; padding: 6px 4px; background: transparent; color: #87929b; font-size: 10px; cursor: pointer; }
+.onboarding-text-button:hover { color: #c96824; }
+.onboarding-panel { position: sticky; top: 0; z-index: 19; padding: 18px 20px; border: 1px solid #ebc7aa; border-left: 3px solid #ec873b; border-radius: 11px; background: white; box-shadow: 0 5px 18px #5c351413; margin: 0 0 20px; }
+.onboarding-panel-top { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 9px; }
+.onboarding-panel-top > span { font: 9px ui-monospace, SFMono-Regular, monospace; color: #b18058; letter-spacing: .5px; }
+.onboarding-panel h2 { margin: 0 0 9px; font-size: 17px; color: #3e4a54; letter-spacing: -.3px; font-weight: 600; }
+.onboarding-panel > p { margin: 0; font-size: 11px; color: #737f89; line-height: 1.85; }
+.onboarding-panel .onboarding-live-status { padding-top: 9px; font-size: 9px; color: #98a0a7; overflow-wrap: anywhere; }
+.onboarding-status { margin: 10px 0 0; color: #a06c41 !important; font-size: 10px; line-height: 1.7; }
+.onboarding-highlight { outline: 2px solid #edab78 !important; outline-offset: 4px; scroll-margin-top: calc(var(--onboarding-clearance, 220px) + 16px); scroll-margin-bottom: 14px; }
+.workspace .onboarding-actions button:disabled, .onboarding-task-open:disabled { opacity: .45; cursor: not-allowed; }
+@media(max-width:1000px) {
+ .onboarding-panel { padding: 12px 15px; margin-bottom: 15px; }
+ .onboarding-panel h2 { font-size: 15px; margin-bottom: 6px; }
+ .onboarding-panel > p { font-size: 10px; line-height: 1.75; }
+ .onboarding-panel .onboarding-actions { margin-top: 10px; }
+ .onboarding-checklist { padding: 17px; }
+ .onboarding-page-help { top: 18px; }
+}
+@media(max-width:480px) {
+ .workspace .workspace-heading { padding-right: 60px; }
+ .onboarding-page-help { font-size: 8px; padding: 5px; }
+ .onboarding-list-heading { align-items: flex-start; flex-direction: column; gap: 6px; }
+ .onboarding-panel { max-height: 100%; overflow: auto; }
+}
+
+/* Spotlight cut-outs preserve the real controls; no cloned buttons or backdrop clicks. */
+#onboarding-spotlight { position: fixed; inset: 0; z-index: 180; pointer-events: none; }
+#onboarding-spotlight[hidden] { display: none; }
+.onboarding-shade { position: absolute; background: rgb(18 27 38 / 67%); pointer-events: auto; touch-action: none; }
+.onboarding-spotlight-outline { position: absolute; border: 2px solid #f4a567; border-radius: 9px; box-shadow: 0 0 0 3px #fff4; pointer-events: none; }
+#onboarding-spotlight .onboarding-panel { position: fixed; box-sizing: border-box; z-index: 2; margin: 0; padding: 22px 24px; overflow: auto; pointer-events: auto; border: 1px solid #f2d5bf; border-top: 3px solid #ec873b; border-radius: 14px; background: #fff; box-shadow: 0 18px 70px #07121e45, 0 3px 12px #07121e1c; }
+#onboarding-spotlight .onboarding-panel h2 { font-size: 19px; line-height: 1.3; color: #2f3c47; margin-bottom: 12px; }
+#onboarding-spotlight .onboarding-panel > p { font-size: 12px; line-height: 1.9; color: #65727d; }
+#onboarding-spotlight .onboarding-panel .onboarding-live-status { font-size: 10px; color: #89949d; }
+#onboarding-spotlight .onboarding-panel-top { margin-bottom: 13px; }
+#onboarding-spotlight .onboarding-panel-top > span { color: #ba773f; font-size: 10px; }
+#onboarding-spotlight .onboarding-actions { margin-top: 22px; gap: 18px; }
+#onboarding-spotlight .action-btn { width: auto; min-height: 36px; padding: 9px 17px; font-size: 11px; }
+#onboarding-spotlight .action-primary { border: 1px solid #e78037; background: #e9843c; color: #fff; box-shadow: 0 3px 8px #e9843c26; }
+#onboarding-spotlight .onboarding-text-button { font-size: 11px; }
+#onboarding-spotlight button:focus-visible { outline: 2px solid #ec873b; outline-offset: 3px; }
+#onboarding-spotlight button:disabled { opacity: .45; cursor: not-allowed; }
+@media(max-width:480px) {
+ #onboarding-spotlight .onboarding-panel { padding: 17px 19px; }
+ #onboarding-spotlight .onboarding-panel h2 { font-size: 17px; }
+ #onboarding-spotlight .onboarding-panel > p { font-size: 11px; }
+}

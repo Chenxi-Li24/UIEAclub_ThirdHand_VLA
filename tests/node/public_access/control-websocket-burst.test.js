@@ -83,3 +83,15 @@ test('the serial response queue is bounded and rejects an authorization-time flo
   f.respond(second);f.respond(second);await once(f.socket,'close');hold.release.resolve();
   assert.equal(f.messages.some(value=>value.type==='fresh'),false);
 });
+
+test('a rejected replay revokes browser authority before an unresponsive peer closes TCP',async t=>{
+  const f=await fixture(t);
+  f.respond(f.first);await f.waitFor(value=>value.type==='fresh');
+  // A client may receive a close frame without completing the close handshake.
+  // Authority must not remain live until the transport eventually disappears.
+  f.socket.close=()=>{};
+  const revoked=once(f.channels.events,'closed',{signal:AbortSignal.timeout(800)});
+  f.respond(f.first);
+  assert.equal((await revoked)[0].connectionId,f.bound.connectionId);
+  assert.equal(f.closed,false);
+});

@@ -16,8 +16,14 @@ async function isolatedDatabase(t) {
   await admin.query(`CREATE DATABASE "${name}"`);
   url.pathname = `/${name}`;
   const pool = new Pool({ connectionString: url.toString(), max: 6 });
+  const disconnected=[];
+  pool.on('connect',client=>disconnected.push(new Promise(resolve=>client.once('end',resolve))));
   t.after(async () => {
     await pool.end();
+    // pg Pool.end resolves after removing its clients, before their TCP end
+    // callbacks necessarily run. DROP FORCE in that gap sends 57P01 errors to
+    // otherwise successfully completed tests on fast Linux runners.
+    await Promise.all(disconnected);
     await admin.query(`DROP DATABASE "${name}" WITH (FORCE)`);
     await admin.end();
   });

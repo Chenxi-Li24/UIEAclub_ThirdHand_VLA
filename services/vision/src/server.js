@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 'use strict';
 
-const { randomUUID } = require('node:crypto');
+const { randomUUID,timingSafeEqual } = require('node:crypto');
 const fs = require('node:fs');
 const http = require('node:http');
 const path = require('node:path');
@@ -100,12 +100,23 @@ function createVisionService(options = {}) {
     }
   }
   let closing = false;
+  const privateMediaClients=new Set();
   let stateRelay=null;
   const framePolicy=config.robotFramePolicyFile
     ?require('./frames/robot_frame_normalization').loadPolicy(config.robotFramePolicyFile):null;
 
   const server = http.createServer(async (request, response) => {
     const pathname = new URL(request.url, 'http://localhost').pathname;
+    if(pathname==='/edge-media/v1/raw'){
+      const supplied=request.headers['x-thirdhand-media-token'];
+      if(!config.edgeMediaToken){writeJson(response,404,{code:'private_media_unavailable'});return;}
+      if(request.method!=='GET'||request.headers.cookie||request.headers.origin||!['127.0.0.1','::1','::ffff:127.0.0.1'].includes(request.socket.remoteAddress)||typeof supplied!=='string'||!/^[a-f0-9]{64}$/.test(supplied)||!timingSafeEqual(Buffer.from(supplied),Buffer.from(config.edgeMediaToken))){writeJson(response,403,{code:'private_media_auth_required'});return;}
+      if(privateMediaClients.size>=1){writeJson(response,429,{code:'private_media_publisher_exists'});return;}
+      const unavailable=streamUnavailable(camera.status(),'raw');if(unavailable){writeJson(response,503,unavailable);return;}
+      response.writeHead(200,{'content-type':'multipart/x-mixed-replace; boundary=frame','cache-control':'no-store','connection':'close'});
+      privateMediaClients.add(response);response.on('close',()=>{privateMediaClients.delete(response);camera.unsubscribe('raw',response);});
+      if(!camera.subscribe('raw',response))response.end();return;
+    }
     if (request.method === 'GET' &&
         (pathname === '/health' || pathname === '/api/vision/status' ||
          pathname === '/api/vision/person-follow/status')) {

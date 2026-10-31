@@ -120,3 +120,5 @@ node --env-file=/etc/thirdhand/cloud.env services/cloud-api/src/jobs/export-main
 - 用户在一次Observer重新登录期间报告长时间转圈，随后登录成功。当前健康检查通过，但未取得该认证POST耗时和浏览器加载时间证据，原因未定位，不能称作已修复。
 
 Git交付偏好记在根目录`AGENTS.md`：独立功能完成且必要检查通过后自动本地提交，同步说明，报告提交号；本次普通推送fork的login分支，保留历史和其他任务改动。
+
+后续[CI修复记录](../operations/2026-11-01-ci-repair.md)说明数据库清理、关闭握手前撤权、只读来源摘要、LF/LFS资源和UI测试夹具的修复；完整公网/Robot回归现为350/350。这些仓库修复未额外部署到现有服务器，不推导出真实物理停止或运动已验收。

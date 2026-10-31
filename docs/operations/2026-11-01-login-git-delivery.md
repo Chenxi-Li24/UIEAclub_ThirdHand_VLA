@@ -46,3 +46,5 @@
 - `tests/python/vision_service/test_xvisio_capture_timing.py`
 
 因此交付后工作区仍有这组修改，不把它误报成“全仓干净”。普通功能提交和线上C6部署是两件事：此次Git整理不改变服务器、Ubuntu、设备证书或机械臂状态。
+
+后续CI核对发现上面9件中的`services/vision/src/config.js`和`server.js`实际上属于已完成的私有相机接口，并非时间采集候选；本次拆分遗漏已在[CI修复](2026-11-01-ci-repair.md)纠正。其余7件仍保留。此处保留首次交付时的原始范围，不能将遗漏解释成这些接口不需要跟踪。

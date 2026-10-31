@@ -1,6 +1,7 @@
 'use strict';
 
 const path = require('node:path');
+const fs = require('node:fs');
 
 const ROOT = path.resolve(__dirname, '../../..');
 
@@ -13,7 +14,15 @@ function parsePort(value, fallback) {
 }
 
 function loadConfig(env = process.env) {
+  let edgeMediaToken=null;
+  if(env.EDGE_MEDIA_TOKEN_FILE){
+    const stat=fs.lstatSync(env.EDGE_MEDIA_TOKEN_FILE);
+    if(!stat.isFile()||stat.isSymbolicLink()||process.platform!=='win32'&&(stat.mode&0o077))throw Error('Private media token requires an owner-only regular file');
+    edgeMediaToken=fs.readFileSync(env.EDGE_MEDIA_TOKEN_FILE,'ascii').trim();
+    if(!/^[a-f0-9]{64}$/.test(edgeMediaToken))throw Error('Invalid private media token');
+  }
   return {
+    edgeMediaToken,
     root: ROOT,
     host: env.VISION_HOST || '127.0.0.1',
     port: parsePort(env.VISION_PORT, 3100),

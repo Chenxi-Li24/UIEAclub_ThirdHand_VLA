@@ -21,3 +21,10 @@ local/models/**/*.onnx filter=lfs diff=lfs merge=lfs -text
 local/sdk/**/*.so* filter=lfs diff=lfs merge=lfs -text
 local/sdk/**/*.deb filter=lfs diff=lfs merge=lfs -text
 local/generated/**/*.so* filter=lfs diff=lfs merge=lfs -text
+
+# Content-bound source/configuration must retain identical bytes across clones.
+services/robot/src/robot-controller.js text eol=lf
+services/robot/src/startouch_bridge.py text eol=lf
+configs/vision/sdk-tool-frame-policy.json text eol=lf
+configs/vision/handeye-flange-normalized.json text eol=lf
+apps/web/configs/web-grasp.json text eol=lf

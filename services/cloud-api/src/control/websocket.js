@@ -20,8 +20,11 @@ function createControlWebSocket({sessions,channels,controlService,publicOrigin,m
         const duration=value=>Math.max(0,Math.min(60000,Math.round(value)));
         const report=value=>{try{onTiming(Object.freeze({traceId,...value}));}catch{/* Diagnostics cannot authorize or reject a control response. */}};
         const send=value=>{if(ws.readyState===WebSocket.OPEN)ws.send(JSON.stringify(value));};
-        const timeout=setTimeout(()=>ws.close(1008,'Control bind timeout'),3000);timeout.unref();
-        const timer=setInterval(()=>{if(connectionId){if(performance.now()-lastResponse>1500){ws.close(1008,'Control response expired');return;}try{channels.challenge(connectionId);}catch{ws.close(1008,'Control connection revoked');}}},250);timer.unref();
+        // Revocation must precede the close handshake: an unresponsive peer can
+        // keep TCP open after receiving our close frame.
+        const reject=reason=>{queue.length=0;if(connectionId)channels.close(connectionId);ws.close(1008,reason);};
+        const timeout=setTimeout(()=>reject('Control bind timeout'),3000);timeout.unref();
+        const timer=setInterval(()=>{if(connectionId){if(performance.now()-lastResponse>1500){reject('Control response expired');return;}try{channels.challenge(connectionId);}catch{reject('Control connection revoked');}}},250);timer.unref();
         ws.on('error',()=>{});
         ws.on('close',()=>{queue.length=0;clearTimeout(timeout);clearInterval(timer);clients.delete(item);if(connectionId)channels.close(connectionId);});
         async function handle({raw,receivedAt}){
@@ -42,7 +45,7 @@ function createControlWebSocket({sessions,channels,controlService,publicOrigin,m
               channels.respond(fresh,message);lastResponse=performance.now();send({type:'fresh',connectionId,sequence:message.sequence});
             }else throw Error();
             metric('accepted');
-          }catch(error){metric('rejected',['STALE_CHALLENGE','FORBIDDEN','BROWSER_STALE'].includes(error?.code)?error.code:'AUTHORIZATION_REJECTED');ws.close(1008,'Control authorization rejected');}
+          }catch(error){metric('rejected',['STALE_CHALLENGE','FORBIDDEN','BROWSER_STALE'].includes(error?.code)?error.code:'AUTHORIZATION_REJECTED');reject('Control authorization rejected');}
         }
         async function drain(){
           if(processing)return;processing=true;
@@ -54,7 +57,7 @@ function createControlWebSocket({sessions,channels,controlService,publicOrigin,m
           // asynchronous identity lookup must not turn that burst into a
           // protocol violation. Keep at most one waiting response, and still
           // verify its original challenge expiry after authorization resolves.
-          if(isBinary||queue.length+(processing?1:0)>=2){ws.close(1008,'Invalid control message');return;}
+          if(isBinary||queue.length+(processing?1:0)>=2){reject('Invalid control message');return;}
           queue.push({raw,receivedAt:performance.now()});void drain();
         });
       });

@@ -35,11 +35,11 @@
     },
     {
       "path": "../../services/robot/src/robot-controller.js",
-      "sha256": "843d18d85141b007785af953969c660b773a25a55476c0e61d78d595da7cf680"
+      "sha256": "2ec120bb6f4e0412277e1cc9d1e4aa8161b7966739d67a3f5b10e34185ae7a34"
     },
     {
       "path": "../../services/robot/src/startouch_bridge.py",
-      "sha256": "41dda5d6038e39fb44ed31d989618a845b5460f22076dc6e4e8a7d1edffd1ff2"
+      "sha256": "d621cbec9b1377219b78b6f76f648864178d5b83d23a5410c34e1e760ef4a1f0"
     },
     {
       "path": "../../assets/robot/startouch-v3/FastTouchV3.SLDASM.urdf",
@@ -81,6 +81,11 @@
     "source_policy_id": "sha256:832c52da1f9f8a4aa33c1ca4c9ab0aee176b590d8f26a2da8a6bf7b62c0d7e83",
     "note": "Repository-relative paths and current source hashes; unchanged SDK tool transform, no new physical validation.",
     "previous_runtime_policy_id": "sha256:f5dd0a13c629c65007d696327aa6f1e65949d5cb00dda103c29d9f331ed96b29",
-    "merge_scope": "main SDK speed reference alignment and pre-construction generated configuration validation; no kinematics or calibration matrix change"
+    "merge_scope": "main SDK speed reference alignment and pre-construction generated configuration validation; no kinematics or calibration matrix change",
+    "ci_20261101": {
+      "previous_policy_id": "sha256:94c4bdb6a2b688e410d187db8b3737dfb8268842c3eff8a71438562b059bb002",
+      "scope": "read-only remote lease/worker lifecycle source changes; tool transform unchanged",
+      "physical_validation_added": false
+    }
   }
 }

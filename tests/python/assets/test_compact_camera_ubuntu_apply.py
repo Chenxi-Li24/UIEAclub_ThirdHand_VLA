@@ -15,7 +15,7 @@ ROOT = Path(__file__).resolve().parents[3]
 
 
 @pytest.fixture
-def camera(tmp_path, monkeypatch):
+def camera(tmp_path, monkeypatch, private_cloud_review):
     path = ROOT / 'tools/operations/apply_compact_camera_ubuntu.py'
     assert path.is_file(), 'fixed C3d camera installer required'
     spec = importlib.util.spec_from_file_location('compact_camera_ubuntu', path)
@@ -68,6 +68,8 @@ def camera(tmp_path, monkeypatch):
         return ''
     monkeypatch.setattr(m, 'run', run)
     receipt = tmp_path / 'cloud-review.json'
+    private_cloud_review(m, receipt)
+    private_cloud_review(m, m.REVIEW, mode=0o40700)
     def fresh():
         raw = json.dumps({'verified': True, 'currentRelease': m.NEW_CLOUD, 'activeLeases': 0,
                           'deviceId': m.DEVICE_ID, 'checkedAt': datetime.fromtimestamp(clock['now'], timezone.utc).isoformat()}).encode()
@@ -85,6 +87,15 @@ def test_camera_review_is_read_only_and_keeps_existing_transport_dropin(camera):
 def test_camera_apply_requires_fresh_cloud_clearance_before_any_write(camera):
     m, _, calls, _, _, _ = camera
     with pytest.raises(m.InstallError): m.apply(m.load_candidate(), None, None)
+    assert calls == [] and not m.NEW.exists() and not m.REVIEW.exists()
+
+
+@pytest.mark.parametrize('metadata', [{'uid': 1001}, {'mode': 0o100644}])
+def test_camera_rejects_wrong_receipt_owner_or_public_mode_before_any_write(camera, private_cloud_review, metadata):
+    m, _, calls, _, receipt, fresh = camera
+    private_cloud_review(m, receipt).update(metadata)
+    with pytest.raises(m.InstallError, match='PRIVATE_CLOUD_REVIEW_REQUIRED'):
+        m.apply(m.load_candidate(), receipt, fresh())
     assert calls == [] and not m.NEW.exists() and not m.REVIEW.exists()
 
 

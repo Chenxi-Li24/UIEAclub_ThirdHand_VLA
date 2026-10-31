@@ -20,7 +20,7 @@ candidate = _fixture_module.candidate
 
 
 @pytest.fixture
-def installer(candidate, tmp_path, monkeypatch):
+def installer(candidate, tmp_path, monkeypatch, private_cloud_review):
     builder, repo, baseline = candidate
     spec = importlib.util.spec_from_file_location('ubuntu_transport_installer', ROOT / 'tools/operations/apply_motion_transport_ubuntu.py')
     module = importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
@@ -92,6 +92,7 @@ def installer(candidate, tmp_path, monkeypatch):
         return ''
     monkeypatch.setattr(module, 'run', run)
     cloud = tmp_path / 'cloud-review.json'
+    private_cloud_review(module, cloud)
     cloud.write_text(json.dumps({'verified': True, 'currentRelease': module.NEW_CLOUD,
         'deviceId': module.DEVICE_ID, 'activeLeases': 0,
         'checkedAt': datetime.fromtimestamp(clock, timezone.utc).isoformat()}))
@@ -109,6 +110,16 @@ def test_review_is_read_only_and_does_not_invent_cloud_clearance(installer):
 def test_apply_without_fresh_cloud_clearance_writes_nothing(installer):
     module, paths, _, commands, _, _, _ = installer
     with pytest.raises(module.InstallError): module.apply(module.load_candidate(), None, None)
+    assert commands == [] and not paths['REVIEW'].exists()
+    assert not paths['NEW_AGENT'].exists() and not paths['NEW_CAMERA'].exists()
+
+
+@pytest.mark.parametrize('metadata', [{'uid': 1001}, {'mode': 0o100644}])
+def test_transport_rejects_wrong_receipt_owner_or_public_mode_before_any_write(installer, private_cloud_review, metadata):
+    module, paths, _, commands, _, cloud, digest = installer
+    private_cloud_review(module, cloud).update(metadata)
+    with pytest.raises(module.InstallError, match='CLOUD_REVIEW_PRIVATE_FILE_REQUIRED'):
+        module.apply(module.load_candidate(), cloud, digest)
     assert commands == [] and not paths['REVIEW'].exists()
     assert not paths['NEW_AGENT'].exists() and not paths['NEW_CAMERA'].exists()
 

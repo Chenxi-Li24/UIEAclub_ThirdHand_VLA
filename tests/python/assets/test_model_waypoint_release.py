@@ -1,4 +1,4 @@
-import copy,importlib.util,json
+import base64,copy,gzip,hashlib,importlib.util,json
 from contextlib import contextmanager
 from pathlib import Path,PurePosixPath
 from types import SimpleNamespace
@@ -13,12 +13,24 @@ def fixture(tmp_path):
     # The installer is Linux-only; keep its release identifiers POSIX on Windows.
     m.OLD=PurePosixPath(m.OLD.as_posix());m.NEW=PurePosixPath(m.NEW.as_posix())
     b=module('waypoint_base','tools/operations/apply_camera_ui_cloud.py')
-    root=REPO/'.superpowers/sdd/2026-11-01-personal-model-waypoints'
-    m.ROOT=root/'deployment-candidate'
-    before=json.loads((root/'baseline-registration-manifest.json').read_bytes())
+    builder=module('waypoint_builder','tools/deploy/build_model_waypoints_release.py')
+    # Build an isolated public fixture from tracked sources. Production's
+    # one-time baseline/package pins stay untouched; no local deployment
+    # receipts, database exports or ignored .superpowers files are required.
+    files={name:hashlib.sha256(('prior '+name).encode()).hexdigest() for name in m.CHANGED}
+    files.update({name:'b'*64 for name in ('apps/web/public/js/camera-view.js','platform/identity/src/accounts.js')})
+    files.update({f'tests/synthetic/unrelated-{n}.txt':'c'*64 for n in range(4630-len(files))})
+    before={'format':1,'role':'synthetic-model-release-test','files':files}
+    raw=(json.dumps(before,sort_keys=True,indent=2)+'\n').encode()
+    baseline=tmp_path/'baseline.json';baseline.write_bytes(raw)
+    builder.OLD_SHA=m.OLD_SHA=hashlib.sha256(raw).hexdigest()
+    m.ROOT=tmp_path/'candidate'
+    report=builder.build(baseline,m.ROOT)
+    m.NEW=PurePosixPath(report['newRelease']);m.NEW_SHA=report['manifestSha256']
+    m.PACKAGE_SHA=report['packageSha256']
     return m,b,before
 
-def test_exact_frozen_package_preserves_account_camera_and_all_other_sources(tmp_path):
+def test_nine_file_delta_preserves_account_camera_and_all_other_sources(tmp_path):
     m,b,before=fixture(tmp_path)
     raw,contents=m.read_package(b,before)
     after=json.loads(raw)
@@ -27,6 +39,21 @@ def test_exact_frozen_package_preserves_account_camera_and_all_other_sources(tmp
     assert all(after['files'][name]==digest for name,digest in before['files'].items() if name not in m.CHANGED)
     assert after['files']['apps/web/public/js/camera-view.js']==before['files']['apps/web/public/js/camera-view.js']
     assert after['files']['platform/identity/src/accounts.js']==before['files']['platform/identity/src/accounts.js']
+
+
+@pytest.mark.parametrize('kind,code', [('unrelated','EXTRA_SOURCE_CHANGES'),('metadata','MANIFEST_METADATA_CHANGED')])
+def test_reviewed_package_rejects_changes_outside_the_nine_sources(tmp_path,kind,code):
+    m,b,before=fixture(tmp_path)
+    path=m.ROOT/'cloud.delta.json.gz';package=json.loads(gzip.decompress(path.read_bytes()))
+    manifest=json.loads(base64.b64decode(package['manifestBase64']))
+    if kind=='unrelated':manifest['files']['platform/identity/src/accounts.js']='d'*64
+    else:manifest['role']='changed-role'
+    raw=(json.dumps(manifest,sort_keys=True,indent=2)+'\n').encode()
+    m.NEW_SHA=package['manifestSha256']=hashlib.sha256(raw).hexdigest()
+    package['manifestBase64']=base64.b64encode(raw).decode()
+    packed=gzip.compress(json.dumps(package).encode(),mtime=0);path.write_bytes(packed)
+    m.PACKAGE_SHA=hashlib.sha256(packed).hexdigest()
+    with pytest.raises(b.DeploymentError,match=code):m.read_package(b,before)
 
 def test_package_cannot_be_applied_to_a_changed_server_baseline(tmp_path):
     m,b,before=fixture(tmp_path)

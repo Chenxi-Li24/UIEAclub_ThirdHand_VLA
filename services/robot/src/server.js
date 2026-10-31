@@ -10,6 +10,7 @@ const { loadConfig } = require('./config');
 const { ExecutionGateway } = require('./execution-gateway');
 const { loadExecutionToken, tokenMatches } = require('./execution-token');
 const { RobotController } = require('./robot-controller');
+const { createRemoteRobotGateway } = require('./remote-gateway');
 
 function writeJson(response, status, payload) {
   const body = JSON.stringify(payload);
@@ -28,7 +29,15 @@ function createRobotService(options = {}) {
     ...options,
     robot: { ...defaults.robot, ...(options.robot || {}) },
   };
-  const controller = new RobotController(config.robot);
+  const remoteEnabled=config.remote?.enabled===true;
+  if(remoteEnabled)config.robot.remoteLeaseGuard=true;
+  const controller = options.controller || new RobotController(config.robot);
+  const edgeToken=remoteEnabled?loadExecutionToken({token:options.edgeToken,tokenFile:config.remote.edgeTokenFile}):null;
+  let remoteGateway=null;
+  if(remoteEnabled){
+    const signingKeys=options.cloudSigningKeys||new Map(Object.entries(JSON.parse(fs.readFileSync(config.remote.cloudSigningKeysFile,'utf8'))));
+    remoteGateway=createRemoteRobotGateway({controller,deviceId:config.remote.deviceId,token:edgeToken.token,signingKeys,readOnly:config.remote.readOnly===true,requireWorkerLeaseGuard:true});
+  }
   const executionToken = loadExecutionToken({
     token: options.executionToken,
     tokenFile: config.executionTokenFile,
@@ -39,7 +48,8 @@ function createRobotService(options = {}) {
   const executionSockets = new Set();
   let closing = false;
 
-  const server = http.createServer((request, response) => {
+  const server = http.createServer(async (request, response) => {
+    if(remoteGateway&&await remoteGateway.handle(request,response))return;
     if (request.method === 'GET' && request.url === '/health') {
       writeJson(response, 200, {
         ...controller.health(),
@@ -60,6 +70,7 @@ function createRobotService(options = {}) {
   });
 
   server.on('upgrade', (request, socket, head) => {
+    if(remoteEnabled){socket.end('HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n');return;}
     const pathname = new URL(request.url, 'http://localhost').pathname;
     if (pathname === '/execution') {
       if (!executionToken.available
@@ -159,6 +170,7 @@ function createRobotService(options = {}) {
     async close() {
       if (closing) return;
       closing = true;
+      await remoteGateway?.close();
       for (const socket of sockets) socket.terminate();
       for (const socket of executionSockets) socket.terminate();
       executionGateway.close();

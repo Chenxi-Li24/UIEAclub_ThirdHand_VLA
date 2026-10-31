@@ -1,0 +1,10 @@
+[Unit]
+Description=Watch ThirdHand public certificate updates
+
+[Path]
+PathChanged=/www/server/panel/vhost/cert/uiea-thirdhand.com
+PathChanged=/www/server/panel/vhost/cert/edge.uiea-thirdhand.com
+Unit=thirdhand-public-tls.service
+
+[Install]
+WantedBy=multi-user.target

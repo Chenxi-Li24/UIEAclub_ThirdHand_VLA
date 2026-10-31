@@ -1,0 +1,26 @@
+[Unit]
+Description=ThirdHand isolated staging private export worker
+After=postgresql@17-stage.service
+Requires=postgresql@17-stage.service
+[Service]
+User=thirdhand-stage
+Group=thirdhand-stage
+SupplementaryGroups=thirdhand-stage-db
+WorkingDirectory=/opt/thirdhand-stage/current
+EnvironmentFile=/etc/thirdhand-stage/export.env
+ExecStart=/opt/thirdhand-stage/node-v24.22.1/bin/node --max-old-space-size=64 services/cloud-api/src/jobs/export-main.js
+Restart=on-failure
+RestartSec=5
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+RestrictAddressFamilies=AF_UNIX
+ReadWritePaths=/var/lib/thirdhand-stage/exports
+MemoryMax=96M
+TasksMax=32
+CPUQuota=25%
+[Install]
+WantedBy=multi-user.target

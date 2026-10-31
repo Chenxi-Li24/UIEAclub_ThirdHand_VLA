@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "thirdhand.remote-command-envelope.v1",
+  "title": "Ed25519 signature over decoded UTF-8 payload; keyId must also be signed inside payload",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["keyId", "payloadBase64url", "signatureBase64url"],
+  "properties": {
+    "keyId": {"type": "string", "pattern": "^[A-Za-z0-9_-]{1,48}$"},
+    "payloadBase64url": {"type": "string", "pattern": "^[A-Za-z0-9_-]+$", "minLength": 1, "maxLength": 16384},
+    "signatureBase64url": {"type": "string", "pattern": "^[A-Za-z0-9_-]{86}$"}
+  }
+}

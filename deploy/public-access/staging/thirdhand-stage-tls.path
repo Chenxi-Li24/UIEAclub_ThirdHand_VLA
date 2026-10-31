@@ -1,0 +1,9 @@
+[Unit]
+Description=Watch ThirdHand staging certificate updates
+
+[Path]
+PathChanged=/www/server/panel/vhost/cert/staging.uiea-thirdhand.com
+Unit=thirdhand-stage-tls.service
+
+[Install]
+WantedBy=multi-user.target

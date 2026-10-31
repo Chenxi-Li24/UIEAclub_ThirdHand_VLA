@@ -1,0 +1,8 @@
+{
+  "name": "@thirdhand/identity",
+  "version": "0.1.0",
+  "private": true,
+  "type": "commonjs",
+  "main": "src/accounts.js",
+  "dependencies": { "argon2": "0.45.1", "otpauth": "9.5.2", "nodemailer": "10.3.1" }
+}

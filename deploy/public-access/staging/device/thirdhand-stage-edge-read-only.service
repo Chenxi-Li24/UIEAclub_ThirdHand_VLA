@@ -1,0 +1,24 @@
+# User unit for nieqingcao. Install only after reviewing the bound public
+# manifest and owner-only configuration/credentials. Never auto-connect SDK.
+[Unit]
+Description=ThirdHand staged read-only device control and durable telemetry
+After=network-online.target thirdhand-tcp-calibration-robot.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/nieqingcao/.local/share/thirdhand-stage-device/20261031
+Environment=PYTHONUNBUFFERED=1
+Environment=PYTHONPATH=/home/nieqingcao/.local/share/thirdhand-stage-device/20261031/agent-source
+ExecStart=/home/nieqingcao/.local/share/thirdhand-media-acceptance/20261031/venv/bin/python -m thirdhand_edge.runtime --config /home/nieqingcao/.local/share/thirdhand-stage-device/20261031/private/agent.toml
+Restart=on-failure
+RestartSec=5
+KillMode=control-group
+TimeoutStopSec=8
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+
+[Install]
+WantedBy=default.target

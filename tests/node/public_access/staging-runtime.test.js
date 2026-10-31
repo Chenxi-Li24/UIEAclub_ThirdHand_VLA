@@ -1,0 +1,31 @@
+'use strict';
+const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs/promises'),os=require('node:os'),path=require('node:path');
+const {randomBytes}=require('node:crypto');
+const {identityFixture}=require('./identity-fixture');
+const {startCloudService}=require('../../../services/cloud-api/src/main');
+const {createStagingMailbox}=require('../../../platform/identity/src/staging-mailbox');
+
+test('the actual cloud entry composes registration verification and protected model pages using only its isolated private staging inbox',async t=>{
+  let service;t.after(()=>service?.close());
+  const f=await identityFixture(t),directory=await fs.mkdtemp(path.join(os.tmpdir(),'thirdhand-stage-runtime-'));
+  t.after(()=>fs.rm(directory,{recursive:true,force:true}));
+  const origin='https://staging.uiea-thirdhand.com',db=new URL(process.env.TEST_DATABASE_URL);db.pathname='/'+(await f.pool.query('SELECT current_database() AS name')).rows[0].name;
+  const stagingMailbox=await createStagingMailbox({directory,publicOrigin:origin,allowedRecipients:['runtime@example.invalid']});
+  const config={databaseUrl:db.toString(),publicOrigin:origin,production:false,host:'127.0.0.1',port:0,csrfKey:randomBytes(32),mfaKeyId:'test',mfaKeys:new Map([['test',randomBytes(32)]]),historyCursorKey:randomBytes(32)};
+  service=await startCloudService(config,{stagingMailbox});
+  const base=`http://127.0.0.1:${service.server.address().port}`;
+  const post=(p,body)=>fetch(base+p,{method:'POST',headers:{origin,'content-type':'application/json'},body:JSON.stringify(body)});
+  const registered=await post('/api/v1/auth/register',{username:'stage_runtime',email:'runtime@example.invalid',displayName:'Runtime',password:f.password,role:'admin'});
+  assert.equal(registered.status,201);
+  const files=await fs.readdir(directory);assert.equal(files.length,1);
+  const message=JSON.parse(await fs.readFile(path.join(directory,files[0]),'utf8'));
+  const token=new URLSearchParams(new URL(message.url).hash.slice(1)).get('token');
+  assert.equal((await post('/api/v1/auth/verify-email',{token})).status,200);
+  const login=await post('/api/v1/auth/login',{login:'stage_runtime',password:f.password});assert.equal(login.status,200);
+  const body=await login.json(),cookie=login.headers.get('set-cookie').split(';')[0];assert.equal(body.mode,'observe');
+  assert.match(await (await fetch(base+'/control',{headers:{cookie}})).text(),/cloud-workspace/);
+  assert.equal((await fetch(base+'/api/v1/admin/users',{headers:{cookie}})).status,403);
+  assert.equal((await post('/api/v1/auth/login',{login:'stage_runtime',password:f.password,requestedMode:'admin'})).status,403);
+  assert.equal((await fetch(base+'/ws')).status,404);
+  await assert.rejects(startCloudService({...config,publicOrigin:'https://uiea-thirdhand.com'},{stagingMailbox}),{code:'CONFIG_ERROR'});
+});

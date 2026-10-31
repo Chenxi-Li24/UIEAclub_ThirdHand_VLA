@@ -10,12 +10,7 @@ const source = fs.readFileSync(
   path.resolve(__dirname, '../../../apps/web/public/js/main.js'),
   'utf8',
 );
-const start = source.indexOf('class ArmModel {');
-const end = source.indexOf('// === WSClient ===', start);
-assert.ok(start >= 0 && end > start, 'ArmModel source is present');
-const ArmModel = vm.runInNewContext(
-  source.slice(start, end) + '\nArmModel',
-  {
+const { ArmModel } = require('../../../apps/web/public/js/robot-viewer').createRobotViewer({
     THREE: {
       Vector3: class Vector3 {
         constructor() {
@@ -25,9 +20,7 @@ const ArmModel = vm.runInNewContext(
         }
       },
     },
-    console,
-  },
-);
+});
 
 const helperStart = source.indexOf('const DIRECTIONAL_PREVIEW_MAPPING');
 const helperEnd = source.indexOf('// === SceneManager ===', helperStart);
@@ -107,6 +100,7 @@ test('lift preview can read end-effector position relative to the robot base', (
 });
 
 test('TypeLJ TCP uses the measured flange-to-tool offset', () => {
-  assert.match(source, /tcpOffsetMeters\s*=\s*0\.17334/);
-  assert.match(source, /endEffector\.position\.set\(this\.tcpOffsetMeters, 0, 0\)/);
+  const viewerSource=fs.readFileSync(path.resolve(__dirname,'../../../apps/web/public/js/robot-viewer.js'),'utf8');
+  assert.match(viewerSource, /tcpOffsetMeters\s*=\s*0\.17334/);
+  assert.match(viewerSource, /endEffector\.position\.set\(this\.tcpOffsetMeters, 0, 0\)/);
 });

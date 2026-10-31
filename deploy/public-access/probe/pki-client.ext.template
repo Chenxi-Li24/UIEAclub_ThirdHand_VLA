@@ -1,0 +1,7 @@
+# Substitute only a validated UUID, generated for this network-probe identity.
+basicConstraints = critical, CA:FALSE
+keyUsage = critical, digitalSignature
+extendedKeyUsage = clientAuth
+subjectAltName = URI:urn:thirdhand:probe:__PROBE_DEVICE_UUID__
+subjectKeyIdentifier = hash
+authorityKeyIdentifier = keyid,issuer

@@ -1,0 +1,8 @@
+# No connection is made merely by reading this file. Device enrollment is a
+# controlled deployment step; a user login cannot issue device credentials.
+url = "wss://edge.uiea-thirdhand.com/edge/v1/connect"
+device_id = "REPLACE_WITH_ENROLLED_DEVICE_UUID"
+certificate = "/etc/thirdhand/device/device.pem"
+private_key = "/etc/thirdhand/device/device.key"
+# Omit ca_file when the ingress uses a normal public server certificate.
+# ca_file = "/etc/thirdhand/device/server-ca.pem"

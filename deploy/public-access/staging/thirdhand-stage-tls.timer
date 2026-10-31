@@ -1,0 +1,10 @@
+[Unit]
+Description=Retry ThirdHand staging certificate reload checks
+
+[Timer]
+OnBootSec=1min
+OnUnitInactiveSec=5min
+Unit=thirdhand-stage-tls.service
+
+[Install]
+WantedBy=timers.target

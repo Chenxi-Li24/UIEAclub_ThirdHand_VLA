@@ -1,0 +1,28 @@
+[Unit]
+Description=ThirdHand outbound device supervisor
+After=network-online.target thirdhand-robot.service
+Wants=network-online.target
+[Service]
+Type=simple
+User=thirdhand-edge
+Group=thirdhand-edge
+WorkingDirectory=/opt/thirdhand/current
+ExecStart=/opt/thirdhand/edge-venv/bin/python -m thirdhand_edge.runtime --config /etc/thirdhand/edge.toml
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=6
+KillMode=control-group
+UMask=0077
+StateDirectory=thirdhand-edge
+StateDirectoryMode=0700
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+# Edge cannot open AF_CAN. Root Robot ownership / CAN namespace isolation is a
+# separate C3 requirement; this setting alone does not contain every local CLI.
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+MemoryMax=384M
+TasksMax=64
+[Install]
+WantedBy=multi-user.target

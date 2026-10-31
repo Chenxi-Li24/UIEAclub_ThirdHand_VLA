@@ -1,0 +1,12 @@
+{
+  "name": "@thirdhand/cloud-api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "commonjs",
+  "main": "src/server.js",
+  "dependencies": {
+    "livekit-client": "2.23.0",
+    "livekit-server-sdk": "2.19.2",
+    "ws": "8.21.3"
+  }
+}

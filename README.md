@@ -7,6 +7,7 @@ ThirdHand VLA 是面向 Startouch 六轴机械臂的统一网页控制、语音�
 | 需求 | 文档 |
 |---|---|
 | 启动、停止和排障 | [`docs/RUN_GUIDE.md`](docs/RUN_GUIDE.md) |
+| 公网登录、账户权限、相机、记录导出和个人模型点位 | [`docs/features/PUBLIC_ACCESS.md`](docs/features/PUBLIC_ACCESS.md) |
 | 浏览全部文档 | [`docs/INDEX.md`](docs/INDEX.md) |
 | 理解目录职责 | [`docs/DIRECTORY_MAP.md`](docs/DIRECTORY_MAP.md) |
 | 接入网页网关 | [`docs/apps/WEB_GATEWAY.md`](docs/apps/WEB_GATEWAY.md) |
@@ -26,7 +27,7 @@ UIEAclub_ThirdHand_VLA/
 |-- skills/     # 可发现能力的 manifest、协议和入口
 |-- configs/    # 可跟踪的运行配置和资产清单模板
 |-- assets/     # 可跟踪的资产说明；大型载荷由准备脚本导入
-|-- local/      # 本机 SDK、模型、运行时与标定，不提交 Git
+|-- local/      # SDK/模型按资产规则跟踪；私有配置、环境和可变标定不提交
 |-- runtime/    # PID、ready、日志和构建产物，不提交 Git
 |-- tests/      # 单元、集成、Node 与 Python 测试
 |-- tools/      # 资产准备、诊断和测试夹具
@@ -52,6 +53,8 @@ UIEAclub_ThirdHand_VLA/
 - `apps/launcher`：服务生命周期、PID 所有权、日志和运行 profile；
 - `platform/contracts` 与 `platform/skill_registry`：Skill 协议和可用性发现；
 - 项目本地 SDK、模型、运行时清单，以及 Startouch URDF/STL 资产准备工具。
+- `services/cloud-api`、`services/device-relay`、`services/edge-agent`：独立鉴权公网staging、私有PostgreSQL、账户/MFA、相机授权、历史/CSV和个人模型点位；真实设备目前仅验收读取，运动仍禁用；
+- `showcase`：已跟踪的独立展示站源码与字体/图片/视频，首页和导航可跳转现有控制登录页。
 
 尚未完成：通用监督执行闭环、VLA/ACT/DP Worker、主动视角和自主夹取闭环。文本 Controller 与只读视觉问答已经接入，但这不等于 LLM 拥有机器人执行权限；其他 `skills/` manifest 也不代表执行 Worker 已可用。
 

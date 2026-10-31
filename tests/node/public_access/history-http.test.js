@@ -1,0 +1,23 @@
+'use strict';
+const test=require('node:test');
+const assert=require('node:assert/strict');
+const {randomBytes,randomUUID}=require('node:crypto');
+const {identityFixture}=require('./identity-fixture');
+const {createSessions}=require('../../../platform/identity/src/sessions');
+const {createHistoryRepository}=require('../../../platform/storage/src/history');
+const {createCloudApi}=require('../../../services/cloud-api/src/server');
+test('history and isolated model assets require current login; observer reads all operational events, no identity data',async t=>{
+  const f=await identityFixture(t),user=await f.verified('history_http'),sessions=createSessions({pool:f.pool,csrfKey:randomBytes(32),clock:f.clock}),history=createHistoryRepository(f.pool,{cursorKey:randomBytes(32)});
+  const server=createCloudApi({...f,sessions,history,publicOrigin:'https://thirdhand.example.invalid'});await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));t.after(()=>new Promise(resolve=>{server.closeAllConnections();server.close(resolve);}));
+  const base=`http://127.0.0.1:${server.address().port}`,session=await sessions.issue({userId:user.userId}),headers={cookie:session.cookie.split(';')[0]};
+  assert.equal((await fetch(base+'/history',{redirect:'manual'})).status,302);
+  const page=await fetch(base+'/history',{headers}),html=await page.text();assert.equal(page.status,200);assert.match(html,/\/control-assets\/js\/history-page.js/);assert.ok(!/(?:src|href)="\/(?:js|css)\//.test(html));
+  assert.equal((await fetch(base+'/control-assets/js/history-replay.js',{headers})).status,200);
+  assert.equal((await fetch(base+'/control-assets/js/main.js',{headers})).status,404);
+  const deviceId=(await f.pool.query("INSERT INTO ops.devices(name,hardware_serial) VALUES('HTTP fixture','history-http') RETURNING id")).rows[0].id;
+  await f.pool.query("INSERT INTO ops.device_events(device_id,edge_event_id,event_code,level,captured_at,details) VALUES($1,$2,'maintenance.checked','info','2026-10-30T09:00:00Z',$3)",[deviceId,randomUUID(),{actorKind:'local_os',reason:'Fixture check'}]);
+  const query='/api/v1/history?'+new URLSearchParams({kind:'device_events',from:'2026-10-30T08:00:00Z',to:'2026-10-30T10:00:00Z'});
+  const result=await fetch(base+query,{headers});assert.equal(result.status,200);const value=await result.json();assert.equal(value.rows[0].event_code,'maintenance.checked');assert.equal(value.rows[0].details.actorKind,'local_os');assert.ok(!JSON.stringify(value).includes('history_http@example.invalid'));
+  await sessions.revokeSession({sessionId:session.sessionId,reason:'logout'});
+  assert.equal((await fetch(base+query,{headers})).status,401);assert.equal((await fetch(base+'/control-assets/js/history-replay.js',{headers})).status,401);
+});

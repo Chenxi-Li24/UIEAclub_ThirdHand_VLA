@@ -1,0 +1,43 @@
+.team {
+  border-top: 1px solid var(--line);
+}
+
+.team__body {
+  display: grid;
+  gap: var(--space-md);
+  justify-items: start;
+  margin-bottom: var(--space-xl);
+}
+
+.team__body .h2 {
+  max-width: 12ch;
+}
+
+.team__body .lede {
+  max-width: 52ch;
+}
+
+.team__body .chapter {
+  width: 100%;
+  margin-bottom: 0;
+}
+
+/**
+ * The photograph is the section. It runs the full content width at its natural
+ * 4:3 — auto height, no frame to fit into, so no one in the room and neither
+ * person on the monitors can be cut off at any screen size.
+ */
+.team__photo {
+  margin: 0;
+}
+
+.team__photo picture {
+  display: block;
+}
+
+.team__photo-img {
+  width: 100%;
+  height: auto;
+  border: 1px solid var(--line);
+  background: var(--surface);
+}

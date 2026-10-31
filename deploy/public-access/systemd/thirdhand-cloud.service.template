@@ -1,0 +1,24 @@
+[Unit]
+Description=ThirdHand private business API
+After=network-online.target postgresql.service
+Wants=network-online.target
+[Service]
+Type=simple
+User=thirdhand-cloud
+Group=thirdhand-cloud
+WorkingDirectory=/opt/thirdhand/current
+EnvironmentFile=/etc/thirdhand/cloud.env
+ExecStart=/opt/thirdhand/node/bin/node services/cloud-api/src/main.js
+Restart=on-failure
+RestartSec=5
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+ReadWritePaths=/var/lib/thirdhand-exports
+MemoryMax=384M
+TasksMax=64
+[Install]
+WantedBy=multi-user.target

@@ -69,3 +69,15 @@ test('policy loader rejects a changed producer source binding',()=>{
   fs.writeFileSync(filename,JSON.stringify(config));assert.ok(loadPolicy(filename).id);
   fs.appendFileSync(source,'// changed\n');assert.throws(()=>loadPolicy(filename),/frame_policy_source_changed/);
 });
+
+test('policy loader rejects an unrestored LFS resource even if its pointer hash was recorded',()=>{
+  const root=fs.mkdtempSync(path.join(os.tmpdir(),'frame-lfs-test-'));
+  try{
+    const sdk=path.join(root,'sdk.yaml'),library=path.join(root,'sdk.so'),filename=path.join(root,'policy.json');
+    fs.writeFileSync(sdk,'kinematics:\n  tool:\n    xyz: [0.17334,0,0]\n    rpy: [0,0,0]\n');
+    fs.writeFileSync(library,'version https://git-lfs.github.com/spec/v1\noid sha256:'+'a'.repeat(64)+'\nsize 123\n');
+    const config={...policy,sdk_config_path:sdk,bindings:[sdk,library].map(p=>({path:p,sha256:crypto.createHash('sha256').update(fs.readFileSync(p)).digest('hex')}))};
+    delete config.id;fs.writeFileSync(filename,JSON.stringify(config));
+    assert.throws(()=>loadPolicy(filename),/frame_policy_resource_unrestored/);
+  }finally{assert.equal(path.dirname(path.resolve(root)),path.resolve(os.tmpdir()));assert.match(path.basename(root),/^frame-lfs-test-/);fs.rmSync(root,{recursive:true,force:true});}
+});

@@ -1,0 +1,5 @@
+# Drop-in for the newly installed postgresql@17-main.service, not existing DBs.
+[Service]
+MemoryMax=384M
+TasksMax=64
+CPUQuota=50%

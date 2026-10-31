@@ -1,0 +1,28 @@
+[Unit]
+Description=ThirdHand staging camera SFU
+After=network-online.target
+Wants=network-online.target
+[Service]
+User=thirdhand-media
+Group=thirdhand-media
+WorkingDirectory=/var/lib/thirdhand-stage-media
+StateDirectory=thirdhand-stage-media
+StateDirectoryMode=0700
+ExecStart=/opt/thirdhand-stage-media/bin/livekit-server --config /etc/thirdhand-stage-media/livekit.yaml
+Restart=on-failure
+RestartSec=5
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
+CapabilityBoundingSet=
+LimitCORE=0
+MemoryHigh=160M
+MemoryMax=192M
+CPUQuota=100%
+TasksMax=96
+[Install]
+WantedBy=multi-user.target

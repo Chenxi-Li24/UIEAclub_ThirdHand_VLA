@@ -126,8 +126,10 @@ def demo_command():
 def test_queued_demo_cancellation_has_exactly_one_terminal_reply():
     bridge = cancellation_fixture()
     events = []
-    old_emit = module.emit
-    module.emit = lambda event, **kwargs: events.append((event, kwargs))
+    old_emit, old_async = module.emit, module.emit_async
+    # Cancellation now schedules bounded audit output. Capture both producer
+    # APIs rather than racing the unrelated stdout worker in this unit test.
+    module.emit = module.emit_async = lambda event, **kwargs: events.append((event, kwargs)) or True
     try:
         bridge.enqueue_fixed_tcp_demo(demo_command())
         bridge.disconnect("software_stop")
@@ -136,7 +138,7 @@ def test_queued_demo_cancellation_has_exactly_one_terminal_reply():
         assert terminal[0]["code"] == "motion_cancelled"
         assert bridge.motion_queue.empty()
     finally:
-        module.emit = old_emit
+        module.emit, module.emit_async = old_emit, old_async
 
 
 def test_blocked_demo_cancellation_cannot_be_revived_by_reconnect():
@@ -162,10 +164,10 @@ def test_blocked_demo_cancellation_cannot_be_revived_by_reconnect():
             observed["sent_after_stop"] = True
 
     fake_demo.FixedTcpDemo = BlockingDemo
-    old_demo, old_emit = sys.modules.get("demo"), module.emit
+    old_demo, old_emit, old_async = sys.modules.get("demo"), module.emit, module.emit_async
     old_simulate, old_arm = module.SIMULATE, module.SimulatedArm
     sys.modules["demo"] = fake_demo
-    module.emit = lambda *args, **kwargs: None
+    module.emit = module.emit_async = lambda *args, **kwargs: True
     module.SIMULATE = True
     module.SimulatedArm = lambda: constructed.append("new arm") or FakeArm()
     thread = threading.Thread(target=bridge._motion_loop)
@@ -182,7 +184,7 @@ def test_blocked_demo_cancellation_cannot_be_revived_by_reconnect():
         resume.set()
         thread.join(3)
         module.SIMULATE, module.SimulatedArm = old_simulate, old_arm
-        module.emit = old_emit
+        module.emit, module.emit_async = old_emit, old_async
         if old_demo is None:
             del sys.modules["demo"]
         else:

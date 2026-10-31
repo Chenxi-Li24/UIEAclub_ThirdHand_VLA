@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools==82.0.1"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "thirdhand-edge"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = ["websockets==17.3", "cryptography==50.0.2"]
+
+[project.optional-dependencies]
+media = ["livekit==1.2.0", "Pillow==13.0.0"]
+
+[project.scripts]
+thirdhand-edge-probe = "thirdhand_edge.probe:main"
+thirdhand-edge = "thirdhand_edge.runtime:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]

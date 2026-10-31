@@ -1,0 +1,6 @@
+node_modules/
+dist/
+source-media/
+*.tsbuildinfo
+.env
+.env.*

@@ -13,7 +13,8 @@ test('merged control page keeps bilingual controls, TCP calibration and the Xavi
 });
 function ui({fetchImpl}={}){
  const elements=new Map();const get=id=>{if(!elements.has(id))elements.set(id,{disabled:false,textContent:'',classList:{toggle(){}}});return elements.get(id);};
- const sent=[];const context={console:{log(){},warn(){},error(){}},THREE:{},window:{},
+ const sent=[];const context={console:{log(){},warn(){},error(){}},THREE:{},window:{},OrbitControls(){},STLLoader(){},ColladaLoader(){},
+  ThirdHandRobotViewer:require('../../../apps/web/public/js/robot-viewer'),
   document:{readyState:'loading',addEventListener(){},getElementById:get,querySelectorAll:()=>[]},
   fetch:fetchImpl||(async(route,options)=>{sent.push({route,body:JSON.parse(options.body)});return {ok:true,json:async()=>({phase:'depth_acquiring',active:true,sessionId:'one'})};}),setTimeout,clearTimeout};
  const source=fs.readFileSync(path.join(__dirname,'../../../apps/web/public/js/main.js'),'utf8').replace(/^import .*\r?$/gm,'');

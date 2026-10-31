@@ -1,0 +1,33 @@
+[Unit]
+Description=ThirdHand probe-only private device relay
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=thirdhand-relay
+Group=www-data
+SupplementaryGroups=thirdhand-probe-db
+WorkingDirectory=/opt/thirdhand-probe/current
+Environment=NODE_ENV=production
+Environment=RELAY_MODE=probe-only
+ExecStart=/opt/thirdhand-probe/node-v24.22.1/bin/node --max-old-space-size=64 services/device-relay/src/probe-main.js
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=8
+KillMode=control-group
+UMask=0077
+RuntimeDirectory=thirdhand-relay
+RuntimeDirectoryMode=0750
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+RestrictAddressFamilies=AF_UNIX
+MemoryMax=128M
+TasksMax=32
+CPUQuota=25%
+
+[Install]
+WantedBy=multi-user.target

@@ -40,6 +40,13 @@ function loadConfig(env = process.env) {
     readyFile: env.THIRDHAND_READY_FILE || path.join(ROOT, 'runtime', 'run', 'robot.ready'),
     executionTokenFile: env.ROBOT_EXECUTION_TOKEN_FILE || null,
     meituanTokenFile: env.MEITUAN_ROBOT_TOKEN_FILE || null,
+    remote: {
+      enabled: env.ROBOT_ACCESS_MODE === 'remote',
+      readOnly: env.ROBOT_REMOTE_READ_ONLY === '1',
+      deviceId: env.THIRDHAND_DEVICE_ID || null,
+      edgeTokenFile: env.ROBOT_EDGE_TOKEN_FILE || null,
+      cloudSigningKeysFile: env.ROBOT_CLOUD_SIGNING_KEYS_FILE || null,
+    },
     robot: {
       python: env.STARTOUCH_PYTHON || (fs.existsSync(localPython) ? localPython : 'python3'),
       sdkPath,

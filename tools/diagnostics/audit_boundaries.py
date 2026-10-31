@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 from dataclasses import asdict, dataclass
+import hashlib
 import json
 from pathlib import Path
 import re
@@ -69,6 +70,27 @@ def audit_repository(root: Path) -> list[Violation]:
     # This does not permit credentials, copied environments or runtime state.
     asset_manifest = root / 'configs/assets/runtime-assets.json'
     allowed_local: set[str] = set()
+    # One-time, reviewed deployment tools intentionally pin a concrete host.
+    # Do not rewrite their targets to make them look like portable runtime code.
+    # An exact LF-normalized content digest exempts only the home-path rule;
+    # edits, unknown tools, runtime code and every other boundary still fail.
+    site_bound: set[str] = set()
+    site_manifest = root / 'configs/audit/site-bound-operations.json'
+    if site_manifest.is_file():
+        document = json.loads(site_manifest.read_text(encoding='utf-8'))
+        if document.get('format') != 1:
+            raise ValueError('Invalid site-bound operations manifest')
+        for entry in document['files']:
+            name = entry['path']
+            if (not re.fullmatch(r'tools/(?:operations|diagnostics)/[a-z0-9_]+\.py', name)
+                    or not re.fullmatch(r'[a-f0-9]{64}', entry['sha256_lf'])
+                    or not entry.get('reason')):
+                raise ValueError('Invalid site-bound operation scope')
+            target = root / name
+            if target.is_file() and not target.is_symlink():
+                digest = hashlib.sha256(target.read_bytes().replace(b'\r\n', b'\n')).hexdigest()
+                if digest == entry['sha256_lf']:
+                    site_bound.add(name)
     if asset_manifest.is_file():
         for entry in json.loads(asset_manifest.read_text(encoding='utf-8'))['files']:
             name = entry['path']
@@ -93,7 +115,7 @@ def audit_repository(root: Path) -> list[Violation]:
             if not candidate.is_file():
                 continue
             for line_number, line in enumerate(_text_lines(candidate), 1):
-                if HOME_PATH.search(line):
+                if HOME_PATH.search(line) and relative not in site_bound:
                     violations.append(
                         Violation("absolute_home_path", relative, line_number, line.strip())
                     )

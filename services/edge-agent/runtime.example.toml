@@ -1,0 +1,18 @@
+# Template, not a hardware acceptance or SDK-connect flag.
+url = "wss://edge.uiea-thirdhand.com/edge/v1/connect"
+device_id = "REPLACE_WITH_ENROLLED_DEVICE_UUID"
+certificate = "/etc/thirdhand/device.crt"
+private_key = "/etc/thirdhand/device.key"
+ca_file = "/etc/ssl/certs/ca-certificates.crt"
+robot_origin = "http://127.0.0.1:3000"
+robot_token_file = "/etc/thirdhand/edge-token"
+signing_keys_file = "/etc/thirdhand/cloud-public-keys.json"
+state_directory = "/var/lib/thirdhand-edge"
+outbox_max_bytes = 268435456
+# Optional media role: enable all three only after B6 staging/capacity approval.
+# media_source_url = "http://127.0.0.1:3100/edge-media/v1/raw"
+# media_token_file = "/run/credentials/thirdhand-edge.service/media-token"
+# media_server_url = "wss://uiea-thirdhand.com/media"
+# Fill from the reviewed installed artifacts, never invent version hashes.
+[versions]
+schema = 1

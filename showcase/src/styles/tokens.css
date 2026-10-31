@@ -1,0 +1,73 @@
+/* ThirdHand design tokens -------------------------------------------------- */
+
+@font-face {
+  font-family: 'Inter';
+  src: url('/fonts/inter-latin.woff2') format('woff2');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'JetBrains Mono';
+  src: url('/fonts/jetbrains-mono-latin.woff2') format('woff2');
+  font-weight: 400 500;
+  font-style: normal;
+  font-display: swap;
+}
+
+:root {
+  /* Surfaces --------------------------------------------------------------- */
+  --bg: #08090b;
+  --surface: #121418;
+  --surface-2: #1a1d23;
+  --line: rgb(244 242 237 / 10%);
+  --line-strong: rgb(244 242 237 / 20%);
+
+  /* Text ------------------------------------------------------------------- */
+  --text: #f4f2ed;
+  --text-2: #a2a6ae; /* 8.0:1 on --bg  */
+  --text-3: #7c8189; /* 4.9:1 on --bg  */
+
+  /* Accents ---------------------------------------------------------------- */
+  --red: #d81f26; /* UIEA signal red — rules, reticles, fills */
+  --red-bright: #ff5347; /* 6.9:1 on --bg — accent text only     */
+  --amber: #f2b233; /* sparing technical detail                 */
+
+  /* Type ------------------------------------------------------------------- */
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial,
+    sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  --step--1: clamp(0.78rem, 0.76rem + 0.1vw, 0.84rem);
+  --step-0: clamp(0.95rem, 0.9rem + 0.22vw, 1.06rem);
+  --step-1: clamp(1.12rem, 1.02rem + 0.45vw, 1.4rem);
+  --step-2: clamp(1.45rem, 1.24rem + 1vw, 2.1rem);
+  --step-3: clamp(1.95rem, 1.5rem + 2.1vw, 3.2rem);
+  --step-4: clamp(2.5rem, 1.6rem + 4.2vw, 5.2rem);
+
+  /* Space ------------------------------------------------------------------ */
+  --space-2xs: 0.25rem;
+  --space-xs: 0.5rem;
+  --space-sm: 0.875rem;
+  --space-md: 1.5rem;
+  --space-lg: 2.25rem;
+  --space-xl: 3.5rem;
+  --space-2xl: 5.5rem;
+  --space-3xl: 8rem;
+
+  /* Layout ----------------------------------------------------------------- */
+  --page: min(100% - 2.5rem, 84rem);
+  --nav-h: 64px;
+
+  /* Motion ----------------------------------------------------------------- */
+  --ease: cubic-bezier(0.16, 1, 0.3, 1);
+  --dur: 260ms;
+}
+
+@media (width >= 48rem) {
+  :root {
+    --page: min(100% - 4rem, 84rem);
+    --nav-h: 72px;
+  }
+}

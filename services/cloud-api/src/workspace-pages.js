@@ -6,6 +6,7 @@ const {createHash}=require('node:crypto');
 const {assetPath,isolateAssets}=require('./asset-paths');
 const root=path.resolve(__dirname,'../../../apps/web/public'),models=path.resolve(__dirname,'../../../assets/robot');
 const files=new Set([
+  'js/model-waypoints.js','css/model-waypoints.css',
   'css/style.css','css/i18n.css','css/workspace.css','css/workspace-polish.css','css/onboarding.css','css/account-settings.css','css/workspace-surfaces.css','css/status-lights.css','css/cloud-workspace.css',
   'js/cloud-workspace.js','js/robot-viewer.js','js/workspace-session.js','js/simulation-controller.js','js/tutorial-adapter.js','js/camera-lighting.js','js/onboarding-spotlight.js','js/onboarding.js','js/account-settings.js','js/admin-access.js','js/account-security.js','js/admin-control.js','js/status-lights.js','js/workspace-shell.js',
   'js/i18n-voice-catalog.js','js/i18n-onboarding-catalog.js','js/i18n-account-catalog.js','js/i18n-status-catalog.js','js/i18n-cloud-catalog.js','js/history-page.js','js/history-dates.js','js/history-replay.js','js/i18n-history-catalog.js','css/history.css','js/camera-view.js','js/lib/livekit-frame-metadata.worker.mjs'
@@ -20,7 +21,7 @@ function workspaceHtml(source,{publicOrigin}={}){
     '<script src="/js/preferences.js"></script><script src="/js/simulation-controller.js"></script><script src="/js/tutorial-adapter.js"></script><script src="/js/lib/qrcode-generator-2.0.4.js"></script><script src="/js/admin-access.js"></script><script src="/js/account-security.js"></script><script src="/js/admin-control.js"></script><script src="/js/lib/livekit-client.umd.js"></script><script src="/js/camera-view.js"></script><script src="/js/workspace-session.js"></script><script type="module" src="/js/cloud-workspace.js"></script>');
   if(!html.includes('/js/cloud-workspace.js')||html.includes('src="js/main.js'))throw new Error('Cloud entry replacement failed');
   html=html.replace('<script defer src="js/i18n.js','<script defer src="/js/i18n-auth-catalog.js"></script><script defer src="/js/i18n-cloud-catalog.js"></script><script defer src="/js/i18n-history-catalog.js"></script><script defer src="js/i18n.js');
-  html=html.replace('</head>','<link rel="stylesheet" href="/css/cloud-workspace.css"></head>');
+  html=html.replace('</head>','<link rel="stylesheet" href="/css/cloud-workspace.css"><link rel="stylesheet" href="/css/model-waypoints.css"></head>');
   return protectedHtml(isolateAssets(html),{publicOrigin});
 }
 function protectedHtml(html,{publicOrigin}={}){

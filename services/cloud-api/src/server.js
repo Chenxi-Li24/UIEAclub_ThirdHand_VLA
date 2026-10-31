@@ -11,6 +11,7 @@ const { adminRoute } = require('./routes/admin');
 const {adminApplicationsRoute}=require('./routes/admin-applications');
 const { workspaceRoute } = require('./routes/workspace');
 const { preferencesRoute } = require('./routes/preferences');
+const {waypointsRoute}=require('./routes/waypoints');
 const { serveAuthPage } = require('./auth-pages');
 const { writeAudit }=require('../../../platform/storage/src/audit');
 const {isWorkspacePath,serveWorkspacePage}=require('./workspace-pages');
@@ -30,7 +31,7 @@ const STATUS = { INVALID_INPUT:400, INVALID_PASSWORD:400, INVALID_TOKEN:400, BOD
   LEASE_BUSY:409,LEASE_CHANGED:409,LEASE_REQUIRED:409,LEASE_UNCONFIRMED:409,TAKEOVER_INVALID:409,STOP_UNCONFIRMED:409,
   DEVICE_UNAVAILABLE:503,CONTROL_READINESS_REQUIRED:409,READ_ONLY_DEVICE:403,BROWSER_STALE:409,COMMAND_ID_CONFLICT:409,
   INVALID_CURSOR:400,HISTORY_UNAVAILABLE:503,HISTORY_BUSY:429,EXPORT_SERVICE_UNAVAILABLE:503,EXPORT_BUSY:429,EXPORT_EXPIRED:410,EXPORT_NOT_READY:409,
-  MEDIA_UNAVAILABLE:503,MEDIA_BUSY:429,MEDIA_PUBLISHER_BUSY:409,MEDIA_REVOCATION_PENDING:503,STALE_VIDEO_FRAME:409 };
+  MEDIA_UNAVAILABLE:503,MEDIA_BUSY:429,MEDIA_PUBLISHER_BUSY:409,MEDIA_REVOCATION_PENDING:503,STALE_VIDEO_FRAME:409,WAYPOINT_LIMIT_REACHED:409 };
 
 function createCloudApi({ pool, accounts, sessions, mfa, publicOrigin, tutorialAdapter, controlService,controlChannels,history,exports,mediaService, trustProxyLoopback=false, clock = { now:()=>new Date() } }) {
   const origin = new URL(publicOrigin).origin;
@@ -73,7 +74,7 @@ function createCloudApi({ pool, accounts, sessions, mfa, publicOrigin, tutorialA
       const context = { path,request,response,body,principal,pool,accounts,sessions,mfa,sourceKey,clock,tutorialAdapter,controlService,history,exports,mediaService };
       if (publicAuth && request.method === 'POST') await authRoute(context);
       if (!response.writableEnded && !publicAuth) {
-        for (const route of [sessionRoute,adminApplicationsRoute,adminRoute,profileRoute,preferencesRoute,tutorialRoute,historyRoute,exportsRoute,mediaRoute,controlRoute,workspaceRoute]) { await route(context); if (response.writableEnded||response.destroyed) break; }
+        for (const route of [sessionRoute,adminApplicationsRoute,adminRoute,profileRoute,preferencesRoute,waypointsRoute,tutorialRoute,historyRoute,exportsRoute,mediaRoute,controlRoute,workspaceRoute]) { await route(context); if (response.writableEnded||response.destroyed) break; }
       }
       if (!response.writableEnded) json(response,404,{error:'NOT_FOUND'});
     } catch (error) {

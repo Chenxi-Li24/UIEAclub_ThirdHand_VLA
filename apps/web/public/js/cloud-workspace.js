@@ -3,6 +3,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { STLLoader } from 'three/addons/loaders/STLLoader.js';
 import { ColladaLoader } from 'three/addons/loaders/ColladaLoader.js';
 import './robot-viewer.js';
+import './model-waypoints.js';
 
 async function start(){
   const session=globalThis.ThirdHandWorkspaceSession.createWorkspaceSession();
@@ -20,6 +21,7 @@ async function start(){
   const spinner=document.createElement('p');spinner.className='cloud-model-loading';spinner.textContent='Loading model…';document.getElementById('three-container').append(spinner);
   // Authentication, account and viewing must not wait for the large STL meshes.
   const controls=globalThis.ThirdHandWorkspaceSession.mountModelWorkspace({document,view:window,shell,arm,scene,identity,sessionClient:session,preferences});
+  const waypoints=globalThis.ThirdHandModelWaypoints.mountModelWaypoints({document,view:window,sessionClient:session,arm,simulation:controls.simulation,ready:false});
   const modelControls=Array.from(document.querySelectorAll('#joint-controls-body input,#preset-grid button,#btn-send,#gripper-input,#gripper-slider,#workspace-model .view-tools button')).map(node=>({node,disabled:node.disabled}));
   for(const {node} of modelControls)node.disabled=true;
   let active=true,liveControls={dispose(){}};
@@ -27,6 +29,7 @@ async function start(){
     if(!active)return;
     controls.simulation.setJoints([0,90,-90,0,0,0]);arm.setGripperPosition(1);scene.fitModel(arm.mount);spinner.remove();
     for(const {node,disabled} of modelControls)node.disabled=disabled;
+    waypoints.setReady(true);
     liveControls=globalThis.ThirdHandAdminControl.mountAdminControl({document,view:window,identity,sessionClient:session,arm});
   }).catch(()=>{
     if(active)spinner.textContent=globalThis.ThirdHandI18n?.translate('The robot model could not be loaded.')||'The robot model could not be loaded.';
@@ -34,7 +37,7 @@ async function start(){
     globalThis.ThirdHandAccountSecurity.mountAccountSecurity({document,view:window,identity,sessionClient:session});
     const historyLink=document.createElement('a');historyLink.href='/history';historyLink.className='action-btn action-secondary';historyLink.textContent=globalThis.ThirdHandI18n?.translate('Run history')||'Run history';document.querySelector('.nav-bottom').append(historyLink);
     const camera=globalThis.ThirdHandCameraView.mountCameraView({document,view:window,sessionClient:session});
-    session.startMonitoring();window.addEventListener('pagehide',()=>{active=false;camera.dispose();liveControls.dispose();controls.dispose();session.close();preferences.dispose();},{once:true});
+    session.startMonitoring();window.addEventListener('pagehide',()=>{active=false;waypoints.dispose();camera.dispose();liveControls.dispose();controls.dispose();session.close();preferences.dispose();},{once:true});
     shell.installOnboarding(globalThis.ThirdHandOnboarding);
     let tutorial={state:{status:'unavailable'},entry:null};
     try{tutorial=await session.request('/api/v1/tutorial');}catch{/* Keep actual tutorial progress explicitly unavailable. */}

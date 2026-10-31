@@ -1,0 +1,28 @@
+'use strict';
+const test=require('node:test'),assert=require('node:assert/strict');
+const {randomBytes}=require('node:crypto');
+const {identityFixture}=require('./identity-fixture');
+const {createSessions}=require('../../../platform/identity/src/sessions');
+const {createCloudApi}=require('../../../services/cloud-api/src/server');
+test('cloud workspace requires a valid session and serves a separate model-only bootstrap with no legacy proxy access',async t=>{
+  const f=await identityFixture(t),user=await f.verified('workspace');
+  const sessions=createSessions({pool:f.pool,csrfKey:randomBytes(32),clock:f.clock});
+  const server=createCloudApi({...f,sessions,publicOrigin:'https://thirdhand.example.invalid'});
+  await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));t.after(()=>new Promise(resolve=>{server.closeAllConnections();server.close(resolve);}));
+  const base=`http://127.0.0.1:${server.address().port}`;
+  const anonymous=await fetch(base+'/control',{redirect:'manual'});assert.equal(anonymous.status,302);assert.equal(anonymous.headers.get('location'),'/login');
+  const session=await sessions.issue({userId:user.userId}),headers={cookie:session.cookie.split(';')[0]};
+  const result=await fetch(base+'/control',{headers});assert.equal(result.status,200);
+  const html=await result.text();assert.ok(html.includes('cloud-workspace.js'));assert.ok(!html.includes('src="js/main.js'));assert.ok(!html.includes('dummy-control.js'));
+  assert.ok(result.headers.get('content-security-policy').includes('sha256-'));
+  assert.equal((await fetch(base+'/js/robot-viewer.js',{headers})).status,200);
+  assert.equal((await fetch(base+'/js/cloud-workspace.js',{headers})).status,200);
+  assert.equal((await fetch(base+'/js/model-waypoints.js',{headers})).status,200);
+  assert.equal((await fetch(base+'/css/model-waypoints.css',{headers})).status,200);
+  assert.equal((await fetch(base+'/js/lib/three.module.js',{headers})).status,200);
+  assert.equal((await fetch(base+'/models/startouch-v3/FastTouchV3.SLDASM.urdf',{headers})).status,200);
+  for(const route of ['/js/main.js','/js/voice-control.js','/js/dummy-control.js','/ws','/execution','/voice'])assert.equal((await fetch(base+route,{headers})).status,404);
+  const tutorial=await fetch(base+'/api/v1/tutorial',{headers});assert.equal(tutorial.status,200);assert.equal((await tutorial.json()).state.status,'unavailable');
+  await sessions.revokeSession({sessionId:session.sessionId,reason:'logout'});
+  assert.equal((await fetch(base+'/js/robot-viewer.js',{headers,redirect:'manual'})).status,401);
+});

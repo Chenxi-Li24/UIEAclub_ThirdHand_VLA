@@ -1,8 +1,11 @@
 # Public access implementation status
 
-Updated 2026-10-31. Worktree: D:/claudeworkplace/thirdhand-login, branch login,
-based on canonical main24c6f9c. No Git commit, push or PR has been made for this rollout.
-The original working directories and site-local uncommitted code remain preserved.
+Updated 2026-11-01. Worktree: D:/claudeworkplace/thirdhand-login, branch login,
+based on canonical/fork main24c6f9c. The user subsequently authorized functional
+commits and ordinary pushing to fork origin/login. Completed source/resources/docs
+are being committed together; no main merge or PR is requested. The original
+working directories and unfinished capture-timing changes remain preserved.
+See the [Git delivery record](../operations/2026-11-01-login-git-delivery.md).
 
 The active cloud release is **7c7f4b5f3792288e** at staging.uiea-thirdhand.com
 (C6 personal model waypoints, verified2026-11-01 02:07 China). It preserves the

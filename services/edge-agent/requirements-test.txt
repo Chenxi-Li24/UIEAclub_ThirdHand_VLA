@@ -1,0 +1,5 @@
+websockets==17.3
+cryptography==50.0.2
+pytest==9.2.0
+livekit==1.2.0
+Pillow==13.0.0

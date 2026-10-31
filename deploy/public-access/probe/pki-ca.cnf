@@ -1,0 +1,14 @@
+[req]
+prompt = no
+distinguished_name = subject
+x509_extensions = ca_extensions
+
+[subject]
+CN = ThirdHand temporary network probe CA
+O = ThirdHand
+
+[ca_extensions]
+basicConstraints = critical, CA:TRUE, pathlen:0
+keyUsage = critical, keyCertSign, cRLSign
+subjectKeyIdentifier = hash
+authorityKeyIdentifier = keyid:always

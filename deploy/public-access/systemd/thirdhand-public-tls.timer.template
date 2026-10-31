@@ -1,0 +1,10 @@
+[Unit]
+Description=Retry failed ThirdHand public certificate reload checks
+
+[Timer]
+OnBootSec=1min
+OnUnitInactiveSec=5min
+Unit=thirdhand-public-tls.service
+
+[Install]
+WantedBy=timers.target

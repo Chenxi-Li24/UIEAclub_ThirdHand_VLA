@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "thirdhand.remote-device.v1",
+  "title": "Device hello; control executor requires separate local binding and explicit registry enablement",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["type", "protocol", "deviceId", "bootId", "executorEpoch", "agentVersion", "capabilities"],
+  "properties": {
+    "type": {"const": "hello"},
+    "protocol": {"const": 1},
+    "deviceId": {"type": "string", "format": "uuid"},
+    "bootId": {"type": "string", "format": "uuid"},
+    "executorEpoch": {"anyOf": [{"type": "null"}, {"type": "string", "format": "uuid"}]},
+    "agentVersion": {"type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+(?:[-+][a-zA-Z0-9.-]+)?$", "maxLength": 80},
+    "capabilities": {"type": "array", "items": {"enum": ["probe", "control"]}, "minItems": 1, "maxItems": 1}
+  },
+  "oneOf": [
+    {"properties": {"executorEpoch": {"type": "null"}, "capabilities": {"const": ["probe"]}}},
+    {"properties": {"executorEpoch": {"type": "string", "format": "uuid"}, "capabilities": {"const": ["control"]}}}
+  ]
+}

@@ -1,0 +1,5 @@
+# Review the actual new cluster's complete file; keep postgres administrator peer.
+# No host/hostssl rules are required with listen_addresses=''.
+local   all               postgres          peer
+local   thirdhand_probe   thirdhand-relay    peer
+local   all               all               reject

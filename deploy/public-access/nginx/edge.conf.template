@@ -1,0 +1,40 @@
+# Separate device hostname. Replace certificate paths with the paths actually
+# created by the approved Baota certificate workflow. Never put private keys here.
+server {
+    listen 80;
+    server_name edge.uiea-thirdhand.com;
+    root /www/wwwroot/thirdhand-edge-acme;
+    location ^~ /.well-known/acme-challenge/ { try_files $uri =404; }
+    location / { return 404; }
+}
+server {
+    listen 443 ssl;
+    server_name edge.uiea-thirdhand.com;
+    ssl_certificate /www/server/panel/vhost/cert/edge.uiea-thirdhand.com/fullchain.pem;
+    ssl_certificate_key /www/server/panel/vhost/cert/edge.uiea-thirdhand.com/privkey.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_client_certificate /etc/thirdhand/device-ca.pem;
+    ssl_verify_client on;
+    ssl_verify_depth 2;
+    # Add a maintained ssl_crl file when the device CA workflow supplies it;
+    # registry revocation is also checked continuously by the relay.
+    client_max_body_size 360k;
+    # No token-bearing query strings, certificates or headers in request logs.
+    access_log off;
+    error_log /www/wwwlogs/thirdhand-edge.error.log warn;
+    location ~ ^/edge/v1/(?:connect|healthz|telemetry-batches)$ {
+        proxy_pass http://unix:/run/thirdhand-relay/edge.sock;
+        proxy_http_version 1.1;
+        proxy_set_header Host edge.uiea-thirdhand.com;
+        proxy_set_header X-SSL-Client-Verify $ssl_client_verify;
+        proxy_set_header X-SSL-Client-Cert $ssl_client_escaped_cert;
+        # Preserve incoming Cookie/Origin: the relay rejects browser requests.
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_connect_timeout 3s;
+        proxy_read_timeout 25s;
+        proxy_send_timeout 25s;
+        proxy_buffering off;
+    }
+    location / { return 404; }
+}

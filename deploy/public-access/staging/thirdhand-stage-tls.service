@@ -1,0 +1,17 @@
+[Unit]
+Description=Verify and reload changed ThirdHand staging certificate
+After=nginx.service
+
+[Service]
+Type=oneshot
+User=root
+ExecStart=/usr/bin/python3 /opt/thirdhand-stage/maintenance/reload_staging_tls.py
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/www/server/panel/vhost/cert/staging.uiea-thirdhand.com/privkey.pem /var/log/nginx /run/nginx.pid
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+MemoryMax=64M
+TasksMax=16

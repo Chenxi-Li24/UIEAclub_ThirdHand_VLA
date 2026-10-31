@@ -1,0 +1,14 @@
+'use strict';
+globalThis.ThirdHandI18nCatalog=(globalThis.ThirdHandI18nCatalog||[]).concat([ ['所有设备','All devices'],
+ ['开始','From'],['结束','To'],['开始日期','Start date'],['开始时间','Start time'],['结束日期','End date'],['结束时间','End time'],['最近 24 小时','Last 24 hours'],['时区','Time zone'],
+ ['日期和时间按你的本地时区填写，记录和下载使用 UTC。','Dates and times use your local time zone. Records and downloads use UTC.'],
+ ['SDK 断开时仍可查看已存记录。此页面不会连接机械臂。','Stored records remain available when the SDK is disconnected. This page does not connect the robot.'],
+ ['正在加载记录…','Loading records…'],['此时间范围没有记录，请扩大日期范围，或选择其他设备或记录类型。','No records in this time range. Widen the dates or choose another device or record type.'],
+ ['请输入有效日期和时间，结束时间须晚于开始时间，且范围不超过 31 天。','Enter valid dates and times, with the end after the start and a range of up to 31 days.'],
+ ['运行记录','Run history'],['返回工作台','Back to workspace'],['注册用户可查看全部运行记录。账号安全记录另行受限管理。','All operational records are available to registered viewers. Account security records are restricted.'],
+ ['记录类型','Record type'],['原始采样','Original samples'],['运行任务','Runs'],['命令','Commands'],['命令事件','Command events'],['设备与维护事件','Device and maintenance events'],['无效源记录','Invalid source records'],['完整原始批次','Exact raw batches'],['开始时间（UTC）','From (UTC)'],['结束时间（UTC）','To (UTC)'],['设备 ID（可选）','Device ID (optional)'],['加载记录','Load records'],['下一页','Next page'],['本页记录数','Records on this page'],
+ ['单次查询最多 31 天，可更改日期查看更早记录。原始批次按接收时间查询；其他记录显示各自的时间基准。','Queries cover up to 31 days. Change the dates to view earlier records. Raw batches use receipt time; other records show their stated time basis.'],
+ ['模型回放','Model replay'],['回放仅使用当前页采样。关节姿态为实测值，不重建工具几何与 TCP 轨迹。','Replay uses only the loaded sample page. Joint poses are measured values; tool geometry and TCP trajectories are not reconstructed.'],['回放位置','Replay position'],['显示实测姿态','Show measured pose'],['模型回放不会发送真机命令。','Model replay sends no robot commands.'],['实测姿态','Measured pose'],['数据缺口 · 保持姿态','Data gap · pose held'],['采样无效或超出限位','Invalid or out-of-range sample'],['版本不匹配','Version mismatch'],['已到当前页末尾','End of loaded page'],['没有采样','No samples'],
+ ['私有导出','Private export'],['导出使用当前筛选条件并在后台执行。如超出限制，请缩小日期范围。历史原始记录会保留。','Exports use the current filters and run in the background. If a limit is exceeded, narrow the date range. Historical records are retained.'],['格式','Format'],['创建导出','Create export'],['检查导出','Check export'],['下载导出','Download export'],['导出已排队，稍后可检查进度。','Export queued. Check its progress shortly.'],['导出状态','Export status'],['排队中','queued'],['执行中','running'],['已完成','completed'],['失败','failed'],['已过期','expired'],
+ ['请检查时区，并选择不超过 31 天的范围。','Check the timezone and select a range of up to 31 days.'],['查询已过期，请重新加载。','This query expired. Load records again.'],['导出超出限制，请缩小日期范围。','Export limit exceeded. Narrow the date range.'],['导出队列繁忙，请稍后重试。','Export queue is busy. Try again later.'],['导出服务尚未配置。','Export service is not configured.']
+]);

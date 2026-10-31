@@ -1,0 +1,6 @@
+# Frozen Linux x86_64 CPython3.11 wheel set; use --no-index --require-hashes
+thirdhand-edge-probe==0.1.0 --hash=sha256:8e1b58e47eb59422c14ca14348c78b74fd4ccd52b9bde9c81480e6efb8958177
+websockets==17.3 --hash=sha256:5ad409b7ea102339041281117cf2dadfe71edbb653dc48037cc55d516fb7f448
+cryptography==50.0.2 --hash=sha256:4061c0079120205fb760c58acab6443e217307dcf05e3702cf970e0689972856
+cffi==2.1.1 --hash=sha256:34e261f78cb6ceaaa36f42f2613f4380d94d9c759a9c73c769ee6e0247364632
+pycparser==3.12 --hash=sha256:a076f3f489b39b43ed13563a1dafe42447445bec2e294154ec5c57fcdda4c85e

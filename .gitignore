@@ -23,6 +23,8 @@ Thumbs.db
 
 # Local configuration and secrets
 .env
+.env.*
+!.env.example
 api_keys.yaml
 
 # Existing runtime output

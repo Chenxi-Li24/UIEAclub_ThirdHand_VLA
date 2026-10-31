@@ -28,7 +28,7 @@
     wall: ['M3 3v18 M6 7v10h6l3-5-3-5z M15 12h6 M21 9v6'],
     sidebar: ['M4 4h16v16H4z M9 4v16 M16 9l-3 3 3 3'],
   };
-  function mountWorkspace(doc, win) {
+  function mountWorkspace(doc, win, options = {}) {
     if (mounted.has(doc)) return mounted.get(doc);
     const byId = id => doc.getElementById(id);
     const element = (tag, attrs = {}, text = '') => {
@@ -193,7 +193,7 @@
       return true;
     }
     function go(id, { focus = false } = {}) {
-      if (!pageNodes.has(id)) id = 'control';
+      if (!pageNodes.has(id) || options.canOpenPage && !options.canOpenPage(id)) id = 'control';
       if (id !== current && !canLeave()) { win.history.replaceState(null, '', `#${current}`); return false; }
       if (current === id) {
         if (id === 'assistant' && byId('voice-panel').inert) runtime.voice?.openPanel();
@@ -208,8 +208,8 @@
         button.classList.toggle('active', key === id);
         if (key === id) button.setAttribute('aria-current', 'page'); else button.removeAttribute('aria-current');
       }
-      if (id === 'calibration' && !frame) {
-        frame = element('iframe', { id: 'workspace-calibration-frame', title: 'TCP calibration', src: 'tcp-calibration.html?embedded=1' });
+      if (id === 'calibration' && !frame && options.calibrationEntry !== null) {
+        frame = element('iframe', { id: 'workspace-calibration-frame', title: 'TCP calibration', src: options.calibrationEntry || 'tcp-calibration.html?embedded=1' });
         calibration.appendChild(frame);
       }
       if (id === 'assistant') runtime.voice?.openPanel();

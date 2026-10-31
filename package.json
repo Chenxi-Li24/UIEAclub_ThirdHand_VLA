@@ -17,6 +17,9 @@
     "test:task-engine": "node --test tests/node/task_engine/*.test.js",
     "test:launcher": "node --test tests/node/launcher/*.test.js",
     "test:skills": "node --test tests/node/skill_registry/*.test.js",
+    "test:public-access": "node --test --test-concurrency=4 tests/node/public_access/*.test.js",
+    "cloud:start": "node services/cloud-api/src/main.js",
+    "cloud:migrate": "node platform/storage/src/migrate-cli.js",
     "test:lifecycle": "python -m pytest tests/integration/test_simulated_lifecycle.py -v",
     "test:node": "node --test tests/node/authorization/*.test.js tests/node/contracts/*.test.js tests/node/gripper_skill/*.test.js tests/node/launcher/*.test.js tests/node/robot_service/*.test.js tests/node/skill_registry/*.test.js tests/node/task_engine/*.test.js tests/node/vision_service/*.test.js tests/node/web/*.test.js",
     "test:python": "python -m pytest -q"
@@ -24,7 +27,9 @@
   "devDependencies": {
     "ajv": "8.20.0",
     "ajv-formats": "3.0.1",
+    "jsqr": "1.4.0",
     "linkedom": "0.18.14",
+    "qrcode-generator": "2.0.4",
     "yaml": "2.9.0"
   }
 }

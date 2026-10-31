@@ -1,0 +1,8 @@
+{
+  "name": "@thirdhand/device-relay",
+  "version": "0.1.0",
+  "private": true,
+  "type": "commonjs",
+  "main": "src/server.js",
+  "dependencies": {"ws": "8.21.3"}
+}

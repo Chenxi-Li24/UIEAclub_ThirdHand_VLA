@@ -17,6 +17,7 @@ import threading
 import time
 from joint_speed_policy import bounded_speed_percent, command_speed_percent, validate_sdk_speed_reference
 from continuous_follow import ContinuousFollow
+from remote_lease_guard import RemoteLeaseGuard, LeaseGuardError
 from typing import Any
 
 try:
@@ -31,6 +32,7 @@ CAN_INTERFACE = os.environ.get("STARTOUCH_CAN_INTERFACE", "can0")
 SIMULATE = os.environ.get("STARTOUCH_SIMULATE", "0") == "1"
 SPEED_PERCENT = bounded_speed_percent(os.environ.get("STARTOUCH_SPEED_SCALE", "0.05"))
 DRY_RUN = os.environ.get("STARTOUCH_DRY_RUN", "0") == "1"
+REMOTE_LEASE_GUARD = os.environ.get("STARTOUCH_REMOTE_LEASE_GUARD", "0") == "1"
 GRIPPER_ENABLED = os.environ.get("STARTOUCH_GRIPPER", "1") != "0"
 GRIPPER_MAX_DISTANCE_M = min(
     0.2, max(0.001, float(os.environ.get("STARTOUCH_GRIPPER_MAX_DISTANCE_M", "0.08")))
@@ -103,14 +105,46 @@ _event_stream = (
 )
 
 
-def emit(message_type: str, **payload: Any) -> None:
-    message = {"type": message_type, **payload, "ts": int(time.time() * 1000)}
+def _write_event(message) -> None:
     with _event_lock:
         print(
             json.dumps(message, ensure_ascii=False, separators=(",", ":")),
             file=_event_stream,
             flush=True,
         )
+
+
+_audit_queue = queue.Queue(maxsize=64)
+
+
+def emit_async(message_type: str, **payload: Any) -> bool:
+    """Bounded best-effort output; cancellation never waits for a parent pipe."""
+    message = {"type": message_type, **payload, "ts": int(time.time() * 1000)}
+    try:
+        _audit_queue.put_nowait(message)
+        return True
+    except queue.Full:
+        return False
+
+
+def _write_audit_events():
+    while True:
+        message = _audit_queue.get()
+        try:
+            _write_event(message)
+        except Exception:
+            # Broken/unread parent output must not become SDK cancellation work.
+            pass
+
+
+threading.Thread(target=_write_audit_events, name="robot-audit-output", daemon=True).start()
+
+
+def emit(message_type: str, **payload: Any) -> None:
+    if REMOTE_LEASE_GUARD:
+        emit_async(message_type, **payload)
+    else:
+        _write_event({"type": message_type, **payload, "ts": int(time.time() * 1000)})
 
 
 class SimulatedArm:
@@ -189,7 +223,11 @@ class RobotBridge:
         self.shutdown_requested = threading.Event()
         self.motion_queue: queue.Queue[dict[str, Any]] = queue.Queue(maxsize=1)
         self.arm_lock = threading.RLock()
+        self.disconnect_lock = threading.RLock()
+        self.connect_in_progress = False
         self.control_lock_file = None
+        self.release_unconfirmed = False
+        self.release_pending_arm = None
         self.last_joint_log_monotonic = 0.0
         self.gripper_target: float | None = None
         self.grasp_feedback_upper: float | None = None
@@ -202,6 +240,8 @@ class RobotBridge:
         self.last_can_rx_monotonic = 0.0
         self.follow = None
         self.follow_stop_request = None
+        self.follow_remote_lease = None
+        self.remote_lease_guard = RemoteLeaseGuard(enabled=REMOTE_LEASE_GUARD, on_expire=self._remote_lease_expired)
         self.follow_thread = threading.Thread(target=self._follow_loop, daemon=True)
         self.motion_thread = threading.Thread(target=self._motion_loop, daemon=True)
         self.state_thread = threading.Thread(target=self._state_loop, daemon=True)
@@ -209,12 +249,41 @@ class RobotBridge:
         self.state_thread.start()
         self.follow_thread.start()
 
+    def _require_remote_lease(self, binding, *, continuing=False):
+        guard = getattr(self, "remote_lease_guard", None)
+        if guard is not None:
+            guard.require_active(binding, original_expiry=not continuing)
+
+    def _remote_lease_expired(self, event):
+        # This invokes the SDK's documented best-effort cancellation/cleanup,
+        # not a verified controlled motor stop or independent hardware watchdog.
+        try:
+            self.disconnect("remote_lease_expired")
+        finally:
+            emit_async("remote_lease_expired", **event, code="SOFTWARE_LEASE_CANCELLED")
+
+    def update_remote_lease(self, command):
+        guard = self.remote_lease_guard
+        name, value = command["cmd"], command.get("lease")
+        if name == "remote_lease_arm":
+            guard.arm(value)
+        elif name == "remote_lease_renew":
+            guard.renew(value)
+        elif name == "remote_lease_revoke":
+            guard.revoke(value, command.get("reason", "authorization_revoked"))
+        else:
+            raise LeaseGuardError("REMOTE_LEASE_COMMAND_INVALID")
+        emit("remote_lease_status", command=name, binding=guard.snapshot(),
+             active=guard.active(guard.snapshot()), stop_state="unknown", controlled_stop_supported=False)
+
     def follow_command(self, command):
+        self._require_remote_lease(command.get("remote_lease"))
         from pathlib import Path
         from workspace_guard import WorkspaceGuard
 
         name = command["cmd"]
         request_id = command.get("request_id")
+        self.follow_remote_lease = command.get("remote_lease")
         with self.arm_lock:
             if not self.connected or self.arm is None or (name != "follow_stop" and not self.state_ready):
                 raise RuntimeError("fresh connected robot state required for follow")
@@ -268,6 +337,7 @@ class RobotBridge:
                     if result is None:
                         continue
                     positions, velocities, finished = result
+                    self._require_remote_lease(getattr(self, "follow_remote_lease", None))
                     self.arm.set_joint_raw(positions, velocities)
                     if finished:
                         request_id, self.follow_stop_request = self.follow_stop_request, None
@@ -689,12 +759,24 @@ class RobotBridge:
         self.gripper_stable_samples = 0
         return log_message, result
 
-    def connect(self) -> None:
+    def connect(self, remote_lease=None) -> None:
+        self._require_remote_lease(remote_lease)
         with self.arm_lock:
+            if getattr(self, "release_unconfirmed", False):
+                emit("connection", connected=False, interface=CAN_INTERFACE,
+                     code="SDK_RELEASE_UNCONFIRMED",
+                     error="previous SDK release is unconfirmed; reconnect refused")
+                return
             if self.active_motion_cancel is not None or self.motion_active:
                 emit("connection", connected=False, interface=CAN_INTERFACE,
                      error="previous motion worker is still stopping; reconnect refused")
                 return
+            if getattr(self, "connect_in_progress", False):
+                emit("connection", connected=False, interface=CAN_INTERFACE, code="SDK_CONNECT_PENDING")
+                return
+            generation = self.connection_generation
+            if not self.connected:
+                self.connect_in_progress = True
         if self.connected:
             self.publish_state()
             return
@@ -731,6 +813,7 @@ class RobotBridge:
                     f"CAN RX before={rx_before}"
                 ),
             )
+            self._require_remote_lease(remote_lease)
             if SIMULATE:
                 arm = SimulatedArm()
             else:
@@ -758,6 +841,10 @@ class RobotBridge:
                     message="SingleArm constructor returned; sampling joint state",
                 )
 
+            self._require_remote_lease(remote_lease, continuing=True)
+            with self.arm_lock:
+                if generation != self.connection_generation:
+                    raise RuntimeError("SDK initialization cancelled")
             snapshot = self._wait_for_stable_state(arm, expected_joints)
             rx_after = self._read_can_rx_packets()
             if (
@@ -776,7 +863,11 @@ class RobotBridge:
                     "refusing to enable web motion"
                 )
             with self.arm_lock:
+                self._require_remote_lease(remote_lease, continuing=True)
+                if generation != self.connection_generation:
+                    raise RuntimeError("SDK initialization cancelled")
                 self.arm = arm
+                self.connect_in_progress = False
                 self.connected = True
                 self.state_ready = True
                 self.last_valid_joints = list(snapshot["joints"])
@@ -797,12 +888,15 @@ class RobotBridge:
             )
             self._emit_snapshot(snapshot)
         except Exception as exc:
+            cleanup_state = "not_required"
             if arm is not None:
                 try:
                     arm.cleanup()
+                    cleanup_state = "completed"
                 except Exception:
-                    pass
+                    cleanup_state = "failed"
             with self.arm_lock:
+                self.connect_in_progress = False
                 self.arm = None
                 self.connected = False
                 self.state_ready = False
@@ -813,21 +907,33 @@ class RobotBridge:
                 self.gripper_start_position = None
                 self.can_rx_packets = None
                 self.last_can_rx_monotonic = 0.0
-            self._release_control_lock()
+                self.release_unconfirmed = cleanup_state == "failed"
+                self.release_pending_arm = arm if self.release_unconfirmed else None
+            if not self.release_unconfirmed:
+                self._release_control_lock()
             emit(
                 "connection",
                 connected=False,
                 interface=CAN_INTERFACE,
-                error=str(exc),
+                error="SDK release failed after initialization; physical stop is unconfirmed"
+                      if self.release_unconfirmed else str(exc),
+                **({"code": "SDK_RELEASE_FAILED"} if self.release_unconfirmed else {}),
+                sdk_released=not self.release_unconfirmed,
+                cleanup_state=cleanup_state,
+                stop_state="unknown",
             )
 
-    def disconnect(self, reason: str = "requested") -> None:
+    def disconnect(self, reason: str = "requested", request_id: str | None = None) -> None:
+        with getattr(self, "disconnect_lock", self.arm_lock):
+            self._disconnect(reason, request_id)
+
+    def _disconnect(self, reason: str = "requested", request_id: str | None = None) -> None:
         self.stop_requested.set()
         with self.arm_lock:
             self.connection_generation += 1
             if self.active_motion_cancel is not None:
                 self.active_motion_cancel.set()
-            arm = self.arm
+            arm = self.arm if self.arm is not None else getattr(self, "release_pending_arm", None)
             self.arm = None
             self.connected = False
             self.state_ready = False
@@ -842,22 +948,46 @@ class RobotBridge:
             if self.follow is not None:
                 self.follow.active = False
             self.follow_stop_request = None
+        cancelled_requests = []
         while True:
             try:
                 cancelled = self.motion_queue.get_nowait()
-                emit("error", code="motion_cancelled", message=reason,
-                     request_id=cancelled.get("request_id"))
+                cancelled_requests.append(cancelled.get("request_id"))
             except queue.Empty:
                 break
+        cleanup_state = "not_required"
         if arm is not None:
             try:
                 arm.cleanup()
-            except Exception as exc:
-                emit("log", level="warning", message=f"SDK cleanup failed: {exc}")
-        self._release_control_lock()
-        emit("connection", connected=False, interface=CAN_INTERFACE, reason=reason)
+                cleanup_state = "completed"
+            except Exception:
+                cleanup_state = "failed"
+        initialization_pending = getattr(self, "connect_in_progress", False)
+        if initialization_pending and cleanup_state == "not_required":
+            cleanup_state = "initialization_pending"
+        released = cleanup_state != "failed" and not initialization_pending
+        with self.arm_lock:
+            self.release_unconfirmed = not released
+            self.release_pending_arm = None if released else arm
+        # Keep exclusive ownership on failed cleanup. A new SDK instance cannot
+        # safely replace this one until an explicit release succeeds.
+        if released and not getattr(self, "connect_in_progress", False):
+            self._release_control_lock()
+        # Do not perform audit I/O while cancelling work, cleaning the SDK or
+        # holding the control lock. A full/broken output pipe can drop notices.
+        for cancelled_request in cancelled_requests:
+            emit_async("error", code="motion_cancelled", message=reason, request_id=cancelled_request)
+        if cleanup_state == "failed":
+            emit_async("log", level="warning", message="SDK cleanup failed; physical stop is unconfirmed")
+        emit_async("connection", connected=False, interface=CAN_INTERFACE, reason=reason,
+             request_id=request_id, sdk_released=released, cleanup_state=cleanup_state,
+             stop_state="unknown",
+             stop_code="SDK_INITIALIZATION_PENDING" if initialization_pending else
+                       "STOP_FEEDBACK_UNAVAILABLE" if released else "SDK_RELEASE_FAILED",
+             source_mode="simulation" if SIMULATE else "dry-run" if DRY_RUN else "hardware")
 
     def enqueue_motion(self, command: dict[str, Any]) -> None:
+        self._require_remote_lease(command.get("remote_lease"))
         with self.arm_lock:
             connected = self.connected
             state_ready = self.state_ready
@@ -939,6 +1069,7 @@ class RobotBridge:
             return
 
         item = {
+            "remote_lease": command.get("remote_lease"),
             "start_joints_rad": start_joints,
             "joints_rad": target,
             "waypoints_rad": waypoints,
@@ -962,6 +1093,7 @@ class RobotBridge:
         )
 
     def enqueue_fixed_tcp_demo(self, command: dict[str, Any]) -> None:
+        self._require_remote_lease(command.get("remote_lease"))
         request_id = command.get("request_id")
         execute = command.get("execute")
         use_current_tcp = command.get("use_current_tcp_xyz", False)
@@ -989,6 +1121,7 @@ class RobotBridge:
             return
         try:
             self.motion_queue.put_nowait({
+                "remote_lease": command.get("remote_lease"),
                 "_fixed_tcp_demo": True, "request_id": request_id,
                 "execute": execute, "fixed_xyz": xyz,
                 "use_current_tcp_xyz": use_current_tcp,
@@ -1007,7 +1140,9 @@ class RobotBridge:
         kd: Any = None,
         request_id: Any = None,
         grasp_feedback_upper: Any = None,
+        remote_lease=None,
     ) -> None:
+        self._require_remote_lease(remote_lease)
         if not self.connected or self.arm is None:
             emit("error", message="Startouch SDK is not connected")
             return
@@ -1047,6 +1182,7 @@ class RobotBridge:
                 before_position = float(self.arm.get_gripper_position())
                 before_distance = float(self.arm.get_gripper_distance())
                 target_distance = value * GRIPPER_MAX_DISTANCE_M
+                self._require_remote_lease(remote_lease)
                 self.arm.setGripperDistance(target_distance, kp_value, kd_value)
                 self.gripper_target = value
                 self.grasp_feedback_upper = grasp_feedback_upper
@@ -1080,6 +1216,7 @@ class RobotBridge:
             )
 
     def preview_ik(self, command: dict[str, Any]) -> None:
+        self._require_remote_lease(command.get("remote_lease"))
         """Solve a displayed flange target without commanding motion."""
         request_id = command.get("request_id")
         position = command.get("position")
@@ -1123,6 +1260,7 @@ class RobotBridge:
         emit("ik_preview", request_id=request_id, ok=ok, joints_rad=joints if ok else [])
 
     def move_linear(self, command: dict[str, Any]) -> None:
+        self._require_remote_lease(command.get("remote_lease"))
         """Execute a Cartesian linear move (move_l)."""
         with self.arm_lock:
             connected = self.connected
@@ -1171,6 +1309,7 @@ class RobotBridge:
 
         # Use a fake joint target so enqueue_motion doesn't reject it
         fake_item = {
+            "remote_lease": command.get("remote_lease"),
             "start_joints_rad": self.last_valid_joints or [0.0] * 6,
             "joints_rad": self.last_valid_joints or [0.0] * 6,
             "waypoints_rad": [self.last_valid_joints or [0.0] * 6],
@@ -1185,7 +1324,8 @@ class RobotBridge:
         self.motion_queue.put_nowait(fake_item)
         emit("command_accepted", command="move_l", request_id=request_id, source="move_l")
 
-    def go_home(self, request_id: str | None = None) -> None:
+    def go_home(self, request_id: str | None = None, remote_lease=None) -> None:
+        self._require_remote_lease(remote_lease)
         """Send the arm to its home position."""
         with self.arm_lock:
             connected = self.connected
@@ -1202,6 +1342,7 @@ class RobotBridge:
             return
 
         fake_item = {
+            "remote_lease": remote_lease,
             "start_joints_rad": self.last_valid_joints or [0.0] * 6,
             "joints_rad": [0.0] * 6,
             "waypoints_rad": [[0.0] * 6],
@@ -1288,6 +1429,11 @@ class RobotBridge:
                 command = self.motion_queue.get(timeout=0.1)
             except queue.Empty:
                 continue
+            try:
+                self._require_remote_lease(command.get("remote_lease"))
+            except LeaseGuardError:
+                emit("error", code="remote_lease_required", request_id=command.get("request_id"))
+                continue
             with self.arm_lock:
                 if self.stop_requested.is_set() or not self.connected or self.arm is None:
                     emit("error", code="motion_cancelled", message="robot disconnected before motion",
@@ -1307,6 +1453,7 @@ class RobotBridge:
             )
             emit("motion_state", state="MOVING", request_id=command["request_id"])
             try:
+                self._require_remote_lease(command.get("remote_lease"))
                 if command.get("_fixed_tcp_demo"):
                     demo_dir = Path(__file__).resolve().parents[3] / "apps" / "fixed_tcp_demo"
                     if str(demo_dir) not in sys.path:
@@ -1395,7 +1542,69 @@ class RobotBridge:
 
     def shutdown(self) -> None:
         self.shutdown_requested.set()
+        guard = getattr(self, "remote_lease_guard", None)
+        if guard is not None:
+            guard.close()
         self.disconnect("bridge_shutdown")
+
+
+def command_lines(bridge, stream):
+    """Keep lease updates off the potentially blocking SDK command thread."""
+    guard = getattr(bridge, "remote_lease_guard", None)
+    if guard is None or not guard.enabled:
+        yield from stream
+        return
+    pending = queue.Queue(maxsize=1)
+
+    def read_input():
+        try:
+            for line in stream:
+                if bridge.shutdown_requested.is_set():
+                    break
+                try:
+                    if len(line) > 32768:
+                        raise LeaseGuardError("REMOTE_INPUT_TOO_LARGE")
+                    command = json.loads(line)
+                    if not isinstance(command, dict):
+                        raise LeaseGuardError("REMOTE_INPUT_INVALID")
+                    name = command.get("cmd")
+                    if name in {"remote_lease_arm", "remote_lease_renew", "remote_lease_revoke"}:
+                        bridge.update_remote_lease(command)
+                        continue
+                    if name in {"software_stop", "disconnect", "shutdown"}:
+                        guard.revoke_current("operator_stop" if name != "shutdown" else "robot_service_shutdown")
+                        if name == "shutdown":
+                            bridge.shutdown()
+                        else:
+                            bridge.disconnect("software_stop" if name == "software_stop" else str(command.get("reason", "requested")),
+                                              request_id=command.get("request_id"))
+                        continue
+                    pending.put_nowait(line)
+                except queue.Full:
+                    emit("error", code="remote_command_queue_full", request_id=command.get("request_id"))
+                except (LeaseGuardError, ValueError, TypeError):
+                    emit("error", code="remote_lease_rejected", stop_state="unknown")
+        finally:
+            try:
+                guard.revoke_current("parent_eof")
+            except LeaseGuardError:
+                pass
+            while not bridge.shutdown_requested.is_set():
+                try:
+                    pending.put(None, timeout=0.02)
+                    break
+                except queue.Full:
+                    continue
+
+    threading.Thread(target=read_input, name="remote-lease-input", daemon=True).start()
+    while not bridge.shutdown_requested.is_set():
+        try:
+            line = pending.get(timeout=0.1)
+        except queue.Empty:
+            continue
+        if line is None:
+            return
+        yield line
 
 
 def main() -> None:
@@ -1413,9 +1622,18 @@ def main() -> None:
         sdk_path=SDK_PATH,
         simulated=SIMULATE,
         dry_run=DRY_RUN,
+        remote_lease_guard=bridge.remote_lease_guard.enabled if hasattr(bridge, "remote_lease_guard") else False,
+        remote_lease_protocol="thirdhand-worker-lease-v1" if REMOTE_LEASE_GUARD else None,
     )
 
-    for line in sys.stdin:
+    try:
+        _run_commands(bridge, command_lines(bridge, sys.stdin))
+    finally:
+        bridge.shutdown()
+
+
+def _run_commands(bridge, lines):
+    for line in lines:
         if bridge.shutdown_requested.is_set():
             break
         command = {}
@@ -1423,11 +1641,11 @@ def main() -> None:
             command = json.loads(line)
             name = command.get("cmd")
             if name == "connect":
-                bridge.connect()
+                bridge.connect(command.get("remote_lease"))
             elif name == "disconnect":
-                bridge.disconnect(str(command.get("reason", "requested")))
+                bridge.disconnect(str(command.get("reason", "requested")), request_id=command.get("request_id"))
             elif name == "software_stop":
-                bridge.disconnect("software_stop")
+                bridge.disconnect("software_stop", request_id=command.get("request_id"))
             elif name in {"move_joint", "move_joint_path"}:
                 bridge.enqueue_motion(command)
             elif name == "fixed_tcp_demo":
@@ -1437,7 +1655,7 @@ def main() -> None:
             elif name == "preview_ik":
                 bridge.preview_ik(command)
             elif name == "go_home":
-                bridge.go_home(command.get("request_id"))
+                bridge.go_home(command.get("request_id"), command.get("remote_lease"))
             elif name in {"follow_start", "follow_target", "follow_stop"}:
                 bridge.follow_command(command)
             elif name == "gripper":
@@ -1447,6 +1665,7 @@ def main() -> None:
                     command.get("kd"),
                     command.get("request_id"),
                     command.get("grasp_feedback_upper"),
+                    command.get("remote_lease"),
                 )
             elif name == "get_state":
                 if bridge.connected:

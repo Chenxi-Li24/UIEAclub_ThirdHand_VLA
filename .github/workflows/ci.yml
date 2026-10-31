@@ -5,6 +5,40 @@ on:
   pull_request:
 
 jobs:
+  public-access:
+    runs-on: ubuntu-22.04
+    services:
+      postgres:
+        image: postgres:17.11
+        env:
+          POSTGRES_USER: thirdhand_test
+          POSTGRES_PASSWORD: isolated-ci-only
+          POSTGRES_DB: thirdhand_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U thirdhand_test -d thirdhand_test"
+          --health-interval 5s --health-timeout 5s --health-retries 12
+    env:
+      TEST_DATABASE_URL: postgresql://thirdhand_test:isolated-ci-only@127.0.0.1:5432/thirdhand_test
+    steps:
+      - uses: actions/checkout@v4
+      - name: Restore robot geometry for public workspace checks
+        run: git lfs pull --include="assets/robot/startouch-v3/meshes/**" --exclude=""
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: python -m pip install -r services/edge-agent/requirements-test.txt
+      - run: npm ci
+      - run: npm run test:public-access
+      - run: python -m pytest -q tests/python/edge_agent
+      - name: Isolated C2 business and restore acceptance
+        run: python -m pytest -q tests/integration/public_access/test_remote_flow.py
+
   test:
     runs-on: ubuntu-22.04
     steps:
@@ -35,7 +69,9 @@ jobs:
         run: npm run test:node
 
       - name: Python tests
-        run: npm run test:python
+        # Edge tests run above in their own Python3.11/media dependency job.
+        # Avoid mixing the legacy ML/websocket environment with that transport.
+        run: python -m pytest -q --ignore=tests/python/edge_agent --ignore=tests/integration/public_access
 
       - name: Dummy adapter and resource path tests
         run: python -m pytest -q apps/dummy/tests/test_direct_robot_control.py apps/dummy/tests/test_resource_paths.py apps/dummy/tests/test_yolo_person_detector.py apps/dummy/tests/test_follow_speed_limits.py apps/dummy/tests/test_robot_ws_client.py apps/dummy/tests/test_runtime_scheduler.py apps/dummy/tests/test_follow_pipeline.py apps/dummy/tests/test_person_follow_runtime.py

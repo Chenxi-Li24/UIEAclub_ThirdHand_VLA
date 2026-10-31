@@ -7,6 +7,7 @@
 | 我要做什么 | 阅读 |
 |---|---|
 | 启动、停止、检查状态和排障 | [`RUN_GUIDE.md`](RUN_GUIDE.md) |
+| 公网工作台的实现/API、数据库、资源和本地/云端运行 | [`features/PUBLIC_ACCESS.md`](features/PUBLIC_ACCESS.md) |
 | 查看运行时所有权与安全约束 | [`OPERATIONS.md`](OPERATIONS.md) |
 | 查看待迁移能力、目标目录和 History 删除门槛 | [`MIGRATION_BACKLOG.md`](MIGRATION_BACKLOG.md) |
 | 查看语音、模型到真机执行的完整安全链路 | [`VOICE_ACTION_CONTROL_CHAIN_DESIGN.md`](VOICE_ACTION_CONTROL_CHAIN_DESIGN.md) |

@@ -1,0 +1,15 @@
+[build-system]
+requires = ["setuptools==82.0.1"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "thirdhand-edge-probe"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = ["websockets==17.3", "cryptography==50.0.2"]
+
+[project.scripts]
+thirdhand-edge-probe = "thirdhand_edge.probe:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]

@@ -1,0 +1,26 @@
+[Unit]
+Description=ThirdHand isolated staging business API
+After=network-online.target postgresql@17-stage.service
+Requires=postgresql@17-stage.service
+[Service]
+User=thirdhand-stage
+Group=thirdhand-stage
+SupplementaryGroups=thirdhand-stage-db
+WorkingDirectory=/opt/thirdhand-stage/current
+EnvironmentFile=/etc/thirdhand-stage/cloud.env
+ExecStart=/opt/thirdhand-stage/node-v24.22.1/bin/node --max-old-space-size=96 services/cloud-api/src/staging-main.js
+Restart=on-failure
+RestartSec=5
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+ReadWritePaths=/var/lib/thirdhand-stage/mail /var/lib/thirdhand-stage/exports
+MemoryMax=192M
+TasksMax=64
+CPUQuota=50%
+[Install]
+WantedBy=multi-user.target

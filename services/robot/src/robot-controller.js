@@ -139,38 +139,43 @@ class RobotController extends EventEmitter {
     this.bridge.on('bridge_error', message => this._handleBridgeMessage({
       ...message, type: 'error', code: message.code || 'bridge_error',
     }));
-    this.bridge.on('software_stop_complete', message => {
-      this._finalizeInterruptedExecutions('interrupted', null);
-      const requestId = this.pendingStopRequestId;
-      this.pendingStopRequestId = null;
-      if (requestId) {
-        this.pendingLowLevel.delete(requestId);
-        this.emit('message', {
-          type: 'command_status', status: 'complete', command: 'software_stop',
-          request_id: requestId, stopped: true,
-          applied_state_sequence: this.stateSequence,
-          applied_producer_monotonic_ns: this.latestProducerMonotonicNs,
-          robot_healthy: false,
-        });
-      }
+    this.bridge.on('software_stop_result', message => this._handleSoftwareStopResult(message));
+    // Older in-process adapters may still emit this event. Its name alone is
+    // never evidence that physical hardware stopped or was depowered.
+    this.bridge.on('software_stop_complete', message => this._handleSoftwareStopResult(message));
+    this.bridge.on('software_stop_timeout', message => this._handleSoftwareStopResult(message, true));
+  }
+
+  _handleSoftwareStopResult(message, timedOut = false) {
+    const requestId = this.pendingStopRequestId;
+    if (message.request_id && requestId && message.request_id !== requestId) return;
+    const simulated = !timedOut && this.config.simulate === true
+      && (message.source_mode === 'simulation' || message.source_mode === undefined)
+      && message.sdk_released !== false;
+    const sourceMode = this.config.simulate === true ? 'simulation'
+      : this.config.dryRun === true ? 'dry-run' : 'hardware';
+    this._finalizeInterruptedExecutions(simulated ? 'interrupted' : 'uncertain',
+      simulated ? null : 'stop_feedback_unconfirmed');
+    this.pendingStopRequestId = null;
+    if (requestId) {
+      this.pendingLowLevel.delete(requestId);
       this.emit('message', {
-        type: 'software_stop',
-        complete: true,
-        depowered: true,
-        msg: 'SDK stopped and motors disabled',
-        ts: message.ts || Date.now(),
+        type: 'command_status', status: 'complete', command: 'software_stop',
+        request_id: requestId, stopped: simulated, state: simulated ? 'stopped' : 'unknown',
+        code: simulated ? 'SIMULATED_STOP' : 'STOP_UNCONFIRMED', sourceMode,
+        sdk_released: message.sdk_released === true,
+        applied_state_sequence: this.stateSequence,
+        applied_producer_monotonic_ns: this.latestProducerMonotonicNs,
+        robot_healthy: false,
       });
-    });
-    this.bridge.on('software_stop_timeout', message => {
-      this._finalizeInterruptedExecutions('uncertain', 'stop_feedback_timeout');
-      this.pendingStopRequestId = null;
-      this.emit('message', {
-        type: 'software_stop',
-        complete: false,
-        depowered: false,
-        msg: message.message,
-        ts: Date.now(),
-      });
+    }
+    this.emit('message', {
+      type: 'software_stop', request_id: requestId || message.request_id || null,
+      complete: simulated, state: simulated ? 'stopped' : 'unknown',
+      depowered: false, sourceMode, sdkReleased: message.sdk_released === true,
+      code: simulated ? 'SIMULATED_STOP' : 'STOP_UNCONFIRMED',
+      msg: simulated ? 'Simulated execution cancelled' : 'Physical stop is unconfirmed',
+      ts: message.ts || Date.now(),
     });
   }
 
@@ -319,7 +324,7 @@ class RobotController extends EventEmitter {
         this.connectPending = this.bridge.send({ cmd: 'connect' });
         return;
       case 'disconnect':
-        this.bridge.send({ cmd: 'disconnect', reason: 'browser_request' });
+        this.bridge.send({ cmd: 'disconnect', reason: 'browser_request', request_id: message.request_id });
         return;
       case 'status':
       case 'get_state':
@@ -327,6 +332,10 @@ class RobotController extends EventEmitter {
         return;
       case 'software_stop':
       case 'estop': {
+        if (this.pendingStopRequestId) {
+          reply({ type: 'error', code: 'stop_pending', msg: 'A software stop result is pending' });
+          return;
+        }
         const requestId = typeof message.request_id === 'string' && message.request_id
           ? message.request_id : randomUUID();
         this.pendingStopRequestId = requestId;
@@ -832,6 +841,10 @@ class RobotController extends EventEmitter {
   }
 
   _handleBridgeMessage(message) {
+    if (message.type === 'remote_lease_status' || message.type === 'remote_lease_expired') {
+      this.emit('message', message);
+      return;
+    }
     if (message.type === 'follow_state') {
       this.followActive = message.active === true;
       this.motionActive = this.followActive;

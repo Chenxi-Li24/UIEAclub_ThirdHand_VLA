@@ -1,0 +1,15 @@
+# Candidate only. Generate independent credentials into a mode-0600 server file.
+port: 7880
+bind_addresses: [127.0.0.1]
+rtc:
+  tcp_port: 7881
+  udp_port: 7882
+  use_external_ip: false
+  node_ip: 47.94.95.244
+keys:
+  __MEDIA_API_KEY__: __MEDIA_API_SECRET__
+logging:
+  level: warn
+  json: true
+turn:
+  enabled: false

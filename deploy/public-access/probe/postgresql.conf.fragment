@@ -1,0 +1,18 @@
+# Review with the installed17/main configuration before applying.
+# Applies to the new, otherwise empty C1b cluster only. No public DB listener.
+listen_addresses = ''
+port = 5432
+unix_socket_directories = '/var/run/postgresql'
+unix_socket_permissions = 0770
+unix_socket_group = 'thirdhand-probe-db'
+max_connections = 20
+shared_buffers = '64MB'
+work_mem = '2MB'
+maintenance_work_mem = '32MB'
+max_wal_size = '256MB'
+min_wal_size = '80MB'
+logging_collector = off
+log_statement = 'none'
+log_min_error_statement = 'panic'
+# Add only postgres and thirdhand-relay to the dedicated thirdhand-probe-db OS
+# group; the peer rule still restricts DB identity and privileges.

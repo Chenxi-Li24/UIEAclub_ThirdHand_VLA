@@ -1,0 +1,22 @@
+[Unit]
+Description=Verify and reload changed ThirdHand public certificates
+After=nginx.service
+
+[Service]
+Type=oneshot
+User=root
+ExecStart=/usr/bin/python3 /opt/thirdhand-probe/current/tools/operations/reload_public_tls.py
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/www/server/panel/vhost/cert/uiea-thirdhand.com/privkey.pem /www/server/panel/vhost/cert/edge.uiea-thirdhand.com/privkey.pem
+# nginx -t also opens the active system log files. Verify actual paths before install.
+ReadWritePaths=/var/log/nginx
+# Ubuntu Nginx opens its existing PID file during nginx -t.
+ReadWritePaths=/run/nginx.pid
+# nginx -t checks the existing IPv4 and IPv6 listen directives.
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+MemoryMax=64M
+TasksMax=16

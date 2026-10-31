@@ -1,0 +1,23 @@
+[Unit]
+Description=ThirdHand private bounded export worker
+After=network-online.target postgresql.service
+[Service]
+Type=simple
+User=thirdhand-cloud
+Group=thirdhand-cloud
+WorkingDirectory=/opt/thirdhand/current
+EnvironmentFile=/etc/thirdhand/cloud.env
+ExecStart=/opt/thirdhand/node/bin/node services/cloud-api/src/jobs/export-main.js
+Restart=on-failure
+RestartSec=5
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+ReadWritePaths=/var/lib/thirdhand-exports
+MemoryMax=256M
+TasksMax=32
+[Install]
+WantedBy=multi-user.target

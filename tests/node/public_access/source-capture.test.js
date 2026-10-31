@@ -1,0 +1,34 @@
+'use strict';
+const test=require('node:test');
+const assert=require('node:assert/strict');
+const {EventEmitter,once}=require('node:events');
+const {spawn}=require('node:child_process');
+const fs=require('node:fs/promises');
+const os=require('node:os');
+const path=require('node:path');
+const {randomUUID,randomBytes,generateKeyPairSync}=require('node:crypto');
+const {identityFixture}=require('./identity-fixture');
+const {createRemoteRobotGateway}=require('../../../services/robot/src/remote-gateway');
+const {createIngestRepository}=require('../../../platform/storage/src/ingest');
+test('private SSE to independent Python capture to PostgreSQL retains every published state without connecting SDK',async t=>{
+  const f=await identityFixture(t),directory=await fs.mkdtemp(path.join(os.tmpdir(),'thirdhand-capture-'));
+  t.after(async()=>{const target=path.resolve(directory);assert.equal(path.dirname(target),path.resolve(os.tmpdir()));assert.match(path.basename(target),/^thirdhand-capture-/);await fs.rm(target,{recursive:true,force:true,maxRetries:5,retryDelay:100});});
+  const deviceId=(await f.pool.query("INSERT INTO ops.devices(name,hardware_serial,enabled) VALUES('Capture fixture','capture-fixture',true) RETURNING id")).rows[0].id;
+  const certificateId=(await f.pool.query("INSERT INTO ops.device_credentials(device_id,certificate_serial,fingerprint_sha256,public_key,not_before,expires_at) VALUES($1,'capture-fixture',$2,'fixture',$3,$4) RETURNING id",[deviceId,'a'.repeat(64),new Date(f.clock.value-1000),new Date(f.clock.value+86400000)])).rows[0].id;
+  class Fake extends EventEmitter{constructor(){super();this.config={simulate:true};this.bridge=new EventEmitter();this.calls=[];}handleCommand(command){this.calls.push(command);}}
+  const controller=new Fake(),token=randomBytes(32).toString('hex'),keys=generateKeyPairSync('ed25519'),gateway=createRemoteRobotGateway({controller,deviceId,token,signingKeys:new Map([['fixture',keys.publicKey]])});
+  const server=require('node:http').createServer((request,response)=>gateway.handle(request,response));await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
+  t.after(async()=>{await gateway.close();server.closeAllConnections();await new Promise(resolve=>server.close(resolve));});
+  const tokenFile=path.join(directory,'edge-token');await fs.writeFile(tokenFile,token,{mode:0o600});const bootId=randomUUID();
+  const input={base:`http://127.0.0.1:${server.address().port}`,tokenFile,deviceId,bootId,outbox:path.join(directory,'outbox.sqlite')};
+  const script=`import sys,json\nfrom thirdhand_edge.robot_client import RobotClient\nfrom thirdhand_edge.capture import capture_stream\nfrom thirdhand_edge.outbox import Outbox\nv=json.load(sys.stdin)\nclass Limited(RobotClient):\n def iter_events(self):\n  for frame in super().iter_events():\n   if frame['type']=='source_snapshot': print('capture-ready',flush=True)\n   yield frame\n   if frame['type']=='robot_event' and frame['sequence']>=6: break\nr=Limited(base_url=v['base'],token_file=v['tokenFile'])\nb=Outbox(v['outbox'],device_id=v['deviceId'],boot_id=v['bootId'])\ncapture_stream(r,b)\nprint('batches:'+json.dumps([Outbox.wire_batch(batch) for batch in b.pending_batches()]),flush=True)\nb.close()`;
+  const child=spawn(process.env.EDGE_TEST_PYTHON||'python',['-c',script],{env:{...process.env,PYTHONPATH:path.resolve('services/edge-agent/src')},stdio:['pipe','pipe','pipe']});
+  t.after(()=>{if(child.exitCode===null)child.kill();});let stdout='',stderr='',published=false;child.stderr.on('data',chunk=>stderr+=chunk);
+  child.stdout.on('data',chunk=>{stdout+=chunk;if(!published&&stdout.includes('capture-ready')){published=true;for(let i=0;i<6;i++)controller.emit('message',{type:'robot_state',ts:f.clock.value+i,joints_deg:[i,90,-90,0,0,0],connected:false,moving:false});}});
+  child.stdin.end(JSON.stringify(input));assert.equal((await once(child,'close'))[0],0,stderr);
+  const batches=JSON.parse(stdout.split('\n').find(line=>line.startsWith('batches:')).slice(8));
+  const ingest=createIngestRepository(f.pool,{clock:f.clock});await f.pool.query("SELECT telemetry.ensure_month_partition('2026-10-01')");
+  for(const batch of batches)assert.equal((await ingest.ingestBatch({deviceId,bootId,certificateId},batch)).persisted,true);
+  const samples=(await f.pool.query('SELECT sample_seq,extra FROM telemetry.robot_samples ORDER BY sample_seq')).rows;
+  assert.equal(samples.length,6);assert.deepEqual(samples.map(row=>row.extra.sourceSequence),[1,2,3,4,5,6]);assert.ok(samples.every(row=>row.extra.sourceMode==='simulation'));assert.equal(controller.calls.length,0);
+});

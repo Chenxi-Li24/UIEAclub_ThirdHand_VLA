@@ -1,0 +1,25 @@
+[Unit]
+Description=ThirdHand staging camera-only outbound publisher
+After=network-online.target thirdhand-stage-camera-source.service
+Wants=network-online.target
+Requires=thirdhand-stage-camera-source.service
+[Service]
+User=nieqingcao
+Group=nieqingcao
+Environment=PYTHONPATH=__IMMUTABLE_CAMERA_SOURCE__
+ExecStart=__CAMERA_VENV__/bin/python -m thirdhand_edge.camera_runtime --config __CAMERA_PRIVATE__/camera.toml
+Restart=on-failure
+RestartSec=5
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=read-only
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
+CapabilityBoundingSet=
+LimitCORE=0
+MemoryMax=384M
+TasksMax=96
+[Install]
+WantedBy=multi-user.target

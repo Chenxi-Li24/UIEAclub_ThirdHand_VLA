@@ -35,11 +35,11 @@
     },
     {
       "path": "../../services/robot/src/robot-controller.js",
-      "sha256": "2ec120bb6f4e0412277e1cc9d1e4aa8161b7966739d67a3f5b10e34185ae7a34"
+      "sha256": "c762ea4001fde553f6efa6033e5157a0ff0704a922164d2ec3e59ed50e2add13"
     },
     {
       "path": "../../services/robot/src/startouch_bridge.py",
-      "sha256": "d621cbec9b1377219b78b6f76f648864178d5b83d23a5410c34e1e760ef4a1f0"
+      "sha256": "665ea6ec285a36aa1b1a0df96a7190beeac37ebeb105099b51b32b8d5ccc876b"
     },
     {
       "path": "../../assets/robot/startouch-v3/FastTouchV3.SLDASM.urdf",
@@ -85,7 +85,8 @@
     "ci_20261101": {
       "previous_policy_id": "sha256:94c4bdb6a2b688e410d187db8b3737dfb8268842c3eff8a71438562b059bb002",
       "scope": "read-only remote lease/worker lifecycle source changes; tool transform unchanged",
-      "physical_validation_added": false
+      "physical_validation_added": false,
+      "source_byte_format": "Git LF, identical on Linux and Windows"
     }
   }
 }

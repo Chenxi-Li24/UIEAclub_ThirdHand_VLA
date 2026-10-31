@@ -69,8 +69,8 @@
       164
     ]
   ],
-  "framePolicyId": "sha256:5ae9b42ced7d72a95495481f91e485fba6b78b7cc352145c10cc84cfb03f1e22",
-  "calibrationId": "sha256:0b321b679778eb7dc82f45ca5d1ee3fa821236cb8f1b0d78d1c8e4f0fcd42f45",
+  "framePolicyId": "sha256:fdf5bd522b1bf175a86e2fe020bd10f0f6bacc431e7a92a585bb7093549e5b72",
+  "calibrationId": "sha256:9405eff3ed8c2a0125e65c52be9ce97d235c77f5c8d7c4930b1cd2338b044cd8",
   "framePolicyFile": "../../../configs/vision/sdk-tool-frame-policy.json",
   "calibrationFile": "../../../configs/vision/handeye-flange-normalized.json",
   "tcpArtifactRoot": "../../../runtime/tcp-calibration",

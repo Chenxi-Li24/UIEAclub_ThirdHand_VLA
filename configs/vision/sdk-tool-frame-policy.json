@@ -51,7 +51,7 @@
     },
     {
       "path": "../../local/generated/startouch-python/startouch_sdk/interface_py/libstartouch.so",
-      "sha256": "35f0e2c99eab70e315135427f1d427c25f935419b8a4910b125288c84515f366"
+      "sha256": "8284d216ab4e7b0195ffaf8e7fc70ee160b834511b9c05e77c0ba33ad545e24b"
     },
     {
       "path": "../../local/generated/startouch-python/startouch_sdk/src/config/FastTouchV2.SLDASM.urdf",
@@ -63,7 +63,7 @@
     },
     {
       "path": "../../local/generated/startouch-python/startouch_sdk/interface_py/startouch.cpython-311-x86_64-linux-gnu.so",
-      "sha256": "de0a2499fdb07e27d5c5ecb34ffb5ede400c9913515f4326c255c08813584711"
+      "sha256": "56627356e9cf751dade7ddec2f45849cebf0519b06a76886dee7761f65ddbd08"
     }
   ],
   "legacy_calibration_sha256": "d2e322dec9c6dab109212188ccc87b714bbd7f3cd9b0de9f22169cc576764a5b",
@@ -86,7 +86,8 @@
       "previous_policy_id": "sha256:94c4bdb6a2b688e410d187db8b3737dfb8268842c3eff8a71438562b059bb002",
       "scope": "read-only remote lease/worker lifecycle source changes; tool transform unchanged",
       "physical_validation_added": false,
-      "source_byte_format": "Git LF, identical on Linux and Windows"
+      "source_byte_format": "Git LF, identical on Linux and Windows",
+      "lfs_bindings": "Restored existing LFS payload bytes, never pointer text"
     }
   }
 }

@@ -19,7 +19,9 @@ function loadPolicy(filename){
   policy.sdk_config_path=resolve(policy.sdk_config_path);
   policy.bindings=policy.bindings.map(binding=>({...binding,path:resolve(binding.path)}));
   for(const binding of policy.bindings){
-    if(hash(fs.readFileSync(binding.path))!==binding.sha256)throw Error('frame_policy_source_changed');
+    const bytes=fs.readFileSync(binding.path);
+    if(bytes.subarray(0,100).toString('ascii').startsWith('version https://git-lfs.github.com/spec/v1'))throw Error('frame_policy_resource_unrestored');
+    if(hash(bytes)!==binding.sha256)throw Error('frame_policy_source_changed');
   }
   const tool=YAML.parse(fs.readFileSync(policy.sdk_config_path,'utf8')).kinematics.tool;
   // This migration is specifically for the observed translation-only SDK tool.

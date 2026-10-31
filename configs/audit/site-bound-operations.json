@@ -1,0 +1,31 @@
+{
+  "format": 1,
+  "scope": "Only exact reviewed one-time tools may retain their fixed host paths. All other boundaries remain enforced.",
+  "files": [
+    {
+      "path": "tools/diagnostics/media_loopback_acceptance.py",
+      "sha256_lf": "6e38ea0bb9f3f26803975d56682a506070cda43ef6e5a8b28fbbda926a528c79",
+      "reason": "C2g synthetic media acceptance on its reviewed fixed Ubuntu prefix."
+    },
+    {
+      "path": "tools/operations/apply_compact_camera_ubuntu.py",
+      "sha256_lf": "c59d14dbaa3da1a7bd84e7acc20336a39a065bf877e40afdb7ade29af68de9e4",
+      "reason": "C3d fixed reviewed Ubuntu release and rollback targets."
+    },
+    {
+      "path": "tools/operations/apply_motion_transport_ubuntu.py",
+      "sha256_lf": "05ccb3e2e32614259bf7af92ee6afaa73e3205056e54c28761ea409a9a10e375",
+      "reason": "C3c fixed reviewed Ubuntu release and rollback targets."
+    },
+    {
+      "path": "tools/operations/install_read_only_edge.py",
+      "sha256_lf": "389a76f3d52b2232e4fdd8b3da7b0c1a4d2ff6cfb5d73a30e4a2e96eb052dd8d",
+      "reason": "C3a fixed reviewed read-only adapter and original checkout targets."
+    },
+    {
+      "path": "tools/operations/prepare_motion_transport_fix.py",
+      "sha256_lf": "0aa61d32ea832b763168df69f43d61c0904c86336974a4bfa9dc61f8577ae0fe",
+      "reason": "C3c immutable candidate builder records reviewed remote target paths; never deploys."
+    }
+  ]
+}

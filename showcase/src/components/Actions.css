@@ -1,0 +1,310 @@
+.acts {
+  padding-bottom: 0;
+  border-top: 1px solid var(--line);
+}
+
+.acts__intro {
+  display: grid;
+  gap: var(--space-md);
+  margin-bottom: var(--space-xl);
+}
+
+.acts__intro .h2 {
+  max-width: 14ch;
+}
+
+.acts__intro .lede {
+  max-width: 50ch;
+}
+
+@media (width >= 62rem) {
+  .acts__intro {
+    grid-template-columns: 1fr 1fr;
+    gap: var(--space-2xl);
+    align-items: end;
+  }
+}
+
+/* Track: its height is the scroll distance for the three acts ---------------- */
+
+.acts__track {
+  position: relative;
+  height: 300vh;
+}
+
+.acts__viewport {
+  position: sticky;
+  top: 0;
+  height: 100svh;
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+}
+
+.acts__stage {
+  display: grid;
+  grid-template-columns: minmax(15rem, 21rem) 1fr;
+  gap: var(--space-2xl);
+  align-items: center;
+  width: var(--page);
+}
+
+/* Copy column ---------------------------------------------------------------- */
+
+.acts__copy-col {
+  position: relative;
+  min-height: 15rem;
+}
+
+.act__copy {
+  position: absolute;
+  inset: 0 0 auto;
+  display: grid;
+  gap: var(--space-xs);
+  justify-items: start;
+  will-change: opacity, transform;
+}
+
+.act__index {
+  font-size: 0.78rem;
+  letter-spacing: 0.2em;
+  color: var(--red-bright);
+}
+
+.act__index::after {
+  content: '';
+  display: inline-block;
+  width: 2.5rem;
+  height: 1px;
+  margin-left: 0.75rem;
+  vertical-align: middle;
+  background: var(--red);
+}
+
+.act__label {
+  max-width: 14ch;
+}
+
+.act__sentence {
+  max-width: 34ch;
+}
+
+/* Progress rail --------------------------------------------------------------- */
+
+.acts__rail {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  gap: 1.1rem;
+}
+
+.acts__rail-item {
+  --tick: 0;
+
+  display: grid;
+  gap: 0.45rem;
+  width: 3.25rem;
+}
+
+.acts__rail-track {
+  display: block;
+  height: 2px;
+  background: var(--line-strong);
+}
+
+.acts__rail-fill {
+  display: block;
+  height: 100%;
+  background: var(--red);
+  transform-origin: left center;
+  transform: scaleX(0);
+}
+
+.acts__rail-tick {
+  font-size: 0.68rem;
+  letter-spacing: 0.14em;
+  color: color-mix(in srgb, var(--red-bright) calc(var(--tick) * 100%), var(--text-3));
+}
+
+/* Media column ---------------------------------------------------------------- */
+
+.acts__media-col {
+  /* Height budget for the media, leaving room for insets and captions. */
+  --panel-h: 58svh;
+
+  position: relative;
+  display: grid;
+  align-items: center;
+  min-height: 0;
+}
+
+.act__panel {
+  grid-area: 1 / 1;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  will-change: opacity, transform;
+}
+
+/**
+ * Each panel is capped by width, derived from its own aspect ratio, so the
+ * media always fits the viewport height without squashing a caption out of the
+ * layout. `--panel-ar` is the media's width ÷ height.
+ */
+.act__panel > * {
+  width: min(100%, calc(var(--panel-h) * var(--panel-ar, 1.4)));
+  margin-inline: auto;
+}
+
+.act__panel[data-act='0'] > * {
+  --panel-ar: 1.667;
+}
+
+.act__panel[data-act='1'] > * {
+  --panel-ar: 1.277;
+}
+
+.act__panel[data-act='2'] > * {
+  --panel-ar: 1.333;
+
+  /* The task clip is 480x360 at source; it is not blown far past that. */
+  max-width: 40rem;
+}
+
+/* Composite panels ------------------------------------------------------------ */
+
+.act__composite {
+  position: relative;
+  width: 100%;
+}
+
+.act__composite-main {
+  width: 100%;
+  aspect-ratio: 1180 / 708;
+}
+
+.act__composite-main video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.act__composite-inset {
+  position: absolute;
+  right: -2%;
+  bottom: -20%;
+  width: 25%;
+  max-width: 13rem;
+  margin: 0;
+  overflow: hidden;
+  border: 1px solid var(--line-strong);
+  background: var(--bg);
+  box-shadow: 0 18px 40px rgb(0 0 0 / 55%);
+}
+
+.act__composite-inset img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.act__inset-field {
+  opacity: 0.85;
+}
+
+/* 02 — the arm working, at the clip's own ratio. */
+.act__composite--move .act__composite-main {
+  aspect-ratio: 1280 / 1002;
+}
+
+/* 03 — the task clip leads the act. */
+.act__composite--grasp .act__composite-main {
+  aspect-ratio: 4 / 3;
+}
+
+/**
+ * The supporting photograph hangs off the bottom-right corner and stays there:
+ * the bottle and the gripper work through the middle and the left of the clip,
+ * so nothing that matters is ever behind it.
+ */
+.act__composite--grasp .act__composite-support {
+  width: 24%;
+  max-width: 11rem;
+  right: -3%;
+  bottom: -16%;
+}
+
+/* Stacked fallback ------------------------------------------------------------- */
+
+.acts__stack {
+  display: grid;
+  gap: var(--space-2xl);
+  padding-bottom: var(--space-2xl);
+}
+
+.act__card {
+  display: grid;
+  gap: var(--space-lg);
+}
+
+.act__card-media {
+  min-width: 0;
+}
+
+.act__card-body {
+  display: grid;
+  gap: var(--space-xs);
+  justify-items: start;
+}
+
+/**
+ * Insets would collide on narrow cards, so they stop floating and stack under
+ * the main media. Source order is already main-then-support, which is the order
+ * these should be read in.
+ */
+@media (width < 48rem) {
+  .act__composite-inset {
+    position: relative;
+    right: auto;
+    left: auto;
+    bottom: auto;
+    width: 58%;
+    max-width: none;
+    margin-top: calc(var(--space-sm) * -1);
+    margin-left: auto;
+    box-shadow: none;
+  }
+
+  .act__composite--grasp .act__composite-support {
+    width: 58%;
+    max-width: none;
+    right: auto;
+    bottom: auto;
+  }
+}
+
+@media (width >= 48rem) {
+  .act__card {
+    grid-template-columns: 1.15fr 1fr;
+    align-items: center;
+  }
+
+  .acts__stack {
+    gap: var(--space-3xl);
+  }
+}
+
+@media (width >= 62rem) and (height < 42rem) {
+  .acts__copy-col {
+    min-height: 12rem;
+  }
+
+  .act__sentence {
+    font-size: var(--step--1);
+  }
+}

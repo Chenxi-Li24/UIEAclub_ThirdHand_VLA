@@ -1,0 +1,230 @@
+.hero {
+  position: relative;
+  min-height: 100svh;
+  display: flex;
+  align-items: flex-end;
+  padding-block: calc(var(--nav-h) + var(--space-xl)) var(--space-2xl);
+  overflow: hidden;
+  isolation: isolate;
+}
+
+.hero__frame {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  overflow: hidden;
+}
+
+.hero__media {
+  position: absolute;
+  inset: -4% -4%;
+  will-change: transform;
+}
+
+.hero__media-el {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: 58% 52%;
+}
+
+/* Single soft light sweep on load. */
+.hero__sweep {
+  position: absolute;
+  inset: -20% -60%;
+  transform: translateX(-140%);
+  background: linear-gradient(
+    100deg,
+    transparent 0%,
+    rgb(244 242 237 / 4%) 40%,
+    rgb(244 242 237 / 12%) 50%,
+    rgb(244 242 237 / 4%) 60%,
+    transparent 100%
+  );
+  pointer-events: none;
+}
+
+.hero__scrim {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(90deg, rgb(8 9 11 / 94%) 0%, rgb(8 9 11 / 76%) 34%, rgb(8 9 11 / 10%) 66%),
+    linear-gradient(180deg, rgb(8 9 11 / 78%) 0%, transparent 30%, transparent 46%, rgb(8 9 11 / 92%) 100%);
+}
+
+.hero__field {
+  opacity: 0.9;
+}
+
+/* Narrow-screen frame mark: four corner brackets, no cross-hairs over copy. */
+.hero__brackets {
+  display: none;
+  position: absolute;
+  inset: calc(var(--nav-h) + 0.75rem) 1.25rem auto;
+  height: 34vh;
+  pointer-events: none;
+}
+
+.hero__brackets span {
+  position: absolute;
+  width: 24px;
+  height: 24px;
+  border: 1px solid var(--red-bright);
+  opacity: 0.75;
+}
+
+.hero__brackets span:nth-child(1) {
+  inset: 0 auto auto 0;
+  border-width: 1px 0 0 1px;
+}
+
+.hero__brackets span:nth-child(2) {
+  inset: 0 0 auto auto;
+  border-width: 1px 1px 0 0;
+}
+
+.hero__brackets span:nth-child(3) {
+  inset: auto auto 0 0;
+  border-width: 0 0 1px 1px;
+}
+
+.hero__brackets span:nth-child(4) {
+  inset: auto 0 0 auto;
+  border-width: 0 1px 1px 0;
+}
+
+@media (width < 48rem) {
+  .hero__field {
+    display: none;
+  }
+
+  .hero__brackets {
+    display: block;
+  }
+}
+
+/* Content -------------------------------------------------------------------- */
+
+.hero__content {
+  position: relative;
+  max-width: 100%;
+}
+
+.hero__eyebrow.label {
+  margin-bottom: var(--space-md);
+  color: var(--red-bright);
+}
+
+.hero__line-wrap {
+  display: block;
+  overflow: hidden;
+}
+
+.hero__line {
+  display: block;
+}
+
+.hero__headline {
+  max-width: 15ch;
+  margin-bottom: var(--space-md);
+}
+
+.hero__support {
+  max-width: 46ch;
+  margin-bottom: var(--space-lg);
+  overflow: hidden;
+}
+
+.hero__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+}
+
+/* Instrumentation ----------------------------------------------------------- */
+
+.hero__scroll {
+  position: absolute;
+  left: max(1.25rem, calc((100% - var(--page)) / 2));
+  bottom: var(--space-md);
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  min-height: 44px;
+}
+
+.hero__scroll .label {
+  transition: color var(--dur) var(--ease);
+}
+
+.hero__scroll:hover .label {
+  color: var(--text);
+}
+
+.hero__scroll-track {
+  position: relative;
+  display: block;
+  width: 46px;
+  height: 1px;
+  background: var(--line-strong);
+  overflow: hidden;
+}
+
+.hero__scroll-dot {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 14px;
+  background: var(--red-bright);
+  animation: hero-scroll 2.6s var(--ease) infinite;
+}
+
+@keyframes hero-scroll {
+  0% {
+    transform: translateX(-14px);
+  }
+
+  60%,
+  100% {
+    transform: translateX(46px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hero__scroll-dot {
+    animation: none;
+    transform: none;
+  }
+
+  .hero__sweep {
+    display: none;
+  }
+}
+
+/* Narrow screens put the copy over the frame, so the scrim works vertically. */
+@media (width < 62rem) {
+  .hero__scrim {
+    background:
+      linear-gradient(180deg, rgb(8 9 11 / 82%) 0%, rgb(8 9 11 / 34%) 22%, rgb(8 9 11 / 78%) 52%, rgb(8 9 11 / 95%) 100%),
+      linear-gradient(90deg, rgb(8 9 11 / 60%) 0%, rgb(8 9 11 / 10%) 70%);
+  }
+
+  .hero__media-el {
+    object-position: 56% 46%;
+  }
+}
+
+@media (width >= 62rem) {
+  .hero {
+    align-items: center;
+    padding-block: var(--nav-h) var(--space-3xl);
+  }
+
+  .hero__content {
+    padding-top: var(--space-xl);
+  }
+
+  .hero__headline {
+    max-width: 13ch;
+  }
+}

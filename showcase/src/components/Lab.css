@@ -1,0 +1,115 @@
+.lab {
+  border-top: 1px solid var(--line);
+  overflow: hidden;
+}
+
+.lab__intro {
+  display: grid;
+  gap: var(--space-md);
+  margin-bottom: var(--space-xl);
+}
+
+.lab__intro .h2 {
+  max-width: 15ch;
+}
+
+.lab__intro .lede {
+  max-width: 52ch;
+}
+
+@media (width >= 62rem) {
+  .lab__intro {
+    grid-template-columns: 1fr 1fr;
+    gap: var(--space-2xl);
+    align-items: end;
+  }
+}
+
+/* Panorama ------------------------------------------------------------------- */
+
+/**
+ * The wide CAD view is the one image on the page with no frame of its own: it
+ * runs the full content width at its natural height, so the assembly is never
+ * cut at either end. No `object-fit` is involved — the element is the picture.
+ */
+.lab__panorama {
+  margin: 0 0 var(--space-xl);
+  display: grid;
+  gap: 0.6rem;
+}
+
+.lab__panorama-img {
+  width: 100%;
+  height: auto;
+  border: 1px solid var(--line);
+  background: #eef0f3;
+}
+
+/* Grid ----------------------------------------------------------------------- */
+
+.lab__grid {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: var(--space-md);
+  grid-template-columns: repeat(2, 1fr);
+}
+
+.lab__item figure {
+  margin: 0;
+  display: grid;
+  gap: 0.6rem;
+}
+
+/**
+ * Every card is the same 4:5 box. The photograph inside is contained, not
+ * cropped, so a 3:4 frame simply leaves a thin neutral margin at its sides.
+ */
+/**
+ * The card must resolve to a definite height for `height: 100%` on the image to
+ * mean anything — so it stays a plain block. Centring the image with grid or
+ * flex would make the row size to its content, the percentage height would fall
+ * back to `auto`, and the picture would grow past the card and be clipped.
+ * `object-fit: contain` does the centring instead.
+ */
+.lab__frame {
+  overflow: hidden;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  aspect-ratio: 4 / 5;
+}
+
+.lab__frame img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  object-position: center;
+  transition: transform 620ms var(--ease);
+}
+
+.lab__item:hover .lab__frame img {
+  transform: scale(1.02);
+}
+
+.lab__caption {
+  font-size: 0.66rem;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lab__item:hover .lab__frame img {
+    transform: none;
+  }
+}
+
+@media (width >= 62rem) {
+  .lab__grid {
+    grid-template-columns: repeat(3, 1fr);
+    gap: var(--space-lg) var(--space-md);
+  }
+
+  /* Ten cards leave one final item; centre it within the three-column rhythm. */
+  .lab__item:last-child:nth-child(3n + 1) {
+    grid-column: 2;
+  }
+}

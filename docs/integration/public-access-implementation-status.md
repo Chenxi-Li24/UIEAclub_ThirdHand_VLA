@@ -2,8 +2,9 @@
 
 Updated 2026-11-01. Worktree: D:/claudeworkplace/thirdhand-login, branch login,
 based on canonical/fork main24c6f9c. The user subsequently authorized functional
-commits and ordinary pushing to fork origin/login. Completed source/resources/docs
-are being committed together; no main merge or PR is requested. The original
+commits and ordinary pushing to fork origin/login. The three functional commits
+f6f396f,33ee850,51030b4 are pushed and the remote login SHA was verified;
+no main merge or PR was requested. The original
 working directories and unfinished capture-timing changes remain preserved.
 See the [Git delivery record](../operations/2026-11-01-login-git-delivery.md).
 

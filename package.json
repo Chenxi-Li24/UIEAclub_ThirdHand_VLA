@@ -29,6 +29,7 @@
     "ajv-formats": "3.0.1",
     "jsqr": "1.4.0",
     "linkedom": "0.18.14",
+    "meshoptimizer": "0.22.0",
     "qrcode-generator": "2.0.4",
     "yaml": "2.9.0"
   }

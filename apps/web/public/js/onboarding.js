@@ -29,7 +29,7 @@
   const persist=()=>{try{win.localStorage?.setItem(storageKey,JSON.stringify(state));}catch{/* Session-only progress is still usable. */}};
   const context=()=>{try{return options.getContext()||{busy:true};}catch{return {busy:true};}};
   let mode='closed',helpPage='overview',notice='',navigating=false,highlight=null,lastKey='',opener=null,boundScene=null,orbitStart=null;
-  const pages=byId('workspace-pages'),overview=byId('page-overview');
+  const pages=options.panelHost||byId('workspace-pages'),overview=options.checklistHost||byId('page-overview');
   const checklist=el('section',{id:'onboarding-checklist',class:'onboarding-checklist','aria-label':'Getting started'});
   const welcome=el('div',{id:'onboarding-welcome',class:'onboarding-welcome'});
   const welcomeTitle=el('h2',{id:'onboarding-welcome-title'}),welcomeBody=el('p');welcome.append(welcomeTitle,welcomeBody);
@@ -49,7 +49,7 @@
   const panelTop=el('div',{class:'onboarding-panel-top'}),stepLabel=el('span',{id:'onboarding-step'}),skip=el('button',{id:'onboarding-skip',type:'button',class:'onboarding-text-button'});panelTop.append(stepLabel,skip);
   const title=el('h2',{id:'onboarding-title',tabindex:'-1'}),body=el('p'),liveStatus=el('p',{class:'onboarding-live-status','data-i18n-skip':''}),panelNotice=el('p',{class:'onboarding-status',role:'status'});
   const panelActions=el('div',{class:'onboarding-actions'}),back=el('button',{id:'onboarding-back',type:'button',class:'onboarding-text-button'}),next=el('button',{id:'onboarding-next',type:'button',class:'action-btn action-primary'}),helpDone=el('button',{id:'onboarding-help-done',type:'button',class:'action-btn action-primary'});
-  panelActions.append(back,next,helpDone);panel.append(panelTop,title,body,liveStatus,panelNotice,panelActions);pages.insertBefore(panel,pages.querySelector('.workspace-page'));
+  panelActions.append(back,next,helpDone);panel.append(panelTop,title,body,liveStatus,panelNotice,panelActions);const firstPage=pages.querySelector('.workspace-page');pages.insertBefore(panel,firstPage?.parentNode===pages?firstPage:null);
   const spotlight=win.ThirdHandOnboardingSpotlight?.mountSpotlight(doc,win,panel,{onTargetVisibilityChange:available=>{if(mode==='tour')next.disabled=context().busy||!available;}});
   const helpButton=el('button',{id:'workspace-guide',type:'button',class:'nav-help','aria-controls':'onboarding-panel'});
   helpButton.hidden=byId('app').dataset.workspaceGroup==='account';
@@ -57,12 +57,12 @@
   const bottom=doc.querySelector('.nav-bottom');bottom.insertBefore(helpButton,bottom.firstChild);
   for(const [page]of Object.entries(help)){
    const button=el('button',{type:'button',class:'onboarding-page-help','data-page-help':page,'aria-controls':'onboarding-panel'},'Page help');
-   button.addEventListener('click',()=>{opener=button;openPageHelp(page);});byId(`page-${page}`).querySelector('.workspace-heading').appendChild(button);
+   button.addEventListener('click',()=>{opener=button;openPageHelp(page);});byId(`page-${page}`)?.querySelector('.workspace-heading')?.appendChild(button);
   }
   function clearHighlight(){highlight?.classList.remove('onboarding-highlight');highlight=null;}
   function mark(id){if(!state.done.includes(id)){state.done.push(id);persist();render();}}
   function visibleTarget(selector){const node=doc.querySelector(selector);if(!node||node.closest('[hidden]'))return null;for(let parent=node;parent;parent=parent.parentElement){const style=win.getComputedStyle?.(parent);if(style?.display==='none'||style?.visibility==='hidden')return null;}return node;}
-  const tourTarget=()=>steps[state.step].targets.map(visibleTarget).find(Boolean)||null;
+  const tourTarget=()=>(options.resolveTargets?.(steps[state.step].targets)||steps[state.step].targets).map(visibleTarget).find(Boolean)||null;
   function showHighlight(scroll=false){
    clearHighlight();if(mode!=='tour'||context().busy||notice)return;
    highlight=tourTarget();

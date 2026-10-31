@@ -122,3 +122,29 @@ node --env-file=/etc/thirdhand/cloud.env services/cloud-api/src/jobs/export-main
 Git交付偏好记在根目录`AGENTS.md`：独立功能完成且必要检查通过后自动本地提交，同步说明，报告提交号；本次普通推送fork的login分支，保留历史和其他任务改动。
 
 后续[CI修复记录](../operations/2026-11-01-ci-repair.md)说明数据库清理、关闭握手前撤权、只读来源摘要、LF/LFS资源和UI测试夹具的修复；完整公网/Robot回归现为350/350。这些仓库修复未额外部署到现有服务器，不推导出真实物理停止或运动已验收。
+
+## 双布局与加载优化（C7，待单独批准部署）
+
+账户偏好新增`layoutId=workspace|classic`及独立的`classicThemeId`，默认新版、英文。
+经典版直接复用主仓库`372ac80a98e279e85bd25dfe8f219b399b97cb80`的原始HTML/CSS，
+保留全屏模型、顶部连接工具和原右侧浮动抽屉，不重设计为新版导航结构。
+原始文件逐字节校验来源记录在`configs/web/classic-source.json`；新增账户/相机/运行记录入口及个人点位使用现有鉴权业务适配器。
+原版`main.js`的SDK/WebSocket/语音启动流程不会被云端加载。
+
+`/control`由当前会话读取数据库外观和显示名，在HTML首屏确定模板、语言和配色。
+账户摘要、退出、相机入口及会话监测先初始化，Three.js和模型随后独立加载；请求超时可重试，网络超时本身不注销有效会话。
+切换布局先保存、再重新请求对应模板；快速连续改变主题/语言按数据库revision顺序保存。
+`011-workspace-layout.sql`为兼容旧代码的加列迁移，不新增角色或设备权限。
+
+网页模型为完整STL生成的`web/robot-visuals.glb`，gzip为1,918,246字节，原STL/URDF继续保留。
+保留448,604个三角面的顺序、绕序和float32顶点位置；法线由几何面重建，未保留原STL法线属性的逐位表示。
+GLTFLoader匹配现有Three.js r163，Meshoptimizer固定0.22.0，均附许可证；只为解码增加CSP `wasm-unsafe-eval`。
+使用Git LFS恢复`assets/robot/startouch-v3/web/*.glb*`；重建及校验说明见该目录README。
+
+鉴权静态资源使用内容版本URL、ETag及`private, max-age=31536000, immutable`，减少刷新/再次登录重复下载。
+HTML、身份和动态API保持`no-store`，每次网络请求仍验证会话，缓存只含源码/可视化资源，不含身份、MFA或控制权限。
+相机客户端库仅在点击观看时加载；模型失败不阻塞相机入口。
+
+详细模块、数据流、测量和限制见[C7实现记录](../operations/2026-11-01-C7-workspace-layout-startup.md)，
+固定32文件、迁移、重启和回退范围见[C7部署审阅](../operations/2026-11-01-C7-deployment-review.md)。
+这些本地修复不代表已部署、校园网已提速或真机运动已通过。

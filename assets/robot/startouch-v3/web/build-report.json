@@ -1,0 +1,186 @@
+{
+  "format": 1,
+  "glbBytes": 3050660,
+  "glbGzipLevel3Bytes": 1918246,
+  "glbSha256": "b4fc6716a5b460c0fd38ea25bf66936e0385d128e8028ef6513b146cc6f0f1cd",
+  "meshes": {
+    "base_link": {
+      "bounds": [
+        [
+          -0.05999999865889549,
+          -0.09000000357627869,
+          -4.668139523894828e-17
+        ],
+        [
+          0.05999999865889549,
+          0.09000000357627869,
+          0.07145000249147415
+        ]
+      ],
+      "expandedPositionsSha256": "de1961ff6b0bcf3fdbc05a5eb027a4501e1bcfebc780d5bd33df3ce0d99a5793",
+      "sourceBytes": 2316184,
+      "sourceSha256": "46d307ee511515271a4065ab3b792b13bfa4a8416f8e5a86eefe07354af911e6",
+      "triangles": 46322,
+      "vertices": 24964
+    },
+    "gripper_base": {
+      "bounds": [
+        [
+          2.354385020275629e-10,
+          -0.07704880833625793,
+          -0.03610000014305115
+        ],
+        [
+          0.08229999989271164,
+          0.07704880833625793,
+          0.046000003814697266
+        ]
+      ],
+      "expandedPositionsSha256": "fccc998770ee6e848e16ed748019aa9adce3afe921f52b80f720bf35ee0b0e7c",
+      "sourceBytes": 6817084,
+      "sourceSha256": "c9db30dbdf8be27a648cd9f9dd2f2ab312208103deb0785dde985f76afca00e9",
+      "triangles": 136340,
+      "vertices": 67884
+    },
+    "gripper_link1": {
+      "bounds": [
+        [
+          -0.08250000327825546,
+          -0.03353610634803772,
+          -0.030500000342726707
+        ],
+        [
+          2.3841859597695247e-9,
+          -7.212161423630903e-10,
+          0.030500000342726707
+        ]
+      ],
+      "expandedPositionsSha256": "6a6e062767208857e629807d36f3a5f479b20ffce586c89c580dbba606674a2b",
+      "sourceBytes": 81484,
+      "sourceSha256": "28fe89bb57944f81e98ed11a25b6c51d22387b89a481ca166acf48eba728a0bc",
+      "triangles": 1628,
+      "vertices": 809
+    },
+    "gripper_link2": {
+      "bounds": [
+        [
+          -0.08250000327825546,
+          7.212164199188464e-10,
+          -0.030500000342726707
+        ],
+        [
+          2.3841859597695247e-9,
+          0.03353610634803772,
+          0.030500000342726707
+        ]
+      ],
+      "expandedPositionsSha256": "58b9445c21d01e745b3f8e816c2566434c43b068680cce297524cb551e135c8f",
+      "sourceBytes": 88284,
+      "sourceSha256": "150dc8302b45a792d4747f991593f126effc4e232f93e4dd184ad30ea51baefe",
+      "triangles": 1764,
+      "vertices": 882
+    },
+    "link1": {
+      "bounds": [
+        [
+          -0.03199509531259537,
+          -0.034324999898672104,
+          0.05719999969005585
+        ],
+        [
+          0.052499718964099884,
+          0.03212499991059303,
+          0.14549945294857025
+        ]
+      ],
+      "expandedPositionsSha256": "b5abb791b48d19c8953998c95b93da1ddc8d3ef3042481a6dd594326a5c41a4c",
+      "sourceBytes": 1924484,
+      "sourceSha256": "3a2da70ca32a76275ca2f68ee19d82e73ae9809ce1c7f1b3f143423a64ae57f7",
+      "triangles": 38488,
+      "vertices": 20510
+    },
+    "link2": {
+      "bounds": [
+        [
+          -0.29350000619888306,
+          -0.038780152797698975,
+          -0.029319263994693756
+        ],
+        [
+          0.02002330869436264,
+          0.038790151476860046,
+          0.030246518552303314
+        ]
+      ],
+      "expandedPositionsSha256": "8c128a986254e1029e4cf23e796999f7ba5f53ed147688e0dec66d40daa4c37a",
+      "sourceBytes": 2217084,
+      "sourceSha256": "bae9a1daf0961cacb9e1f2e758f9e1210f1ae4b4ec799a8da73c2636a4fc233b",
+      "triangles": 44340,
+      "vertices": 23316
+    },
+    "link3": {
+      "bounds": [
+        [
+          -0.02249956876039505,
+          -0.043472740799188614,
+          -0.022284161299467087
+        ],
+        [
+          0.29350000619888306,
+          0.04347481206059456,
+          0.09049999713897705
+        ]
+      ],
+      "expandedPositionsSha256": "2536b7e2f2ae54528b3096b0c22ae3fe4ffd1059ef4c498e69e174e6fd787c89",
+      "sourceBytes": 6557884,
+      "sourceSha256": "d992996403392f606a0204bcc126f0bc891dff788a03678b802d594b8cea5cdb",
+      "triangles": 131156,
+      "vertices": 65223
+    },
+    "link4": {
+      "bounds": [
+        [
+          -0.022953465580940247,
+          -0.03674999997019768,
+          -0.020169759169220924
+        ],
+        [
+          0.10649999976158142,
+          0.03674999997019768,
+          0.08529999852180481
+        ]
+      ],
+      "expandedPositionsSha256": "b0cbec71c77e769945355a0141f6dc7d37e6335892519ba6c16a465a4f9de2d2",
+      "sourceBytes": 1311134,
+      "sourceSha256": "ed12189c36429cd09ae227ed89e846e9ddd7ddb7fa45e763116f85b571afa279",
+      "triangles": 26221,
+      "vertices": 14414
+    },
+    "link5": {
+      "bounds": [
+        [
+          -0.026549996808171272,
+          -0.03316543996334076,
+          -0.03149053081870079
+        ],
+        [
+          0.03020000085234642,
+          0.03316543996334076,
+          0.03920000046491623
+        ]
+      ],
+      "expandedPositionsSha256": "b113d5220658a009de437bd9951bc2d6ae0708af721bd468a62101a8c33c4878",
+      "sourceBytes": 1117334,
+      "sourceSha256": "4a9513dc4faf2c58a23843c2534e0665d7303f4a199ee34912df95fc54cd7e13",
+      "triangles": 22345,
+      "vertices": 12553
+    }
+  },
+  "method": "lossless-position-bitwise-indexing-with-flat-face-normals+meshopt-0.22.0",
+  "sourceBytes": 22430956,
+  "triangles": 448604,
+  "urdfSha256": "0e52a6ed086e87b2d3dc24391874ab433e7e9cc33b6b0fc995370cf9e37dea86",
+  "meshoptFilters": "NONE",
+  "unpackedGlbBytes": 6281612,
+  "buffersVerifiedByteForByte": 18
+}

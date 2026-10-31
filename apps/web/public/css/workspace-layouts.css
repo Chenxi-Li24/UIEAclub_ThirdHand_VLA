@@ -1,0 +1,55 @@
+/* First paint and additions shared with the authenticated cloud adapters. */
+#app[data-ready=false]{visibility:hidden}
+#workspace-opening{position:fixed;inset:0;display:grid;place-items:center;color:var(--text-primary);background:var(--bg-primary);font:14px system-ui;z-index:9000}
+.cloud-appearance{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.cloud-appearance select{max-width:230px;min-height:38px;padding:8px 12px;border:1px solid var(--border);border-radius:6px;background:var(--bg-secondary);color:var(--text-primary)}
+.cloud-model-loading .action-btn,.cloud-model-loading button{display:block;margin-top:12px;padding:8px 12px}
+.workspace-history-link{display:flex;align-items:center;justify-content:center;gap:8px;min-height:38px;text-decoration:none;font-size:11px}
+/* Classic canvas/drawer/tool geometry and all nine palettes come unchanged from
+   css/classic-source.css at 372ac80. These rules add cloud account entry only. */
+.classic-user-tools{display:flex;align-items:center;gap:6px}
+.classic-user-tools .account-entry{display:flex;align-items:center;gap:7px;max-width:160px;padding:4px 6px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg-card);color:var(--text-primary);cursor:pointer}
+.classic-user-tools .account-entry-copy{display:flex;flex-direction:column;font-size:11px;max-width:110px;overflow:hidden}
+.classic-user-tools .account-entry-copy>span{display:none}
+.classic-user-tools .account-entry-copy strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.classic-user-tools .account-avatar{width:28px;height:28px;flex-basis:28px;background:var(--accent-dim);border-color:var(--border);color:var(--accent)}
+.classic-user-tools .action-btn,.classic-user-tools #workspace-logout{font-size:11px;padding:7px 9px;background:var(--bg-card);color:var(--text-primary);border:1px solid var(--border);border-radius:var(--radius-sm);cursor:pointer}
+#classic-settings{width:min(1000px,calc(100vw - 32px));height:min(760px,calc(100dvh - 48px));margin:auto;padding:18px;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg-primary);color:var(--text-primary);overflow:hidden}
+#classic-settings[open]{display:grid;grid-template:40px minmax(0,1fr)/160px minmax(0,1fr);gap:16px}
+#classic-settings[hidden],#classic-settings [hidden]{display:none!important}
+#classic-settings::backdrop{background:#030711bb}
+#classic-settings-close{grid-column:1/-1;justify-self:end;background:var(--bg-card);color:var(--text-primary);border-color:var(--border)}
+#classic-settings #workspace-nav{display:flex;flex-direction:column;gap:8px;min-width:0;overflow:auto;border-right:1px solid var(--border);padding-right:14px}
+#classic-settings #workspace-nav button{display:flex;align-items:center;gap:8px;padding:11px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg-card);color:var(--text-primary);font:inherit;cursor:pointer}
+#classic-settings #workspace-nav .nav-bottom{margin-top:auto}
+#classic-settings #workspace-nav .nav-footer{font-size:9px;color:var(--text-secondary)}
+#classic-settings #workspace-pages{overflow:auto;min-width:0;padding-right:6px}
+#classic-settings .workspace-heading{margin:0 0 20px}
+#classic-settings .workspace-heading h1{font-size:24px;margin:6px 0}
+#classic-settings .workspace-heading p{color:var(--text-secondary);font-size:12px}
+#classic-settings .account-card{background:var(--bg-card);color:var(--text-primary);border-color:var(--border)}
+#classic-settings .account-card h2,#classic-settings .account-card strong{color:var(--text-primary)}
+#classic-settings .account-field input,#classic-settings .account-card button{background:var(--bg-secondary);color:var(--text-primary);border-color:var(--border)}
+#classic-settings .account-page{max-width:none}
+[data-access-mode=observe] .classic-console #btn-voice-toggle,[data-access-mode=observe] .classic-console #btn-estop-top{display:none!important}
+[data-layout=classic] .cloud-joint-row input{font-size:12px}
+[data-layout=classic] .cloud-model-loading{z-index:2}
+[data-layout=classic] #view-tools svg{width:20px;height:20px}
+@media(max-width:1100px){.classic-user-tools .account-entry-copy,.classic-user-tools #workspace-logout{display:none}.classic-user-tools .action-btn{padding:7px 5px}.classic-user-tools .workspace-history-link .nav-label{display:none}}
+@media(max-width:700px){.classic-user-tools>button:first-child{display:none}#classic-settings[open]{grid-template-columns:1fr;grid-template-rows:40px auto minmax(0,1fr)}#classic-settings #workspace-nav{flex-direction:row;flex-wrap:wrap;max-height:120px;border:0;padding:0}#classic-settings .nav-bottom,#classic-settings .account-back{display:none}#classic-settings #workspace-nav button{font-size:11px;padding:7px}}
+[data-layout=classic] #onboarding-panel{position:fixed;left:80px;top:calc(var(--topbar-h) + 70px);width:min(380px,calc(100vw - 100px));max-height:calc(100dvh - 170px);overflow:auto;z-index:190;background:var(--bg-card);color:var(--text-primary);border-color:var(--accent)}
+[data-layout=classic] #onboarding-panel[hidden]{display:none!important}
+[data-layout=classic] #onboarding-panel h2{color:var(--text-primary)}
+[data-layout=classic] .classic-notice{position:absolute;top:62px;left:80px;padding:10px;background:var(--bg-card);color:var(--text-primary);z-index:22;border:1px solid var(--border);border-radius:var(--radius-sm)}
+[data-layout=classic] .cloud-model-loading{left:80px;top:65px}
+.classic-user-tools{flex:0 0 auto}
+.classic-user-tools .action-btn,.classic-user-tools #workspace-logout{white-space:nowrap}
+.classic-user-tools .workspace-history-link .nav-label{display:none}
+.classic-user-tools .workspace-history-link{min-width:30px;padding:6px}
+.classic-user-tools .account-entry{max-width:125px;flex-shrink:0}
+.classic-user-tools .account-entry-copy{max-width:80px;min-width:0}
+.classic-console #workspace-mode{max-width:160px;overflow:hidden;text-overflow:ellipsis;font-size:11px;white-space:nowrap}
+#classic-settings .onboarding-checklist{background:var(--bg-card);color:var(--text-primary);border-color:var(--border)}
+#classic-settings .onboarding-list-heading,#classic-settings .onboarding-tasks{color:var(--text-primary)}
+.classic-user-tools #workspace-guide{display:flex;align-items:center;justify-content:center;min-width:30px;min-height:30px;padding:6px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg-card);color:var(--text-primary);font:inherit;font-size:12px;cursor:pointer}
+.classic-user-tools #workspace-guide .nav-label{display:none}

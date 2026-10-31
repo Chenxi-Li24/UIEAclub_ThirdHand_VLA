@@ -1,6 +1,7 @@
 'use strict';
 globalThis.ThirdHandI18nCatalog=(globalThis.ThirdHandI18nCatalog||[]).concat([
- ['刷新','Refresh'],['用户名','Username'],['邮箱','Email'],
+ ['界面布局','Interface'],['新版工作台','Modern workspace'],['经典控制台','Classic console'],['ThirdHand工作台','ThirdHand workspace'],['选择界面布局与配色。','Choose a layout and color scheme.'],['重试模型','Retry model'],['模型加载时间较长。','The model is taking longer than expected.'],['正在打开工作台…','Opening workspace…'],
+ ['返回模型','Back to model'],['账户页面','Account pages'],['刷新','Refresh'],['用户名','Username'],['邮箱','Email'],
  ['先前的管理员申请已批准','Previous application approved'],['先前通过首批管理员名单授权','Previous initial administrator grant'],
  ['管理员申请','Administrator application'],['管理员申请列表','Administrator applications'],['申请理由','Application reason'],['申请管理员权限','Request administrator access'],['等待管理员审批','Pending administrator approval'],
  ['已批准，请重新登录并设置两步验证。','Approved. Sign in again and set up two-step verification.'],['申请已被拒绝','Application rejected'],['已通过首批管理员名单授权，请重新登录。','Granted through the initial administrator batch. Sign in again.'],['尚未提交申请。','No application submitted.'],

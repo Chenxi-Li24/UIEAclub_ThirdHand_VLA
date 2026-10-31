@@ -15,6 +15,7 @@ const {waypointsRoute}=require('./routes/waypoints');
 const { serveAuthPage } = require('./auth-pages');
 const { writeAudit }=require('../../../platform/storage/src/audit');
 const {isWorkspacePath,serveWorkspacePage}=require('./workspace-pages');
+const {loadWorkspaceBootstrap}=require('./workspace-bootstrap');
 const {tutorialRoute}=require('./routes/tutorial');
 const {profileRoute}=require('./routes/profile');
 const {controlRoute}=require('./routes/control');
@@ -50,7 +51,8 @@ function createCloudApi({ pool, accounts, sessions, mfa, publicOrigin, tutorialA
       if(isWorkspacePath(path)&&['GET','HEAD'].includes(request.method)){
         const authenticated=await sessions?.resolveSession(request);
         if(!authenticated){if(['/control','/history'].includes(path)){response.writeHead(302,{Location:'/login','Cache-Control':'no-store'});response.end();}else json(response,401,{error:'UNAUTHENTICATED'});return;}
-        if(await serveWorkspacePage(request,response,path,{publicOrigin:origin}))return;
+        const bootstrap=path==='/control'?await loadWorkspaceBootstrap(pool,authenticated):undefined;
+        if(await serveWorkspacePage(request,response,path,{publicOrigin:origin,bootstrap}))return;
       }
       if (!path.startsWith('/api/v1/')) return json(response,404,{error:'NOT_FOUND'});
       if (!['GET','POST'].includes(request.method)) return json(response,405,{error:'METHOD_NOT_ALLOWED'});

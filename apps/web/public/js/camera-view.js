@@ -1,6 +1,20 @@
 /* Subscribe-only camera viewing. No microphone, SDK or robot command adapter. */
 (function(root,factory){const api=factory(root);if(typeof module==='object'&&module.exports)module.exports=api;root.ThirdHandCameraView=api;})(globalThis,function(root){
   'use strict';
+  const libraries=new WeakMap();
+  function loadVideoLibrary(view){
+    if(view.LivekitClient)return Promise.resolve(view.LivekitClient);
+    if(libraries.has(view))return libraries.get(view);
+    const loading=new Promise((resolve,reject)=>{
+      const script=view.document.createElement('script');let base='/control-assets';
+      try{base=JSON.parse(view.document.getElementById('workspace-bootstrap')?.textContent||'{}').assetBase||base;}catch{}
+      script.src=base+'/js/lib/livekit-client.umd.js';script.async=true;
+      const timer=(view.setTimeout||root.setTimeout)(()=>{script.remove();reject(Error('MEDIA_LIBRARY_TIMEOUT'));},12000);
+      const done=error=>{(view.clearTimeout||root.clearTimeout)(timer);if(error||!view.LivekitClient){script.remove();reject(error||Error('MEDIA_LIBRARY_UNAVAILABLE'));}else resolve(view.LivekitClient);};
+      script.onload=()=>done();script.onerror=()=>done(Error('MEDIA_LIBRARY_UNAVAILABLE'));view.document.head.append(script);
+    }).catch(error=>{libraries.delete(view);throw error;});
+    libraries.set(view,loading);return loading;
+  }
   function createCameraClient({view=root,sessionClient,video,onChange=()=>{},createRoom}){
     let room=null,grant=null,worker=null,track=null,frameCallback=null,epoch=0,opening=false,acknowledging=false,lastAck=-Infinity,state='unavailable';
     let intent=null,retryTimer=null,activeAttempt=null,progressAt=null,disposed=false,pendingViews=0,cleanupTail=Promise.resolve(true);
@@ -47,6 +61,7 @@
       try{
         const released=await cleanup;if(current!==epoch||!wanted(value))return;
         if(!released)throw failure('MEDIA_CLOSE_UNCONFIRMED');
+        if(!createRoom&&!view.LivekitClient){await timed(loadVideoLibrary(view),12000);if(current!==epoch||!wanted(value))return;}
         if(retrying){
           const identity=await timed(sessionClient.load?sessionClient.load():sessionClient.request('/api/v1/session'),12000);
           if(current!==epoch||!wanted(value))return;
@@ -102,5 +117,5 @@
     const timer=view.setInterval(()=>client.checkFreshness(),250);
     return {client,dispose(){view.clearInterval(timer);logout?.removeEventListener('click',signingOut,{capture:true});void client.dispose();panel.remove();}};
   }
-  return {createCameraClient,mountCameraView};
+  return {createCameraClient,mountCameraView,loadVideoLibrary};
 });

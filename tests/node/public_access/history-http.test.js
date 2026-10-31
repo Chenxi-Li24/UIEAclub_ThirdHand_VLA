@@ -11,7 +11,8 @@ test('history and isolated model assets require current login; observer reads al
   const server=createCloudApi({...f,sessions,history,publicOrigin:'https://thirdhand.example.invalid'});await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));t.after(()=>new Promise(resolve=>{server.closeAllConnections();server.close(resolve);}));
   const base=`http://127.0.0.1:${server.address().port}`,session=await sessions.issue({userId:user.userId}),headers={cookie:session.cookie.split(';')[0]};
   assert.equal((await fetch(base+'/history',{redirect:'manual'})).status,302);
-  const page=await fetch(base+'/history',{headers}),html=await page.text();assert.equal(page.status,200);assert.match(html,/\/control-assets\/js\/history-page.js/);assert.ok(!/(?:src|href)="\/(?:js|css)\//.test(html));
+  const page=await fetch(base+'/history',{headers}),html=await page.text();assert.equal(page.status,200);assert.match(html,/\/control-assets\/v[a-f0-9]{32}\/js\/history-page.js/);assert.ok(!/(?:src|href)="\/(?:js|css)\//.test(html));
+  const authCss=html.match(/\/control-assets\/v[a-f0-9]{32}\/css\/auth.css/)[0];assert.equal((await fetch(base+authCss,{headers})).status,200);
   assert.equal((await fetch(base+'/control-assets/js/history-replay.js',{headers})).status,200);
   assert.equal((await fetch(base+'/control-assets/js/main.js',{headers})).status,404);
   const deviceId=(await f.pool.query("INSERT INTO ops.devices(name,hardware_serial) VALUES('HTTP fixture','history-http') RETURNING id")).rows[0].id;

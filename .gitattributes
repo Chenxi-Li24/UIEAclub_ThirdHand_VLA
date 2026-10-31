@@ -12,6 +12,8 @@ History/legacy-calibration-20261008/source/HANDOVER.md whitespace=-blank-at-eol
 local/** -text
 assets/robot/startouch-v3/** -text
 assets/robot/startouch-v3/meshes/** filter=lfs diff=lfs merge=lfs -text
+assets/robot/startouch-v3/web/*.glb* filter=lfs diff=lfs merge=lfs -text
+assets/robot/startouch-v3/web/*.json text eol=lf
 apps/dummy/models/*.tflite filter=lfs diff=lfs merge=lfs -text
 local/models/**/*.pt filter=lfs diff=lfs merge=lfs -text
 local/models/**/*.bin filter=lfs diff=lfs merge=lfs -text
@@ -28,3 +30,6 @@ services/robot/src/startouch_bridge.py text eol=lf
 configs/vision/sdk-tool-frame-policy.json text eol=lf
 configs/vision/handeye-flange-normalized.json text eol=lf
 apps/web/configs/web-grasp.json text eol=lf
+# User-selected classic presentation snapshot: retain exact source commit bytes.
+apps/web/public/classic.html -text -whitespace
+apps/web/public/css/classic-source.css -text -whitespace

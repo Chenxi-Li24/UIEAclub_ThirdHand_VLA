@@ -17,13 +17,13 @@ Ubuntu、SDK、真机、相机发布/媒体/中继服务、展示站、env/凭�
 |---|---|
 | current基线 | `/opt/thirdhand-stage/releases/7c7f4b5f3792288e` |
 | 基线manifest SHA-256 | `7c7f4b5f3792288ec42d98ddbd25151ae192a766f8a7f16fd996afe6ba35f63c` |
-| 候选release | `/opt/thirdhand-stage/releases/2a1bf049a022c65e` |
-| 候选manifest SHA-256 | `2a1bf049a022c65e59c1da65c3a6aab72b988b2fd1a889b76eb39b2a5e4b4544` |
-| cloud.delta.json.gz SHA-256 | `0b59a622e88ef2fa5e04451b96ef91e142972f6b701610062bd6a1e0ea959c0a` |
-| 包大小 | 4,492,505字节 |
+| 候选release | `/opt/thirdhand-stage/releases/1fdfb95e8d905105` |
+| 候选manifest SHA-256 | `1fdfb95e8d905105b94238fb1749bcf21f368045e8301d519c0e509d160b97b8` |
+| cloud.delta.json.gz SHA-256 | `f2c49218c0a25a1cb055d4098dad262a7f8de1f92802a3167c91e77d248101a0` |
+| 包大小 | 4,492,681字节 |
 | 文件总数 | 4634 → 4653；4621件原文件字节不变 |
 | 迁移011 SHA-256 | `31d504df11ff4be7ddb9f321e427e04ba80f0eda1b8d728736ae101ffd4192fd` |
-| apply_workspace_layout_cloud.py SHA-256（Git字节） | `f14991ae886e63c9a3e5d90a4fc676a921e6eb0a579809706f30f20ba727c20b` |
+| apply_workspace_layout_cloud.py SHA-256（Git字节） | `8bf2ce96c921247fc0e7c593fa3d1adf99df91b1547530aae36fe3d45bf3d0f1` |
 | 服务器私有操作目录 | `/var/backups/thirdhand/access-C7-layout-startup-20261101` |
 
 准备期间只读现场检查确认current/基线摘要一致、API active/running、重启计数0、活跃租约0、accepted/started命令0、新偏好列0。
@@ -33,7 +33,7 @@ Ubuntu、SDK、真机、相机发布/媒体/中继服务、展示站、env/凭�
 源码范围固化于`tools/deploy/build_workspace_layout_release.py`及`tools/operations/apply_workspace_layout_cloud.py`，
 后者验证包摘要、源摘要、完整清单、原元数据、精确新增/改动集合以及迁移摘要。
 模型原STL/URDF、业务node_modules及整个其他发布内容从已验证基线复制，不覆盖。
-本地候选目录在`.superpowers/sdd/2026-11-01-workspace-performance/deployment-candidate`，不进入Git。
+本地候选目录在`.superpowers/sdd/2026-11-01-workspace-performance/deployment-candidate-v3`，不进入Git；此前候选已被替代，不得应用旧包。
 
 ## 数据库变化
 
@@ -77,4 +77,4 @@ python3 apply_workspace_layout_cloud.py --rollback # 源码回退，保留新增
 如果数据库迁移已成功但切换失败，旧代码继续运行，新列及迁移记录保留；恢复前复核现场，不能盲目重跑。
 API重启会短暂影响业务请求和观看授权续期；现有媒体/Ubuntu单元不重启，用户必要时重新请求观看。
 CSP增加WebAssembly解码许可；静态源码/模型私有长缓存可能留在浏览器，动态身份/权限始终不缓存。
-手机断点实际验收尚未完成，生产网络和真实视频性能须另测，不据本机指标扩大真机运动权限。
+生产网络和真实视频性能须另测，不据本机指标扩大真机运动权限。

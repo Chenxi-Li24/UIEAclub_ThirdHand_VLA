@@ -36,6 +36,8 @@ test('classic reuses drawer controls and shared model/account adapters without m
   assert.ok(document.getElementById('slider-j0'));assert.equal(document.getElementById('viewport').parentElement.id,'app');
   shell.go('account-profile');assert.equal(document.getElementById('classic-settings').hidden,false);shell.go('control');assert.equal(document.getElementById('classic-settings').hidden,true);
   assert.equal(document.getElementById('btn-connect').disabled,true);assert.ok(requests.every(path=>!/(?:sdk|control\/|voice|dummy)/.test(path)));
+  assert.equal(document.getElementById('classic-settings-logout').parentElement.id,'workspace-nav','logout must not live in the mobile-hidden nav footer');
+  document.getElementById('classic-settings-logout').click();assert.ok(requests.includes('/api/v1/session/logout'),'compact screens retain the shared logout action');
   await preferences.choose({layoutId:'workspace'});assert.equal(reloads,1);assert.equal(document.documentElement.dataset.layout,'classic','do not recolor/reflow the old DOM before the new document opens');
   controls.dispose();essentials.dispose();preferences.dispose();
 });

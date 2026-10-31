@@ -52,6 +52,10 @@
       bindRuntime(value){Object.assign(runtime,value);view.requestAnimationFrame(()=>runtime.scene?._onResize());guide?.bindScene?.(runtime.scene);},
       attachEssentials({preferences}){
         tools.append(byId('workspace-logout'),doc.querySelector('.workspace-history-link'));
+        // The compact original header hides text actions on small screens.
+        // Keep the same shared logout action reachable inside account settings.
+        const logout=el('button',{type:'button',id:'classic-settings-logout'},'Sign out');
+        logout.addEventListener('click',()=>byId('workspace-logout').click());nav.append(logout);
         const theme=byId('theme-select'),selectTheme=value=>{for(const option of theme.options)option.selected=option.value===value.classicThemeId;};preferences.subscribe(selectTheme);
         theme.addEventListener('change',()=>preferences.choose({classicThemeId:theme.value}).catch(()=>{selectTheme(preferences.current());go('account-preferences');notice.hidden=false;notice.textContent=tr('Could not save preferences. Please try again.');}));
       },

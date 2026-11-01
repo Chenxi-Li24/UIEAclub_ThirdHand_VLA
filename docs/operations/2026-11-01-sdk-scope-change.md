@@ -19,3 +19,17 @@ Observer实际签名租约已确认 scope=sdk，真实工作进程多次记录 r
 - 仅apps/web/public/js/admin-control.js改变，保留4656件，无数据库/Ubuntu/端口/权限变更。5项固定包边界测试通过。沿用版本备份、零租约准入锁、重启业务API和回退流程。
 
 以上单文件补丁为已批准SDK接入验收中的缺陷修复，不扩展权限或硬件动作范围。实际补丁应用和后续验收结果继续追加，不能以模拟测试记为真实10分钟通过。
+
+## 本轮现场核验结果
+
+单文件确认框补丁已应用：云端当前发布 dc458eb35ed369a1，应用记录 applied=true，thirdhand-stage.service 为 active。没有数据库、端口、设备服务或权限范围的附加变更。
+
+18:34 与 18:40 的 Observer 授权均进入设备端；18:40:13.537 记录 remote_lease_arm active=true，18:40:13.702 记录 remote_lease_renew active=true，18:40:14.228 因 browser_stale 撤销。与较早的 renewal_unconfirmed 区分：最新失败明确是浏览器心跳超时。验收 Edge 窗口被系统报告为 minimized；这是待排除的环境因素，尚不能把全部中断归因于窗口状态或校园网。
+
+18:40 后只读核验：sdkConnected=false、readOnly=true、recordingHealthy=true、videoHealthy=false、controlAccepted=true。未执行 SDK 初始化或后续运动；10分钟真实关节/夹爪数据验收未完成。不能把页面出现“真实硬件”来源标签或历史连接事件算作实际关节数据通过。
+
+用户报告的登录无转圈尚未复现。内置浏览器当前登录表单为空，DOM 中存在 auth-spinner；公网脚本及样式含等待组件，Cache-Control 为 no-store。认证及SDK界面16项自动化测试通过（包含延迟请求禁用按钮、转圈、重复提交阻止、超时恢复和非阻塞确认），这些是测试环境结果，不替代用户登录实测。待用户在发生问题的页面提交一次并保留现场检查。
+
+截图保存在本地运行证据目录 .superpowers/sdd/2026-11-01-sdk-source-audit/，不纳入源码提交。部署回退仍使用上文固定应用器记录和原发布；不回滚迁移012已有数据。
+
+CI 核验：部署锁修复 c807176 的运行 41295343458、固定确认框补丁 fea5b2e 的运行 41297298966 均 completed successfully。

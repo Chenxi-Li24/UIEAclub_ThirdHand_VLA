@@ -1,0 +1,21 @@
+# SDK 权限部署与现场验收记录
+
+用户已批准固定部署及状态验收，初始化允许使能电机和默认闭爪，后续运动保持 readOnly 门禁。
+
+2026-11-01 17:56–17:58（Asia/Shanghai）应用成功：Ubuntu8文件/两个服务配置、云端11文件/迁移012。应用前真实 Robot /health 报 connected=false、moving=false、无固定TCP动作，context 报 readOnly=true、recordingHealthy=true；云端活动租约及在途命令均为0。两服务停止后设备应用器校验新鲜证明和CAN协作锁成功，未打开SDK。
+
+云端发布 `0735390c57d2ad7d`，迁移应用成功；原发布和配置摘要留存，原设备快照保留。设备服务从 agent-sdk-ab786c269838e18c 和 robot-sdk-2fe4b77d3974d3c3 启动，无自动连接，NeedDaemonReload=no。实际 SDK 尚未连续验收。
+
+应用前修正迁移与独立租约准入锁的自阻塞问题，提交 c807176：迁移同一事务锁表、核验空闲、升级锁；完成后另取准入锁切换服务。21项部署测试及独立真实PostgreSQL锁验证通过。应用器现场名 apply_sdk_scope_cloud_v2.py，摘要见部署审阅。
+
+Observer实际签名租约已确认 scope=sdk，真实工作进程多次记录 remote_lease_renew active=true；随后释放原因 renewal_unconfirmed。没有因此关闭超时保护或放宽安全阈值。视频健康标记false，运动不开放。
+
+连接确认发现原生confirm会阻塞浏览器心跳，改为页面内确认（952f746）。确认前不发送连接，取消/失去租约/页面销毁不初始化，7项前端测试通过。固定单文件补丁：
+
+- 原清单0735390c57d2ad7d58d663818c191beb6ad8ab30183f7feeb5cd137e58c318d1。
+- 新清单dc458eb35ed369a1a8716b69bb4bd56b7d6b804383e74a6e944da1f68b8fa381。
+- 包b8ba140ad28e82f7f7a92fbb5e835c2dcf298b5058aa65b4aa76e224956541c5。
+- 应用器c16f33d2dce17c7e13858c7a2abb52e18fe18435fe5089261cc491810524a83f。
+- 仅apps/web/public/js/admin-control.js改变，保留4656件，无数据库/Ubuntu/端口/权限变更。5项固定包边界测试通过。沿用版本备份、零租约准入锁、重启业务API和回退流程。
+
+以上单文件补丁为已批准SDK接入验收中的缺陷修复，不扩展权限或硬件动作范围。实际补丁应用和后续验收结果继续追加，不能以模拟测试记为真实10分钟通过。

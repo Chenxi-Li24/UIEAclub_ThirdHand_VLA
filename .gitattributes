@@ -40,4 +40,5 @@ tools/operations/apply_ui_sdk_followup_cloud.py text eol=lf
 tools/operations/apply_login_wait_cloud.py text eol=lf
 tools/operations/apply_sdk_scope_cloud.py text eol=lf
 tools/operations/apply_sdk_scope_device.py text eol=lf
+tools/operations/apply_sdk_confirmation_cloud.py text eol=lf
 deploy/public-access/staging/device/sdk-scope-pins.json text eol=lf

@@ -36,7 +36,7 @@
 | cloud.delta.json.gz | a6ecf9b39aef8bedbaa41a696927732699c43d2631c05fe8892fcc5acf747006 |
 | apply_ui_sdk_cloud.py | c68d0f75533a86cae460b966c5c3618eb90d4484850f0084a982ca35ba6305a2 |
 | device.delta.json.gz | 12ac8cf0773393aa4c36e6792f4944e617420b58afb7730b500cd8f06918815d |
-| apply_ui_sdk_device.py | 8099335cba5f1810adb57e9358b31834397fc212dc6902e2ba7a3ad81f640c7a |
+| apply_ui_sdk_device.py | d934f64cec10c1649ccc28303e3fd369fa669e8199b2c71b44a03f5bcd902186 |
 | apply_ui_sdk_route.py | 72b77a4521ea2f14bfb100f258fcee92e6aafe61213c47fc32ced4dfddf15217 |
 | state-location.conf | af9834e79eed184d6bb551d399a4f009967761850f6f79fb193bf754e511b531 |
 | Nginx原配置 | a2e7dff2bc075998e1898de8137b0a3386ae828e0a11bf4bfe28412d7663f44a |

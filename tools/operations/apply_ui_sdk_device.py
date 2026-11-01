@@ -6,6 +6,7 @@ deployment sequence. Credentials, original checkout and SDK are never touched.
 import argparse
 import base64
 import gzip
+import getpass
 import hashlib
 import io
 import json
@@ -14,7 +15,7 @@ from pathlib import Path
 import stat
 import subprocess
 
-BASE = Path('/home/nieqingcao/.local/share/thirdhand-stage-device/20261031')
+BASE = Path.home() / '.local/share/thirdhand-stage-device/20261031'
 ROOT = BASE.parent / 'C8-ui-sdk-20261101'
 PACKAGE_SHA = '12ac8cf0773393aa4c36e6792f4944e617420b58afb7730b500cd8f06918815d'
 AGENT = 'agent-source/thirdhand_edge/'
@@ -155,7 +156,7 @@ def execute(apply=False, rollback=False):
 
 
 if __name__ == '__main__':
-    require(os.name == 'posix' and Path.home() == Path('/home/nieqingcao'), 'EXPECTED_LINUX_USER_REQUIRED')
+    require(os.name == 'posix' and getpass.getuser() == 'nieqingcao', 'EXPECTED_LINUX_USER_REQUIRED')
     os.umask(0o077)
     parser = argparse.ArgumentParser(description=__doc__)
     mode = parser.add_mutually_exclusive_group()

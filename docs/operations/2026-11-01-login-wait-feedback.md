@@ -1,6 +1,6 @@
 # 登录等待反馈与超时恢复
 
-状态：本地实现及浏览器验证完成；尚未部署 staging。
+状态：本地实现及浏览器验证完成；2026-11-01 已按用户批准部署 staging，release `dfbca02d47ca7f40`。
 
 ## 本次发现与行为
 
@@ -24,4 +24,4 @@
 - 本轮完整 public_access 回归 337/337 通过（隔离 PostgreSQL，Node24，现有 Python3.11 测试环境）；其后仅增加表单 aria-busy 收尾断言并重跑认证测试。
 - 真实浏览器访问本地延迟夹具，模拟响应 30 秒：观察到灰色 Sending… 按钮、转圈、按钮不可点击；15 秒后恢复 Sign in 并显示超时。断言读取 disabled、aria-busy 和 spinner.hidden。使用虚构账号，不发送真实认证。
 - 截图保存在忽略目录 `.superpowers/sdd/2026-11-01-sdk-source-audit/login-pending.png`、`login-timeout.png`。它们证明本地候选，不代表线上已修复。
-- 尚需固定候选上线及线上真实会话验收；本次没有网络链路提速或登录后台性能修复的证据。
+- 上线后公网登录 HTML 与三件资源均 HTTP200，SHA256 与固定 Git 源码一致；真实浏览器验证中英文切换、默认 Observer、新 spinner 节点及无横向溢出。未再次提交用户密码，线上真实凭据登录中的等待过程尚未单独重验；本次没有网络链路提速或登录后台性能修复的证据。

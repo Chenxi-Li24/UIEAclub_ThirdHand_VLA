@@ -6,8 +6,13 @@ const fail=code=>Object.assign(Error(code),{code});
 const BINDING=['deviceId','bootId','executorEpoch','connectionId','certificateId'];
 const same=(left,right)=>left&&right&&BINDING.every(key=>left[key]===right[key]);
 const hash=value=>createHash('sha256').update(value).digest('hex');
-function createControlService({repository,sessions,channels,devices,signer,clock={now:()=>new Date(),monotonic:()=>performance.now()},readiness=async()=>false}){
+function createControlService({repository,sessions,channels,devices,signer,clock={now:()=>new Date(),monotonic:()=>performance.now()},readiness=async()=>false,onDiagnostic=()=>{}}){
   const holders=new Map(),pending=new Set(),revocations=new Map();let closed=false;
+  const diagnosticCodes=new Set(['FORBIDDEN','BROWSER_STALE','LEASE_CHANGED','LEASE_REQUIRED','DEVICE_UNAVAILABLE','DEVICE_REPLY_UNKNOWN','DEVICE_DISCONNECTED','DEVICE_BUSY','LEASE_UNCONFIRMED']);
+  function reportRenewal(stage,error,started){
+    // Never pass arbitrary exceptions, principals, envelopes or identifiers to logs.
+    try{onDiagnostic(Object.freeze({component:'sdk_renewal',stage,code:diagnosticCodes.has(error?.code||error?.message)?(error.code||error.message):'RENEWAL_FAILED',elapsedMs:Math.max(0,Math.min(60000,Math.round(clock.monotonic()-started)))}));}catch{/* Diagnostics cannot affect authorization. */}
+  }
   function track(promise){pending.add(promise);promise.catch(()=>{}).finally(()=>pending.delete(promise));return promise;}
   async function actor(principal,action,binding){if(!authorize(principal,action).ok)throw fail('FORBIDDEN');await repository.validatePrincipal(principal,action.startsWith('sdk.')?'sdk':'control');if(binding)channels.requireFresh(principal,binding);}
   function context(deviceId){const value=devices.get(deviceId);if(!value||!value.executorEpoch||value.controlAccepted!==true)throw fail('DEVICE_UNAVAILABLE');return Object.fromEntries(BINDING.map(key=>[key,value[key]]));}
@@ -58,16 +63,25 @@ function createControlService({repository,sessions,channels,devices,signer,clock
       const holder=[...holders.values()].find(value=>value.lease.deviceId===input.deviceId&&value.lease.sessionId===principal.sessionId&&value.browser.connectionId===input.connectionId&&value.browser.clientInstanceId===input.clientInstanceId);
       if(!holder)throw fail('LEASE_REQUIRED');
       if(holder.renewal)return holder.renewal;
+      const started=clock.monotonic();let stage='principal';
+      const stillHeld=()=>{if(holders.get(holder.lease.id)!==holder)throw fail('LEASE_CHANGED');channels.requireFresh(principal,input);};
       holder.renewal=(async()=>{
         await actor(principal,holder.lease.scope==='sdk'?'sdk.connect':'control.command',input);
+        stage='readiness';stillHeld();
         const binding=context(input.deviceId);
         if(!same(binding,leaseContext(holder.lease))||!await readiness(principal,input.deviceId)){await revoke(holder.lease,'readiness_lost');throw fail('DEVICE_UNAVAILABLE');}
+        stage='repository';stillHeld();
         const renewed=await repository.renew(principal,holder.lease.id);
+        stage='dispatch';stillHeld();
+        if(!same(context(input.deviceId),binding))throw fail('DEVICE_UNAVAILABLE');
+        stage='device_reply';
         const result=await devices.request(input.deviceId,signed('lease_renew',binding,{leaseId:renewed.id,leaseEpoch:renewed.leaseEpoch,sequence:renewed.renewalSequence,scope:renewed.scope}));
+        stage='confirmation';
         if(result?.state!=='active'||result.leaseId!==renewed.id||result.leaseEpoch!==renewed.leaseEpoch||(renewed.scope==='sdk'&&result.scope!=='sdk')){await revoke(renewed,'renewal_unconfirmed');throw fail('LEASE_UNCONFIRMED');}
+        stillHeld();
         holder.lease=renewed;return {renewed:true};
       })();
-      try{return await holder.renewal;}finally{holder.renewal=null;}
+      try{return await holder.renewal;}catch(error){reportRenewal(stage,error,started);throw error;}finally{holder.renewal=null;}
     },
     async requestTakeover(principal,input){
       await actor(principal,'control.request',input);context(input.deviceId);
@@ -121,7 +135,23 @@ function createControlService({repository,sessions,channels,devices,signer,clock
     async drain(){while(pending.size)await Promise.allSettled([...pending]);},
     async close(){closed=true;clearInterval(timer);sessions.events.off('revoked',revoked);sessions.events.off('unavailable',unavailable);channels.events.off('fresh',fresh);channels.events.off('closed',disconnected);devices.events?.off('disconnected',deviceDisconnected);await Promise.allSettled([...holders.values()].map(value=>revoke(value.lease,'cloud_service_shutdown')));await api.drain();}
   };
-  function fresh({principal,binding}){for(const holder of holders.values())if(holder.browser.connectionId===binding.connectionId)track(api.renewFromBrowser(principal,{...binding,deviceId:holder.lease.deviceId}).catch(()=>revoke(holder.lease,'renewal_failed')));}
+  function fresh({principal,binding}){
+    for(const holder of holders.values())if(holder.browser.connectionId===binding.connectionId){
+      // Retain at most one fresh event while awaiting a device ACK. Dropping all
+      // such events wastes the remainder of a delayed lease's unchanged 1s TTL.
+      // This is event-driven, not a retry timer; every drain rechecks freshness.
+      holder.freshPending=true;
+      if(holder.pumping)continue;
+      holder.pumping=true;
+      track((async()=>{
+        try{while(holder.freshPending&&holders.get(holder.lease.id)===holder){
+          holder.freshPending=false;
+          await api.renewFromBrowser(principal,{...binding,deviceId:holder.lease.deviceId});
+        }}catch{if(holders.get(holder.lease.id)===holder)await revoke(holder.lease,'renewal_failed');}
+        finally{holder.pumping=false;holder.freshPending=false;}
+      })());
+    }
+  }
   function disconnected({connectionId}){for(const holder of holders.values())if(holder.browser.connectionId===connectionId)track(revoke(holder.lease,'browser_disconnected'));}
   function revoked({sessionId}){channels.closeSession(sessionId);for(const holder of holders.values())if(holder.principal.sessionId===sessionId)track(revoke(holder.lease,'session_revoked'));}
   function unavailable(){channels.closeAll();for(const holder of holders.values())track(revoke(holder.lease,'identity_unavailable'));}

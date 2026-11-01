@@ -16,8 +16,8 @@ ROOT = Path('/var/backups/thirdhand/access-C8a-ui-sdk-20261101')
 BASE = Path('/var/backups/thirdhand/access-C3f-camera-ui-20261101/apply_camera_ui_cloud.py')
 BASE_SHA = 'd10eaa3e631f873d394f501e36588d6b4f037dbfbd2cc6145b63e4ba09ac2f4f'
 OLD_SHA = '1fdfb95e8d905105b94238fb1749bcf21f368045e8301d519c0e509d160b97b8'
-NEW_SHA = '5808d2436598e10e9858fabb359ed8099e39c6e8e86183f960b30bdde8ed7ab5'
-PACKAGE_SHA = '50f7b191215bab2a43d45435d9f6febf95bab1e83408fa35d922309fa9a4b5ec'
+NEW_SHA = '4688a5dfdcf768109296765b7937fd8bbb47ec22bd27ae4b25a11562590da1f8'
+PACKAGE_SHA = 'a6ecf9b39aef8bedbaa41a696927732699c43d2631c05fe8892fcc5acf747006'
 FILES = {'apps/web/public/css/' + n + '.css' for n in ('history', 'workspace-layouts')} | {
     'apps/web/public/js/' + n + '.js' for n in (
         'account-security', 'account-settings', 'admin-access', 'admin-control',

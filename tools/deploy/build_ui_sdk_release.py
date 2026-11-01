@@ -12,7 +12,7 @@ from pathlib import Path
 import subprocess
 
 REPO = Path(__file__).resolve().parents[2]
-SOURCE = '7e65b5d3b59fb7359dec1262d1f7a31c9a63139d'
+SOURCE = '004e7f404c1e0d942483f53302d2ccb808899bce'
 OLD_SHA = '1fdfb95e8d905105b94238fb1749bcf21f368045e8301d519c0e509d160b97b8'
 OLD = '/opt/thirdhand-stage/releases/' + OLD_SHA[:16]
 FILES = {'apps/web/public/css/' + n + '.css' for n in ('history', 'workspace-layouts')} | {

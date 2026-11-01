@@ -12,14 +12,14 @@
 
 ## 固定来源与包
 
-运行源码来自 Git `7e65b5d3b59fb7359dec1262d1f7a31c9a63139d`，不是当前工作目录。其他任务的 XVisio/C++/相机 Python 未进入候选。
+云端运行源码来自 Git `004e7f404c1e0d942483f53302d2ccb808899bce`；设备源码仍固定 `7e65b5d3b59fb7359dec1262d1f7a31c9a63139d`，不是当前工作目录。其他任务的 XVisio/C++/相机 Python 未进入候选。
 
 | 项目 | 固定内容 |
 |---|---|
 | 云端当前 release | /opt/thirdhand-stage/releases/1fdfb95e8d905105 |
-| 云端新 release | /opt/thirdhand-stage/releases/5808d2436598e10e |
+| 云端新 release | /opt/thirdhand-stage/releases/4688a5dfdcf76810 |
 | 云端变化 | 26份源码，23更新、3新增；总清单4653→4656，4630份原文件不变 |
-| 云端包 | cloud.delta.json.gz，388611字节 |
+| 云端包 | cloud.delta.json.gz，388726字节 |
 | Ubuntu 基目录 | /home/nieqingcao/.local/share/thirdhand-stage-device/20261031 |
 | Ubuntu 变化 | runtime.py、telemetry.py、remote-gateway.js；新增 latest_state.py、state_upload.py，共5份 |
 | Ubuntu 包 | device.delta.json.gz，21034字节 |
@@ -27,14 +27,14 @@
 
 云端完整文件列表、旧/新摘要由 `tools/deploy/build_ui_sdk_release.py` 和 `tools/operations/apply_ui_sdk_cloud.py` 固定。Ubuntu 清单、六份现场源码摘要及保护规则由 `tools/deploy/build_ui_sdk_device.py` 和 `tools/operations/apply_ui_sdk_device.py` 固定。
 
-本地候选均位于 `.superpowers/sdd/2026-11-01-ui-sdk-audit/`：`cloud-candidate-v2/`、`device-candidate/`、`route-candidate/`。旧 `cloud-candidate/` 已废弃，不能上传。安装器与模板使用UTF-8/LF；上传后必须逐一核对以下SHA-256。
+本地候选均位于 `.superpowers/sdd/2026-11-01-ui-sdk-audit/`：`cloud-candidate-v3/`、`device-candidate/`、`route-candidate/`。旧 `cloud-candidate/` 与 `cloud-candidate-v2/` 已废弃，不能上传。安装器与模板使用UTF-8/LF；上传后必须逐一核对以下SHA-256。
 
 | 产物 | SHA-256 |
 |---|---|
 | 云端旧manifest | 1fdfb95e8d905105b94238fb1749bcf21f368045e8301d519c0e509d160b97b8 |
-| 云端新manifest | 5808d2436598e10e9858fabb359ed8099e39c6e8e86183f960b30bdde8ed7ab5 |
-| cloud.delta.json.gz | 50f7b191215bab2a43d45435d9f6febf95bab1e83408fa35d922309fa9a4b5ec |
-| apply_ui_sdk_cloud.py | bb59b0f406a17aa66ee0908af6b638d6932a8fc1d1919a687d77aca47f52ba10 |
+| 云端新manifest | 4688a5dfdcf768109296765b7937fd8bbb47ec22bd27ae4b25a11562590da1f8 |
+| cloud.delta.json.gz | a6ecf9b39aef8bedbaa41a696927732699c43d2631c05fe8892fcc5acf747006 |
+| apply_ui_sdk_cloud.py | c68d0f75533a86cae460b966c5c3618eb90d4484850f0084a982ca35ba6305a2 |
 | device.delta.json.gz | 12ac8cf0773393aa4c36e6792f4944e617420b58afb7730b500cd8f06918815d |
 | apply_ui_sdk_device.py | 8099335cba5f1810adb57e9358b31834397fc212dc6902e2ba7a3ad81f640c7a |
 | apply_ui_sdk_route.py | 72b77a4521ea2f14bfb100f258fcee92e6aafe61213c47fc32ced4dfddf15217 |

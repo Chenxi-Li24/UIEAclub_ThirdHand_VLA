@@ -18,10 +18,10 @@ def load(relative):
     return module
 
 
-@pytest.fixture
-def candidate(tmp_path, monkeypatch):
-    build = load('tools/deploy/build_sdk_confirmation_release.py')
-    apply = load('tools/operations/apply_sdk_confirmation_cloud.py')
+@pytest.fixture(params=['confirmation', 'heartbeat'])
+def candidate(tmp_path, monkeypatch, request):
+    build = load(f'tools/deploy/build_sdk_{request.param}_release.py')
+    apply = load(f'tools/operations/apply_sdk_{request.param}_cloud.py')
     files = {n: 'a' * 64 for n in build.FILES - build.ADDED}
     files.update({f'preserved/{i}.txt': 'b' * 64 for i in range(4657 - len(files))})
     before = {'format': 1, 'files': files, 'metadata': 'preserve-exactly'}

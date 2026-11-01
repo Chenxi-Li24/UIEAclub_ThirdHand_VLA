@@ -41,7 +41,7 @@
 | active-pins.json | 103171b62779c34408845549dc68fe8be7aee0b7b8b83e8be5bf18ae729a34fa |
 | apply_ui_sdk_active_device.py | 0b3213bc1fd25f6836f4484ca4977374d198d3265829f40a9b399a25fadff638 |
 
-完整旧/新文件摘要和两份drop-in精确内容在 [固定清单](../../deploy-placeholder)；仓库实际路径为 `deploy/public-access/staging/device/c8-active-pins.json`。模板仅以当前Linux用户home替换`@HOME@`，不接受任意自定义路径。
+完整旧/新文件摘要和两份drop-in精确内容在 [固定清单](../../deploy/public-access/staging/device/c8-active-pins.json)；仓库实际路径为 `deploy/public-access/staging/device/c8-active-pins.json`。模板仅以当前Linux用户home替换`@HOME@`，不接受任意自定义路径。
 
 本地固定文件在 `.superpowers/sdd/2026-11-01-ui-sdk-audit/active-device-candidate-v3/` 与 `cloud-followup-candidate/`。旧active-device-candidate和v2只是压缩器差异失败产物，不得上传。构建使用Python3.14.5；不同zlib版本可能产生不同gzip压缩字节，即使源码相同，仍拒绝摘要不匹配包，不放宽安装校验。Python3.11运行安装器及测试不依赖重压缩。
 

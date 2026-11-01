@@ -31,3 +31,16 @@ test('browser ages independently of polling, repeats do not renew, API failure r
 test('one in-flight read, background pause, bounded backoff and explicit connection phase',async()=>{
  const b=browser();await b.store.start();let resolve;b.pending(new Promise(r=>{resolve=r;}));const poll=b.store.refresh(),before=b.requests;await b.store.refresh();assert.equal(b.requests,before);b.advance(5000);assert.equal(b.store.snapshot().status,'stale');resolve({bad:true});await poll;for(let i=0;i<4;i++){b.pending(null);b.set({bad:true});await b.store.refresh();}assert.equal(b.scheduled.at(-1).ms,8000);b.doc.visibilityState='hidden';const paused=b.requests;await b.store.refresh();assert.equal(b.requests,paused);b.store.close();
 });
+
+test('connection completion clears pending UI without inventing a connected or stopped robot',async()=>{
+ const b=browser();await b.store.start();const attempt=b.store.connecting();assert.equal(b.store.snapshot().status,'connecting');assert.equal(b.store.snapshot().sample,null);
+ b.store.connectionSettled(attempt);assert.equal(b.store.snapshot().status,'unknown');assert.equal(b.store.snapshot().sample,null);
+ const older=b.store.connecting(),current=b.store.connecting();b.store.connectionSettled(older);assert.equal(b.store.snapshot().status,'connecting');
+ b.store.connectionSettled(current);assert.equal(b.store.snapshot().status,'unknown');b.store.close();
+});
+
+test('pending SDK UI is bounded and authoritative measurements win over command completion',async()=>{
+ const b=browser();await b.store.start();b.store.connecting();b.advance(15001);assert.equal(b.store.snapshot().status,'unknown');
+ const attempt=b.store.connecting();await b.store.refresh();assert.equal(b.store.snapshot().status,'connected');
+ b.store.connectionSettled(attempt);assert.equal(b.store.snapshot().status,'connected');b.advance(3001);assert.equal(b.store.snapshot().status,'stale');b.store.close();
+});

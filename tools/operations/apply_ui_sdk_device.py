@@ -17,6 +17,9 @@ import subprocess
 
 BASE = Path.home() / '.local/share/thirdhand-stage-device/20261031'
 ROOT = BASE.parent / 'C8-ui-sdk-20261101'
+# Field inspection found the approved paths were inactive snapshots. Retain this
+# installer only to undo its own writes; never install this retired candidate.
+RETIRED = True
 PACKAGE_SHA = '12ac8cf0773393aa4c36e6792f4944e617420b58afb7730b500cd8f06918815d'
 AGENT = 'agent-source/thirdhand_edge/'
 ROBOT = 'robot/services/robot/src/'
@@ -120,6 +123,7 @@ def restore(after):
 
 def execute(apply=False, rollback=False):
     require(not (apply and rollback), 'INVALID_MODE')
+    require(rollback or not RETIRED, 'C8_CANDIDATE_RETIRED_ACTIVE_SOURCE_MISMATCH')
     safe(BASE); safe(ROOT)
     check(PROTECTED)
     if rollback:

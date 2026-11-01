@@ -13,7 +13,7 @@
       else if(sample&&!fresh)status='stale';
       else if(fresh&&sample.sdkConnected===false)status='disconnected';
       else if(fresh&&sample.sdkConnected===true)status=validVector(sample.jointPositionRad)?'connected':'waiting';
-      else if(phase==='connecting')status='connecting';
+      else if(phase&&now()<phase.deadline)status='connecting';
       return {devices:[...devices],deviceId:selected,api,status,error,ageMs,fresh,sample,value};
     }
     function emit(){const state=snapshot();for(const fn of listeners)fn(state);}
@@ -44,7 +44,8 @@
     return {snapshot,subscribe(fn){listeners.add(fn);fn(snapshot());return()=>listeners.delete(fn);},start:poll,
       updateDevices(rows){devices=rows.filter(d=>d.controllable);emit();},
       select(id){if(id===selected)return;if(!devices.some(d=>d.id===id))return;selected=id;value=null;baseAge=Infinity;phase=null;emit();void poll();},
-      connecting(){phase='connecting';error=null;value=null;baseAge=Infinity;emit();},refresh:poll,
+      connecting(){phase={deadline:now()+15000};error=null;value=null;baseAge=Infinity;emit();return phase;},
+      connectionSettled(attempt){if(phase===attempt){phase=null;emit();}},refresh:poll,
       close(){closed=true;view.clearTimeout(timer);view.clearInterval(tick);doc.removeEventListener('visibilitychange',visible);listeners.clear();}};
   }
   function mountDeviceState({document:doc,view,sessionClient,shell}){

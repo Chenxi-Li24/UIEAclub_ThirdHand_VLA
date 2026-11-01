@@ -18,6 +18,7 @@ def load(relative):
 def candidate(tmp_path, monkeypatch):
     build = load('tools/deploy/build_ui_sdk_device.py')
     apply = load('tools/operations/apply_ui_sdk_device.py')
+    monkeypatch.setattr(apply, 'RETIRED', False)
     originals = {
         'runtime.py': b'def worker(role):\n    box = Outbox(directory / "outbox.sqlite", device_id=device.device_id,)\nroles=("capture", "upload", "control", *(("media",) if media else ()))\nchoices=("control", "capture", "upload", "media")\n',
         'remote-gateway.js': b'const event={sequence:++sourceSequence,receivedAt:now()};\n',
@@ -102,3 +103,14 @@ def test_partial_write_failure_restores_all_originals(candidate, monkeypatch):
         apply.execute(apply=True)
     apply.check(apply.BEFORE)
     apply.check(apply.PROTECTED)
+
+
+def test_retired_candidate_refuses_review_and_apply_but_preserves_rollback(candidate, monkeypatch):
+    apply, report, calls = candidate
+    apply.execute(apply=True)
+    monkeypatch.setattr(apply, 'RETIRED', True)
+    for mode in ({}, {'apply': True}):
+        with pytest.raises(ValueError, match='C8_CANDIDATE_RETIRED_ACTIVE_SOURCE_MISMATCH'):
+            apply.execute(**mode)
+    assert apply.execute(rollback=True)['rolledBack'] is True
+    apply.check(apply.BEFORE)

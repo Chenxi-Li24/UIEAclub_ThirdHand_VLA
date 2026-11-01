@@ -4,7 +4,7 @@ globalThis.ThirdHandI18nCatalog=(globalThis.ThirdHandI18nCatalog||[]).concat([ [
  ['已选择相机 · 尚未观看','Camera selected · not watching'],['请先加载相机目录','Load the camera directory to begin'],
  ['安全与登录','Security & login'],['登录模式与账户保护。','Sign-in mode and account protection.'],['成员与权限','Members & permissions'],['注册用户与管理员申请。','Registered users and administrator applications.'],
  ['编辑并保存模型姿态。这些控件不会移动真实机械臂。','Edit and save model poses. These controls do not move the real robot.'],['观看已授权的相机画面。这里不提供语音或真机运动操作。','View an authorized camera stream. Voice and robot motion are unavailable here.'],
- ['是','Yes'],['否','No'],['真实硬件','hardware'],['仿真','simulation'],['空跑','dummy'],['未知','unknown'],
+ ['是','Yes'],['否','No'],['真实硬件','hardware'],['仿真','simulation'],['空跑','dummy'],['未知','unknown'],['未知','Unknown'],
  ['设备','Devices'],['设备与诊断','Devices & diagnostics'],['模型工作台','Model workspace'],['数据','Data'],['模型','Model'],['更多','More'],['只读 SDK 连接','Read-only SDK connection'],
  ['真实机械臂状态','Real robot state'],['仅显示实测反馈，模型编辑保持独立。','Measured feedback only. Model editing stays independent.'],['真机反馈','Real robot feedback'],['真实机械臂','Real robot'],['尚无已核验的真机反馈','No verified hardware feedback'],
  ['已连接 · 数据新鲜','Connected · fresh'],['正在连接','Connecting'],['等待实测反馈','Waiting for measured feedback'],['数据已过期','Data expired'],['已断开','Disconnected'],['状态读取失败','State read failed'],['未提供','Not provided'],['历史','Historical'],

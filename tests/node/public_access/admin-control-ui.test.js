@@ -27,3 +27,18 @@ test('administrator read-only connection is located exclusively in Devices & dia
   try{assert.equal(document.getElementById('cloud-live-control').parentElement.id,'page-system');assert.equal(log.previousElementSibling.id,'cloud-live-control');}
   finally{mounted.dispose();}
 });
+
+test('failed and successful SDK requests both settle pending state and refresh measured feedback',async()=>{
+  for(const fails of [true,false]){
+    const {document}=parseHTML('<html><body><section id="page-system"></section></body></html>');
+    const attempt={},calls=[];
+    const stateStore={subscribe(){return ()=>{};},connecting(){calls.push('pending');return attempt;},connectionSettled(value){assert.equal(value,attempt);calls.push('settled');},async refresh(){calls.push('refresh');}};
+    const mounted=mountAdminControl({document,view:{},identity:{role:'admin',mode:'admin'},sessionClient:{},stateStore});
+    mounted.client.command=async()=>{if(fails)throw Object.assign(Error(),{code:'COMMAND_RESULT_UNKNOWN'});return {state:'completed'};};
+    const button=[...document.querySelectorAll('button')].find(b=>b.textContent==='Connect SDK');button.disabled=false;button.click();
+    await new Promise(resolve=>setImmediate(resolve));
+    assert.deepEqual(calls,['pending','settled','refresh']);
+    assert.match(document.querySelector('[role="status"]').textContent,fails?/result is unknown/:/Command completed/);
+    mounted.dispose();
+  }
+});

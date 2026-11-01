@@ -1,5 +1,10 @@
 'use strict';
 globalThis.ThirdHandI18nCatalog=(globalThis.ThirdHandI18nCatalog||[]).concat([
+ ['正在发送…','Sending…'],['正在打开工作台…','Opening workspace…'],['打开工作台','Open workspace'],
+ ['请求已发送，请稍候，不要重复提交。','Request sent. Please wait; do not submit again.'],
+ ['登录成功，正在加载偏好…','Signed in. Loading your preferences…'],['登录成功，正在打开工作台…','Signed in. Opening the workspace…'],
+ ['已登录，但工作台打开较慢。可继续进入，无需再次登录。','Signed in, but the workspace is taking longer to open. Continue without signing in again.'],
+ ['登录请求超时。请检查连接后再试。','The sign-in request timed out. Check your connection before trying again.'],
  ['欢迎回来','Welcome back'],['登录 ThirdHand','Sign in to ThirdHand'],['观察员','Observer'],['管理员','Administrator'],['登录模式','Sign-in mode'],
  ['查看相机、探索三维模型并查看运行记录。','View cameras, explore the 3D model and review run history.'],
  ['管理员访问需要两步验证。','Administrator access requires two-step verification.'],['用户名或邮箱','Username or email'],['密码','Password'],['记住账号','Remember account'],

@@ -53,7 +53,9 @@
     const card=el('section',null,{id:'device-real-state',class:'account-card device-real-state'}),heading=el('h2','Real robot state'),note=el('p','Measured feedback only. Model editing stays independent.'),select=el('select',null,{'aria-label':'Device',id:'state-device'}),status=el('p',null,{role:'status',id:'device-state-status'}),details=el('dl',null,{class:'device-state-values'}),stamp=el('p',null,{class:'device-state-time'});
     const labels=['J1','J2','J3','J4','J5','J6','Gripper position','Gripper width','Moving','Source','Gateway','Captured at','Received at','Flange position','Tool TCP','Joint velocity','Joint torque','Joint current','Joint temperature'];
     const fields=labels.map(label=>{const row=el('div'),name=el('dt',label),value=el('dd','--');row.append(name,value);details.append(row);return value;});
-    card.append(heading,note,select,status,details,stamp);(doc.getElementById('page-system')||doc.getElementById('page-account-connections')).append(card);
+    card.append(heading,note,select,status,details,stamp);
+    const page=doc.getElementById('page-system')||doc.getElementById('page-account-connections'),log=page.querySelector('#log-panel');
+    if(log)log.before(card);else page.append(card);
     const feedback=el('section',null,{id:'model-real-feedback',class:'device-feedback-summary'}),summary=el('p');feedback.append(el('h3','Real robot feedback'),summary);(doc.querySelector('#sec-rt-angles .sec-body')||doc.getElementById('page-control')||doc.querySelector('#control-drawer .drawer-content')).prepend(feedback);
     const link=el('button','Devices',{id:'device-status-entry',type:'button',class:'action-btn action-secondary',title:tr('Devices & diagnostics'),'aria-label':tr('Devices & diagnostics')});link.addEventListener('click',()=>shell.go(doc.getElementById('page-system')?'system':'account-connections'));
     const legacy=doc.getElementById('conn-bar');if(legacy){legacy.hidden=true;legacy.after(link);}

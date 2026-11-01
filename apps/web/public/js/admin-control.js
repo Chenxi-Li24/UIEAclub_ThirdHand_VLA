@@ -67,7 +67,9 @@
     button('Disconnect SDK',()=>client.command('disconnect',{}),{requiresLease:true});
     button('Software stop',async()=>{const id=selected();await client.open();const result=await client.stop(id);status.textContent=tr(result.state==='stopped'?(isReadOnly()?'The SDK connection was released.':'The device confirmed software stop.'):'Stop is unconfirmed. Control was not transferred.');});
     button('Release control',async()=>{const result=await client.stop();client.close();if(result.state!=='stopped')throw fail('STOP_UNCONFIRMED');},{requiresLease:true});
-    section.append(warningBox);(doc.getElementById('page-system')||doc.getElementById('page-account-connections')).append(section);
+    section.append(warningBox);
+    const page=doc.getElementById('page-system')||doc.getElementById('page-account-connections'),anchor=page.querySelector('#device-real-state')||page.querySelector('#log-panel');
+    if(anchor)anchor.before(section);else page.append(section);
     const hidden=()=>{if(doc.visibilityState==='hidden')client.close();};doc.addEventListener('visibilitychange',hidden);
     const unsubscribe=stateStore?.subscribe(state=>{
       if(!client.state().lease){

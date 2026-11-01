@@ -22,7 +22,8 @@ test('live control UI is absent for observing sessions and never opens a socket 
 test('administrator read-only connection is located exclusively in Devices & diagnostics',()=>{
   const {document}=parseHTML(fs.readFileSync('apps/web/public/index.html','utf8'));
   const page=document.createElement('section');page.id='page-system';document.body.append(page);
+  const log=document.createElement('div');log.id='log-panel';page.append(log);
   const mounted=mountAdminControl({document,view:{},identity:{role:'admin',mode:'admin'},sessionClient:{},arm:{}});
-  try{assert.equal(document.getElementById('cloud-live-control').parentElement.id,'page-system');}
+  try{assert.equal(document.getElementById('cloud-live-control').parentElement.id,'page-system');assert.equal(log.previousElementSibling.id,'cloud-live-control');}
   finally{mounted.dispose();}
 });

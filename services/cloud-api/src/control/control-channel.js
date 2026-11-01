@@ -5,10 +5,10 @@ const {authorize}=require('../../../../platform/identity/src/policy');
 const fail=code=>Object.assign(Error(code),{code});
 function createBrowserControlRegistry({clock={monotonic:()=>performance.now()}}={}){
   const connections=new Map(),events=new EventEmitter();
-  const find=(principal,id)=>{const item=connections.get(id);if(!item||item.principal.sessionId!==principal?.sessionId||item.principal.userId!==principal?.userId||item.principal.roleVersion!==principal?.roleVersion||!authorize(principal,'control.command').ok)throw fail('FORBIDDEN');return item;};
+  const find=(principal,id)=>{const item=connections.get(id);if(!item||item.principal.sessionId!==principal?.sessionId||item.principal.userId!==principal?.userId||item.principal.roleVersion!==principal?.roleVersion||!authorize(principal,'sdk.connect').ok)throw fail('FORBIDDEN');return item;};
   return {events,
     open(principal,{clientInstanceId,send}){
-      if(!authorize(principal,'control.request').ok||typeof clientInstanceId!=='string'||!/^[a-f0-9-]{36}$/i.test(clientInstanceId))throw fail('FORBIDDEN');
+      if(!authorize(principal,'sdk.connect').ok||typeof clientInstanceId!=='string'||!/^[a-f0-9-]{36}$/i.test(clientInstanceId))throw fail('FORBIDDEN');
       const connectionId=randomUUID();connections.set(connectionId,{principal,clientInstanceId,send,sequence:0,lastResponse:-Infinity,lastSequence:0,challenges:new Map()});return {connectionId};
     },
     challenge(connectionId){const item=connections.get(connectionId);if(!item)throw fail('FORBIDDEN');const sequence=++item.sequence,nonce=randomBytes(32).toString('base64url'),message={type:'challenge',connectionId,sequence,nonce};item.challenges.set(sequence,{nonce,issued:clock.monotonic()});for(const [old,value]of item.challenges)if(old<sequence-1||clock.monotonic()-value.issued>=500)item.challenges.delete(old);item.send(message);return message;},

@@ -24,7 +24,7 @@ async function controlFixture(t){
   const clock={now:()=>f.clock.now(),monotonic:()=>f.clock.value};
   const channels=createBrowserControlRegistry({clock});
   const requests=[];let stopState='stopped',afterStop=null;
-  const devices={get:()=>context,async request(id,envelope){const value=JSON.parse(Buffer.from(envelope.payloadBase64url,'base64url'));requests.push(value);if(value.purpose==='stop'){if(afterStop)await afterStop();return {commandId:value.commandId,state:stopState};}if(value.purpose.startsWith('lease_'))return {state:'active',leaseId:value.leaseId,leaseEpoch:value.leaseEpoch};return {commandId:value.commandId,state:'completed'};}};
+  const devices={get:()=>context,async request(id,envelope){const value=JSON.parse(Buffer.from(envelope.payloadBase64url,'base64url'));requests.push(value);if(value.purpose==='stop'){if(afterStop)await afterStop();return {commandId:value.commandId,state:stopState};}if(value.purpose.startsWith('lease_'))return {state:'active',leaseId:value.leaseId,leaseEpoch:value.leaseEpoch,scope:value.scope};return {commandId:value.commandId,state:'completed'};}};
   const sign={sign:value=>({keyId:'test',payloadBase64url:Buffer.from(JSON.stringify(value)).toString('base64url'),signatureBase64url:'test-only'})};
   const repo=createLeasesRepository(f.pool,{clock:f.clock});
   service=createControlService({pool:f.pool,repository:repo,sessions,channels,devices,signer:sign,clock,readiness:async()=>true});

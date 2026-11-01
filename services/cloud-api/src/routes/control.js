@@ -40,7 +40,8 @@ async function controlRoute({path,request,response,body,principal,controlService
     return json(response,200,await controlService.status(principal,deviceId));
   }
   const route=routes.get(path);if(!route||!controlService)return false;
-  if(!authorize(principal,route.method==='stop'?'control.stop':'control.request').ok)throw identityError('FORBIDDEN');
+  const action=route.method==='requestLease'?'sdk.connect':route.method==='dispatchRealCommand'?(['connect','disconnect'].includes(body?.opcode)?'sdk.'+body.opcode:'control.command'):route.method==='stop'?'control.stop':'control.request';
+  if(!authorize(principal,action).ok)throw identityError('FORBIDDEN');
   if(request.method!=='POST')return json(response,405,{error:'METHOD_NOT_ALLOWED'});
   requireFields(body,route.fields);
   for(const key of route.fields)if(key.endsWith('Id')&&!UUID.test(body[key]))throw identityError('INVALID_INPUT');

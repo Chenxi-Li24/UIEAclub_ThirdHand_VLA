@@ -1,5 +1,8 @@
 'use strict';
-globalThis.ThirdHandI18nCatalog=(globalThis.ThirdHandI18nCatalog||[]).concat([ ['正在加载安全状态…','Loading security status…'],['设置或进入管理员模式','Set up or enter Administrator mode'],['已绑定验证器','Authenticator enabled'],['尚未绑定验证器','Authenticator not enabled'],['安全状态暂不可用','Security status unavailable'], ['搜索已加载的成员','Search loaded members'],['仿真／测试反馈','Simulation/test feedback'],['抬升至安全高度','Raise to safe height'],['自动调平','Auto-level'],
+globalThis.ThirdHandI18nCatalog=(globalThis.ThirdHandI18nCatalog||[]).concat([
+ ['SDK 连接','SDK connection'],['申请 SDK 连接','Request SDK connection'],['释放 SDK 连接','Release SDK connection'],
+ ['连接 SDK 会使能电机，并可能闭合夹爪。只有管理员可以发送运动指令。','Connecting the SDK enables motors and may close the gripper. Only administrators can send motion commands.'],
+ ['连接 SDK 会使能电机并闭合已配置的夹爪。请保持工作区清空。是否继续？','Connecting the SDK enables motors and closes the configured gripper. Keep the workspace clear. Continue?'], ['正在加载安全状态…','Loading security status…'],['设置或进入管理员模式','Set up or enter Administrator mode'],['已绑定验证器','Authenticator enabled'],['尚未绑定验证器','Authenticator not enabled'],['安全状态暂不可用','Security status unavailable'], ['搜索已加载的成员','Search loaded members'],['仿真／测试反馈','Simulation/test feedback'],['抬升至安全高度','Raise to safe height'],['自动调平','Auto-level'],
  ['正在加载相机…','Loading cameras…'],['相机就绪 · 尚未观看','Camera ready · not watching'],['相机网关离线','Camera gateway offline'],['相机请求失败','Camera request failed'],['尚未登记相机','No cameras registered'],
  ['已选择相机 · 尚未观看','Camera selected · not watching'],['请先加载相机目录','Load the camera directory to begin'],
  ['安全与登录','Security & login'],['登录模式与账户保护。','Sign-in mode and account protection.'],['成员与权限','Members & permissions'],['注册用户与管理员申请。','Registered users and administrator applications.'],

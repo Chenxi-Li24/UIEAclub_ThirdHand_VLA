@@ -11,8 +11,8 @@ test('permissions deny unknown requests and require both administrator mode and 
     { name: 'admin missing MFA', ...base, role: 'admin', mode: 'admin', mfaVerifiedAt: null },
     { name: 'admin authorized', ...base, role: 'admin', mode: 'admin', mfaVerifiedAt: new Date() }
   ];
-  const read = ['telemetry.read','history.read','history.export','simulation.use','video.view','preferences.read','preferences.write'];
-  const control = ['sdk.connect','sdk.disconnect','control.request','control.command','control.stop','voice.use','grasp.execute','dummy.execute','admin.users','admin.audit'];
+  const read = ['sdk.connect','sdk.disconnect','telemetry.read','history.read','history.export','simulation.use','video.view','preferences.read','preferences.write'];
+  const control = ['control.request','control.command','control.stop','voice.use','grasp.execute','dummy.execute','admin.users','admin.audit'];
   for (const action of [...read, ...control]) {
     assert.equal(authorize(null, action).ok, false, `anonymous ${action}`);
     for (const principal of identities) {

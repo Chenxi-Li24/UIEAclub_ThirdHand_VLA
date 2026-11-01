@@ -12,7 +12,7 @@ function createControlWebSocket({sessions,channels,controlService,publicOrigin,m
     if(new URL(request.url,publicOrigin).pathname!=='/stream/v1/control')return false;
     try{
       if(request.url!=='/stream/v1/control'||request.method!=='GET'||request.headers.origin!==publicOrigin||clients.size>=maxConnections)throw Error();
-      const principal=await sessions.resolveSession(request);if(!authorize(principal,'control.request').ok)throw Error();
+      const principal=await sessions.resolveSession(request);if(!authorize(principal,'sdk.connect').ok)throw Error();
       if(socket.destroyed)return true;
       wss.handleUpgrade(request,socket,head,ws=>{
         const item={ws,principal};clients.add(item);let connectionId=null,processing=false,lastResponse=performance.now();
@@ -36,7 +36,7 @@ function createControlWebSocket({sessions,channels,controlService,publicOrigin,m
             const authStarted=performance.now();let fresh;
             try{fresh=await sessions.resolveSession(request);}finally{authMs=duration(performance.now()-authStarted);}
             if(ws.readyState!==WebSocket.OPEN){metric('rejected','CONTROL_CLOSED');return;}
-            if(!fresh||fresh.sessionId!==principal.sessionId||!authorize(fresh,'control.command').ok)throw Error();
+            if(!fresh||fresh.sessionId!==principal.sessionId||!authorize(fresh,'sdk.connect').ok)throw Error();
             if(!connectionId){
               if(!message||message.type!=='bind'||Object.keys(message).length!==3||!UUID.test(message.clientInstanceId)||!sessions.verifyCsrf({headers:{'x-csrf-token':message.csrfToken}},fresh))throw Error();
               const bound=channels.open(fresh,{clientInstanceId:message.clientInstanceId,send});connectionId=bound.connectionId;clearTimeout(timeout);

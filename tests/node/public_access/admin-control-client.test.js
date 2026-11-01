@@ -28,10 +28,14 @@ test('administrator opens only a protected control channel; lease and SDK comman
   assert.equal(f.sockets.length,1,'closed channel must not automatically reconnect');
 });
 
-test('observer or administrator in observer mode never opens control channel or issues SDK calls',async()=>{
+test('observer sessions can connect but cannot send motion, stop other owners or take over',async()=>{
   for(const identity of [{role:'observer',mode:'observe'},{role:'admin',mode:'observe'}]){
-    const f=fixture(identity);await assert.rejects(f.client.open(),{code:'FORBIDDEN'});await assert.rejects(f.client.command('connect',{}));
-    assert.equal(f.sockets.length,0);assert.equal(f.requests.length,0);
+    const f=fixture(identity),opening=f.client.open(),ws=f.sockets[0],connectionId=randomUUID();ws.onopen();
+    ws.receive({type:'bound',connectionId});ws.receive({type:'challenge',connectionId,sequence:1,nonce:'x'.repeat(43)});ws.receive({type:'fresh',connectionId,sequence:1});await opening;
+    await f.client.acquire(randomUUID());await f.client.command('connect',{});
+    for(const opcode of ['move_joint','gripper','preset','software_stop'])await assert.rejects(f.client.command(opcode,{}),{code:'FORBIDDEN'});
+    await assert.rejects(f.client.stop(),{code:'FORBIDDEN'});await assert.rejects(f.client.prepareTakeover(randomUUID()),{code:'FORBIDDEN'});
+    assert.deepEqual(f.requests.map(r=>r.body.opcode).filter(Boolean),['connect']);f.client.close();
   }
 });
 

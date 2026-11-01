@@ -9,7 +9,7 @@ const hash=value=>createHash('sha256').update(value).digest('hex');
 function createControlService({repository,sessions,channels,devices,signer,clock={now:()=>new Date(),monotonic:()=>performance.now()},readiness=async()=>false}){
   const holders=new Map(),pending=new Set(),revocations=new Map();let closed=false;
   function track(promise){pending.add(promise);promise.catch(()=>{}).finally(()=>pending.delete(promise));return promise;}
-  async function actor(principal,action,binding){if(!authorize(principal,action).ok)throw fail('FORBIDDEN');await repository.validatePrincipal(principal);if(binding)channels.requireFresh(principal,binding);}
+  async function actor(principal,action,binding){if(!authorize(principal,action).ok)throw fail('FORBIDDEN');await repository.validatePrincipal(principal,action.startsWith('sdk.')?'sdk':'control');if(binding)channels.requireFresh(principal,binding);}
   function context(deviceId){const value=devices.get(deviceId);if(!value||!value.executorEpoch||value.controlAccepted!==true)throw fail('DEVICE_UNAVAILABLE');return Object.fromEntries(BINDING.map(key=>[key,value[key]]));}
   function leaseContext(lease){return {deviceId:lease.deviceId,bootId:lease.bootId,executorEpoch:lease.executorEpoch,connectionId:lease.deviceConnectionId,certificateId:lease.certificateId};}
   function signed(purpose,binding,value,ttl=1000){const now=clock.now().getTime();return signer.sign({schema:1,purpose,...binding,...value,issuedAt:now,expiresAt:now+ttl});}
@@ -37,34 +37,34 @@ function createControlService({repository,sessions,channels,devices,signer,clock
   }
   async function grant(principal,lease,browser,binding){
     try{
-      const result=await devices.request(lease.deviceId,signed('lease_grant',binding,{leaseId:lease.id,leaseEpoch:lease.leaseEpoch,sequence:0}));
-      if(result?.state!=='active'||result.leaseId!==lease.id||result.leaseEpoch!==lease.leaseEpoch)throw fail('LEASE_UNCONFIRMED');
-      await actor(principal,'control.request',browser);
+      const result=await devices.request(lease.deviceId,signed('lease_grant',binding,{leaseId:lease.id,leaseEpoch:lease.leaseEpoch,sequence:0,scope:lease.scope}));
+      if(result?.state!=='active'||result.leaseId!==lease.id||result.leaseEpoch!==lease.leaseEpoch||(lease.scope==='sdk'&&result.scope!=='sdk'))throw fail('LEASE_UNCONFIRMED');
+      await actor(principal,lease.scope==='sdk'?'sdk.connect':'control.request',browser);
       if(!same(context(lease.deviceId),binding)||!await readiness(principal,lease.deviceId))throw fail('DEVICE_UNAVAILABLE');
       const active=await repository.confirm(principal,lease.id);holders.set(active.id,{lease:active,principal,browser});return active;
     }catch(error){await revoke(lease,'grant_failed');throw error;}
   }
   const api={
     async listDevices(principal){if(!authorize(principal,'telemetry.read').ok)throw fail('FORBIDDEN');const rows=await repository.listDevices();return rows.map(row=>({...row,online:!!devices.get(row.id),controlAccepted:devices.get(row.id)?.controlAccepted===true,readOnly:devices.get(row.id)?.readOnly===true}));},
-    async status(principal,deviceId){await actor(principal,'control.request');const lease=await repository.current(deviceId);return {deviceId,online:!!devices.get(deviceId),controlAccepted:devices.get(deviceId)?.controlAccepted===true,lease:lease?{leaseEpoch:lease.leaseEpoch,state:lease.state,own:lease.sessionId===principal.sessionId}:null};},
+    async status(principal,deviceId){await actor(principal,'sdk.connect');const lease=await repository.current(deviceId);return {deviceId,online:!!devices.get(deviceId),controlAccepted:devices.get(deviceId)?.controlAccepted===true,lease:lease?{leaseEpoch:lease.leaseEpoch,state:lease.state,own:lease.sessionId===principal.sessionId}:null};},
     async requestLease(principal,input){
-      await actor(principal,'control.request',input);const binding=context(input.deviceId);
+      await actor(principal,'sdk.connect',input);const binding=context(input.deviceId);
       if(!await readiness(principal,input.deviceId))throw fail('CONTROL_READINESS_REQUIRED');
       const lease=await repository.reserve(principal,{context:binding,clientInstanceId:input.clientInstanceId,connectionId:input.connectionId});
       return grant(principal,lease,input,binding);
     },
     async renewFromBrowser(principal,input){
-      if(!authorize(principal,'control.command').ok)throw fail('FORBIDDEN');channels.requireFresh(principal,input);
+      if(!authorize(principal,'sdk.connect').ok)throw fail('FORBIDDEN');channels.requireFresh(principal,input);
       const holder=[...holders.values()].find(value=>value.lease.deviceId===input.deviceId&&value.lease.sessionId===principal.sessionId&&value.browser.connectionId===input.connectionId&&value.browser.clientInstanceId===input.clientInstanceId);
       if(!holder)throw fail('LEASE_REQUIRED');
       if(holder.renewal)return holder.renewal;
       holder.renewal=(async()=>{
-        await actor(principal,'control.command',input);
+        await actor(principal,holder.lease.scope==='sdk'?'sdk.connect':'control.command',input);
         const binding=context(input.deviceId);
         if(!same(binding,leaseContext(holder.lease))||!await readiness(principal,input.deviceId)){await revoke(holder.lease,'readiness_lost');throw fail('DEVICE_UNAVAILABLE');}
         const renewed=await repository.renew(principal,holder.lease.id);
-        const result=await devices.request(input.deviceId,signed('lease_renew',binding,{leaseId:renewed.id,leaseEpoch:renewed.leaseEpoch,sequence:renewed.renewalSequence}));
-        if(result?.state!=='active'||result.leaseId!==renewed.id||result.leaseEpoch!==renewed.leaseEpoch){await revoke(renewed,'renewal_unconfirmed');throw fail('LEASE_UNCONFIRMED');}
+        const result=await devices.request(input.deviceId,signed('lease_renew',binding,{leaseId:renewed.id,leaseEpoch:renewed.leaseEpoch,sequence:renewed.renewalSequence,scope:renewed.scope}));
+        if(result?.state!=='active'||result.leaseId!==renewed.id||result.leaseEpoch!==renewed.leaseEpoch||(renewed.scope==='sdk'&&result.scope!=='sdk')){await revoke(renewed,'renewal_unconfirmed');throw fail('LEASE_UNCONFIRMED');}
         holder.lease=renewed;return {renewed:true};
       })();
       try{return await holder.renewal;}finally{holder.renewal=null;}
@@ -91,12 +91,12 @@ function createControlService({repository,sessions,channels,devices,signer,clock
       }catch(error){if(next)await revoke(next,'takeover_grant_failed');if(stopped)await repository.completeStop(old.id,'takeover_not_granted').catch(()=>{});await repository.failTakeover(input.requestId,error.code||'TAKEOVER_FAILED').catch(()=>{});throw error;}
     },
     async dispatchRealCommand(principal,input){
-      await actor(principal,'control.command',input);const binding=context(input.deviceId);
+      await actor(principal,['connect','disconnect'].includes(input.opcode)?'sdk.'+input.opcode:'control.command',input);const binding=context(input.deviceId);
       if(!await readiness(principal,input.deviceId))throw fail('CONTROL_READINESS_REQUIRED');
       if(typeof input.commandId!=='string'||!/^[a-f0-9-]{36}$/i.test(input.commandId)||!validOperation(input.opcode,input.parameters)||input.opcode==='software_stop')throw fail('INVALID_INPUT');
       if(devices.get(input.deviceId)?.readOnly===true&&!['connect','disconnect'].includes(input.opcode))throw fail('READ_ONLY_DEVICE');
       const lease=await repository.find(input.leaseId);
-      if(!lease||lease.deviceId!==input.deviceId||!same(binding,leaseContext(lease)))throw fail('FORBIDDEN');
+      if(!lease||lease.deviceId!==input.deviceId||!same(binding,leaseContext(lease))||lease.scope==='sdk'&&!['connect','disconnect'].includes(input.opcode))throw fail('FORBIDDEN');
       const expiresAt=new Date(clock.now().getTime()+1000),record=await repository.recordCommand(principal,{...input,expiresAt});
       if(!record.fresh)return record.receipt;
       let result={commandId:input.commandId,state:'unknown',code:'SUBMISSION_RESULT_UNKNOWN'};

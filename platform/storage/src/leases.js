@@ -4,9 +4,21 @@ const {transaction}=require('./pool');
 const fail=code=>Object.assign(Error(code),{code});
 const COLUMNS=`l.id,l.device_id AS "deviceId",l.user_id AS "userId",l.session_id AS "sessionId",l.client_instance_id AS "clientInstanceId",
  l.browser_connection_id AS "connectionId",l.device_connection_id AS "deviceConnectionId",l.certificate_id AS "certificateId",
- l.boot_id AS "bootId",l.executor_epoch AS "executorEpoch",l.lease_epoch::float8 AS "leaseEpoch",l.state,l.expires_at AS "expiresAt",l.renewal_sequence::float8 AS "renewalSequence"`;
+ l.boot_id AS "bootId",l.executor_epoch AS "executorEpoch",l.lease_epoch::float8 AS "leaseEpoch",l.scope,l.state,l.expires_at AS "expiresAt",l.renewal_sequence::float8 AS "renewalSequence"`;
 const digest=value=>createHash('sha256').update(value).digest('hex');
-async function assertPrincipal(client,principal,now){
+const scopeFor=principal=>principal?.role==='admin'&&principal.mode==='admin'?'control':'sdk';
+async function assertPrincipal(client,principal,now,scope='control'){
+  if(scope==='sdk'){
+    if(!require('../../identity/src/policy').authorize(principal,'sdk.connect').ok)throw fail('FORBIDDEN');
+    const row=(await client.query(`SELECT u.display_name AS "displayName" FROM auth.sessions s JOIN auth.users u ON u.id=s.user_id
+      WHERE s.id=$1 AND s.user_id=$2 AND s.mode=$3 AND s.revoked_at IS NULL AND s.role_version=u.role_version AND s.role_version=$4
+      AND u.role=$5 AND u.status='active' AND u.email_verified_at IS NOT NULL
+      AND (s.mode='observe' OR (u.role='admin' AND s.mfa_verified_at IS NOT NULL AND s.mfa_verified_at<=$6))
+      AND s.idle_expires_at>$6 AND s.absolute_expires_at>$6 FOR SHARE OF s,u`,
+      [principal.sessionId,principal.userId,principal.mode,principal.roleVersion,principal.role,now])).rows[0];
+    if(!row)throw fail('FORBIDDEN');return row;
+  }
+  if(scope!=='control')throw fail('FORBIDDEN');
   if(principal?.role!=='admin'||principal.mode!=='admin'||!principal.mfaVerifiedAt)throw fail('FORBIDDEN');
   const row=(await client.query(`SELECT u.display_name AS "displayName" FROM auth.sessions s JOIN auth.users u ON u.id=s.user_id
     WHERE s.id=$1 AND s.user_id=$2 AND s.mode='admin' AND s.revoked_at IS NULL AND s.role_version=u.role_version AND s.role_version=$3
@@ -17,7 +29,7 @@ async function assertPrincipal(client,principal,now){
 function createLeasesRepository(pool,{clock={now:()=>new Date()}}={}){
   async function lockedDevice(client,deviceId){const device=(await client.query('SELECT id,enabled,control_epoch FROM ops.devices WHERE id=$1 FOR UPDATE',[deviceId])).rows[0];if(!device?.enabled)throw fail('DEVICE_UNAVAILABLE');return device;}
   async function reserve(client,principal,{context,clientInstanceId,connectionId},device){
-    await assertPrincipal(client,principal,clock.now());
+    const scope=scopeFor(principal);await assertPrincipal(client,principal,clock.now(),scope);
     device=device||await lockedDevice(client,context.deviceId);
     if((await client.query("SELECT id FROM ops.control_leases WHERE device_id=$1 AND state IN ('requested','active','revoking')",[context.deviceId])).rowCount)throw fail('LEASE_BUSY');
     const bound=await client.query(`SELECT 1 FROM ops.execution_instances e JOIN ops.device_credentials c ON c.device_id=e.device_id
@@ -26,17 +38,19 @@ function createLeasesRepository(pool,{clock={now:()=>new Date()}}={}){
     if(!bound.rowCount)throw fail('DEVICE_UNAVAILABLE');
     const epoch=BigInt(device.control_epoch)+1n;if(epoch>BigInt(Number.MAX_SAFE_INTEGER))throw fail('EPOCH_EXHAUSTED');
     await client.query('UPDATE ops.devices SET control_epoch=$2 WHERE id=$1',[context.deviceId,epoch.toString()]);
-    return (await client.query(`INSERT INTO ops.control_leases AS l(device_id,user_id,session_id,client_instance_id,browser_connection_id,device_connection_id,certificate_id,boot_id,executor_epoch,lease_epoch,state,requested_at)
-      VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'requested',$11) RETURNING ${COLUMNS}`,[context.deviceId,principal.userId,principal.sessionId,clientInstanceId,connectionId,context.connectionId,context.certificateId,context.bootId,context.executorEpoch,epoch.toString(),clock.now()])).rows[0];
+    return (await client.query(`INSERT INTO ops.control_leases AS l(device_id,user_id,session_id,client_instance_id,browser_connection_id,device_connection_id,certificate_id,boot_id,executor_epoch,lease_epoch,state,requested_at,scope)
+      VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'requested',$11,$12) RETURNING ${COLUMNS}`,[context.deviceId,principal.userId,principal.sessionId,clientInstanceId,connectionId,context.connectionId,context.certificateId,context.bootId,context.executorEpoch,epoch.toString(),clock.now(),scope])).rows[0];
   }
   const api={
     async listDevices(){return (await pool.query("SELECT id,name,coalesce(capabilities->>'camera'='true',false) AS camera,coalesce(capabilities->>'remoteControlEnabled'='true',false) AS controllable FROM ops.devices WHERE enabled ORDER BY name,id LIMIT 100")).rows;},
-    validatePrincipal:principal=>assertPrincipal(pool,principal,clock.now()),
+    validatePrincipal:(principal,scope='control')=>assertPrincipal(pool,principal,clock.now(),scope),
     reserve:(principal,input)=>transaction(pool,client=>reserve(client,principal,input)),
     async find(id){return (await pool.query(`SELECT ${COLUMNS} FROM ops.control_leases l WHERE l.id=$1`,[id])).rows[0]||null;},
     async current(deviceId){return (await pool.query(`SELECT ${COLUMNS} FROM ops.control_leases l WHERE l.device_id=$1 AND l.state IN ('requested','active','revoking')`,[deviceId])).rows[0]||null;},
     async confirm(principal,leaseId){return transaction(pool,async client=>{
-      await assertPrincipal(client,principal,clock.now());
+      const stored=(await client.query('SELECT scope FROM ops.control_leases WHERE id=$1 AND session_id=$2 FOR UPDATE',[leaseId,principal.sessionId])).rows[0];
+      if(!stored)throw fail('FORBIDDEN');
+      await assertPrincipal(client,principal,clock.now(),stored.scope);
       const row=(await client.query(`UPDATE ops.control_leases AS l SET state='active',confirmed_at=$3,expires_at=$4
         WHERE l.id=$1 AND l.session_id=$2 AND l.state='requested' RETURNING ${COLUMNS}`,[leaseId,principal.sessionId,clock.now(),new Date(clock.now().getTime()+1000)])).rows[0];
       if(!row)throw fail('LEASE_CHANGED');return row;
@@ -44,7 +58,9 @@ function createLeasesRepository(pool,{clock={now:()=>new Date()}}={}){
     async markRevoking(leaseId,reason){await pool.query("UPDATE ops.control_leases SET state='revoking',release_reason=$2 WHERE id=$1 AND state IN ('requested','active')",[leaseId,reason]);},
     async completeStop(leaseId,reason){await pool.query("UPDATE ops.control_leases SET state='released',released_at=$3,release_reason=$2 WHERE id=$1 AND state IN ('requested','active','revoking')",[leaseId,reason,clock.now()]);},
     async renew(principal,leaseId){return transaction(pool,async client=>{
-      await assertPrincipal(client,principal,clock.now());
+      const stored=(await client.query('SELECT scope FROM ops.control_leases WHERE id=$1 AND session_id=$2 FOR UPDATE',[leaseId,principal.sessionId])).rows[0];
+      if(!stored)throw fail('FORBIDDEN');
+      await assertPrincipal(client,principal,clock.now(),stored.scope);
       const result=(await client.query(`UPDATE ops.control_leases AS l SET renewal_sequence=renewal_sequence+1,expires_at=$3
         WHERE id=$1 AND session_id=$2 AND state='active' AND expires_at>$4 RETURNING ${COLUMNS}`,[leaseId,principal.sessionId,new Date(clock.now().getTime()+1000),clock.now()])).rows[0];if(!result)throw fail('LEASE_CHANGED');return result;
     });},
@@ -79,9 +95,11 @@ function createLeasesRepository(pool,{clock={now:()=>new Date()}}={}){
     async completeTakeover(id,leaseId){const result=await pool.query("UPDATE ops.control_takeovers SET state='granted' WHERE id=$1 AND state='stopping' AND granted_lease_id=$2",[id,leaseId]);if(!result.rowCount)throw fail('TAKEOVER_INVALID');},
     async failTakeover(id,code){await pool.query("UPDATE ops.control_takeovers SET state='failed',stop_result=$2 WHERE id=$1 AND state='stopping'",[id,{code}]);},
     async recordCommand(principal,{leaseId,clientInstanceId,connectionId,commandId,opcode,parameters,expiresAt}){return transaction(pool,async client=>{
-      const actor=await assertPrincipal(client,principal,clock.now());
       const lease=(await client.query(`SELECT ${COLUMNS} FROM ops.control_leases l WHERE l.id=$1 FOR UPDATE`,[leaseId])).rows[0];
       if(!lease||lease.state!=='active'||lease.sessionId!==principal.sessionId||lease.clientInstanceId!==clientInstanceId||lease.connectionId!==connectionId)throw fail('FORBIDDEN');
+      const lifecycle=['connect','disconnect'].includes(opcode);
+      if(lease.scope==='sdk'&&!lifecycle)throw fail('FORBIDDEN');
+      const actor=await assertPrincipal(client,principal,clock.now(),lifecycle?lease.scope:'control');
       const requestDigest=digest(JSON.stringify({leaseId,opcode,parameters}));
       const previous=(await client.query('SELECT command_id AS "commandId",run_id AS "runId",session_id AS "sessionId",request_digest,state,result FROM ops.commands WHERE command_id=$1',[commandId])).rows[0];
       if(previous){if(previous.sessionId!==principal.sessionId||previous.request_digest!==requestDigest)throw fail('COMMAND_ID_CONFLICT');return {fresh:false,receipt:{commandId:previous.commandId,runId:previous.runId,state:previous.state,...previous.result}};}

@@ -16,6 +16,19 @@ function fixture(){
   return {clock,state,calls,policy,context,lease,command};
 }
 
+test('SDK-scoped signed leases reject all motion and cannot be upgraded by renewal or command fields',async()=>{
+  const f=fixture();
+  assert.equal((await f.policy.handle({...f.lease,scope:'sdk'})).scope,'sdk');
+  assert.equal((await f.policy.handle(f.command())).state,'completed');
+  for(const [opcode,parameters] of [['move_joint',{joints:[0,0,0,0,0,0]}],['gripper',{position:1}],['preset',{name:'home'}]]){
+    assert.equal((await f.policy.handle(f.command({sequence:2,scope:'control',opcode,parameters}))).code,'SDK_CONNECTION_ONLY');
+  }
+  assert.equal((await f.policy.handle({...f.lease,purpose:'lease_renew',sequence:1,scope:'control'})).code,'LEASE_SCOPE_CHANGED');
+  assert.equal((await f.policy.handle({...f.lease,purpose:'lease_renew',sequence:1,scope:'sdk'})).scope,'sdk');
+  assert.deepEqual(f.calls.map(x=>x.opcode),['connect']);
+  assert.equal((await f.policy.handle(f.command({sequence:3,opcode:'disconnect'}))).state,'stopped');
+});
+
 test('bind and state subscription do not connect; only current bound lease can submit',async()=>{
   const f=fixture();assert.equal(f.calls.length,0);
   assert.equal((await f.policy.handle(f.command())).state,'rejected');

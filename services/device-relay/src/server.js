@@ -121,7 +121,7 @@ function createDeviceRelay({store,ingestBatch,mediaPublisher,tls=null,trustedUni
       // Receipts do not grant authority by themselves. Match them to this exact
       // authenticated socket without placing stop ACK behind a storage query.
       if(state==='active'&&message.type==='result'){
-        if(active.get(context.deviceId)!==entry||!object(message,['type','requestId','outcome'])||typeof message.requestId!=='string'||!object(message.outcome,['state','commandId','leaseId','leaseEpoch','code'])||!['active','accepted','started','completed','stopped','rejected','failed','unknown'].includes(message.outcome.state)){ws.close(1008,'Invalid result');return;}
+        if(active.get(context.deviceId)!==entry||!object(message,['type','requestId','outcome'])||typeof message.requestId!=='string'||!object(message.outcome,['state','commandId','leaseId','leaseEpoch','code','scope'])||!['active','accepted','started','completed','stopped','rejected','failed','unknown'].includes(message.outcome.state)||('scope' in message.outcome&&(message.outcome.state!=='active'||!['sdk','control'].includes(message.outcome.scope)))){ws.close(1008,'Invalid result');return;}
         const pending=pendingRequests.get(message.requestId);if(!pending)return;
         clearTimeout(pending.timer);pendingRequests.delete(message.requestId);pending.resolve(message.outcome);return;
       }

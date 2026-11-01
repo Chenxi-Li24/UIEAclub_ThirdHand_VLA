@@ -108,11 +108,11 @@ test('media publisher lease uses separate mTLS plus device-signed current contex
   const result=await submit(report);assert.equal(result.status,200);assert.ok(result.body.envelope);assert.equal(accepted.length,1);assert.equal(f.relay.devices.get(f.identity.id).controlAccepted,false);assert.equal(context.executorEpoch,null);
 });
 
-test('Python bound transport forwards signed lease and journaled command once without implicit SDK connect',async t=>{
+for(const leaseScope of [undefined,'control','sdk'])test(`Python bound transport preserves ${leaseScope||'legacy'} lease scope and journals commands once`,async t=>{
   const f=await fixture(t,{control:true}),keys=generateKeyPairSync('ed25519'),signer=createEnvelopeSigner({keyId:'test',privateKey:keys.privateKey});
   const input={url:f.url,device_id:f.identity.id,boot_id:randomUUID(),certificate:path.join(f.dir,'device.pem'),private_key:path.join(f.dir,'device.key'),ca_file:path.join(f.dir,'ca.pem'),heartbeat_seconds:0.1};
   const executorEpoch=randomUUID();
-  const script=`import asyncio,json,sys\nfrom pathlib import Path\nfrom websockets.exceptions import ConnectionClosed\nfrom thirdhand_edge.transport import DeviceConfig\nfrom thirdhand_edge.bound_transport import connect_bound_device\nfrom thirdhand_edge.journal import CommandJournal\nv=json.load(sys.stdin)\nclass FakeRobot:\n def __init__(self): self.calls=[]\n async def get_context(self): return {'deviceId':v['config']['device_id'],'executorEpoch':v['executorEpoch'],'hardwareFingerprint':'f'*64,'controlAccepted':True}\n async def bind(self,c): return {'bound':True,'context':c,'controlAuthorized':False}\n async def submit_envelope(self,p):\n  self.calls.append(p['purpose'])\n  if p['purpose'].startswith('lease_'): return {'state':'active','leaseId':p['leaseId'],'leaseEpoch':p['leaseEpoch']}\n  return {'state':'completed','commandId':p['commandId']}\nr=FakeRobot()\nj=CommandJournal(v['journal'])\ntry: asyncio.run(connect_bound_device(DeviceConfig(**v['config']),robot=r,trusted_keys={'test':v['publicKey']},journal=j))\nexcept ConnectionClosed: pass\nfinally:\n j.close()\n print(json.dumps({'calls':r.calls}))`;
+  const script=`import asyncio,json,sys\nfrom pathlib import Path\nfrom websockets.exceptions import ConnectionClosed\nfrom thirdhand_edge.transport import DeviceConfig\nfrom thirdhand_edge.bound_transport import connect_bound_device\nfrom thirdhand_edge.journal import CommandJournal\nv=json.load(sys.stdin)\nclass FakeRobot:\n def __init__(self): self.calls=[]\n async def get_context(self): return {'deviceId':v['config']['device_id'],'executorEpoch':v['executorEpoch'],'hardwareFingerprint':'f'*64,'controlAccepted':True}\n async def bind(self,c): return {'bound':True,'context':c,'controlAuthorized':False}\n async def submit_envelope(self,p):\n  self.calls.append(p['purpose'])\n  if p['purpose'].startswith('lease_'): return {'state':'active','leaseId':p['leaseId'],'leaseEpoch':p['leaseEpoch'],'privateDiagnostic':'must-not-leak',**({'scope':p['scope']} if 'scope' in p else {})}\n  return {'state':'completed','commandId':p['commandId']}\nr=FakeRobot()\nj=CommandJournal(v['journal'])\ntry: asyncio.run(connect_bound_device(DeviceConfig(**v['config']),robot=r,trusted_keys={'test':v['publicKey']},journal=j))\nexcept ConnectionClosed: pass\nfinally:\n j.close()\n print(json.dumps({'calls':r.calls}))`;
   const child=require('node:child_process').spawn(python,['-c',script],{env:{...process.env,PYTHONPATH:path.resolve('services/edge-agent/src')},stdio:['pipe','pipe','pipe']});
   f.track(child);
   let stdout='',stderr='';child.stdout.on('data',v=>stdout+=v);child.stderr.on('data',v=>stderr+=v);
@@ -120,13 +120,20 @@ test('Python bound transport forwards signed lease and journaled command once wi
   child.stdin.end(JSON.stringify({config:input,executorEpoch,journal:path.join(f.dir,'bound.sqlite'),publicKey:keys.publicKey.export({type:'spki',format:'pem'}).toString()}));
   await bound;
   const binding=f.relay.devices.get(f.identity.id),context=Object.fromEntries(['deviceId','bootId','executorEpoch','connectionId','certificateId'].map(key=>[key,binding[key]]));
-  const leaseId=randomUUID(),now=Date.now();
-  assert.equal((await f.relay.devices.request(f.identity.id,signer.sign({schema:1,purpose:'lease_grant',...context,leaseId,leaseEpoch:1,sequence:0,issuedAt:now,expiresAt:now+1000}))).state,'active');
+  const leaseId=randomUUID();
+  const grant=()=>({schema:1,purpose:'lease_grant',...context,leaseId,leaseEpoch:1,sequence:0,issuedAt:Date.now(),expiresAt:Date.now()+1000,...(leaseScope?{scope:leaseScope}:{})});
+  for(const scope of ['all','',null,{},true])assert.equal((await f.relay.devices.request(f.identity.id,signer.sign({...grant(),scope}))).state,'rejected');
+  assert.equal((await f.relay.devices.request(f.identity.id,signer.sign({...grant(),extra:true}))).state,'rejected');
+  const granted=await f.relay.devices.request(f.identity.id,signer.sign(grant()));
+  assert.equal(granted.state,'active');assert.equal(granted.scope,leaseScope);
+  assert.equal(granted.privateDiagnostic,undefined);
+  const renewed=await f.relay.devices.request(f.identity.id,signer.sign({...grant(),purpose:'lease_renew',sequence:1}));
+  assert.equal(renewed.state,'active');assert.equal(renewed.scope,leaseScope);
   const command=signer.sign({schema:1,purpose:'command',...context,leaseId,leaseEpoch:1,sequence:1,commandId:randomUUID(),opcode:'connect',parameters:{},issuedAt:Date.now(),expiresAt:Date.now()+1000});
   assert.equal((await f.relay.devices.request(f.identity.id,command)).state,'completed');
   assert.equal((await f.relay.devices.request(f.identity.id,command)).state,'completed');
   const exited=once(child,'close');await f.relay.close();assert.equal((await exited)[0],0,stderr);
-  assert.deepEqual(JSON.parse(stdout).calls,['lease_grant','command']);
+  assert.deepEqual(JSON.parse(stdout).calls,['lease_grant','lease_renew','command']);
 });
 
 test('bounded probe CLI measures sustained ping and planned reconnects without printing credentials',async t=>{

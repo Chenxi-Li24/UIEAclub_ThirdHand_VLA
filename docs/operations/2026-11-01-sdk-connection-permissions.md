@@ -24,6 +24,7 @@
 3. `routes/control.js`、`control/leases.js` 按 opcode 重新鉴权。租约 scope 由服务器的真实角色/模式计算，不接受请求参数授权。connect/disconnect 之外继续要求 control.command。
 4. `platform/storage/src/leases.js` 在事务内重新检查真实数据库用户、会话、角色版本、邮箱、MFA、到期及撤销状态。命令必须绑定自己的会话、浏览器和租约；sdk 租约不写入任何运动指令。
 5. 签名 lease_grant/lease_renew 带 scope。Ubuntu `services/robot/src/control-policy.js` 保存 scope 并在桥接层前拦截运动；续租不能改变 scope，命令字段不能覆盖。云端要求 sdk scope 的明确 ACK，旧设备不确认时拒绝授权，不下发 connect。
+   续查完整链路补齐三处兼容：Python `lease.py` 仅允许可选 sdk/control 字段，`bound_transport.py` 仅回传有效 active scope；云端 `services/device-relay/src/server.js` 对对应 ACK 做相同枚举限制。旧版不带 scope 的管理员协议兼容保留，未知字段与 scope 值仍拒绝。
 6. `admin-control.js` 展示共同的 SDK 连接区，观察员无接管/Software stop 按钮；自身释放使用 disconnect。保留双布局、中英文和现有共享状态读取。
 
 沿用现有设备、租约、命令 HTTP 路由与 WebSocket，不新开公网端口。历史记录和事件入库沿用原链路。scope 只存在签名租约及数据库，不将用户凭据发往 Ubuntu。
@@ -41,3 +42,5 @@
 完整 public_access 套件 337/337 通过（隔离 PostgreSQL、Node24、Python3.11）。之后新增的真实 HTTP/WebSocket 鉴权用例与其余三个 scope 用例一起 4/4 通过。测试验证观察会话能够签名申请并连接、续租、断开；移动、夹爪、回零、抢占、停止别人、借用管理员租约、伪造管理员角色、篡改 scope 均拒绝；旧设备无 scope ACK 时不发送命令。
 
 Robot 策略测试验证 sdk scope 在设备侧拒绝运动和续租提权。前端测试验证观察员可用连接入口但无运动权限，挂载不自动建连接。本轮数据库与网络测试使用模拟设备，绝非真实机械臂运动或十分钟实测验收。未连接现场 SDK，未改变 Ubuntu/CAN/相机服务。管理员真实运动与通信中断停止效果仍未完成现场验收。
+
+后续完整链路核验修复后，public_access 340/340 通过；其中三个真实 Python 子进程 + TLS 中继用例覆盖 legacy/control/sdk 的授权、续租与 scope ACK，拒绝未知枚举和额外字段、不外泄非白名单诊断，命令重放只调用一次模拟 Robot。它们发现并防止“云端模拟设备通过而实际 Python 网关拒绝 scope”的兼容遗漏。

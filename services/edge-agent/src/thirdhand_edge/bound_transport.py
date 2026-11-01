@@ -76,6 +76,8 @@ async def connect_bound_device(config, *, robot, trusted_keys, journal, on_ready
             if not isinstance(outcome, dict) or outcome.get("state") not in ("active", "accepted", "started", "completed", "stopped", "rejected", "failed", "unknown"):
                 outcome = {"state": "unknown", "code": "SUBMISSION_RESULT_UNKNOWN"}
             safe = {key: outcome[key] for key in ("state", "commandId", "leaseId", "leaseEpoch", "code") if key in outcome}
+            if outcome.get("state") == "active" and outcome.get("scope") in ("sdk", "control"):
+                safe["scope"] = outcome["scope"]
             await ws.send(json.dumps({"type": "result", "requestId": request_id, "outcome": safe}, allow_nan=False))
 
         async def heartbeats():

@@ -9,6 +9,16 @@ const hash=value=>createHash('sha256').update(value).digest('hex');
 function createControlService({repository,sessions,channels,devices,signer,clock={now:()=>new Date(),monotonic:()=>performance.now()},readiness=async()=>false,onDiagnostic=()=>{}}){
   const holders=new Map(),pending=new Set(),revocations=new Map();let closed=false;
   const diagnosticCodes=new Set(['FORBIDDEN','BROWSER_STALE','LEASE_CHANGED','LEASE_REQUIRED','DEVICE_UNAVAILABLE','DEVICE_REPLY_UNKNOWN','DEVICE_DISCONNECTED','DEVICE_BUSY','LEASE_UNCONFIRMED']);
+  const deviceCodes=new Set(['DEVICE_REQUEST_REJECTED','SUBMISSION_RESULT_UNKNOWN','POLICY_CLOSED','WRONG_EXECUTOR','EXPIRED_COMMAND','STOP_UNCONFIRMED','LEASE_UPDATE_PENDING','INVALID_LEASE','INVALID_LEASE_SCOPE','LEASE_SCOPE_CHANGED','LEASE_CONFLICT','STALE_LEASE','LEASE_EXPIRED','LOCAL_LEASE_GUARD_REJECTED']);
+  function reportConfirmation(phase,result,lease){
+    // Only constants and comparisons cross this boundary, never response values
+    // outside the allowlists (including identifiers or arbitrary error strings).
+    try{onDiagnostic(Object.freeze({component:'sdk_lease_confirmation',phase,
+      deviceState:['active','rejected','failed','unknown'].includes(result?.state)?result.state:'UNRECOGNIZED',
+      deviceCode:deviceCodes.has(result?.code)?result.code:'UNRECOGNIZED',
+      leaseIdMatches:result?.leaseId===lease.id,leaseEpochMatches:result?.leaseEpoch===lease.leaseEpoch,
+      scopeMatches:result?.scope===lease.scope}));}catch{/* Diagnostics cannot affect revocation. */}
+  }
   function reportRenewal(stage,error,started){
     // Never pass arbitrary exceptions, principals, envelopes or identifiers to logs.
     try{onDiagnostic(Object.freeze({component:'sdk_renewal',stage,code:diagnosticCodes.has(error?.code||error?.message)?(error.code||error.message):'RENEWAL_FAILED',elapsedMs:Math.max(0,Math.min(60000,Math.round(clock.monotonic()-started)))}));}catch{/* Diagnostics cannot affect authorization. */}
@@ -43,7 +53,7 @@ function createControlService({repository,sessions,channels,devices,signer,clock
   async function grant(principal,lease,browser,binding){
     try{
       const result=await devices.request(lease.deviceId,signed('lease_grant',binding,{leaseId:lease.id,leaseEpoch:lease.leaseEpoch,sequence:0,scope:lease.scope}));
-      if(result?.state!=='active'||result.leaseId!==lease.id||result.leaseEpoch!==lease.leaseEpoch||(lease.scope==='sdk'&&result.scope!=='sdk'))throw fail('LEASE_UNCONFIRMED');
+      if(result?.state!=='active'||result.leaseId!==lease.id||result.leaseEpoch!==lease.leaseEpoch||(lease.scope==='sdk'&&result.scope!=='sdk')){reportConfirmation('grant',result,lease);throw fail('LEASE_UNCONFIRMED');}
       await actor(principal,lease.scope==='sdk'?'sdk.connect':'control.request',browser);
       if(!same(context(lease.deviceId),binding)||!await readiness(principal,lease.deviceId))throw fail('DEVICE_UNAVAILABLE');
       const active=await repository.confirm(principal,lease.id);holders.set(active.id,{lease:active,principal,browser});return active;
@@ -77,7 +87,7 @@ function createControlService({repository,sessions,channels,devices,signer,clock
         stage='device_reply';
         const result=await devices.request(input.deviceId,signed('lease_renew',binding,{leaseId:renewed.id,leaseEpoch:renewed.leaseEpoch,sequence:renewed.renewalSequence,scope:renewed.scope}));
         stage='confirmation';
-        if(result?.state!=='active'||result.leaseId!==renewed.id||result.leaseEpoch!==renewed.leaseEpoch||(renewed.scope==='sdk'&&result.scope!=='sdk')){await revoke(renewed,'renewal_unconfirmed');throw fail('LEASE_UNCONFIRMED');}
+        if(result?.state!=='active'||result.leaseId!==renewed.id||result.leaseEpoch!==renewed.leaseEpoch||(renewed.scope==='sdk'&&result.scope!=='sdk')){reportConfirmation('renewal',result,renewed);await revoke(renewed,'renewal_unconfirmed');throw fail('LEASE_UNCONFIRMED');}
         stillHeld();
         holder.lease=renewed;return {renewed:true};
       })();

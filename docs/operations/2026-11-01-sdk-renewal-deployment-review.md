@@ -1,6 +1,6 @@
 # SDK 续期调度修复固定部署审阅
 
-状态：候选已在本地构建、测试通过，尚未上传或应用。等待本组固定变更批准。来源为用户已批准C8流程第9节第6步：固定源码/资源清单和回退材料完成后才申请实际部署；不是再次申请已获准的SDK只读测试权限。
+状态：用户已明确批准上传、部署并继续验收；2026-11-01 22:40（北京时间）已应用。只读前检通过，安装器返回 applied=true、exit=0；当前发布为下列671809219c9cefc8。业务服务active，健康检查仍为explicit-read-only。只改两件固定源码、保留4655件；没有数据库、Ubuntu、网络或权限变更。授权续期实测未通过，结果见文末。
 
 ## 本次具体操作
 
@@ -38,7 +38,7 @@
 - 三种固定包边界测试13/13通过，覆盖额外文件/内容篡改/错误摘要拒绝。
 - 已只读核对线上 current、清单摘要及两件原源码均符合基线，thirdhand-stage.service 为active。
 - CI以最终候选提交关联结果为准，在实际部署前核对，不能用本地测试冒充CI或真机验收。
-- 未部署、未做新的真机初始化；本轮不把网络样本或模拟worker当作真实SDK10分钟验收。
+- 最终候选8e032d6的CI运行41315672136成功；部署后未做新的真机初始化，本轮不把网络样本或模拟worker当作真实SDK10分钟验收。
 
 ## 执行与回退
 
@@ -47,3 +47,13 @@
 切换后的失败自动回退；必要时 python3 apply_sdk_renewal_cloud.py --rollback，验证旧清单与备份后恢复旧current，只重启业务API。没有数据库迁移，因此不回滚账户、点位或记录。回退不依赖新包完整性；任何受保护配置或基线漂移都停止，不能覆盖其他任务发布。
 
 本地构建：python tools/deploy/build_sdk_renewal_release.py --baseline .superpowers/sdd/2026-11-01-sdk-source-audit/sdk-heartbeat-candidate/expected-manifest.json --destination <新的空候选目录>。构建从固定Git提交读取，不打包脏工作目录。
+
+## 已执行的现场验收
+
+- 22:42:46.391首次申请，22:42:46.456确认，22:42:47.181释放，数据库续期序号3、原因renewal_unconfirmed。Ubuntu对应arm及前两次renew成功，第三次无worker续期事件。新云端诊断为confirmation / LEASE_UNCONFIRMED / elapsedMs=162，不能把这次快速拒绝直接归因于网络超时。
+- 22:49:16.659第二次申请，22:49:16.773释放，未确认、续期序号0、grant_failed。未继续盲目重复申请。
+- 两次均为Observer授权链测试，未点击SDK初始化确认。最后connect命令仍是13:34:56.44（北京时间）的历史记录；本轮未新增connect或后续运动。设备sdkConnected=false、readOnly=true。
+- 自动审批拒绝拟议的本机HTTP响应载荷抓取，理由为可能包含认证信息；抓取没有执行，后续改用受限应用日志诊断。不得通过其他工具绕过该拒绝。
+- SDK十分钟真实状态验收尚未开始。下一步只准备白名单设备拒绝码诊断；不能通过延长超时、放宽权限或用模拟数据宣称修复。
+
+云端应用输出：/var/backups/thirdhand/access-sdk-renewal-20261101/apply-output.json；本地截图证据：.superpowers/sdd/2026-11-01-sdk-source-audit/sdk-renewal-applied.png。备份与回退沿用上述固定应用器。

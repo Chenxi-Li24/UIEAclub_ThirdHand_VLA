@@ -80,6 +80,10 @@ def migrate(base,guard,raw):
         # Same lock as the standard migration runner; a busy runner fails fast.
         guard.sql("BEGIN; SET LOCAL lock_timeout='3s'; SET LOCAL statement_timeout='15s'; "
           "DO $$ BEGIN IF NOT pg_try_advisory_lock(240103,1) THEN RAISE EXCEPTION 'MIGRATION_BUSY'; END IF; END $$;\n"
+          "LOCK TABLE ops.control_leases IN SHARE MODE; "
+          "DO $$ BEGIN IF EXISTS (SELECT 1 FROM ops.control_leases WHERE state IN ('requested','active','revoking')) "
+          "OR EXISTS (SELECT 1 FROM ops.commands WHERE state IN ('accepted','started') OR (state='unknown' AND expires_at>now())) "
+          "THEN RAISE EXCEPTION 'DEVICE_OCCUPIED'; END IF; END $$;\n"
           +raw.decode('utf8')+"\nINSERT INTO public.thirdhand_schema_migrations(version,checksum) VALUES ('"+MIGRATION+"','"+MIGRATION_SHA+"'); COMMIT;")
     base.require(schema_state(guard)=={'checksum':MIGRATION_SHA,'columns':1},'MIGRATION_UNCONFIRMED')
 
@@ -121,10 +125,24 @@ def execute(apply=False,rollback=False):
     if not apply and not rollback:
         report=base.prepare()[3];state=check_schema(base,guard);no_commands(base,guard)
         return {**report,'databaseMigrations':[MIGRATION],'permissionChanges':['authenticated-sdk-connect-only'],'leaseSchemaBefore':state,'restartUnits':['thirdhand-stage.service']}
-    with base.installation_lock(),guard.quiescent_lease_admission():
-        no_commands(base,guard)
-        if rollback:return {**base.rollback_locked(),'scopeDataRetained':True}
-        return apply_locked(base,guard)
+    with base.installation_lock():
+        if apply:
+            # DDL must not wait on the separate admission-guard connection's
+            # SHARE lock. Run the additive migration first, checking occupancy
+            # and upgrading the table lock in the SAME SQL transaction. OLD is
+            # compatible with the new column; the following guard rechecks idle
+            # and blocks new leases throughout the source switch and restart.
+            _,contents,invariants,_=base.prepare()
+            before=check_schema(base,guard);no_commands(base,guard);base.save_backup(invariants)
+            receipt=ROOT/'lease-schema-before-public.json'
+            if not receipt.exists():
+                with receipt.open('xb') as output:output.write((json.dumps(before,sort_keys=True)+'\n').encode())
+                receipt.chmod(0o600)
+            migrate(base,guard,contents['platform/storage/migrations/'+MIGRATION])
+        with guard.quiescent_lease_admission():
+            no_commands(base,guard)
+            if rollback:return {**base.rollback_locked(),'scopeDataRetained':True}
+            return apply_locked(base,guard)
 
 if __name__=='__main__':
     p=argparse.ArgumentParser();m=p.add_mutually_exclusive_group();m.add_argument('--apply',action='store_true');m.add_argument('--rollback',action='store_true');a=p.parse_args()

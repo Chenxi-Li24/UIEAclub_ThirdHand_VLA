@@ -89,6 +89,8 @@ def test_atomic_migration_uses_shared_lock_time_bounds_and_checksum_and_can_resu
         assert query.startswith('BEGIN;') and query.endswith('COMMIT;')
         assert "lock_timeout='3s'" in query and "statement_timeout='15s'" in query
         assert 'pg_try_advisory_lock(240103,1)' in query and m.MIGRATION_SHA in query
+        assert 'LOCK TABLE ops.control_leases IN SHARE MODE' in query
+        assert "RAISE EXCEPTION 'DEVICE_OCCUPIED'" in query
         assert 'DROP ' not in query and 'GRANT ' not in query
         state.update(checksum=m.MIGRATION_SHA,columns=1)
         return ''
@@ -97,3 +99,25 @@ def test_atomic_migration_uses_shared_lock_time_bounds_and_checksum_and_can_resu
     assert len(calls)==1,'retained migration is never applied twice'
     state['checksum']='d'*64
     with pytest.raises(b.DeploymentError,match='LEASE_SCHEMA_CHANGED'):m.migrate(b,guard,raw)
+
+def test_ddl_finishes_before_separate_admission_guard_is_acquired(tmp_path):
+    m,b,_=fixture(tmp_path);events=[];held=False
+    @contextmanager
+    def admission():
+        nonlocal held
+        assert events==['migrated'];held=True
+        try:yield
+        finally:held=False
+    base=SimpleNamespace(require_identity=lambda:None,frozen=lambda:None,require=b.require,
+        installation_lock=context,prepare=lambda:(None,{'platform/storage/migrations/'+m.MIGRATION:b'sql'}, {}, {}),
+        save_backup=lambda _:None)
+    guard=SimpleNamespace(quiescent_lease_admission=admission)
+    def migration(*args):
+        assert not held;events.append('migrated')
+    def apply(*args):
+        assert held;events.append('switched');return {'applied':True}
+    with patch.object(m,'load_verified',side_effect=[base,guard]),patch.object(m,'configure',side_effect=lambda v:v), \
+         patch.object(m,'check_schema',return_value={'checksum':None,'columns':0}),patch.object(m,'no_commands'), \
+         patch.object(m,'migrate',side_effect=migration),patch.object(m,'apply_locked',side_effect=apply):
+        assert m.execute(apply=True)['applied']
+    assert events==['migrated','switched']

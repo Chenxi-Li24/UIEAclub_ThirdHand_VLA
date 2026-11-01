@@ -5,6 +5,17 @@ const {parseHTML}=require('linkedom');
 const fs=require('node:fs');
 const {mountAdminControl}=require('../../../apps/web/public/js/admin-control');
 
+test('read-only device capability never hides a lost connection authorization',()=>{
+  const {document}=parseHTML('<html><body><section id="page-system"></section></body></html>');
+  const stateStore={subscribe(callback){callback({devices:[{id:'device-test',name:'Lab',readOnly:true}],deviceId:null});return ()=>{};}};
+  const mounted=mountAdminControl({document,view:{},identity:{role:'observer',mode:'observe'},sessionClient:{},stateStore});
+  document.querySelector('option').selected=true;
+  mounted.client.close('BROWSER_STALE');
+  assert.equal(document.querySelector('[role="status"]').textContent,'Control connection is stale. Request control again.');
+  for(const text of ['Connect SDK','Disconnect SDK','Release SDK connection'])assert.equal([...document.querySelectorAll('button')].find(b=>b.textContent===text).disabled,true);
+  mounted.dispose();
+});
+
 test('SDK connection UI is available for observing sessions and never opens a socket or SDK during mount',()=>{
   for(const identity of [{role:'observer',mode:'observe'},{role:'admin',mode:'observe'},{role:'admin',mode:'admin'}]){
     const {document}=parseHTML(fs.readFileSync('apps/web/public/index.html','utf8'));

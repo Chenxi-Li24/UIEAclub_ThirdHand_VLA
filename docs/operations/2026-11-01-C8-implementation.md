@@ -60,6 +60,7 @@
 功能提交 `699c424` 的 Linux [CI 41262059094](https://github.com/Oliveirah007/UIEAclub_ThirdHand_VLA/actions/runs/41262059094) 两任务 `test` 和 `public-access` 均成功，包含完整 Linux Node/Python 回归；本机 Windows 失败不隐藏。
 随后修复上述历史画布溢出，只改 CSS，并用真实浏览器三宽度复测。
 最终设备页层级补丁 `004e7f4` 另做9项界面/只读门禁/启动测试通过。首次未设置测试库且受沙箱回环限制的4项失败，补齐隔离环境后全部重跑通过；没有改业务逻辑以绕过测试。
+`306d053` 的公网业务CI通过，通用Node测试573/574；失败为旧execution-gateway测试把当前序号/源纳秒+1当作未来要求，20ms后台采样与WebSocket投递竞争，可能提前满足要求。测试改用有效安全整数上界，仍断言三个精确拒绝码及运动调用0；不修改运行代码或扩大超时。测试Python路径支持现有PYTHON环境变量，本机simulate=true全套10/10通过。该测试修复不改变已固定部署包。
 浏览器矩阵 `C8-browser-matrix.json`，教程 `C8-browser-tutorials.json`，故障 `C8-browser-state-faults.json`。
 一次等待断线标签超出浏览器工具等待窗口，随后读到正确“已断开”；不将该次等待计为延迟 SLA 通过。
 曾发现连接事件的未知 moving 被归一化为 False；实时上报现转 null，并通过新增测试。

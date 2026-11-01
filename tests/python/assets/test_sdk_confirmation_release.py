@@ -18,7 +18,7 @@ def load(relative):
     return module
 
 
-@pytest.fixture(params=['confirmation', 'heartbeat'])
+@pytest.fixture(params=['confirmation', 'heartbeat', 'renewal'])
 def candidate(tmp_path, monkeypatch, request):
     build = load(f'tools/deploy/build_sdk_{request.param}_release.py')
     apply = load(f'tools/operations/apply_sdk_{request.param}_cloud.py')
@@ -50,12 +50,13 @@ def candidate(tmp_path, monkeypatch, request):
     return build, apply, base, before, report, destination
 
 
-def test_only_one_cloud_file_change_and_no_models_device_code_or_credentials(candidate):
+def test_only_fixed_cloud_changes_and_no_models_device_code_or_credentials(candidate):
     build, apply, base, before, report, destination = candidate
     raw, contents = apply.read_package(base, before)
-    assert len(contents) == 1
+    expected_count = 2 if build.__name__ == 'build_sdk_renewal_release' else 1
+    assert len(contents) == expected_count
     assert build.FILES == apply.FILES
-    assert report['filesCount'] == 4657 and report['preservedFiles'] == 4656
+    assert report['filesCount'] == 4657 and report['preservedFiles'] == 4657 - expected_count
     assert report['sdkActions'] == 0
     for key in ('databaseMigrations', 'permissionChanges', 'newPublicPorts', 'ubuntuChanges', 'deletedFiles'):
         assert report[key] == []

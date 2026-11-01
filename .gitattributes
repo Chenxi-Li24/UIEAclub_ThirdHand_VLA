@@ -43,3 +43,4 @@ tools/operations/apply_sdk_scope_device.py text eol=lf
 tools/operations/apply_sdk_confirmation_cloud.py text eol=lf
 deploy/public-access/staging/device/sdk-scope-pins.json text eol=lf
 tools/operations/apply_sdk_heartbeat_cloud.py text eol=lf
+tools/operations/apply_sdk_renewal_cloud.py text eol=lf

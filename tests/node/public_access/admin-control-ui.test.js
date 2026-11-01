@@ -37,8 +37,29 @@ test('failed and successful SDK requests both settle pending state and refresh m
     mounted.client.command=async()=>{if(fails)throw Object.assign(Error(),{code:'COMMAND_RESULT_UNKNOWN'});return {state:'completed'};};
     const button=[...document.querySelectorAll('button')].find(b=>b.textContent==='Connect SDK');button.disabled=false;button.click();
     await new Promise(resolve=>setImmediate(resolve));
+    assert.deepEqual(calls,[],'no initialization before explicit DOM confirmation');
+    const dialog=document.querySelector('[role="alertdialog"]');assert.equal(dialog.hidden,false);
+    dialog.querySelector('button').click();
+    await new Promise(resolve=>setImmediate(resolve));
     assert.deepEqual(calls,['pending','settled','refresh']);
     assert.match(document.querySelector('[role="status"]').textContent,fails?/result is unknown/:/Command completed/);
+    mounted.dispose();
+  }
+});
+
+test('SDK confirmation never blocks browser heartbeat callbacks; cancel and lost lease never connect',async()=>{
+  for(const action of ['cancel','lost-lease','dispose']){
+    const {document}=parseHTML('<html><body><section id="page-system"></section></body></html>');
+    let commands=0,heartbeatRan=false;
+    const mounted=mountAdminControl({document,view:{confirm(){throw Error('native modal blocks heartbeat');}},identity:{role:'observer',mode:'observe'},sessionClient:{}});
+    mounted.client.command=async()=>{commands++;};
+    const button=[...document.querySelectorAll('button')].find(b=>b.textContent==='Connect SDK');button.disabled=false;button.click();
+    await new Promise(resolve=>setImmediate(()=>{heartbeatRan=true;resolve();}));
+    const dialog=document.querySelector('[role="alertdialog"]');assert.equal(dialog.hidden,false);assert.equal(heartbeatRan,true);assert.equal(commands,0);
+    if(action==='cancel')dialog.querySelectorAll('button')[1].click();
+    else if(action==='lost-lease')mounted.client.close();
+    else mounted.dispose();
+    await new Promise(resolve=>setImmediate(resolve));assert.equal(dialog.hidden,true);assert.equal(commands,0);
     mounted.dispose();
   }
 });

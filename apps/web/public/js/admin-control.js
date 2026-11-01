@@ -56,17 +56,32 @@
     const tr=text=>view.ThirdHandI18n?.translate(text,doc.documentElement.lang)||text;
     const el=(tag,text,attributes={})=>{const node=doc.createElement(tag);if(text)node.textContent=tr(text);for(const [key,value]of Object.entries(attributes))node.setAttribute(key,value);return node;};
     const section=el('section',null,{class:'cloud-live-control',id:'cloud-live-control'}),title=el('h3','SDK connection'),status=el('p','Real robot control is unavailable',{role:'status'}),select=el('select',null,{'aria-label':tr('Device')}),buttons=[],warningBox=el('div',null,{role:'alertdialog','aria-label':tr('Confirm control takeover')});warningBox.hidden=true;
-    const telemetry=el('pre',null,{'aria-live':'polite',class:'cloud-live-telemetry'});let devices=[],telemetryBusy=false,disposed=false;
+    const telemetry=el('pre',null,{'aria-live':'polite',class:'cloud-live-telemetry'});let devices=[],telemetryBusy=false,disposed=false,cancelSdkConfirmation=null;
     section.append(title,el('p','Connecting the SDK enables motors and may close the gripper. Only administrators can send motion commands.'),el('p','Model sliders and sequences remain independent of the live robot.'),status,select,telemetry);
     const isReadOnly=()=>devices.find(value=>value.id===select.value)?.readOnly===true;
-    const client=createAdminControlClient({view,identity,sessionClient,onChange:state=>{for(const button of buttons)button.disabled=!state.lease||button.dataset.motion==='true'&&isReadOnly();select.disabled=!!state.lease;if(state.lease)select.value=state.deviceId;status.textContent=tr(isReadOnly()?'This device permits SDK connection and state reading only.':state.lease?'You hold live robot control.':'No live control lease.');}});
+    const client=createAdminControlClient({view,identity,sessionClient,onChange:state=>{if(!state.lease)cancelSdkConfirmation?.();for(const button of buttons)button.disabled=!state.lease||button.dataset.motion==='true'&&isReadOnly();select.disabled=!!state.lease;if(state.lease)select.value=state.deviceId;status.textContent=tr(isReadOnly()?'This device permits SDK connection and state reading only.':state.lease?'You hold live robot control.':'No live control lease.');}});
     const message=error=>{status.textContent=tr(({LEASE_BUSY:'Another operator holds control.',STOP_UNCONFIRMED:'Stop is unconfirmed. Control was not transferred.',COMMAND_RESULT_UNKNOWN:'The command result is unknown. Check device state before requesting control again.',CONTROL_READINESS_REQUIRED:'Live video, tutorial and device checks must pass first.',BROWSER_STALE:'Control connection is stale. Request control again.',LEASE_REQUIRED:'Request control before sending a live command.',DEVICE_UNAVAILABLE:'The device is unavailable.'})[error?.code]||'Real robot control is unavailable');};
     const button=(label,action,{requiresLease=false}={})=>{const node=el('button',label,{type:'button',class:'action-btn action-secondary'});node.disabled=requiresLease;node.addEventListener('click',()=>Promise.resolve().then(action).then(result=>{const text=({completed:'Command completed.',accepted:'Command accepted.',started:'Command started.',rejected:'The device rejected the command.',failed:'The command failed.'})[result?.state];if(text)status.textContent=tr(text);}).catch(message));section.append(node);if(requiresLease)buttons.push(node);return node;};
     async function loadTelemetry(){await stateStore?.refresh();}
     button('Load devices',async()=>{if(client.state().lease)return;const result=await sessionClient.request('/api/v1/devices');stateStore?.updateDevices(result.devices);devices=result.devices.filter(value=>value.controllable===true&&value.readOnly===true);select.replaceChildren();for(const device of devices){const option=el('option',device.name,{value:device.id});select.append(option);}status.textContent=tr(isReadOnly()?'This device permits SDK connection and state reading only.':devices.length?'Select a device, then request control.':'No devices are available.');stateStore?.select(select.value);await loadTelemetry();});
     function selected(){if(!select.value)throw fail('DEVICE_UNAVAILABLE');return select.value;}
     button(isAdmin?'Request control':'Request SDK connection',async()=>{if(client.state().lease)return;try{await client.acquire(selected());}catch(error){if(error.code!=='LEASE_BUSY'||!isAdmin)throw error;const warning=await client.prepareTakeover(selected());warningBox.replaceChildren(el('p',`${tr('Continuing will stop the current operator before control can transfer.')} ${warning.holderName||''}`));const confirm=el('button','Confirm takeover',{type:'button',class:'action-btn'}),cancel=el('button','Cancel',{type:'button',class:'action-btn action-secondary'});confirm.addEventListener('click',()=>{warningBox.hidden=true;client.confirmTakeover().catch(message);});cancel.addEventListener('click',()=>{warningBox.hidden=true;client.cancelTakeover();});warningBox.append(confirm,cancel);warningBox.hidden=false;confirm.focus();}});
-    button('Connect SDK',async()=>{if(!view.confirm?.(tr('Connecting the SDK enables motors and closes the configured gripper. Keep the workspace clear. Continue?')))return;const attempt=stateStore?.connecting();try{return await client.command('connect',{});}finally{stateStore?.connectionSettled(attempt);void stateStore?.refresh();}},{requiresLease:true});
+    function confirmSdkConnection(){
+      // Native confirm() blocks WebSocket callbacks, expiring the safety lease
+      // while the user reads it. DOM controls keep the heartbeat running.
+      cancelSdkConfirmation?.();
+      return new Promise(resolve=>{
+        const confirm=el('button','Connect SDK',{type:'button',class:'action-btn'}),cancel=el('button','Cancel',{type:'button',class:'action-btn action-secondary'});
+        let done=false;
+        const finish=accepted=>{if(done)return;done=true;confirm.disabled=cancel.disabled=true;warningBox.hidden=true;cancelSdkConfirmation=null;resolve(accepted);};
+        cancelSdkConfirmation=()=>finish(false);
+        warningBox.setAttribute('aria-label',tr('SDK connection'));
+        warningBox.replaceChildren(el('p','Connecting the SDK enables motors and closes the configured gripper. Keep the workspace clear. Continue?'),confirm,cancel);
+        confirm.addEventListener('click',()=>finish(true));cancel.addEventListener('click',()=>finish(false));
+        warningBox.hidden=false;confirm.focus();
+      });
+    }
+    button('Connect SDK',async()=>{if(!await confirmSdkConnection())return;const attempt=stateStore?.connecting();try{return await client.command('connect',{});}finally{stateStore?.connectionSettled(attempt);void stateStore?.refresh();}},{requiresLease:true});
     button('Disconnect SDK',()=>client.command('disconnect',{}),{requiresLease:true});
     if(isAdmin)button('Software stop',async()=>{const id=selected();await client.open();const result=await client.stop(id);status.textContent=tr(result.state==='stopped'?(isReadOnly()?'The SDK connection was released.':'The device confirmed software stop.'):'Stop is unconfirmed. Control was not transferred.');});
     button(isAdmin?'Release control':'Release SDK connection',async()=>{if(!isAdmin)return client.command('disconnect',{});const result=await client.stop();client.close();if(result.state!=='stopped')throw fail('STOP_UNCONFIRMED');},{requiresLease:true});
@@ -83,6 +98,6 @@
       telemetry.textContent=tr('This device permits SDK connection and state reading only.');
     });
     select.addEventListener('change',()=>stateStore?.select(select.value));
-    return {client,dispose(){disposed=true;unsubscribe?.();doc.removeEventListener('visibilitychange',hidden);client.close();section.remove();}};
+    return {client,dispose(){disposed=true;cancelSdkConfirmation?.();unsubscribe?.();doc.removeEventListener('visibilitychange',hidden);client.close();section.remove();}};
   }  return {createAdminControlClient,mountAdminControl};
 });

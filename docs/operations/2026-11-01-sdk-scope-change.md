@@ -41,3 +41,6 @@ CI 核验：部署锁修复 c807176 的运行 41295343458、固定确认框补�
 授权HTTP结果返回后再次核对连接绑定和新鲜度，不能在通道已断开时恢复按钮。设备只读能力提示不再遮盖授权失效，按钮按租约实际状态禁用。无数据库、Ubuntu、权限或端口变化；部署目标仅 admin-control.js，候选摘要与现场结果随后追加。Node客户端、UI、真实回环WebSocket共16项测试通过。登录反馈本轮由用户说明在Edge已不再复现，暂不继续修改登录文件。
 
 固定单文件心跳补丁：source c6000ea9907c1ae7e1cef42f56c71305debe5c26，old dc458eb35ed369a1a8716b69bb4bd56b7d6b804383e74a6e944da1f68b8fa381，new 3d3acd1d9fa353a0dcfb66db18f3e373526de73b6da1ae1694b86aa5fe5c3e0c，package b95a8889386c3b3a54e57ec21601b5d98ea90d368eee83bcbe5ee985209799a2，installer 133f6c14cbcd1967e12005658af34e8ae6dbce9c6dcba628d61329c5a7239558。保持其余4656件资源，9项发布边界测试通过；部署沿用零租约/零在途命令准入、备份和回退，只有业务API重启。
+
+
+心跳单文件补丁经用户追加批准后已部署为3d3acd1d9fa353a0，CI #47（41301269331）通过。现场续期65次后仍因设备lease_expired/云端renewal_unconfirmed中断；未产生新connect命令，未通过10分钟SDK验收。Ubuntu wlp7s0开启节电，TCP存在重传，60次非鉴权HTTPS响应测量最大2.86秒。下一步仅准备了15分钟自动恢复的Wi-Fi节电对照方案，尚未改变设置，见2026-11-01-sdk-wifi-ab-review.md。

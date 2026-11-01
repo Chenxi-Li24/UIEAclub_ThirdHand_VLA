@@ -5,6 +5,7 @@ const {EventEmitter}=require('node:events');
 const {X509Certificate,randomUUID,randomBytes,verify}=require('node:crypto');
 const {WebSocketServer,WebSocket}=require('ws');
 const {parseMessage,validateHello,decodeBase64url,validateEnvelope,object,UUID}=require('./protocol');
+const {createLatestState,same}=require('./latest-state');
 
 function mediaNegotiation(headers){
   const version=headers['x-thirdhand-media-grant'],digest=headers['x-thirdhand-media-credentials'];
@@ -20,6 +21,9 @@ function createDeviceRelay({store,ingestBatch,mediaPublisher,tls=null,trustedUni
   if(!store?.resolveCertificate||(!tls&&!trustedUnixProxy)||tls&&trustedUnixProxy)throw Error('Choose mTLS or a private Unix proxy');
   const active=new Map(),sockets=new Set(),networkSockets=new Set(),events=new EventEmitter();
   const now=()=>clock.now().getTime();
+  const latestState=createLatestState({wallNow:now,capacity:maxDevices,contextFor:id=>{
+    const entry=active.get(id);return entry?.ws.readyState===WebSocket.OPEN&&entry.ready?entry.context:null;
+  }});
   async function stillRegistered(registered){
     if(now()>=registered.validUntil)return false;
     const row=await store.resolveCertificate(registered.fingerprint);
@@ -49,6 +53,18 @@ function createDeviceRelay({store,ingestBatch,mediaPublisher,tls=null,trustedUni
     response.setHeader('Cache-Control','no-store');response.setHeader('Content-Type','application/json');
     let uploadVerified=false;
     try{
+      if(request.url==='/edge/v1/state'&&request.method==='POST'){
+        const registered=await identity(request);
+        if(!registered.remoteControlEnabled||!/^application\/json(?:\s*;.*)?$/i.test(request.headers['content-type']||''))throw Error('INVALID_STATE_REQUEST');
+        const chunks=[];let size=0;for await(const chunk of request){size+=chunk.length;if(size>24000)throw Error('STATE_TOO_LARGE');chunks.push(chunk);}
+        const envelope=JSON.parse(Buffer.concat(chunks).toString('utf8'));
+        if(!object(envelope,['payloadBase64url','signatureBase64url'])||Object.keys(envelope).length!==2)throw Error('INVALID_STATE_REQUEST');
+        const bytes=decodeBase64url(envelope.payloadBase64url);
+        if(!verify(null,bytes,registered.publicKey,decodeBase64url(envelope.signatureBase64url,86)))throw Error('INVALID_STATE_SIGNATURE');
+        const body=JSON.parse(new TextDecoder('utf-8',{fatal:true}).decode(bytes)),entry=active.get(registered.id);
+        if(!entry?.ready||body.context?.certificateId!==registered.certificateId||!same(body.context,entry.context))throw Error('INVALID_STATE_CONTEXT');
+        const result=latestState.accept(entry.context,body);response.end(JSON.stringify(result));return;
+      }
       if(request.url==='/edge/v1/media-grant'&&request.method==='POST'&&mediaPublisher){
         const registered=await identity(request);
         const negotiation=mediaNegotiation(request.headers);
@@ -149,7 +165,7 @@ function createDeviceRelay({store,ingestBatch,mediaPublisher,tls=null,trustedUni
     try{for(const item of active.values()){let valid=false;try{valid=await stillRegistered(item.registered);}catch{/* Storage failure denies a device channel. */}if(!valid||now()-item.ws.lastSeen()>=heartbeatTimeoutMs)item.ws.close(1008,'Device authorization expired');}}
     finally{sweeping=false;}
   },1000);sweep.unref();
-  return {server,devices:{events,get(deviceId){const entry=active.get(deviceId);return entry?.ws.readyState===WebSocket.OPEN?{...entry.context,controlAccepted:entry.ready,readOnly:entry.registered.readOnly===true}:null;},async request(deviceId,envelope){
+  return {server,latestState,devices:{events,get(deviceId){const entry=active.get(deviceId);return entry?.ws.readyState===WebSocket.OPEN?{...entry.context,controlAccepted:entry.ready,readOnly:entry.registered.readOnly===true}:null;},async request(deviceId,envelope){
     validateEnvelope(envelope);const item=active.get(deviceId),payload=JSON.parse(decodeBase64url(envelope.payloadBase64url));
     if(!item?.ready||item.ws.readyState!==WebSocket.OPEN||now()>=item.registered.validUntil||!['deviceId','bootId','executorEpoch','connectionId','certificateId'].every(key=>payload[key]===item.context[key]))throw Error('DEVICE_UNAVAILABLE');
     const priorityStop=payload.purpose==='stop'&&payload.opcode==='software_stop';

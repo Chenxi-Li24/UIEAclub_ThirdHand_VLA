@@ -21,6 +21,17 @@
  };
  function mountOnboarding(doc,win,options){
   if(mounted.has(doc))return mounted.get(doc);
+  // Reuse the same progress keys/task IDs; cloud text never implies that a
+  // preset executes hardware. Targets exist for both permission modes.
+  const cloud=!!doc.getElementById('workspace-bootstrap');
+  const tourSteps=steps.map(step=>({...step}));
+  if(cloud){
+   tourSteps[2].body='Joint sliders, presets and personal waypoints change only the Three.js model. Real measurements are shown separately. Movement is disabled.';
+   tourSteps[3].body='Select a camera and choose Watch camera. Observers can view video; camera viewing does not connect the SDK or execute a grasp.';
+   tourSteps[4].body='Flange feedback is not a calibrated tool TCP. Calibration and physical collection remain unavailable in this read-only stage.';
+   tourSteps[5].targets=['#device-status-entry','#hb-label','#workspace-mode'];
+   tourSteps[5].body='If feedback expires or the device disconnects, contact the person beside the emergency stop. A webpage cannot confirm a physical stop. Use Devices & diagnostics for details.';
+  }
   const byId=id=>doc.getElementById(id),tr=value=>win.ThirdHandI18n?.translate(value,doc.documentElement.lang||'en')||value;
   const el=(tag,attrs={},text='')=>{const node=doc.createElement(tag);for(const [key,value]of Object.entries(attrs))node.setAttribute(key,value);if(text)node.textContent=text;return node;};
   const set=(node,value)=>{if(node.textContent!==value)node.textContent=value;};
@@ -62,7 +73,7 @@
   function clearHighlight(){highlight?.classList.remove('onboarding-highlight');highlight=null;}
   function mark(id){if(!state.done.includes(id)){state.done.push(id);persist();render();}}
   function visibleTarget(selector){const node=doc.querySelector(selector);if(!node||node.closest('[hidden]'))return null;for(let parent=node;parent;parent=parent.parentElement){const style=win.getComputedStyle?.(parent);if(style?.display==='none'||style?.visibility==='hidden')return null;}return node;}
-  const tourTarget=()=>(options.resolveTargets?.(steps[state.step].targets)||steps[state.step].targets).map(visibleTarget).find(Boolean)||null;
+  const tourTarget=()=>(options.resolveTargets?.(tourSteps[state.step].targets)||tourSteps[state.step].targets).map(visibleTarget).find(Boolean)||null;
   function showHighlight(scroll=false){
    clearHighlight();if(mode!=='tour'||context().busy||notice)return;
    highlight=tourTarget();
@@ -107,8 +118,8 @@
    next.hidden=mode==='help';next.disabled=busy||missingTarget;helpDone.hidden=mode!=='help';
    set(skip,tr(mode==='tour'?'Skip tour':'Close'));set(helpDone,tr('Got it'));
    if(mode==='tour'){
-    const step=steps[state.step];set(stepLabel,tr('Step {step} of {total}').replace('{step}',state.step+1).replace('{total}',steps.length));set(title,tr(step.title));set(body,tr(step.body));set(next,tr(state.step===steps.length-1?'Finish tour':'Next'));
-   }else if(mode==='help'){set(stepLabel,tr('Page help'));set(title,tr(help[helpPage][0]));set(body,tr(help[helpPage][1]));}
+    const step=tourSteps[state.step];set(stepLabel,tr('Step {step} of {total}').replace('{step}',state.step+1).replace('{total}',steps.length));set(title,tr(step.title));set(body,tr(step.body));set(next,tr(state.step===steps.length-1?'Finish tour':'Next'));
+   }else if(mode==='help'){set(stepLabel,tr('Page help'));set(title,tr(help[helpPage][0]));set(body,tr(cloud&&['control','vision','calibration'].includes(helpPage)?tourSteps[{control:2,vision:3,calibration:4}[helpPage]].body:help[helpPage][1]));}
    else{set(stepLabel,tr('Optional guide'));set(title,tr('Get comfortable with the workspace'));set(body,tr('Learn the interface, try a model preview and return to page help whenever you need it.'));set(next,tr(state.tourComplete?'Watch the tour again':'Continue tour'));}
    set(liveStatus,[current.statusText,current.page==='vision'?current.cameraText:null].filter(Boolean).join(' · '));
    set(panelNotice,message);panelNotice.hidden=!message;

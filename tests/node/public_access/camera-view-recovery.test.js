@@ -89,6 +89,7 @@ test('a connected room without decoded frames is replaced and occasional frames 
 test('the mounted Sign out button immediately stops camera intent before navigation or logout finishes',async()=>{
   const f=fixture(),{document,window}=parseHTML('<html><body><button id="workspace-logout">Sign out</button><section id="sec-xvision"><div class="sec-body"><span id="cam-label"></span><span id="cam-dot"></span><div><img id="xvision-feed"><div class="camera-empty"></div></div></div></section></body></html>');
   f.view.document=document;document.visibilityState='visible';f.view.setInterval=()=>1;f.view.clearInterval=()=>{};
+  f.view.MutationObserver=window.MutationObserver;
   f.view.LivekitClient={Room:class extends EventEmitter{constructor(){super();f.rooms.push(this);}async connect(){}async disconnect(){}}};
   const mounted=mountCameraView({view:f.view,document,sessionClient:f.source});await mounted.client.watch('device-fixture');const video=document.querySelector('video');
   f.rooms[0].emit('trackSubscribed',{kind:'video',attach(){video.srcObject={};},detach(){}},{},{identity:'publisher-1'});assert.ok(video.srcObject);

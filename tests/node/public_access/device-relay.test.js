@@ -58,6 +58,21 @@ test('mTLS identity requires device key proof; reconnected device gets a fresh u
   assert.equal(f.relay.devices.get(f.identity.id),null);
 });
 
+test('live snapshots require signed bound context and never renew repeated or displaced frames',async t=>{
+  const f=await fixture(t,{control:true}),ws=await f.socket(),welcome=await f.auth(ws,{executorEpoch:randomUUID()});
+  const bound=nextMessage(ws);ws.send(JSON.stringify({type:'bound',executorEpoch:welcome.context.executorEpoch,hardwareFingerprint:'c'.repeat(64)}));await bound;
+  const report={schema:1,purpose:'latest_state',context:welcome.context,sequence:1,producerMonotonicNs:1234,sourceAgeMs:10,issuedAt:Date.now()-10,sample:{capturedAt:new Date(Date.now()-20).toISOString(),clockQuality:'estimated',jointPositionRad:[0,1,2,3,4,5],sdkConnected:true,moving:false,fieldAvailability:{sdkConnected:true,moving:true},extra:{sourceMode:'simulation'}}};
+  async function submit(value,badSignature=false){
+    const payload=Buffer.from(JSON.stringify(value)),body=JSON.stringify({payloadBase64url:payload.toString('base64url'),signatureBase64url:badSignature?'A'.repeat(86):sign(null,payload,await f.pem('device.key')).toString('base64url')});
+    const options={method:'POST',key:await f.pem('device.key'),cert:await f.pem('device.pem'),ca:await f.pem('ca.pem'),headers:{'content-type':'application/json'}};
+    return new Promise((resolve,reject)=>{const request=https.request(f.url.replace('wss:','https:').replace('/edge/v1/connect','/edge/v1/state'),options,response=>{let raw='';response.on('data',chunk=>raw+=chunk);response.on('end',()=>resolve({status:response.statusCode,body:JSON.parse(raw)}));});request.on('error',reject);request.end(body);});
+  }
+  assert.equal((await submit(report,true)).status,403);assert.equal(f.relay.latestState.get(f.identity.id).sample,null);
+  assert.equal((await submit(report)).status,200);assert.equal(f.relay.latestState.get(f.identity.id).fresh,true);
+  const received=f.relay.latestState.get(f.identity.id).receivedAt;assert.equal((await submit(report)).status,403);assert.equal(f.relay.latestState.get(f.identity.id).receivedAt,received);
+  const newer=await f.socket();await f.auth(newer,{executorEpoch:randomUUID()});assert.equal((await submit({...report,sequence:2,producerMonotonicNs:2345})).status,403);assert.equal(f.relay.latestState.get(f.identity.id).fresh,false);
+});
+
 test('bound executor is unavailable for commands until local binding ACK; replies are connection scoped',async t=>{
   const f=await fixture(t,{control:true}),ws=await f.socket(),welcome=await f.auth(ws,{executorEpoch:randomUUID()});
   assert.equal(f.relay.devices.get(f.identity.id).controlAccepted,false);

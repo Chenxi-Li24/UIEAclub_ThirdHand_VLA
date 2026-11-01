@@ -193,6 +193,7 @@
       return true;
     }
     function go(id, { focus = false } = {}) {
+      if (id === 'account-connections' && doc.getElementById('workspace-bootstrap')) id = 'system';
       if (!pageNodes.has(id) || options.canOpenPage && !options.canOpenPage(id)) id = 'control';
       if (id !== current && !canLeave()) { win.history.replaceState(null, '', `#${current}`); return false; }
       if (current === id) {

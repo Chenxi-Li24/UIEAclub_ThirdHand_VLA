@@ -7,6 +7,7 @@
     const el=(tag,attrs={},text)=>{const node=doc.createElement(tag);for(const [key,value]of Object.entries(attrs))node.setAttribute(key,String(value));if(text!==undefined)node.textContent=text;return node;};
     const card=el('article',{id:'account-security',class:'account-card cloud-security'}),status=el('p',{role:'status',class:'account-status'});
     card.append(el('h2',{},'Two-step verification'),el('p',{},'Enable an authenticator before entering Administrator mode.'));
+    const summary=el('p',{id:'security-summary',role:'status'},'Loading security status…'),begin=el('button',{id:'security-begin',type:'button',class:'action-btn action-secondary'},'Set up or enter Administrator mode');card.append(summary,begin);
     const form=el('form',{class:'account-form cloud-mfa-form',novalidate:''}),passwordLabel=el('label',{class:'account-field',for:'security-password'},'Current password'),password=el('input',{id:'security-password',type:'password',autocomplete:'current-password',maxlength:512});passwordLabel.append(password);form.append(passwordLabel);
     const setupButton=el('button',{type:'button',class:'action-btn action-secondary'},'Verify password');
     const setup=el('section',{id:'mfa-enrollment',hidden:''}),qrBox=el('div',{id:'mfa-qr',class:'cloud-mfa-qr','data-i18n-skip':'',role:'img','aria-label':'Authenticator QR code'}),secretLabel=el('label',{class:'account-field',for:'mfa-secret'},'Authenticator setup key'),secret=el('input',{id:'mfa-secret',type:'text',readonly:'',autocomplete:'off','data-i18n-skip':''});secretLabel.append(secret);
@@ -14,9 +15,12 @@
     const codeLabel=el('label',{id:'security-code-field',class:'account-field',for:'security-totp',hidden:''},'Authenticator or recovery code'),code=el('input',{id:'security-totp',type:'text',autocomplete:'one-time-code',maxlength:128});codeLabel.append(code);form.append(codeLabel);
     const confirm=el('button',{type:'button',class:'action-btn action-primary',hidden:''},'Confirm authenticator'),modeButton=el('button',{type:'submit',class:'action-btn action-primary',hidden:''},identity.mode==='admin'?'Switch to Observer':'Enter Administrator mode'),backButton=el('button',{id:'security-back',type:'button',class:'action-btn action-secondary',hidden:''},'Back to password');
     const actions=el('div',{class:'cloud-mfa-actions'});actions.append(setupButton,confirm,modeButton,backButton);form.append(actions,status);card.append(form);
-    const recovery=el('textarea',{id:'mfa-recovery-codes',rows:10,readonly:'',hidden:'',autocomplete:'off','data-i18n-skip':'','aria-label':'One-time recovery codes'});card.append(recovery);doc.getElementById('page-account-profile').append(card);
+    const recovery=el('textarea',{id:'mfa-recovery-codes',rows:10,readonly:'',hidden:'',autocomplete:'off','data-i18n-skip':'','aria-label':'One-time recovery codes'});card.append(recovery);(doc.getElementById('page-account-security')||doc.getElementById('page-account-profile')).append(card);
     const recoveryContinue=el('button',{id:'mfa-recovery-continue',type:'button',class:'action-btn action-secondary',hidden:''},'Continue');card.append(recoveryContinue);
     let busy=false,verifiedPassword=null,enrolling=false;
+    form.hidden=identity.mode!=='admin';begin.hidden=identity.mode==='admin';
+    begin.addEventListener('click',()=>{form.hidden=false;begin.hidden=true;password.focus();});
+    void sessionClient.request('/api/v1/me/security').then(value=>{summary.textContent=tr(value.mfaEnabled?'Authenticator enabled':'Authenticator not enabled');}).catch(()=>{summary.textContent=tr('Security status unavailable');});
     function clearProof(){verifiedPassword=null;enrolling=false;password.value='';code.value='';secret.value='';qrBox.replaceChildren();setup.hidden=codeLabel.hidden=confirm.hidden=backButton.hidden=true;passwordLabel.hidden=identity.mode==='admin';setupButton.hidden=identity.mode==='admin';modeButton.hidden=identity.mode!=='admin';actions.hidden=false;}
     clearProof();passwordLabel.hidden=identity.mode==='admin';
     password.addEventListener('input',()=>{verifiedPassword=null;enrolling=false;code.value='';secret.value='';qrBox.replaceChildren();setup.hidden=codeLabel.hidden=confirm.hidden=true;setupButton.hidden=false;modeButton.hidden=true;});
@@ -58,20 +62,25 @@
     if(identity.mode==='admin'){
       const directory=el('article',{id:'admin-user-directory',class:'account-card cloud-security'}),reload=el('button',{type:'button',class:'action-btn action-secondary'},'Load registered users'),more=el('button',{type:'button',class:'action-btn action-secondary',hidden:''},'Load more'),table=el('table',{class:'cloud-users-table'}),body=el('tbody'),directoryStatus=el('p',{role:'status'});
       const download=el('a',{id:'admin-users-export',href:'/api/v1/admin/users/export',class:'action-btn action-secondary',download:''},'Download members (CSV)');
-      const head=el('tr');for(const name of ['Username','Display name','Email','Organization','Role','Status','Registered at','Email verified at','Actions'])head.append(el('th',{scope:'col'},name));const heading=el('thead');heading.append(head);table.append(heading,body);const tableScroll=el('div',{class:'cloud-users-scroll',tabindex:'0','aria-label':'Registered users'});tableScroll.append(table);directory.append(el('h2',{},'Registered users'),reload,download,tableScroll,more,directoryStatus);doc.getElementById('page-account-profile').append(directory);
+      const search=el('input',{id:'admin-user-search',type:'search','aria-label':'Search loaded members',placeholder:'Search loaded members'});
+      const filterRows=()=>{const term=search.value.trim().toLocaleLowerCase();for(const row of body.children)row.hidden=!!term&&!row.textContent.toLocaleLowerCase().includes(term);};search.addEventListener('input',filterRows);
+      const columnNames=['Username','Display name','Email','Organization','Role','Status','Registered at','Email verified at','Actions'];
+      const head=el('tr');for(const name of columnNames)head.append(el('th',{scope:'col'},name));const heading=el('thead');heading.append(head);table.append(heading,body);const tableScroll=el('div',{class:'cloud-users-scroll',tabindex:'0','aria-label':'Registered users'});tableScroll.append(table);directory.append(el('h2',{},'Registered users'),reload,download,tableScroll,more,directoryStatus);(doc.getElementById('page-account-members')||doc.getElementById('page-account-profile')).append(directory);
+      tableScroll.before(search);
       const dialog=el('dialog',{'aria-labelledby':'admin-confirm-title'}),confirmation=el('form',{class:'account-form'}),dialogTitle=el('h2',{id:'admin-confirm-title'},'Confirm administrator action');
       const inputs={};for(const [key,label,type]of [['reason','Reason','text'],['password','Current password','password'],['verification','Authenticator or recovery code','text']]){const row=el('label',{class:'account-field'},label),input=el('input',{type,required:'',maxlength:key==='reason'?500:128,autocomplete:key==='password'?'current-password':'off'});inputs[key]=input;row.append(input);confirmation.append(row);}
-      const apply=el('button',{type:'submit',class:'action-btn action-primary'},'Confirm'),cancel=el('button',{type:'button',class:'action-btn action-secondary'},'Cancel');confirmation.append(apply,cancel);dialog.append(dialogTitle,confirmation);directory.append(dialog);
+      const apply=el('button',{type:'submit',class:'action-btn action-primary'},'Confirm'),cancel=el('button',{type:'button',class:'action-btn action-secondary'},'Cancel'),confirmStatus=el('p',{role:'alert'});confirmation.append(apply,cancel,confirmStatus);dialog.append(dialogTitle,confirmation);doc.body.append(dialog);dialog.className='cloud-admin-confirm';
       let cursor=null,mutation=null,loading=false;
-      const clearDialog=()=>{for(const input of Object.values(inputs))input.value='';mutation=null;dialog.close();};cancel.addEventListener('click',clearDialog);dialog.addEventListener('cancel',()=>{for(const input of Object.values(inputs))input.value='';mutation=null;});
-      function chooseMutation(user,kind,value){mutation={user,kind,value};dialogTitle.textContent=`${tr('Confirm administrator action')} · ${user.username}`;dialog.showModal();}
+      let previousPanel=null,opener=null;
+      const clearDialog=()=>{for(const input of Object.values(inputs))input.value='';mutation=null;dialog.close();if(previousPanel){previousPanel.showModal();previousPanel=null;}opener?.focus?.();};cancel.addEventListener('click',clearDialog);dialog.addEventListener('cancel',event=>{event.preventDefault();clearDialog();});
+      function chooseMutation(user,kind,value){opener=doc.activeElement;previousPanel=doc.getElementById('classic-settings');if(previousPanel?.open)previousPanel.close();else previousPanel=null;mutation={user,kind,value};confirmStatus.textContent='';dialogTitle.textContent=`${tr('Confirm administrator action')} · ${user.username}`;dialog.showModal();}
       loadUsers=async(append=false)=>{
         if(loading)return;loading=true;reload.disabled=more.disabled=true;directoryStatus.textContent=tr('Loading registered users…');
         try{const result=await sessionClient.request(`/api/v1/admin/users${append&&cursor?`?cursor=${encodeURIComponent(cursor)}`:''}`);if(!append)body.replaceChildren();
-          for(const user of result.users){const row=el('tr');for(const value of [user.username,user.displayName,user.email,user.organization,user.role,user.status,user.createdAt?new Date(user.createdAt).toLocaleString(doc.documentElement.lang):'—',user.emailVerifiedAt?new Date(user.emailVerifiedAt).toLocaleString(doc.documentElement.lang):'—'])row.append(el('td',{'data-i18n-skip':''},value));
+          for(const user of result.users){const row=el('tr');for(const [index,value]of [user.username,user.displayName,user.email,user.organization,user.role,user.status,user.createdAt?new Date(user.createdAt).toLocaleString(doc.documentElement.lang):'—',user.emailVerifiedAt?new Date(user.emailVerifiedAt).toLocaleString(doc.documentElement.lang):'—'].entries())row.append(el('td',{'data-i18n-skip':'','data-label':tr(columnNames[index])},value));
             const actions=el('td'),role=el('button',{type:'button'},user.role==='admin'?'Revoke administrator':'Grant administrator'),state=el('button',{type:'button'},user.status==='disabled'?'Enable account':'Disable account');
             role.addEventListener('click',()=>chooseMutation(user,'role','observer'));state.addEventListener('click',()=>chooseMutation(user,'status',user.status==='disabled'?'active':'disabled'));if(user.role==='admin')actions.append(role);actions.append(state);row.append(actions);body.append(row);}
-          cursor=result.nextCursor;more.hidden=!cursor;directoryStatus.textContent=tr(result.users.length?'User list loaded.':'No registered users.');
+          cursor=result.nextCursor;more.hidden=!cursor;filterRows();directoryStatus.textContent=tr(result.users.length?'User list loaded.':'No registered users.');
         }catch(error){directoryStatus.textContent=tr(errorText(error));}finally{loading=false;reload.disabled=more.disabled=false;}
       };
       reload.addEventListener('click',()=>loadUsers());more.addEventListener('click',()=>loadUsers(true));
@@ -79,7 +88,7 @@
       confirmation.addEventListener('submit',async event=>{event.preventDefault();if(!mutation||apply.disabled)return;apply.disabled=true;try{
         const value=inputs.verification.value.trim(),payload={[mutation.kind]:mutation.value,expectedVersion:mutation.user.roleVersion,reason:inputs.reason.value,password:inputs.password.value,[/^\d{6}$/.test(value)?'totp':'recoveryCode']:value};
         await sessionClient.request(`/api/v1/admin/users/${mutation.user.id}/${mutation.kind}`,payload);clearDialog();await loadUsers();
-      }catch(error){directoryStatus.textContent=tr(errorText(error));}finally{inputs.password.value='';inputs.verification.value='';apply.disabled=false;}});
+      }catch(error){confirmStatus.textContent=tr(errorText(error));}finally{inputs.password.value='';inputs.verification.value='';apply.disabled=false;}});
     }
     return {role:identity.role,beginEnrollment,confirmEnrollment,loadUsers,applications};
   }

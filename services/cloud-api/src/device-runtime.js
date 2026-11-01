@@ -31,7 +31,7 @@ function createDeviceRuntime({pool,sessions,mediaConfig,config}){
     // Initial remote rollout is explicitly SDK read-only. Full movement stays
     // closed until physical binding, video timing and tutorial acceptance exist.
     readiness:async(_principal,id)=>relay.devices.get(id)?.readOnly===true}):null;
-  return {relay,mediaService,controlChannels,controlService,async listen(){
+  return {relay,latestState:relay.latestState,mediaService,controlChannels,controlService,async listen(){
     if(process.platform!=='linux'||closed)throw Error('DEVICE_UNIX_RUNTIME_REQUIRED');
     await new Promise((resolve,reject)=>{relay.server.once('error',reject);relay.server.listen(mediaConfig.socketPath,resolve);});
     await fs.chmod(mediaConfig.socketPath,0o660);

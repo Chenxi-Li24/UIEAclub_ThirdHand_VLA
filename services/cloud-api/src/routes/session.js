@@ -2,6 +2,7 @@
 const { json, requireFields } = require('../http');
 const { createUsersRepository } = require('../../../../platform/storage/src/users');
 async function sessionRoute({ path, request, response, body, principal, sessions, accounts, mfa, pool, sourceKey }) {
+  if(path==='/api/v1/me/security'&&request.method==='GET')return json(response,200,{mode:principal.mode,role:principal.role,mfaEnabled:await mfa.hasEnabled(principal.userId)});
   if (path === '/api/v1/session' && request.method === 'GET') return json(response, 200, {
     userId:principal.userId,sessionId:principal.sessionId,role:principal.role,mode:principal.mode,roleVersion:principal.roleVersion,csrfToken:principal.csrfToken
   });

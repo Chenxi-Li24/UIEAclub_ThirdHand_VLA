@@ -14,17 +14,17 @@
     const shell=get(bootstrap.preferences?.layoutId==='classic'?'ThirdHandClassicShell':'ThirdHandWorkspace').mountWorkspace(doc,tutorialView,{calibrationEntry:null,canOpenPage:id=>identity.mode==='admin'||id!=='assistant'});
     const essentials=api.mountWorkspaceEssentials({document:doc,view,shell,identity,sessionClient:session,preferences});
     get('ThirdHandAccountSecurity').mountAccountSecurity({document:doc,view,identity,sessionClient:session});
-    const historyLink=doc.createElement('a');historyLink.href='/history';historyLink.className='action-btn action-secondary workspace-history-link';historyLink.title=tr('Run history');historyLink.setAttribute('aria-label',tr('Run history'));
-    const historyIcon=doc.createElement('span');historyIcon.className='nav-icon';historyIcon.setAttribute('aria-hidden','true');historyIcon.textContent='◷';
-    const historyText=doc.createElement('span');historyText.className='nav-label';historyText.textContent=tr('Run history');historyLink.append(historyIcon,historyText);doc.querySelector('.nav-bottom').append(historyLink);
+    const navigation=get('ThirdHandWorkspaceNavigation')?.mount({document:doc,view,shell,identity});
     const camera=get('ThirdHandCameraView').mountCameraView({document:doc,view,sessionClient:session});
+    const deviceState=get('ThirdHandDeviceState')?.mountDeviceState({document:doc,view,sessionClient:session,shell});
+    const liveControls=get('ThirdHandAdminControl').mountAdminControl({document:doc,view,identity,sessionClient:session,stateStore:deviceState?.store});
     shell.attachEssentials?.({preferences});
     session.startMonitoring();doc.getElementById('app').dataset.ready='true';doc.getElementById('workspace-opening')?.remove();
     view.performance?.mark?.('thirdhand:shell-ready');
     const spinner=doc.createElement('p');spinner.className='cloud-model-loading';spinner.setAttribute('role','status');spinner.textContent=tr('Loading model…');doc.getElementById('three-container').append(spinner);
     const initialDisabled=new Map();
     for(const node of doc.querySelectorAll('#joint-controls-body input,#preset-grid button,#btn-send,#gripper-input,#gripper-slider,#workspace-model .view-tools button')){initialDisabled.set(node,node.disabled);node.disabled=true;}
-    let active=true,controls,waypoints,liveControls,modelTimer;
+    let active=true,controls,waypoints,modelTimer;
     const modelTask=(async()=>{
       try{
         const resources=await loadModel();if(!active)return;
@@ -38,14 +38,13 @@
         controls.simulation.setJoints([0,90,-90,0,0,0]);arm.setGripperPosition(1);scene.fitModel(arm.mount);spinner.remove();
         for(const {node,disabled}of inputs)node.disabled=disabled;
         waypoints.setReady(true);
-        liveControls=get('ThirdHandAdminControl').mountAdminControl({document:doc,view,identity,sessionClient:session,arm});
         view.performance?.mark?.('thirdhand:model-ready');
       }catch{
         if(active){spinner.textContent=tr('The robot model could not be loaded.');const retry=doc.createElement('button');retry.type='button';retry.className='action-btn action-secondary';retry.textContent=tr('Retry model');retry.addEventListener('click',()=>view.location.reload());spinner.append(retry);}
       }finally{view.clearTimeout?.(modelTimer);}
     })();
     modelTimer=view.setTimeout?.(()=>{if(active&&spinner.isConnected){spinner.textContent=tr('The model is taking longer than expected.');const retry=doc.createElement('button');retry.type='button';retry.textContent=tr('Retry model');retry.addEventListener('click',()=>view.location.reload());spinner.append(retry);}},20000);
-    view.addEventListener('pagehide',()=>{active=false;view.clearTimeout?.(modelTimer);waypoints?.dispose();camera.dispose();liveControls?.dispose();controls?.dispose();essentials.dispose();session.close();preferences.dispose();},{once:true});
+    view.addEventListener('pagehide',()=>{active=false;view.clearTimeout?.(modelTimer);waypoints?.dispose();camera.dispose();navigation?.dispose();deviceState?.dispose();liveControls?.dispose();controls?.dispose();essentials.dispose();session.close();preferences.dispose();},{once:true});
     shell.installOnboarding(get('ThirdHandOnboarding'));
     void (async()=>{
       let tutorial={state:{status:'unavailable'},entry:null};try{tutorial=await session.request('/api/v1/tutorial');}catch{}

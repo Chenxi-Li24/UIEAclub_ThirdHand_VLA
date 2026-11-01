@@ -8,9 +8,10 @@
   const back=el('button',{id:'account-back',type:'button',class:'account-back',title:'Back to workspace','aria-label':'Back to workspace'}),backLabel=el('span',{class:'nav-label'},'Back to workspace');back.append(el('span',{class:'nav-icon','aria-hidden':'true'},'←'),backLabel);nav.insertBefore(back,nav.querySelector('[data-page]'));
   const pages=new Map();
   for(const [id,label,description,symbol]of [
-   ['profile','Profile','Your identity and workspace details.','◉'],['preferences','Preferences','Make this workspace feel like yours.','☷'],
-   ['connections','Connections','Current services and device feedback.','⌁'],['about','About','A closer look at your robot workspace.','ⓘ'],
+   ['profile','Profile','Your identity and workspace details.','◉'],['security','Security & login','Sign-in mode and account protection.','◇'],['preferences','Preferences','Make this workspace feel like yours.','☷'],
+   ['members','Members & permissions','Registered users and administrator applications.','☷'],['connections','Devices & diagnostics','Current services and device feedback.','⌁'],['about','About','A closer look at your robot workspace.','ⓘ'],
   ]){
+   if(id==='members'&&doc.documentElement.dataset.accessMode!=='admin')continue;
    const key=`account-${id}`,button=el('button',{type:'button','data-page':key,'aria-label':label,title:label});
    button.append(el('span',{class:'nav-icon','aria-hidden':'true'},symbol),el('span',{class:'nav-label'},label));button.addEventListener('click',()=>go(key));nav.insertBefore(button,bottom);
    const page=el('section',{id:`page-${key}`,class:'workspace-page account-page',hidden:'','aria-labelledby':`heading-${key}`}),heading=el('div',{class:'workspace-heading'});
@@ -36,6 +37,7 @@
    const name=profile?.displayName||tr('Workspace account'),initials=profile?.displayName?profile.displayName.trim().slice(0,2).toUpperCase():'TH';
    entryName.textContent=name;profileName.textContent=name;avatar.textContent=largeAvatar.textContent=initials;entryDetail.textContent=tr('Account and settings');entry.title=tr('Account and settings');entry.setAttribute('aria-label',tr('Account and settings'));backLabel.textContent=tr('Back to workspace');back.title=tr('Back to workspace');back.setAttribute('aria-label',tr('Back to workspace'));
    badge.textContent=tr(ready?'Profile data available':'Not connected');profileStatus.textContent=tr(status);
+   profileNote.textContent=tr(ready?'Email changes require verification.':'Loading profile…');
    reload.disabled=pending||!provider?.loadProfile;save.disabled=pending||!ready||!provider?.saveProfile;for(const field of Object.values(fields))field.disabled=pending||!ready||!provider?.saveProfile;
   }
   function applyProfile(value){profile=clean(value);for(const [key,input]of Object.entries(fields))input.value=profile[key];}
@@ -55,11 +57,12 @@
   });
   reload.addEventListener('click',()=>setDataProvider(provider));entry.addEventListener('click',()=>go('account-profile'));back.addEventListener('click',()=>go(lastWorkspace));
   learning.addEventListener('click',()=>{if(go('overview')!==false)byId('workspace-guide')?.click();});
+  const aboutEntry=el('button',{type:'button',class:'action-btn action-secondary'},'About');aboutEntry.addEventListener('click',()=>go('account-about'));pages.get('preferences').append(aboutEntry);
   function routeChanged(id){
    const account=id.startsWith('account-');if(!account)lastWorkspace=id;
    byId('app').dataset.workspaceGroup=account?'account':'workspace';const model=byId('workspace-model');if(model)model.hidden=account;back.hidden=!account;
    nav.querySelector('.nav-footer').textContent=account?'ACCOUNT & SETTINGS':'CONTROL WORKSPACE';
-   for(const node of nav.querySelectorAll('[data-page]'))node.hidden=node.dataset.page.startsWith('account-')!==account;
+   for(const node of nav.querySelectorAll('[data-page]'))node.hidden=node.dataset.page.startsWith('account-')!==account||node.dataset.permissionHidden==='true'||node.dataset.page==='account-connections'||node.dataset.page==='account-about';
    const guide=byId('workspace-guide');if(guide)guide.hidden=account;
    entry.classList.toggle('account-active',account);refresh();
   }

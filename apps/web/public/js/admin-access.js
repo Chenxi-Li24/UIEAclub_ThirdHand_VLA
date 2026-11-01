@@ -1,7 +1,7 @@
 (function(root,factory){const api=factory();if(typeof module==='object'&&module.exports)module.exports=api;root.ThirdHandAdminAccess=api;})(globalThis,function(){
   'use strict';
   function mountAdminAccess({document:doc,view,identity,sessionClient}){
-    const parent=doc.getElementById('page-account-profile');
+    const parent=doc.getElementById(identity.role==='admin'&&identity.mode==='admin'?'page-account-members':'page-account-security')||doc.getElementById('page-account-profile');
     const tr=text=>view.ThirdHandI18n?.translate(text,doc.documentElement.lang)||text;
     const el=(tag,attrs={},text)=>{const node=doc.createElement(tag);for(const [key,value]of Object.entries(attrs))node.setAttribute(key,String(value));if(text!==undefined)node.textContent=tr(text);return node;};
     const field=(form,id,label,type='text')=>{const row=el('label',{class:'account-field',for:id},label),input=el('input',{id,type,required:'',maxlength:500,autocomplete:type==='password'?'current-password':'off'});row.append(input);form.append(row);return input;};

@@ -25,7 +25,7 @@ test('classic reuses drawer controls and shared model/account adapters without m
   const request=async(path,body)=>{requests.push(path);if(path.includes('preferences')&&body)return {...body.value,revision:2};return new Promise(()=>{});};
   const preferences=createPreferenceClient({view,request});await preferences.hydrate({userId:'synthetic'},prefs);
   const shell=classic.mountWorkspace(document,view),essentials=workspace.mountWorkspaceEssentials({document,view,shell,identity:{userId:'synthetic',mode:'observe',displayName:'Classic member'},sessionClient:{request},preferences});
-  const history=document.createElement('a');history.className='workspace-history-link';document.querySelector('.nav-bottom').append(history);shell.attachEssentials({preferences});
+  const navigation=require('../../../apps/web/public/js/workspace-navigation').mount({document,view,shell,identity:{mode:'observe'}});shell.attachEssentials({preferences});
   const arm={jointLimits:[[-162,162],[-12,201],[-183,0],[-98,98],[-98,98],[-164,164]],getJointAngles:()=>[0,90,-90,0,0,0],setJointAngles(){},setGripperPosition(){}},controls=workspace.mountModelWorkspace({document,view,shell,arm,scene:{_onResize(){}},identity:{mode:'observe'},sessionClient:{request}});
   shell.installOnboarding(require('../../../apps/web/public/js/onboarding'));
   assert.ok(document.getElementById('workspace-guide'));assert.ok(document.getElementById('onboarding-panel'));
@@ -36,8 +36,8 @@ test('classic reuses drawer controls and shared model/account adapters without m
   assert.ok(document.getElementById('slider-j0'));assert.equal(document.getElementById('viewport').parentElement.id,'app');
   shell.go('account-profile');assert.equal(document.getElementById('classic-settings').hidden,false);shell.go('control');assert.equal(document.getElementById('classic-settings').hidden,true);
   assert.equal(document.getElementById('btn-connect').disabled,true);assert.ok(requests.every(path=>!/(?:sdk|control\/|voice|dummy)/.test(path)));
-  assert.equal(document.getElementById('classic-settings-logout').parentElement.id,'workspace-nav','logout must not live in the mobile-hidden nav footer');
-  document.getElementById('classic-settings-logout').click();assert.ok(requests.includes('/api/v1/session/logout'),'compact screens retain the shared logout action');
+  assert.equal(document.getElementById('workspace-logout').parentElement.id,'page-account-security','logout belongs to the accessible security page, not the mobile-hidden nav footer');
+  document.getElementById('workspace-logout').click();assert.ok(requests.includes('/api/v1/session/logout'),'compact screens retain the shared logout action');
   await preferences.choose({layoutId:'workspace'});assert.equal(reloads,1);assert.equal(document.documentElement.dataset.layout,'classic','do not recolor/reflow the old DOM before the new document opens');
-  controls.dispose();essentials.dispose();preferences.dispose();
+  controls.dispose();essentials.dispose();preferences.dispose();navigation.dispose();
 });

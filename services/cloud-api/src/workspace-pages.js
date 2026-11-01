@@ -8,7 +8,7 @@ const root=path.resolve(__dirname,'../../../apps/web/public'),models=path.resolv
 const files=new Set([
   'css/auth.css','js/preferences.js','js/i18n.js','js/i18n-catalog.js','js/i18n-auth-catalog.js',
   'css/classic-source.css','js/classic-shell.js',
-  'js/workspace-startup.js','js/model-resources.js','css/workspace-layouts.css',
+  'js/workspace-navigation.js','js/device-state.js','js/workspace-startup.js','js/model-resources.js','css/workspace-layouts.css',
   'js/model-waypoints.js','css/model-waypoints.css',
   'css/style.css','css/i18n.css','css/workspace.css','css/workspace-polish.css','css/onboarding.css','css/account-settings.css','css/workspace-surfaces.css','css/status-lights.css','css/cloud-workspace.css',
   'js/cloud-workspace.js','js/robot-viewer.js','js/workspace-session.js','js/simulation-controller.js','js/tutorial-adapter.js','js/camera-lighting.js','js/onboarding-spotlight.js','js/onboarding.js','js/account-settings.js','js/admin-access.js','js/account-security.js','js/admin-control.js','js/status-lights.js','js/workspace-shell.js',
@@ -41,7 +41,7 @@ function workspaceHtml(source,options={}){
   if(classic)html=html.replace('css/style.css','css/classic-source.css');
   if(classic)html=html.replace('<script defer src="js/i18n.js','<script defer src="/js/i18n-onboarding-catalog.js"></script><script defer src="/js/i18n-account-catalog.js"></script><script defer src="/js/i18n-status-catalog.js"></script><script defer src="js/i18n.js');
   html=html.replace(/<script type="module" src="js\/main\.js[^\"]*"><\/script>/,
-    '<script src="/js/preferences.js"></script><script src="/js/simulation-controller.js"></script><script src="/js/tutorial-adapter.js"></script><script src="/js/lib/qrcode-generator-2.0.4.js"></script><script src="/js/admin-access.js"></script><script src="/js/account-security.js"></script><script src="/js/admin-control.js"></script><script src="/js/camera-view.js"></script><script src="/js/workspace-session.js"></script><script src="/js/workspace-startup.js"></script><script type="module" src="/js/cloud-workspace.js"></script>');
+    '<script src="/js/preferences.js"></script><script src="/js/simulation-controller.js"></script><script src="/js/tutorial-adapter.js"></script><script src="/js/lib/qrcode-generator-2.0.4.js"></script><script src="/js/admin-access.js"></script><script src="/js/account-security.js"></script><script src="/js/admin-control.js"></script><script src="/js/device-state.js"></script><script src="/js/workspace-navigation.js"></script><script src="/js/camera-view.js"></script><script src="/js/workspace-session.js"></script><script src="/js/workspace-startup.js"></script><script type="module" src="/js/cloud-workspace.js"></script>');
   if(!html.includes('/js/cloud-workspace.js')||html.includes('src="js/main.js'))throw new Error('Cloud entry replacement failed');
   if(classic)html=html.replace('<script src="/js/preferences.js">','<script src="/js/camera-lighting.js"></script><script src="/js/onboarding-spotlight.js"></script><script src="/js/onboarding.js"></script><script src="/js/account-settings.js"></script><script src="/js/status-lights.js"></script><script src="/js/classic-shell.js"></script><script src="/js/preferences.js">');
   html=html.replace('<script defer src="js/i18n.js','<script defer src="/js/i18n-auth-catalog.js"></script><script defer src="/js/i18n-cloud-catalog.js"></script><script defer src="/js/i18n-history-catalog.js"></script><script defer src="js/i18n.js');

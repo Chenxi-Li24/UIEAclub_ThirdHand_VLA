@@ -35,7 +35,7 @@
   if(mounted.has(doc))return mounted.get(doc);
   const sdkNode=doc.getElementById('hb-label');if(!sdkNode)return null;
   const webNode=doc.createElement('span');webNode.id='workspace-web-status';webNode.className='status-chip';sdkNode.parentElement.insertBefore(webNode,sdkNode);
-  let signal=createSdkSignal(options),web=null,channel=null;const bound=new WeakSet();
+  let signal=createSdkSignal(options),web=null,channel=null,readOnlyState=null;const bound=new WeakSet();
   const tr=value=>win.ThirdHandI18n?.translate(value,doc.documentElement.lang||'en')||value;
   function chip(node,label,state,value,description){
    const key=JSON.stringify([doc.documentElement.lang,label,state,value,description]);node.classList.add('status-chip');
@@ -49,6 +49,12 @@
    if(name.textContent!==tr(label))name.textContent=tr(label);const text=` · ${tr(value)}`;if(status.textContent!==text)status.textContent=text;
   }
   function refresh(){
+   if(readOnlyState){
+    const s=readOnlyState,labels={unknown:'Unknown',connecting:'Connecting',connected:'Connected · fresh',waiting:'Waiting for measured feedback',stale:'Data expired',disconnected:'Disconnected',read_failed:'State read failed'};
+    const state=s.status==='connected'?'online':['waiting','stale','connecting'].includes(s.status)?'waiting':['disconnected','read_failed'].includes(s.status)?'offline':'unknown';
+    chip(sdkNode,'SDK',state,labels[s.status]||'Unknown',labels[s.status]||'Unknown');chip(webNode,'API',s.api,s.api==='online'?'Online':s.api==='offline'?'Offline':'Unknown','Read-only business API');
+    const feedback=doc.querySelector('.overview-card-feedback');if(feedback)feedback.dataset.linkState=state;return;
+   }
    const result=signal.snapshot(),details={
     unknown:['Unknown','SDK status unknown'],awaiting_feedback:['Waiting','Waiting for SDK feedback'],
     current:['Online','SDK online'],sdk_disconnected:['Offline','SDK disconnected'],
@@ -69,7 +75,7 @@
   const timer=win.setInterval?.(refresh,500);timer?.unref?.();
   win.addEventListener('pagehide',event=>{if(!event.persisted)win.clearInterval?.(timer);});doc.addEventListener('visibilitychange',refresh);
   new win.MutationObserver(refresh).observe(doc.documentElement,{attributes:true,attributeFilter:['lang']});
-  const view={bind,refresh};mounted.set(doc,view);refresh();return view;
+  const view={bind,refresh,setReadOnlyState(value){readOnlyState=value;refresh();}};mounted.set(doc,view);refresh();return view;
  }
  return {createSdkSignal,mountStatusLights};
 });

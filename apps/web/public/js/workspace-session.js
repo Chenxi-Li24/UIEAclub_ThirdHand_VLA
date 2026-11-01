@@ -23,6 +23,8 @@
     const el=(tag,attrs={},text)=>{const node=doc.createElement(tag);for(const [key,value]of Object.entries(attrs))node.setAttribute(key,String(value));if(text!==undefined)node.textContent=text;return node;};
     const report=message=>{const notice=byId('workspace-notice');notice.hidden=false;notice.textContent=tr(message);};
     const mode=()=>{byId('workspace-mode').textContent=tr(identity.mode==='admin'?'Administrator · model simulation':'Observer · model simulation');};mode();
+    const sync=byId('chk-sync');if(sync){sync.checked=false;sync.disabled=true;sync.title=tr('Live-state mirroring is unavailable');}
+    if(byId('btn-send'))byId('btn-send').textContent=tr('Apply to model');
     for(const selector of ['#btn-connect','#btn-disconnect','#btn-estop-top','#btn-stop-reconnect','#btn-voice-toggle','#sec-xvision button','#sec-dummy button','#sec-gripper button','#tab-tcp'])for(const button of doc.querySelectorAll(selector)){if(button.classList.contains('sec-toggle'))continue;button.disabled=true;button.title=tr('Real robot control is unavailable');}
     if(identity.mode==='observe'){byId('btn-estop-top').hidden=true;const assistant=doc.querySelector('[data-page="assistant"]');if(assistant)assistant.hidden=true;}
     const logout=el('button',{type:'button',id:'workspace-logout',class:'action-btn action-secondary'},'Sign out');

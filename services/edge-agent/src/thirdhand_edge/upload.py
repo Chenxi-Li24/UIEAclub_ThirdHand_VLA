@@ -23,6 +23,10 @@ class TelemetryUploadClient:
     media. Errors end the current drain; only a later explicit call can resend
     the same immutable outbox batch, never a Robot command.
     """
+    endpoint = '/edge/v1/telemetry-batches'
+    timeout_seconds = 15
+    maximum_bytes = 360000
+
     def __init__(self, config):
         source = urlsplit(config.url)
         if source.scheme != 'wss' or not source.hostname or source.username or source.password or source.query or source.fragment or source.path != '/edge/v1/connect':
@@ -60,7 +64,7 @@ class TelemetryUploadClient:
 
     def _post(self, value):
         data = json.dumps(value, allow_nan=False, separators=(',', ':')).encode('utf-8')
-        if len(data) > 360000:
+        if len(data) > self.maximum_bytes:
             raise ValueError('Oversized telemetry upload')
         with self._request_lock:
             with self._state_lock:
@@ -68,7 +72,7 @@ class TelemetryUploadClient:
                     raise ValueError('Upload client closed')
                 connection = self._connection
                 if connection is None:
-                    connection = http.client.HTTPSConnection(self._host, self._port, context=self._tls, timeout=15)
+                    connection = http.client.HTTPSConnection(self._host, self._port, context=self._tls, timeout=self.timeout_seconds)
                     connection.auto_open = 0  # Cancellation cannot implicitly reconnect this request.
                     self._connection = connection
             response = None
@@ -78,7 +82,7 @@ class TelemetryUploadClient:
                 with self._state_lock:
                     if self._closed:
                         raise ValueError('Upload client closed')
-                connection.request('POST', '/edge/v1/telemetry-batches', body=data,
+                connection.request('POST', self.endpoint, body=data,
                                    headers={'Content-Type': 'application/json'})
                 response = connection.getresponse()
                 if response.status != 200:

@@ -128,6 +128,12 @@ def run_worker(config, role, boot):
             await publish_camera(frames=frames(),request_grant=grants.request,context=context,publisher_id=str(uuid.uuid4()),trusted_keys=keys,server_url=config["media_server_url"],on_grant=received)
         asyncio.run(publish())
         return
+    if role == "state":
+        from .latest_state import LatestStateClient, publish_latest
+        robot = RobotClient(base_url=config["robot_origin"], token_file=config["robot_token_file"])
+        publish_latest(robot, LatestStateClient(device), context_path=directory / "connection.json",
+                       device_id=device.device_id, boot_id=boot, versions=config.get("versions"))
+        return
     box = Outbox(directory / "outbox.sqlite", device_id=device.device_id, boot_id=boot, max_bytes=config.get("outbox_max_bytes", 268435456))
     try:
         if role == "capture":
@@ -175,7 +181,7 @@ def supervise(path, config):
         stopping = True
     previous = {name: signal.signal(name, stop) for name in (signal.SIGTERM, signal.SIGINT)}
     try:
-        for role in ("capture", "upload", "control", *(("media",) if "media_source_url" in config else ())):
+        for role in ("capture", "upload", "control", "state", *(("media",) if "media_source_url" in config else ())):
             children.append(subprocess.Popen([sys.executable, "-m", "thirdhand_edge.runtime", "--config", str(path), "--worker", role, "--boot", boot], stdin=subprocess.DEVNULL))
         print(json.dumps({"event": "edge.started", "bootId": boot, "controlAuthorized": False}), flush=True)
         while not stopping and all(child.poll() is None for child in children):
@@ -203,7 +209,7 @@ def supervise(path, config):
 def main():
     parser = argparse.ArgumentParser(description="ThirdHand outbound device supervisor; no automatic SDK connection")
     parser.add_argument("--config", type=Path, required=True)
-    parser.add_argument("--worker", choices=("control", "capture", "upload", "media"), help=argparse.SUPPRESS)
+    parser.add_argument("--worker", choices=("control", "capture", "upload", "media", "state"), help=argparse.SUPPRESS)
     parser.add_argument("--boot", help=argparse.SUPPRESS)
     args = parser.parse_args()
     os.umask(0o077)

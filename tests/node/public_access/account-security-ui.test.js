@@ -10,8 +10,10 @@ test('administrator enrollment displays a one-time key and recovery codes withou
   const api=mountAccountSecurity({document,view:{qrcode,location:{reload(){}}},identity:{userId:'admin-user',role:'admin',mode:'observe'},sessionClient:client});
   assert.ok(document.getElementById('security-code-field').hidden);
   assert.ok(document.getElementById('mfa-enrollment').hidden);
+  assert.equal(document.querySelector('.cloud-mfa-form').hidden,true,'Passwords appear only after choosing the security action');
+  document.getElementById('security-begin').click();assert.equal(document.querySelector('.cloud-mfa-form').hidden,false);
   document.getElementById('security-password').value='Private test password';await api.beginEnrollment();
-  assert.equal(calls[0].path,'/api/v1/mfa/prepare');assert.equal(calls[0].body.password,'Private test password');assert.equal(document.getElementById('mfa-secret').value,'JBSWY3DPEHPK3PXP');
+  assert.equal(calls[0].path,'/api/v1/me/security');assert.equal(calls[0].body,undefined);const prepare=calls.find(c=>c.path==='/api/v1/mfa/prepare');assert.equal(prepare.body.password,'Private test password');assert.equal(document.getElementById('mfa-secret').value,'JBSWY3DPEHPK3PXP');
   assert.equal(document.getElementById('security-code-field').hidden,false);
   assert.equal(document.querySelector('label[for="security-password"]').hidden,true,'Password step must disappear after verification');
   const svg=document.querySelector('#mfa-qr svg');assert.ok(svg,'QR must be available after password verification');
@@ -52,7 +54,7 @@ test('administrator member rows load immediately without an extra Load button cl
   const {document}=parseHTML('<section id="page-account-profile"></section>');const calls=[];
   mountAccountSecurity({document,view:{},identity:{role:'admin',mode:'admin'},sessionClient:{async request(path){calls.push(path);return {users:[{id:'member',username:'alice',displayName:'Alice',email:'alice@example.invalid',organization:'Lab',role:'observer',status:'active'}],nextCursor:null};}}});
   for(let i=0;i<10;i++)await Promise.resolve();
-  assert.deepEqual(calls,['/api/v1/admin/applications','/api/v1/admin/users']);
+  assert.deepEqual(calls,['/api/v1/admin/applications','/api/v1/me/security','/api/v1/admin/users']);
   assert.equal(document.querySelectorAll('#admin-user-directory tbody tr').length,1);
   assert.match(document.querySelector('#admin-user-directory tbody').textContent,/Alice/);
 });

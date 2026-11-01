@@ -13,13 +13,14 @@
     const pages=new Map(),runtime={};let current='control',account;
     function hidePanel(){if(panel.open)panel.close();panel.hidden=true;}
     function go(id){
+      if(id==='system'||id==='devices')id='account-connections';
       if(pages.has(id)){
         if(notice.classList.contains('classic-notice')){notice.classList.remove('classic-notice');notice.hidden=true;main.prepend(notice);}
         current=id;for(const [key,node]of pages)node.hidden=key!==id;
-        account?.routeChanged(id);panel.hidden=false;if(panel.showModal&&!panel.open)panel.showModal();
+        account?.routeChanged(id);panel.dataset.section=id==='account-connections'?'devices':'account';nav.hidden=id==='account-connections';panel.hidden=false;if(panel.showModal&&!panel.open)panel.showModal();
       }else{
         hidePanel();current=['overview','vision','system','calibration'].includes(id)?id:'control';account?.routeChanged('control');
-        if(id==='vision'){presentation.expandDrawer();byId('sec-xvision')?.scrollIntoView?.({block:'start'});}
+        if(id==='vision'){presentation.expandDrawer();byId('sec-xvision')?.classList.remove('collapsed');byId('sec-xvision')?.scrollIntoView?.({block:'start'});}
         if(id==='system'){byId('log-panel').classList.add('open');byId('btn-log-toggle').classList.add('active');}
         if(id==='calibration'){byId('viewport').append(notice);notice.classList.add('classic-notice');notice.hidden=false;notice.textContent=tr('Real robot control is unavailable');}
       }
@@ -51,16 +52,17 @@
     const shell={go,setAccountDataProvider:provider=>account.setDataProvider(provider),
       bindRuntime(value){Object.assign(runtime,value);view.requestAnimationFrame(()=>runtime.scene?._onResize());guide?.bindScene?.(runtime.scene);},
       attachEssentials({preferences}){
-        tools.append(byId('workspace-logout'),doc.querySelector('.workspace-history-link'));
         // The compact original header hides text actions on small screens.
         // Keep the same shared logout action reachable inside account settings.
-        const logout=el('button',{type:'button',id:'classic-settings-logout'},'Sign out');
-        logout.addEventListener('click',()=>byId('workspace-logout').click());nav.append(logout);
         const theme=byId('theme-select'),selectTheme=value=>{for(const option of theme.options)option.selected=option.value===value.classicThemeId;};preferences.subscribe(selectTheme);
         theme.addEventListener('change',()=>preferences.choose({classicThemeId:theme.value}).catch(()=>{selectTheme(preferences.current());go('account-preferences');notice.hidden=false;notice.textContent=tr('Could not save preferences. Please try again.');}));
       },
       installOnboarding(api){
-        guide=api?.mountOnboarding?.(doc,view,{go,panelHost:doc.body,checklistHost:byId('page-account-preferences'),resolveTargets:selectors=>selectors.map(selector=>({'#workspace-model':'#viewport','.workspace-tabs':'#sec-joints .sec-header','.workspace-calibration-info':'a[href="tcp-calibration.html"]'}[selector]||selector)),getContext:()=>({page:current,busy:Boolean(runtime.ui?.lastRobotState?.stateName==='MOVING'),statusText:mode.textContent,cameraText:byId('cam-label')?.textContent}),readJointPreview:()=>runtime.ui?.arm?.getJointAngles()});
+        guide=api?.mountOnboarding?.(doc,view,{go,panelHost:doc.body,checklistHost:byId('page-account-preferences'),resolveTargets:selectors=>{
+          if(selectors.includes('#workspace-model'))presentation.collapseDrawer();
+          if(selectors.includes('.workspace-tabs')){presentation.expandDrawer();byId('sec-joints')?.classList.remove('collapsed');byId('sec-joints')?.scrollIntoView?.({block:'start'});}
+          return selectors.map(selector=>({'#workspace-model':'#viewport','.workspace-tabs':'#sec-joints .sec-header','.workspace-calibration-info':'#device-status-entry'}[selector]||selector));
+        },getContext:()=>({page:current,busy:Boolean(runtime.ui?.lastRobotState?.stateName==='MOVING'),statusText:mode.textContent,cameraText:byId('cam-label')?.textContent}),readJointPreview:()=>runtime.ui?.arm?.getJointAngles()});
         if(byId('workspace-guide'))tools.append(byId('workspace-guide'));
         if(runtime.scene)guide?.bindScene?.(runtime.scene);return guide;
       }

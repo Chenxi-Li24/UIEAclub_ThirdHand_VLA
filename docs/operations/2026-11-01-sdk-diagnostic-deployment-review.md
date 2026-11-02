@@ -1,6 +1,6 @@
 # SDK 确认拒绝诊断固定部署审阅
 
-状态：本地实现、针对性测试、固定包及回退准备完成；尚未上传、尚未部署。本次不是SDK已修复的结论。前一候选671809219c9cefc8已部署，但观察员授权两次失败；具体结果见[续期部署记录](2026-11-01-sdk-renewal-deployment-review.md)。
+状态：用户已明确批准上传、部署并继续验收。2026-11-02 09:37（北京时间）已应用为1cae07dc97cc0d04，前检和应用exit=0，applied=true；仅改变leases.js，保留4656件。诊断已部署不等于SDK已修复，现场验收见文末。
 
 ## 目的与限制
 
@@ -39,3 +39,14 @@
 云端先python3 apply_sdk_diagnostic_cloud.py只读核验，获批后--apply。失败自动恢复旧发布；必要时同目录执行--rollback，仅恢复原current并重启业务API。回退核验原清单和备份，不回滚数据库，不删除用户记录，不依赖新包完整性。
 
 本次新增固定字节与上传目标不在上一份两文件续期包中，因此依据已批准[C8方案](2026-11-01-C8-ui-sdk-audit-and-design.md)第9节第6步，在材料准备好后申请本次部署确认。原批准的SDK只读验收权限持续有效。
+
+## 2026-11-02 实际部署与验收
+
+- 上传前复核current仍为671809219c9cefc8，清单、源码摘要与原固定基线一致；上传两件文件摘要匹配，目录0700、文件0600。只读前检及应用成功，受保护配置和explicit-read-only健康校验由固定应用器完成。
+- 09:38:19.698 Observer申请，09:38:19.887确认，09:38:23.409释放，renewal_sequence=10，renewal_unconfirmed。
+- 新诊断明确：phase=renewal，deviceState=rejected，deviceCode=LEASE_SCOPE_CHANGED，三个绑定比较为false；续期诊断耗时919ms。
+- Ubuntu已有事件：09:38:19.828 arm成功，随后9次renew成功，最后09:38:22.278；09:38:23.086先执行租约撤销，09:38:23.090记录lease_expired。设备源码在先调用expire清空lease后，使用lease?.scope与请求scope比较，因而这次过期也会返回LEASE_SCOPE_CHANGED。不能把它误判为观察员权限升级失败。
+- 本次自动化仅申请SDK授权，没有点击连接SDK或初始化确认，没有发送后续运动。部署前读取sdkConnected=false、readOnly=true、controlAccepted=true、recordingHealthy=true；两个正确服务名thirdhand-tcp-calibration-robot.service和thirdhand-stage-edge-read-only.service均active。早先查询猜测服务名得到inactive不代表实际服务停止。
+- 连续10分钟真实SDK状态验收仍未通过。下一步在本地修复确认返回阻塞后续续期的调度，并保持原到期/权限规则；不能宣称其能修复超过一秒的持续下行阻塞。
+
+云端结果文件：/var/backups/thirdhand/access-sdk-diagnostic-20261101/apply-output.json。截图：.superpowers/sdd/2026-11-01-sdk-source-audit/sdk-diagnostic-applied.png。CI候选aee5991运行41319221028的public-access/test均success。

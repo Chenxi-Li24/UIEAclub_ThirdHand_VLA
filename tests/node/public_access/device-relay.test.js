@@ -89,6 +89,23 @@ test('bound executor is unavailable for commands until local binding ACK; replie
   assert.equal(f.relay.devices.get(f.identity.id).controlAccepted,false);
 });
 
+test('ordered relay dispatch finishes after sending, before ACK, and still rejects revoked credentials',async t=>{
+  const f=await fixture(t,{control:true}),ws=await f.socket(),welcome=await f.auth(ws,{executorEpoch:randomUUID()});
+  const bound=nextMessage(ws);ws.send(JSON.stringify({type:'bound',executorEpoch:welcome.context.executorEpoch,hardwareFingerprint:'d'.repeat(64)}));await bound;
+  const keys=generateKeyPairSync('ed25519'),signer=createEnvelopeSigner({keyId:'test',privateKey:keys.privateKey}),leaseId=randomUUID();
+  const envelope=sequence=>{const now=Date.now();return signer.sign({schema:1,purpose:'lease_renew',...welcome.context,leaseId,leaseEpoch:1,sequence,scope:'sdk',issuedAt:now,expiresAt:now+1000});};
+  const incoming1=nextMessage(ws),first=await f.relay.devices.dispatch(f.identity.id,envelope(1)),message1=JSON.parse(await incoming1);
+  let firstConfirmed=false;first.confirmation.then(()=>{firstConfirmed=true;});
+  const incoming2=nextMessage(ws),second=await f.relay.devices.dispatch(f.identity.id,envelope(2)),message2=JSON.parse(await incoming2);
+  assert.equal(firstConfirmed,false);
+  assert.deepEqual([message1,message2].map(m=>JSON.parse(Buffer.from(m.envelope.payloadBase64url,'base64url')).sequence),[1,2]);
+  const outcome={state:'active',leaseId,leaseEpoch:1,scope:'sdk'};
+  ws.send(JSON.stringify({type:'result',requestId:message2.requestId,outcome}));assert.deepEqual(await second.confirmation,outcome);
+  assert.equal(firstConfirmed,false);
+  ws.send(JSON.stringify({type:'result',requestId:message1.requestId,outcome}));assert.deepEqual(await first.confirmation,outcome);
+  f.disable();await assert.rejects(f.relay.devices.dispatch(f.identity.id,envelope(3)),/DEVICE_UNAVAILABLE/);
+});
+
 test('a probe cannot replace an existing bound-executor connection',async t=>{
   const f=await fixture(t,{control:true}),control=await f.socket(),welcome=await f.auth(control,{executorEpoch:randomUUID()});
   const probe=await f.socket();await assert.rejects(f.auth(probe));
@@ -121,7 +138,10 @@ for(const leaseScope of [undefined,'control','sdk'])test(`Python bound transport
   await bound;
   const binding=f.relay.devices.get(f.identity.id),context=Object.fromEntries(['deviceId','bootId','executorEpoch','connectionId','certificateId'].map(key=>[key,binding[key]]));
   const leaseId=randomUUID();
-  const grant=()=>({schema:1,purpose:'lease_grant',...context,leaseId,leaseEpoch:1,sequence:0,issuedAt:Date.now(),expiresAt:Date.now()+1000,...(leaseScope?{scope:leaseScope}:{})});
+  // This integration checks scope and journaling, not the exact TTL boundary.
+  // Node/Python wall clocks can differ by 1ms on Windows; use a valid 900ms
+  // fixture lease. Deterministic clock tests cover the production 1000ms limit.
+  const grant=()=>{const now=Date.now();return {schema:1,purpose:'lease_grant',...context,leaseId,leaseEpoch:1,sequence:0,issuedAt:now,expiresAt:now+900,...(leaseScope?{scope:leaseScope}:{})};};
   for(const scope of ['all','',null,{},true])assert.equal((await f.relay.devices.request(f.identity.id,signer.sign({...grant(),scope}))).state,'rejected');
   assert.equal((await f.relay.devices.request(f.identity.id,signer.sign({...grant(),extra:true}))).state,'rejected');
   const granted=await f.relay.devices.request(f.identity.id,signer.sign(grant()));

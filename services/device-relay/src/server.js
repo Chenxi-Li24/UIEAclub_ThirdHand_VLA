@@ -165,19 +165,26 @@ function createDeviceRelay({store,ingestBatch,mediaPublisher,tls=null,trustedUni
     try{for(const item of active.values()){let valid=false;try{valid=await stillRegistered(item.registered);}catch{/* Storage failure denies a device channel. */}if(!valid||now()-item.ws.lastSeen()>=heartbeatTimeoutMs)item.ws.close(1008,'Device authorization expired');}}
     finally{sweeping=false;}
   },1000);sweep.unref();
-  return {server,latestState,devices:{events,get(deviceId){const entry=active.get(deviceId);return entry?.ws.readyState===WebSocket.OPEN?{...entry.context,controlAccepted:entry.ready,readOnly:entry.registered.readOnly===true}:null;},async request(deviceId,envelope){
+  async function dispatch(deviceId,envelope){
     validateEnvelope(envelope);const item=active.get(deviceId),payload=JSON.parse(decodeBase64url(envelope.payloadBase64url));
     if(!item?.ready||item.ws.readyState!==WebSocket.OPEN||now()>=item.registered.validUntil||!['deviceId','bootId','executorEpoch','connectionId','certificateId'].every(key=>payload[key]===item.context[key]))throw Error('DEVICE_UNAVAILABLE');
     const priorityStop=payload.purpose==='stop'&&payload.opcode==='software_stop';
     if(item.registered.readOnly===true&&payload.purpose==='command'&&!['connect','disconnect'].includes(payload.opcode))throw Error('READ_ONLY_DEVICE');
     if(!priorityStop&&!await stillRegistered(item.registered)||active.get(deviceId)!==item)throw Error('DEVICE_UNAVAILABLE');
     if(item.pendingRequests.size>=(priorityStop?9:8))throw Error('DEVICE_BUSY');
-    return new Promise((resolve,reject)=>{
+    const confirmation=new Promise((resolve,reject)=>{
       const requestId=randomUUID(),timeout=payload.purpose==='command'?35000:priorityStop?4000:1500;
       const timer=setTimeout(()=>{item.pendingRequests.delete(requestId);reject(Error('DEVICE_REPLY_UNKNOWN'));},timeout);timer.unref();
       item.pendingRequests.set(requestId,{resolve,reject,timer});
       item.ws.send(JSON.stringify({type:'request',requestId,envelope}),error=>{if(error){clearTimeout(timer);item.pendingRequests.delete(requestId);reject(Error('DEVICE_DISCONNECTED'));}});
     });
+    // The caller may enqueue the next signed lease only after all async
+    // registration checks above and this ordered WebSocket write have run.
+    confirmation.catch(()=>{});
+    return {confirmation};
+  }
+  return {server,latestState,devices:{events,get(deviceId){const entry=active.get(deviceId);return entry?.ws.readyState===WebSocket.OPEN?{...entry.context,controlAccepted:entry.ready,readOnly:entry.registered.readOnly===true}:null;},dispatch,async request(deviceId,envelope){
+    return (await dispatch(deviceId,envelope)).confirmation;
   },async send(deviceId,envelope){
     validateEnvelope(envelope);const item=active.get(deviceId);
     if(!item||item.ws.readyState!==WebSocket.OPEN||!await stillRegistered(item.registered)||active.get(deviceId)!==item)throw Error('DEVICE_UNAVAILABLE');

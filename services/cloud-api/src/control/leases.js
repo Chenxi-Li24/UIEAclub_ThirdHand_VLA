@@ -59,6 +59,41 @@ function createControlService({repository,sessions,channels,devices,signer,clock
       const active=await repository.confirm(principal,lease.id);holders.set(active.id,{lease:active,principal,browser});return active;
     }catch(error){await revoke(lease,'grant_failed');throw error;}
   }
+  function dispatchRenewal(principal,input,holder){
+    // Serialize principal/DB checks and writes to the ordered device channel,
+    // but do not occupy the send queue while awaiting the return-path ACK.
+    const dispatch=(holder.dispatch||Promise.resolve()).catch(()=>{}).then(async()=>{
+      const started=clock.monotonic();let stage='principal';
+      const stillHeld=()=>{if(holders.get(holder.lease.id)!==holder)throw fail('LEASE_CHANGED');channels.requireFresh(principal,input);};
+      try{
+        stillHeld();await actor(principal,holder.lease.scope==='sdk'?'sdk.connect':'control.command',input);
+        stage='readiness';stillHeld();
+        const binding=context(input.deviceId);
+        if(!same(binding,leaseContext(holder.lease))||!await readiness(principal,input.deviceId)){await revoke(holder.lease,'readiness_lost');throw fail('DEVICE_UNAVAILABLE');}
+        stage='repository';stillHeld();
+        const renewed=await repository.renew(principal,holder.lease.id);
+        stage='dispatch';stillHeld();
+        if(!same(context(input.deviceId),binding))throw fail('DEVICE_UNAVAILABLE');
+        stage='device_reply';
+        const envelope=signed('lease_renew',binding,{leaseId:renewed.id,leaseEpoch:renewed.leaseEpoch,sequence:renewed.renewalSequence,scope:renewed.scope});
+        // A legacy adapter without a send-completion boundary remains serialized.
+        const response=typeof devices.dispatch==='function'?(await devices.dispatch(input.deviceId,envelope)).confirmation:Promise.resolve(await devices.request(input.deviceId,envelope));
+        const confirmation=(async()=>{
+          try{
+            const result=await response;stage='confirmation';
+            if(result?.state!=='active'||result.leaseId!==renewed.id||result.leaseEpoch!==renewed.leaseEpoch||(renewed.scope==='sdk'&&result.scope!=='sdk')){reportConfirmation('renewal',result,renewed);await revoke(renewed,'renewal_unconfirmed');throw fail('LEASE_UNCONFIRMED');}
+            stillHeld();
+            // ACKs may arrive in a different order; never regress holder state.
+            if(renewed.renewalSequence>holder.lease.renewalSequence)holder.lease=renewed;
+            return {renewed:true};
+          }catch(error){reportRenewal(stage,error,started);throw error;}
+        })();
+        confirmation.catch(()=>{});
+        return {confirmation};
+      }catch(error){reportRenewal(stage,error,started);throw error;}
+    });
+    holder.dispatch=dispatch;return dispatch;
+  }
   const api={
     async listDevices(principal){if(!authorize(principal,'telemetry.read').ok)throw fail('FORBIDDEN');const rows=await repository.listDevices();return rows.map(row=>({...row,online:!!devices.get(row.id),controlAccepted:devices.get(row.id)?.controlAccepted===true,readOnly:devices.get(row.id)?.readOnly===true}));},
     async status(principal,deviceId){await actor(principal,'sdk.connect');const lease=await repository.current(deviceId);return {deviceId,online:!!devices.get(deviceId),controlAccepted:devices.get(deviceId)?.controlAccepted===true,lease:lease?{leaseEpoch:lease.leaseEpoch,state:lease.state,own:lease.sessionId===principal.sessionId}:null};},
@@ -73,25 +108,8 @@ function createControlService({repository,sessions,channels,devices,signer,clock
       const holder=[...holders.values()].find(value=>value.lease.deviceId===input.deviceId&&value.lease.sessionId===principal.sessionId&&value.browser.connectionId===input.connectionId&&value.browser.clientInstanceId===input.clientInstanceId);
       if(!holder)throw fail('LEASE_REQUIRED');
       if(holder.renewal)return holder.renewal;
-      const started=clock.monotonic();let stage='principal';
-      const stillHeld=()=>{if(holders.get(holder.lease.id)!==holder)throw fail('LEASE_CHANGED');channels.requireFresh(principal,input);};
-      holder.renewal=(async()=>{
-        await actor(principal,holder.lease.scope==='sdk'?'sdk.connect':'control.command',input);
-        stage='readiness';stillHeld();
-        const binding=context(input.deviceId);
-        if(!same(binding,leaseContext(holder.lease))||!await readiness(principal,input.deviceId)){await revoke(holder.lease,'readiness_lost');throw fail('DEVICE_UNAVAILABLE');}
-        stage='repository';stillHeld();
-        const renewed=await repository.renew(principal,holder.lease.id);
-        stage='dispatch';stillHeld();
-        if(!same(context(input.deviceId),binding))throw fail('DEVICE_UNAVAILABLE');
-        stage='device_reply';
-        const result=await devices.request(input.deviceId,signed('lease_renew',binding,{leaseId:renewed.id,leaseEpoch:renewed.leaseEpoch,sequence:renewed.renewalSequence,scope:renewed.scope}));
-        stage='confirmation';
-        if(result?.state!=='active'||result.leaseId!==renewed.id||result.leaseEpoch!==renewed.leaseEpoch||(renewed.scope==='sdk'&&result.scope!=='sdk')){reportConfirmation('renewal',result,renewed);await revoke(renewed,'renewal_unconfirmed');throw fail('LEASE_UNCONFIRMED');}
-        stillHeld();
-        holder.lease=renewed;return {renewed:true};
-      })();
-      try{return await holder.renewal;}catch(error){reportRenewal(stage,error,started);throw error;}finally{holder.renewal=null;}
+      holder.renewal=dispatchRenewal(principal,input,holder).then(({confirmation})=>confirmation);
+      try{return await holder.renewal;}finally{holder.renewal=null;}
     },
     async requestTakeover(principal,input){
       await actor(principal,'control.request',input);context(input.deviceId);
@@ -145,21 +163,31 @@ function createControlService({repository,sessions,channels,devices,signer,clock
     async drain(){while(pending.size)await Promise.allSettled([...pending]);},
     async close(){closed=true;clearInterval(timer);sessions.events.off('revoked',revoked);sessions.events.off('unavailable',unavailable);channels.events.off('fresh',fresh);channels.events.off('closed',disconnected);devices.events?.off('disconnected',deviceDisconnected);await Promise.allSettled([...holders.values()].map(value=>revoke(value.lease,'cloud_service_shutdown')));await api.drain();}
   };
-  function fresh({principal,binding}){
+  function pump(holder){
+    if(holder.pumping||closed||holders.get(holder.lease.id)!==holder)return;
+    holder.pumping=true;
+    track((async()=>{
+      try{while(holder.freshPending&&holders.get(holder.lease.id)===holder&&(holder.inflight||0)<4){
+        holder.freshPending=false;holder.inflight=(holder.inflight||0)+1;
+        let confirmation;
+        try{({confirmation}=await dispatchRenewal(holder.principal,{...holder.browser,deviceId:holder.lease.deviceId},holder));}
+        catch(error){holder.inflight--;throw error;}
+        track(confirmation.catch(async()=>{if(holders.get(holder.lease.id)===holder)await revoke(holder.lease,'renewal_failed');}).finally(()=>{
+          holder.inflight--;
+          if(holder.freshPending)pump(holder);
+        }));
+      }}catch{if(holders.get(holder.lease.id)===holder)await revoke(holder.lease,'renewal_failed');}
+      finally{
+        holder.pumping=false;
+        if(holder.freshPending&&holders.get(holder.lease.id)===holder&&(holder.inflight||0)<4)pump(holder);
+      }
+    })());
+  }
+  function fresh({binding}){
     for(const holder of holders.values())if(holder.browser.connectionId===binding.connectionId){
-      // Retain at most one fresh event while awaiting a device ACK. Dropping all
-      // such events wastes the remainder of a delayed lease's unchanged 1s TTL.
-      // This is event-driven, not a retry timer; every drain rechecks freshness.
-      holder.freshPending=true;
-      if(holder.pumping)continue;
-      holder.pumping=true;
-      track((async()=>{
-        try{while(holder.freshPending&&holders.get(holder.lease.id)===holder){
-          holder.freshPending=false;
-          await api.renewFromBrowser(principal,{...binding,deviceId:holder.lease.deviceId});
-        }}catch{if(holders.get(holder.lease.id)===holder)await revoke(holder.lease,'renewal_failed');}
-        finally{holder.pumping=false;holder.freshPending=false;}
-      })());
+      // At most four signed renewals await ACK and one latest fresh event waits.
+      // No timer, retry, future validity, or command pipelining is introduced.
+      holder.freshPending=true;pump(holder);
     }
   }
   function disconnected({connectionId}){for(const holder of holders.values())if(holder.browser.connectionId===connectionId)track(revoke(holder.lease,'browser_disconnected'));}

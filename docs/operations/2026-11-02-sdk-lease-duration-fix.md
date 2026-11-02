@@ -10,7 +10,7 @@
 
 本地证据：忽略目录 `.superpowers/sdd/2026-11-01-sdk-source-audit/browser-heartbeat-expiry-proof.png`、`browser-heartbeat-device-0732.jsonl`；云端私有备份目录 `access-sdk-browser-heartbeat-20261102/authorization-samples-0732.jsonl`。不提交原始账户、租约ID或凭据。
 
-## 修正设计与实现（尚未上线）
+## 修正设计与实现（已部署，稳定性待验收）
 
 | 边界 | SDK专用授权 | 管理员运动授权 |
 |---|---:|---:|
@@ -41,3 +41,9 @@
 源码7d16cca的CI业务job通过，通用Node job有3项frame_policy_source_changed：桥接源码摘要改变触发既有内容绑定。后续只更新仓库中frame policy的桥接摘要及handeye/web-grasp引用ID，添加重新绑定来源说明；工具变换、外参矩阵、physical_validation_added=false均保持。没有删校验或更改历史证据。该三件配置只用于仓库运行一致性，不在本次staging固定8件源码包中。定向Windows验证3项通过，抓取端到端测试受目录fsync的EPERM限制，由Linux CI复验；不改平台持久化保护来绕过此限制。新构建器10项测试通过，包括现场IK保留和漂移拒绝。
 
 使用现有public-access隔离PostgreSQL测试、Node policy/watchdog/bridge测试、Python edge及worker模拟测试。覆盖SDK跨1.5秒间隔续约、3秒边界、control仍1秒、签名1秒即使有时钟偏差也不得变长、过期终止、scope不可升级和多层运动拒绝。真实10分钟授权稳定性和真实SDK读取均待新包获批上线后验收；本轮不继续重复申请掩盖失败。
+
+## 2026-11-02 固定包部署结果
+
+用户批准后已完成固定包双端上传与SHA256校验。云端在安装锁及授权准入阻断下备份、核对4658件文件并发布e9885d6408e68955（仅2件改变）；Ubuntu由现场快照派生agent-sdk-duration-550c774c14102253、robot-sdk-duration-e559fd326a08a276，保留其他任务代码，仅更新6件源码和2件新增入口配置。三个既有服务均active，诊断开关保持关闭。
+
+部署后healthz正常，deviceControl=explicit-read-only；设备SDK=false、readOnly=true；活动租约0，部署后ops.commands新增0。没有初始化SDK或发送运动。600秒授权验收尚未开始，等待用户Observer登录；真实SDK读取及运动验收不属于本轮。旧版本及备份保留，可按部署审阅回退。

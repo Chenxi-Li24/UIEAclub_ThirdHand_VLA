@@ -4,7 +4,7 @@ import base64
 import gzip
 import hashlib
 import json
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 import subprocess
 
 REPO = Path(__file__).resolve().parents[2]
@@ -12,7 +12,7 @@ SOURCE = '2bc817ce9249eece16b66da13339c5746458fab3'
 OLD_SHA = '805921eeb03285b8b68a878c27870f69e116d68db7b26e05c9547c9fa1d3551d'
 CLOUD = ('services/cloud-api/src/control/leases.js', 'services/device-relay/src/server.js', 'services/device-relay/src/lease-timing.js')
 EDGE = ('bound_transport.py', 'lease_timing.py')
-EDGE_OLD = '/home/nieqingcao/.local/share/thirdhand-stage-device/20261031/agent-sdk-ab786c269838e18c'
+EDGE_RELATIVE = '.local/share/thirdhand-stage-device/20261031/agent-sdk-ab786c269838e18c'
 EDGE_BOUND_BEFORE = 'c2ebfd381f032a06be3d7cc18e6d027d07f9f8c006be43dd6556f17f54265f8c'
 
 
@@ -30,9 +30,14 @@ def build(cloud_baseline, device_baseline, destination):
         raise ValueError('Cloud baseline changed')
     before = json.loads(before_raw)
     device = json.loads(device_baseline.read_text(encoding='utf-8-sig'))
-    if device['source'] != EDGE_OLD or device['files'].get('thirdhand_edge/bound_transport.py') != EDGE_BOUND_BEFORE:
+    old_source = device['source']
+    source = PurePosixPath(old_source)
+    if (not source.is_absolute() or source.as_posix() != old_source or '..' in source.parts
+            or len(source.parts) != 3 + len(PurePosixPath(EDGE_RELATIVE).parts)
+            or source.parts[1] != 'home' or source.parts[3:] != PurePosixPath(EDGE_RELATIVE).parts
+            or device['files'].get('thirdhand_edge/bound_transport.py') != EDGE_BOUND_BEFORE):
         raise ValueError('Active device source changed')
-    if device.get('pythonpath') != ['PYTHONPATH=' + EDGE_OLD] or device.get('timingEnabled') is not False:
+    if device.get('pythonpath') != ['PYTHONPATH=' + old_source] or device.get('timingEnabled') is not False:
         raise ValueError('Active device configuration changed')
     if len(before['files']) != 4657 or CLOUD[-1] in before['files'] or 'thirdhand_edge/lease_timing.py' in device['files']:
         raise ValueError('Unexpected inventory')
@@ -49,14 +54,14 @@ def build(cloud_baseline, device_baseline, destination):
                               newRelease='/opt/thirdhand-stage/releases/' + sha(manifest)[:16],
                               newManifestSha256=sha(manifest), manifestBase64=base64.b64encode(manifest).decode(),
                               changes={p: base64.b64encode(raw).decode() for p, raw in cloud_bytes.items()}),
-                   edge=dict(oldSource=EDGE_OLD, newSource=EDGE_OLD.rsplit('/', 1)[0] + '/agent-sdk-timing-' + edge_hash[:16],
+                   edge=dict(oldSource=old_source, newSource=old_source.rsplit('/', 1)[0] + '/agent-sdk-timing-' + edge_hash[:16],
                              before=device['files'], after=edge_after, unitHashes=device['unitHashes'],
                              changes={p: base64.b64encode(raw).decode() for p, raw in edge_bytes.items()}))
     packed = gzip.compress(pretty(package), mtime=0)
     report = dict(sourceCommit=SOURCE, packageSha256=sha(packed), packageBytes=len(packed),
                   cloudOld=package['cloud']['oldRelease'], cloudNew=package['cloud']['newRelease'],
                   cloudManifestSha256=sha(manifest), cloudChanged={p: after['files'][p] for p in CLOUD},
-                  cloudFileCount=len(after['files']), edgeOld=EDGE_OLD, edgeNew=package['edge']['newSource'],
+                  cloudFileCount=len(after['files']), edgeOld=old_source, edgeNew=package['edge']['newSource'],
                   edgeChanged={p: edge_after[p] for p in edge_bytes}, edgeFileCount=len(edge_after),
                   environment='THIRDHAND_SDK_TIMING=1', databaseMigrations=[], permissions=[], newPorts=[], sdkActions=0)
     destination.mkdir(parents=True, exist_ok=False)

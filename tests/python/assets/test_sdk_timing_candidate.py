@@ -2,7 +2,7 @@ import base64
 import gzip
 import importlib.util
 import json
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 import pytest
 
@@ -26,9 +26,10 @@ def inputs(tmp_path, monkeypatch):
         return command[2].encode()
     monkeypatch.setattr(builder.subprocess, 'check_output', read_git)
     edge = tmp_path / 'edge.json'
-    edge.write_text(json.dumps(dict(source=builder.EDGE_OLD,
+    source = (PurePosixPath('/') / 'home' / 'test-user' / builder.EDGE_RELATIVE).as_posix()
+    edge.write_text(json.dumps(dict(source=source,
         files={'thirdhand_edge/bound_transport.py': builder.EDGE_BOUND_BEFORE, 'thirdhand_edge/runtime.py': 'c'*64},
-        pythonpath=['PYTHONPATH='+builder.EDGE_OLD], timingEnabled=False, unitHashes={'known.service': 'd'*64})))
+        pythonpath=['PYTHONPATH='+source], timingEnabled=False, unitHashes={'known.service': 'd'*64})))
     return cloud, edge, tmp_path / 'out', calls
 
 

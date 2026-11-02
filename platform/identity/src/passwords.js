@@ -8,8 +8,8 @@ async function limited(operation) {
   try { return await operation(); } finally { activeJobs--; }
 }
 function validatePassword(password) {
-  if (typeof password !== 'string' || [...password].length < 12 || [...password].length > 128 || Buffer.byteLength(password) > 512) {
-    throw identityError('INVALID_PASSWORD', 'Password must contain 12–128 characters');
+  if (typeof password !== 'string' || [...password].length < 8 || [...password].length > 128 || Buffer.byteLength(password) > 512 || !/[A-Z]/.test(password) || !/[a-z]/.test(password)) {
+    throw identityError('INVALID_PASSWORD', 'Password must contain 8–128 characters, including uppercase and lowercase letters');
   }
 }
 async function hashPassword(password) {

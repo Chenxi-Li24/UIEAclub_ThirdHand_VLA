@@ -79,30 +79,49 @@ test('new password feedback updates live and rechecks confirmation when the orig
   const input=(field,value)=>{field.value=value;field.dispatchEvent(new f.window.Event('input'));};
   input(password,'short');
   assert.equal(password.getAttribute('aria-invalid'),'true');
-  assert.match(f.document.getElementById('password-feedback').textContent,/at least 12/i);
+  assert.match(f.document.getElementById('password-feedback').textContent,/at least 8/i);
   assert.match(password.getAttribute('aria-describedby'),/password-requirements/);
-  assert.match(f.document.getElementById('password-requirements').textContent,/12–128/);
-  input(password,'long enough password');input(confirm,'different password');
+  assert.match(f.document.getElementById('password-requirements').textContent,/8–128/);
+  input(password,'Long enough password');input(confirm,'different password');
   assert.match(f.document.getElementById('confirmPassword-feedback').textContent,/do not match/i);
-  input(confirm,'long enough password');assert.equal(confirm.getAttribute('aria-invalid'),'false');
-  input(password,'another long password');assert.equal(confirm.getAttribute('aria-invalid'),'true');
+  input(confirm,'Long enough password');assert.equal(confirm.getAttribute('aria-invalid'),'false');
+  input(password,'Another long password');assert.equal(confirm.getAttribute('aria-invalid'),'true');
   assert.match(f.document.getElementById('confirmPassword-feedback').textContent,/do not match/i);
   f.document.getElementById('locale-zh').click();
   assert.match(f.document.getElementById('confirmPassword-feedback').textContent,/不一致/);
   assert.match(f.document.getElementById('password-requirements').textContent,/密码要求/);
-  assert.ok(!JSON.stringify([...f.stored]).includes('another long password'));
+  assert.ok(!JSON.stringify([...f.stored]).includes('Another long password'));
 });
 
 test('new passwords enforce server Unicode length boundaries before a request',async()=>{
   for(const page of ['register','reset-password']){
     const f=fixture(page,null,'#token=unit-test-token');f.setResponse({status:'pending_email'});
-    for(const id of ['password','confirmPassword'])f.document.getElementById(id).value='😀'.repeat(129);
+    for(const id of ['password','confirmPassword'])f.document.getElementById(id).value='Aa'+'😀'.repeat(127);
     await f.mounted.submit();assert.equal(f.calls.length,0);
     assert.match(f.document.getElementById('password-feedback').textContent,/at most 128/i);
-    for(const id of ['password','confirmPassword'])f.document.getElementById(id).value='😀'.repeat(128);
+    for(const id of ['password','confirmPassword'])f.document.getElementById(id).value='Aa'+'😀'.repeat(126);
     await f.mounted.submit();assert.equal(f.calls.length,1);
-    assert.equal(f.calls[0].body.password,'😀'.repeat(128));
+    assert.equal(f.calls[0].body.password,'Aa'+'😀'.repeat(126));
     assert.equal(f.document.getElementById('password-feedback').textContent,'');
+  }
+});
+
+test('register and reset show missing letter cases live in both languages and accept eight letters',async()=>{
+  for(const page of ['register','reset-password']){
+    const f=fixture(page,null,'#token=unit-test-token');f.setResponse({accepted:true});
+    const password=f.document.getElementById('password'),confirm=f.document.getElementById('confirmPassword');
+    for(const [value,missing]of [['abcdefgh',/uppercase/],['ABCDEFGH',/lowercase/],['12345678',/uppercase.*lowercase/],['Abcdefg',/at least 8/]]){
+      password.value=confirm.value=value;password.dispatchEvent(new f.window.Event('input'));
+      assert.match(f.document.getElementById('password-feedback').textContent,missing);
+      await f.mounted.submit();assert.equal(f.calls.length,0);
+    }
+    password.value='abcdefgh';password.dispatchEvent(new f.window.Event('input'));
+    f.document.getElementById('locale-zh').click();
+    assert.match(f.document.getElementById('password-feedback').textContent,/大写英文字母/);
+    assert.match(f.document.getElementById('password-requirements').textContent,/8–128.*大写.*小写/);
+    f.document.getElementById('locale-en').click();
+    password.value=confirm.value='Abcdefgh';await f.mounted.submit();
+    assert.equal(f.calls.length,1);assert.equal(f.calls[0].body.password,'Abcdefgh');
   }
 });
 

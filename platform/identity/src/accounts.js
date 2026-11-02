@@ -15,7 +15,7 @@ function createAccounts({ pool, mfa, mail=createMailer(), publicOrigin, clock = 
   async function passwordMatches(user, password) {
     // One initialization per process, awaited even for known accounts. Do not leave
     // hidden hash jobs competing with a later login in another service instance.
-    const fallbackHash = await (dummyHash ||= hashPassword(randomToken()));
+    const fallbackHash = await (dummyHash ||= hashPassword('Aa' + randomToken()));
     return verifyPassword(user?.passwordHash || fallbackHash, password);
   }
   const normalize = value => typeof value === 'string' ? value.trim().toLowerCase().slice(0, 254) : '';

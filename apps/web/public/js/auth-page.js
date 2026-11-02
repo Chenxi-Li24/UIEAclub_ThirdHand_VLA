@@ -12,7 +12,7 @@
     MFA_SETUP_EXPIRED:'The setup has expired. Start a new setup.',
     RATE_LIMITED:'Too many attempts. Please try again later.',
     AUTH_BUSY:'Sign-in is busy. Please try again shortly.',
-    INVALID_PASSWORD:'Use 12–128 characters for your password.',
+    INVALID_PASSWORD:'Use 8–128 characters, including uppercase and lowercase letters.',
     INVALID_TOKEN:'This link is invalid or expired. Request a new link.',
     INVALID_INPUT:'Check the form fields and try again.',
     '23505':'That username or email is already registered.',
@@ -53,7 +53,9 @@
     }
     function passwordIssues(id){
       const issues=[],length=[...fields[id].value].length;
-      if(length<12)issues.push('Use at least 12 characters.');
+      if(length<8)issues.push('Use at least 8 characters.');
+      if(!/[A-Z]/.test(fields[id].value))issues.push('Include at least one uppercase letter (A–Z).');
+      if(!/[a-z]/.test(fields[id].value))issues.push('Include at least one lowercase letter (a–z).');
       if(length>128)issues.push('Use at most 128 characters.');
       if(id==='confirmPassword'&&fields[id].value!==fields.password.value)issues.push('Passwords do not match.');
       return issues;
@@ -70,7 +72,7 @@
       field('password',label,{type:'password',autocomplete:'new-password',maximum:512,feedback:true});
       field('confirmPassword','Confirm password',{type:'password',autocomplete:'new-password',maximum:512,feedback:true});
       const requirements=el('section',{id:'password-requirements',class:'auth-password-requirements','aria-label':'Password requirements'});
-      requirements.append(el('strong',{},'Password requirements'),el('p',{},'Use 12–128 characters.'),el('p',{},'Both passwords must match.'));form.append(requirements);
+      requirements.append(el('strong',{},'Password requirements'),el('p',{},'Use 8–128 characters.'),el('p',{},'Include uppercase (A–Z) and lowercase (a–z) letters. Numbers and symbols are optional.'),el('p',{},'Both passwords must match.'));form.append(requirements);
     }
     let modeHint,mfaFields,remember;
     function setMode(next){

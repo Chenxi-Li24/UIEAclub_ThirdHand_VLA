@@ -6,8 +6,10 @@ from .protocol import ProtocolError, verify_envelope
 
 def verify_lease(envelope, trusted_keys, context, *, now_ms):
     payload = verify_envelope(envelope, trusted_keys, context, now_ms=now_ms)
+    # Bound the signed lifetime, not a cross-host remaining-time estimate.
+    # The Robot watchdog separately caps its monotonic deadline to one second.
     fields = {"schema", "keyId", "purpose", "deviceId", "bootId", "executorEpoch", "connectionId", "certificateId", "leaseId", "leaseEpoch", "sequence", "issuedAt", "expiresAt"}
-    if set(payload) - fields - {"scope"} or not fields <= set(payload) or payload.get("scope", "control") not in ("sdk", "control") or payload["purpose"] not in ("lease_grant", "lease_renew") or payload["certificateId"] != context["certificateId"] or payload["expiresAt"] - now_ms > 1000:
+    if set(payload) - fields - {"scope"} or not fields <= set(payload) or payload.get("scope", "control") not in ("sdk", "control") or payload["purpose"] not in ("lease_grant", "lease_renew") or payload["certificateId"] != context["certificateId"] or not 0 < payload["expiresAt"] - payload["issuedAt"] <= 1000:
         raise ProtocolError("INVALID_LEASE")
     try:
         uuid.UUID(payload["leaseId"])

@@ -53,6 +53,16 @@ test('an HTTP lease result arriving after socket closure cannot restore a discon
   assert.equal(f.client.state().lease,null);assert.equal(f.client.state().connected,false);
 });
 
+test('a pending authorization cannot create a second request or change selected device',async()=>{
+  const f=fixture(),opening=f.client.open(),ws=f.sockets[0],connectionId=randomUUID();ws.onopen();
+  ws.receive({type:'bound',connectionId});ws.receive({type:'challenge',connectionId,sequence:1,nonce:'x'.repeat(43)});ws.receive({type:'fresh',connectionId,sequence:1});await opening;
+  let finish,calls=0;f.sessionClient.request=()=>{calls++;return new Promise(resolve=>{finish=resolve;});};
+  const id=randomUUID(),first=f.client.acquire(id);await new Promise(setImmediate);
+  await assert.rejects(f.client.acquire(randomUUID()),{code:'REQUEST_IN_PROGRESS'});
+  assert.equal(calls,1);assert.equal(f.client.state().deviceId,id);
+  finish({id:randomUUID(),state:'active',leaseEpoch:1});await first;f.client.close();
+});
+
 test('administrator opens only a protected control channel; lease and SDK command require separate explicit actions',async()=>{
   const f=fixture();assert.equal(f.sockets.length,0);assert.equal(f.requests.length,0);
   const opening=f.client.open(),ws=f.sockets[0],connectionId=randomUUID();ws.onopen();

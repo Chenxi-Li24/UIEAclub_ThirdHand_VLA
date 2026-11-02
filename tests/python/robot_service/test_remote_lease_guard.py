@@ -115,3 +115,24 @@ def test_utc_forward_jump_expires_poll_and_continuing_while_rollback_still_canno
     clock.update(mono=5.1, wall=1001.)
     assert not guard.active(lease, original_expiry=False)
     assert guard.poll() is True and len(events) == 1
+
+
+@pytest.mark.parametrize('offset', [-100, -10, -1, 0, 1, 10, 100, 500])
+def test_clock_offset_accepts_signed_span_but_never_exceeds_one_local_second(offset):
+    _, guard, clock, events, lease = fixture()
+    lease.update(issuedAt=1000000+offset, expiresAt=1001000+offset)
+    guard.arm(lease)
+    assert guard.deadline == pytest.approx(5 + min(1000, 1000+offset)/1000)
+    clock['mono'] = guard.deadline
+    assert guard.poll() and len(events) == 1 and not guard.active(lease)
+
+
+def test_future_skew_renewal_cannot_revive_expired_local_deadline():
+    m, guard, clock, events, lease = fixture()
+    lease.update(issuedAt=1000100, expiresAt=1001100)
+    guard.arm(lease)
+    clock.update(mono=6.0, wall=1000.9)
+    with pytest.raises(m.LeaseGuardError):
+        guard.renew({**lease, 'sequence': 1, 'issuedAt': 1001000, 'expiresAt': 1002000})
+    guard.poll()
+    assert len(events) == 1 and not guard.active(lease)

@@ -85,7 +85,9 @@ class RemoteLeaseGuard:
         return self.deadline is not None and not self.stopping and not self.closed.is_set()
 
     def _deadline(self, value, mono, wall):
-        require(value['issuedAt'] <= wall + 500 and 0 < value['expiresAt'] - wall <= 1000,
+        # _validate bounds the signed span; small existing clock tolerance must
+        # not make a valid one-second lease look overlong. Keep the local cap.
+        require(value['issuedAt'] <= wall + 500 and value['expiresAt'] > wall,
                 'REMOTE_LEASE_EXPIRED')
         return min(mono + 1., mono + (value['expiresAt'] - wall) / 1000,
                    self.anchor[0] + (value['expiresAt'] - self.anchor[1]) / 1000)

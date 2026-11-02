@@ -1,5 +1,12 @@
 'use strict';
 globalThis.ThirdHandI18nCatalog=(globalThis.ThirdHandI18nCatalog||[]).concat([
+ ['正在申请授权…','Requesting authorization…'],
+ ['请求已发送，正在检查浏览器和设备授权；此步骤不会初始化 SDK。','Request sent. Checking browser and device authorization; the SDK is not being initialized.'],
+ ['SDK 授权已生效，请点击“连接 SDK”进行初始化。','SDK authorization is active. Choose Connect SDK to initialize.'],
+ ['设备未接受 SDK 授权，SDK 尚未初始化。请在连接问题解决后重新申请。','The device did not accept SDK authorization. The SDK was not initialized. Request again after the connection issue is resolved.'],
+ ['请求超时，请检查设备状态后再试。','The request timed out. Check device state before retrying.'],
+ ['已有授权申请正在处理。','An authorization request is already in progress.'],
+ ['当前会话无权执行此操作。','This session is not allowed to request this operation.'],
  ['SDK 连接','SDK connection'],['申请 SDK 连接','Request SDK connection'],['释放 SDK 连接','Release SDK connection'],
  ['连接 SDK 会使能电机，并可能闭合夹爪。只有管理员可以发送运动指令。','Connecting the SDK enables motors and may close the gripper. Only administrators can send motion commands.'],
  ['连接 SDK 会使能电机并闭合已配置的夹爪。请保持工作区清空。是否继续？','Connecting the SDK enables motors and closes the configured gripper. Keep the workspace clear. Continue?'], ['正在加载安全状态…','Loading security status…'],['设置或进入管理员模式','Set up or enter Administrator mode'],['已绑定验证器','Authenticator enabled'],['尚未绑定验证器','Authenticator not enabled'],['安全状态暂不可用','Security status unavailable'], ['搜索已加载的成员','Search loaded members'],['仿真／测试反馈','Simulation/test feedback'],['抬升至安全高度','Raise to safe height'],['自动调平','Auto-level'],

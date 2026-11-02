@@ -16,6 +16,26 @@ test('read-only device capability never hides a lost connection authorization',(
   mounted.dispose();
 });
 
+test('SDK authorization shows pending state, blocks duplicate clicks and reports device refusal',async()=>{
+  const {document}=parseHTML('<html><body><section id="page-system"></section></body></html>');
+  const stateStore={subscribe(callback){callback({devices:[{id:'device-test',name:'Lab',readOnly:true}],deviceId:null});return ()=>{};}};
+  const mounted=mountAdminControl({document,view:{},identity:{role:'observer',mode:'observe'},sessionClient:{},stateStore});
+  document.querySelector('option').selected=true;
+  let reject,calls=0;
+  mounted.client.acquire=()=>{calls++;return new Promise((_,fail)=>{reject=fail;});};
+  const button=[...document.querySelectorAll('button')].find(b=>b.textContent==='Request SDK connection');
+  button.click();button.click();await new Promise(setImmediate);
+  assert.equal(calls,1);assert.equal(button.disabled,true);assert.equal(button.getAttribute('aria-busy'),'true');
+  assert.match(button.textContent,/Requesting/);assert.match(document.querySelector('[role="status"]').textContent,/Request sent/);
+  assert.equal(document.querySelector('select').disabled,true);
+  reject(Object.assign(Error(),{code:'LEASE_UNCONFIRMED'}));await new Promise(setImmediate);
+  assert.equal(button.disabled,false);assert.equal(button.hasAttribute('aria-busy'),false);
+  assert.equal(document.querySelector('select').disabled,false);
+  assert.match(document.querySelector('[role="status"]').textContent,/device did not accept.*not initialized/);
+  assert.equal([...document.querySelectorAll('button')].find(b=>b.textContent==='Connect SDK').disabled,true);
+  mounted.dispose();
+});
+
 test('SDK connection UI is available for observing sessions and never opens a socket or SDK during mount',()=>{
   for(const identity of [{role:'observer',mode:'observe'},{role:'admin',mode:'observe'},{role:'admin',mode:'admin'}]){
     const {document}=parseHTML(fs.readFileSync('apps/web/public/index.html','utf8'));

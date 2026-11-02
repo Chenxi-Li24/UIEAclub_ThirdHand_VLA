@@ -80,7 +80,7 @@ function createRobotControlPolicy({deviceId,getExecutionState,submit,onStopRecei
       if(stopping)return reject('STOP_UNCONFIRMED',value.commandId);
       if(value.purpose==='lease_grant'||value.purpose==='lease_renew'){
         if(leaseUpdate)return reject('LEASE_UPDATE_PENDING');
-        if(!Number.isSafeInteger(value.leaseEpoch)||value.leaseEpoch<1||!Number.isSafeInteger(value.sequence)||value.sequence<0||typeof value.leaseId!=='string'||!/^[a-f0-9-]{36}$/i.test(value.leaseId)||value.expiresAt-wall>1000)return reject('INVALID_LEASE');
+        if(!Number.isSafeInteger(value.leaseEpoch)||value.leaseEpoch<1||!Number.isSafeInteger(value.sequence)||value.sequence<0||typeof value.leaseId!=='string'||!/^[a-f0-9-]{36}$/i.test(value.leaseId)||value.expiresAt-value.issuedAt>1000)return reject('INVALID_LEASE');
         const scope=value.scope??'control';
         if(!['sdk','control'].includes(scope))return reject('INVALID_LEASE_SCOPE');
         const isGrant=value.purpose==='lease_grant';
@@ -95,7 +95,7 @@ function createRobotControlPolicy({deviceId,getExecutionState,submit,onStopRecei
         leaseTarget=target;
         try{
           if(isGrant)watchdog.reset(target);
-          watchdog.renew(value.expiresAt-wall,{deadline:signedDeadline});
+          watchdog.renew(Math.min(1000,value.expiresAt-wall),{deadline:signedDeadline});
         }catch{
           await stop('lease_expired');return reject('LEASE_EXPIRED');
         }

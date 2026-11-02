@@ -16,7 +16,7 @@ test('observer SDK grant is scoped in storage and signatures, permits lifecycle,
   assert.equal(lease.scope,'sdk');assert.equal(f.requests.at(-1).scope,'sdk');
   const input={deviceId:f.deviceId,...browser,leaseId:lease.id,commandId:randomUUID(),opcode:'connect',parameters:{}};
   assert.equal((await f.service.dispatchRealCommand(p,input)).state,'completed');
-  browser.refresh();await f.service.drain();assert.equal(f.requests.findLast(x=>x.purpose==='lease_renew').scope,'sdk');
+  f.clock.value+=250;browser.refresh();await f.service.drain();assert.equal(f.requests.findLast(x=>x.purpose==='lease_renew').scope,'sdk');
   const before=f.requests.length;
   for(const [opcode,parameters] of [['move_joint',{joints:[0,0,0,0,0,0]}],['gripper',{position:0}],['preset',{name:'home'}],['software_stop',{}]]){
     const value={...input,commandId:randomUUID(),opcode,parameters};

@@ -70,3 +70,9 @@ ExecStart=/home/nieqingcao/ThirdHand/UIEAclub_ThirdHand_VLA/local/runtimes/node/
 需批准范围：上传本固定包、云端2件前端源码、Ubuntu3件校验源码及2件入口drop-in、3个现有服务重启，以及上述不初始化SDK的有界授权验收/回退。具体确认来自已批准[C8方案](2026-11-01-C8-ui-sdk-audit-and-design.md)第9节第6步：“固定源码/资源清单、数据库变更和回退材料完成后才申请实际部署。”本轮不延长租约，不实施完整权限分离。
 
 代码与固定材料已推送至origin/login，提交9cff28fe92a47aed93d5479da836457f401952fc；[CI 41396719528](https://github.com/Oliveirah007/UIEAclub_ThirdHand_VLA/actions/runs/41396719528)的public-access和test两个job均已成功，完整CI通过。后续纯文档补记不改变本固定包。
+
+## 实际应用补记
+
+用户批准后按上述固定包应用完成，云端applied-public.json时间2026-11-02T06:16:46Z。current=d5284b8679ff90e8，完整manifest SHA256=d5284b8679ff90e88f0c2138e8b31c9eb53f6197ddef09eb2982300943fc97b7。Ubuntu采用本文两个新快照及两个drop-in，三个服务恢复active，SDK=false、readOnly=true。备份与应用记录留在本文约定目录。
+
+06:18:49.017Z发起的唯一新授权在06:18:50.238Z释放，续期序号3、原因browser_stale；没有初始化SDK或发送运动。浏览器控制随后因Windows URL确认失败中止，因此不记为稳定验收通过。后续请求允许放宽超时，但需要新的固定候选，不能将新行为归入此包；见[后续修复](2026-11-02-sdk-browser-heartbeat-fix.md)。

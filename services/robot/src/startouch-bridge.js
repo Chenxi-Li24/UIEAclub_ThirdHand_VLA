@@ -139,7 +139,7 @@ class StartouchBridge extends EventEmitter {
         || typeof lease.hardwareFingerprint !== 'string' || !/^[a-f0-9]{64}$/.test(lease.hardwareFingerprint)
         || !['leaseEpoch','sequence','issuedAt','expiresAt'].every(key=>Number.isSafeInteger(lease[key]))
         || lease.leaseEpoch < 1 || lease.sequence < 0 || lease.issuedAt > wall + 500
-        || lease.expiresAt <= wall || lease.expiresAt - wall > 1000
+        || lease.expiresAt <= wall
         || lease.expiresAt <= lease.issuedAt || lease.expiresAt - lease.issuedAt > 1000) return null;
     return Object.freeze(lease);
   }

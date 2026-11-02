@@ -88,7 +88,7 @@ function createCloudApi({ pool, accounts, sessions, mfa, publicOrigin, tutorialA
     }
   });
   server.requestTimeout = 15000; server.headersTimeout = 10000; server.keepAliveTimeout = 5000;
-  const controlChannel=controlService&&controlChannels?createControlWebSocket({sessions,channels:controlChannels,controlService,publicOrigin:origin}):null;
+  const controlChannel=controlService&&controlChannels?createControlWebSocket({sessions,channels:controlChannels,controlService,publicOrigin:origin,onTiming:value=>{if(value.outcome==='rejected')console.warn(JSON.stringify({component:'browser_control_timing',...value}));}}):null;
   server.controlChannel=controlChannel;
   server.on('upgrade', async(request,socket,head) => { if(controlChannel&&await controlChannel.upgrade(request,socket,head))return;socket.end('HTTP/1.1 404 Not Found\r\nConnection: close\r\n\r\n'); });
   return server;

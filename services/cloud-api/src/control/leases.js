@@ -57,7 +57,7 @@ function createControlService({repository,sessions,channels,devices,signer,clock
       if(result?.state!=='active'||result.leaseId!==lease.id||result.leaseEpoch!==lease.leaseEpoch||(lease.scope==='sdk'&&result.scope!=='sdk')){reportConfirmation('grant',result,lease);throw fail('LEASE_UNCONFIRMED');}
       await actor(principal,lease.scope==='sdk'?'sdk.connect':'control.request',browser);
       if(!same(context(lease.deviceId),binding)||!await readiness(principal,lease.deviceId))throw fail('DEVICE_UNAVAILABLE');
-      const active=await repository.confirm(principal,lease.id);holders.set(active.id,{lease:active,principal,browser});return active;
+      const active=await repository.confirm(principal,lease.id);holders.set(active.id,{lease:active,principal,browser,lastRenewalScheduledAt:clock.monotonic()});return active;
     }catch(error){await revoke(lease,'grant_failed');throw error;}
   }
   function dispatchRenewal(principal,input,holder){
@@ -196,9 +196,14 @@ function createControlService({repository,sessions,channels,devices,signer,clock
   function fresh({binding}){
     for(const holder of holders.values())if(holder.browser.connectionId===binding.connectionId){
       // At most four signed renewals await ACK and one latest fresh event waits.
-      // No timer, retry, future validity, or command pipelining is introduced.
-      holder.freshPending=true;pump(holder);
+      scheduleRenewal(holder);
     }
+  }
+  function scheduleRenewal(holder){
+    // SDK-only leases bridge short browser jitter, never a lost/expired browser.
+    // Every dispatch still revalidates identity, freshness, device and DB lease.
+    if(holder.lease.scope==='sdk'&&clock.monotonic()-holder.lastRenewalScheduledAt<250)return;
+    holder.lastRenewalScheduledAt=clock.monotonic();holder.freshPending=true;pump(holder);
   }
   function disconnected({connectionId}){for(const holder of holders.values())if(holder.browser.connectionId===connectionId)track(revoke(holder.lease,'browser_disconnected'));}
   function revoked({sessionId}){channels.closeSession(sessionId);for(const holder of holders.values())if(holder.principal.sessionId===sessionId)track(revoke(holder.lease,'session_revoked'));}
@@ -206,7 +211,7 @@ function createControlService({repository,sessions,channels,devices,signer,clock
   function deviceDisconnected(context){for(const holder of holders.values())if(holder.lease.deviceId===context.deviceId&&holder.lease.deviceConnectionId===context.connectionId){channels.close(holder.browser.connectionId);track(revoke(holder.lease,'device_disconnected'));}}
   sessions.events.on('revoked',revoked);sessions.events.on('unavailable',unavailable);channels.events.on('fresh',fresh);channels.events.on('closed',disconnected);
   devices.events?.on('disconnected',deviceDisconnected);
-  const timer=setInterval(()=>{if(closed)return;for(const holder of holders.values()){try{channels.requireFresh(holder.principal,holder.browser);}catch{track(revoke(holder.lease,'browser_stale'));}}},100);timer.unref();
+  const timer=setInterval(()=>{if(closed)return;for(const holder of holders.values()){try{channels.requireFresh(holder.principal,holder.browser);if(holder.lease.scope==='sdk')scheduleRenewal(holder);}catch{track(revoke(holder.lease,'browser_stale'));}}},100);timer.unref();
   return api;
 }
 module.exports={createControlService};

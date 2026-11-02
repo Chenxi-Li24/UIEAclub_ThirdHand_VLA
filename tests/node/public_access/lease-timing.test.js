@@ -26,7 +26,7 @@ test('cloud records raw ACK before waiting for revocation and never changes leas
   let release,ack;const held=new Promise(resolve=>{release=resolve;});
   f.onStop(async()=>{await held;mono+=500;});
   f.devices.dispatch=async()=>{mono+=11;return {confirmation:new Promise(resolve=>{ack=resolve;})};};
-  browser.refresh();
+  f.clock.value+=250;browser.refresh();
   try{
     for(let i=0;i<100&&!ack;i++)await new Promise(resolve=>setTimeout(resolve,5));
     assert.ok(ack);mono+=90;ack({state:'rejected',code:'LEASE_EXPIRED'});

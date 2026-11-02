@@ -4,7 +4,7 @@
   const fail=code=>Object.assign(new Error(code),{code});
   function createAdminControlClient({view=root,identity,sessionClient,onChange=()=>{}}){
     let socket=null,connectionId=null,clientInstanceId=null,lease=null,warning=null,deviceId=null,opening=null,resolveOpen=null,rejectOpen=null,timeout=null,lastChallenge=0,lastResponse=0,lastAck=0,lastFresh=-Infinity,disconnectReason=null;
-    const responses=new Map();let acquiring=false;
+    const responses=new Map();let acquiring=false,freshnessMs=500;
     const now=()=>view.performance?.now()??Date.now();
     const canAdmin=()=>identity?.role==='admin'&&identity.mode==='admin';
     const connection=()=>{if(!['admin','observer'].includes(identity?.role)||!['observe','admin'].includes(identity?.mode)||identity.mode==='admin'&&!canAdmin())throw fail('FORBIDDEN');};
@@ -13,14 +13,14 @@
     function changed(){onChange(state());}
     function disconnected(reason=null){if(timeout)root.clearTimeout(timeout);timeout=null;socket=null;connectionId=null;lease=null;warning=null;lastFresh=-Infinity;responses.clear();disconnectReason=reason;rejectOpen?.(fail(reason||'CONTROL_DISCONNECTED'));resolveOpen=rejectOpen=null;opening=null;changed();}
     function close(reason=null){const previous=socket;disconnected(reason);previous?.close();}
-    function binding(){connection();if(!connectionId||now()-lastFresh>=500)throw fail('BROWSER_STALE');return {clientInstanceId,connectionId};}
+    function binding(){connection();if(!connectionId||now()-lastFresh>=freshnessMs)throw fail('BROWSER_STALE');return {clientInstanceId,connectionId};}
     const api={state,
       async open(){
-        connection();if(connectionId&&now()-lastFresh<500)return binding();if(opening)return opening;
+        connection();if(connectionId&&now()-lastFresh<freshnessMs)return binding();if(opening)return opening;
         if(socket)close();
         const protocol=view.location.protocol==='https:'?'wss:':/^localhost(?::|$)|^127\.0\.0\.1(?::|$)/.test(view.location.host)?'ws:':null;
         if(!protocol)throw fail('HTTPS_REQUIRED');
-        clientInstanceId=clientInstanceId||view.crypto.randomUUID();lastChallenge=lastResponse=lastAck=0;responses.clear();disconnectReason=null;
+        clientInstanceId=clientInstanceId||view.crypto.randomUUID();lastChallenge=lastResponse=lastAck=0;freshnessMs=500;responses.clear();disconnectReason=null;
         opening=new Promise((resolve,reject)=>{resolveOpen=resolve;rejectOpen=reject;});
         socket=new view.WebSocket(`${protocol}//${view.location.host}/stream/v1/control`);
         const current=socket;
@@ -30,15 +30,19 @@
           if(socket!==current)return;
           try{
             const value=JSON.parse(event.data);
-            if(value.type==='bound'&&!connectionId&&typeof value.connectionId==='string')connectionId=value.connectionId;
+            if(value.type==='bound'&&!connectionId&&typeof value.connectionId==='string'){
+              const limit=value.freshnessMs??500;
+              if(limit!==500&&!(identity.mode==='observe'&&limit===3000))throw fail('CONTROL_PROTOCOL_ERROR');
+              connectionId=value.connectionId;freshnessMs=limit;
+            }
             else if(value.type==='challenge'&&value.connectionId===connectionId&&Number.isSafeInteger(value.sequence)&&value.sequence>lastChallenge&&typeof value.nonce==='string'&&/^[A-Za-z0-9_-]{43}$/.test(value.nonce)){
               lastChallenge=value.sequence;lastResponse=value.sequence;
-              for(const [sequence,sentAt]of responses)if(now()-sentAt>=500)responses.delete(sequence);
+              for(const [sequence,sentAt]of responses)if(now()-sentAt>=freshnessMs)responses.delete(sequence);
               responses.set(value.sequence,now());current.send(JSON.stringify({type:'response',connectionId,sequence:value.sequence,nonce:value.nonce}));
             }else if(value.type==='fresh'&&value.connectionId===connectionId&&Number.isSafeInteger(value.sequence)&&value.sequence>lastAck&&value.sequence<=lastResponse&&responses.has(value.sequence)){
               // Responses can be acknowledged after a later challenge arrives.
               // Accept ordered, actually-sent ACKs without extending their age.
-              const sentAt=responses.get(value.sequence);if(now()-sentAt>=500)throw fail('BROWSER_STALE');
+              const sentAt=responses.get(value.sequence);if(now()-sentAt>=freshnessMs)throw fail('BROWSER_STALE');
               lastAck=value.sequence;for(const sequence of responses.keys())if(sequence<=lastAck)responses.delete(sequence);
               const first=!!resolveOpen;lastFresh=sentAt;if(timeout)root.clearTimeout(timeout);timeout=null;resolveOpen?.(binding());resolveOpen=rejectOpen=null;opening=null;if(first)changed();
             }else throw fail('CONTROL_PROTOCOL_ERROR');

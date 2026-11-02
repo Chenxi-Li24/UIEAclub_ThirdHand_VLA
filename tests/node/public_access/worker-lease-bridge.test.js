@@ -23,6 +23,18 @@ test('remote SDK commands fail closed until worker lease is queued and carry a c
   f.lease.expiresAt+=100000;assert.equal(f.sent[1].remote_lease.expiresAt,1000950);
 });
 
+test('bridge accepts permitted clock skew with a capped local deadline, but rejects an overlong signed span',t=>{
+  const f=fixture(t);t.mock.method(performance,'now',()=>50);
+  const skewed={...f.lease,issuedAt:f.clock.now+10,expiresAt:f.clock.now+1010};
+  assert.equal(f.bridge.armRemoteLease(skewed),true);assert.equal(f.bridge.remoteLeaseDeadline,1050);
+  const renewed={...skewed,sequence:1,issuedAt:f.clock.now+500,expiresAt:f.clock.now+1500};
+  assert.equal(f.bridge.renewRemoteLease(renewed),true);assert.equal(f.bridge.remoteLeaseDeadline,1050);
+  assert.equal(f.bridge.renewRemoteLease({...renewed,sequence:2,expiresAt:renewed.expiresAt+1}),false);
+  assert.equal(f.bridge.renewRemoteLease({...renewed,sequence:2,issuedAt:f.clock.now+501,expiresAt:f.clock.now+1501}),false);
+  t.mock.method(performance,'now',()=>1050);
+  assert.equal(f.bridge.renewRemoteLease({...renewed,sequence:2}),false);
+});
+
 test('guard transport preserves original absolute expiry and refuses late or backpressured renewals',t=>{
   const f=fixture(t);assert.equal(f.bridge.armRemoteLease(f.lease),true);
   f.clock.now+=400;

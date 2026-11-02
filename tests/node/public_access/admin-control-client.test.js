@@ -25,6 +25,22 @@ test('batched challenges accept an earlier valid ACK without closing the channel
   assert.equal(f.requests.some(r=>r.path.endsWith('/command')),false);f.client.close();
 });
 
+test('only negotiated observation channels accept a delayed ACK, without extending its original age',async()=>{
+  const f=fixture({role:'observer',mode:'observe'}),opening=f.client.open(),ws=f.sockets[0],connectionId=randomUUID();ws.onopen();
+  ws.receive({type:'bound',connectionId,freshnessMs:3000});
+  ws.receive({type:'challenge',connectionId,sequence:1,nonce:'x'.repeat(43)});
+  f.advance(1200);ws.receive({type:'fresh',connectionId,sequence:1});await opening;
+  await f.client.acquire(randomUUID());assert.equal(f.client.state().lease.state,'active');
+  await assert.rejects(f.client.command('move_joint',{}),{code:'FORBIDDEN'});
+  f.advance(1800);await assert.rejects(f.client.command('connect',{}),{code:'BROWSER_STALE'});
+  assert.equal(f.requests.length,1,'neither initialization nor motion is automatic');
+  for(const identity of [{role:'admin',mode:'admin'},{role:'observer',mode:'observe'}]){
+    const bad=fixture(identity),pending=bad.client.open(),socket=bad.sockets[0];socket.onopen();
+    socket.receive({type:'bound',connectionId:randomUUID(),freshnessMs:identity.mode==='admin'?3000:3001});
+    await assert.rejects(pending,{code:'CONTROL_PROTOCOL_ERROR'});
+  }
+});
+
 test('delayed ACK cannot reset the freshness clock and forged or replayed ACKs fail closed',async()=>{
   for(const kind of ['expired','unknown','replay']){
     const f=fixture(),opening=f.client.open(),ws=f.sockets[0],connectionId=randomUUID();ws.onopen();

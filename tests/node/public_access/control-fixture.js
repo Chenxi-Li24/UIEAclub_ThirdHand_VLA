@@ -13,7 +13,7 @@ async function controlFixture(t,{onDiagnostic,timing}={}){
   await users.bootstrapAdmin({verifiedUserId:a.userId});await users.requestAdmin({userId:b.userId,reason:'test only'});await users.setRole({actorId:a.userId,userId:b.userId,role:'admin',expectedVersion:1,reason:'test only'});
   const sessions=createSessions({pool:f.pool,csrfKey:randomBytes(32),clock:f.clock});
   const cookies=new Map();
-  async function principal(id){const s=await sessions.issue({userId:id,mode:'admin',mfaVerifiedAt:f.clock.now()});const p=await sessions.resolveSession({headers:{cookie:s.cookie.split(';')[0]}});cookies.set(p.sessionId,s.cookie.split(';')[0]);return p;}
+  async function principal(id,mode='admin'){const s=await sessions.issue({userId:id,mode,mfaVerifiedAt:mode==='admin'?f.clock.now():null});const p=await sessions.resolveSession({headers:{cookie:s.cookie.split(';')[0]}});cookies.set(p.sessionId,s.cookie.split(';')[0]);return p;}
   const first=await principal(a.userId),second=await principal(b.userId);
   const deviceId=(await f.pool.query("INSERT INTO ops.devices(name,hardware_serial,enabled) VALUES('FakeRobot','test-fake',true) RETURNING id")).rows[0].id;
   const context={deviceId,bootId:randomUUID(),executorEpoch:randomUUID(),connectionId:randomUUID(),certificateId:randomUUID(),controlAccepted:true};

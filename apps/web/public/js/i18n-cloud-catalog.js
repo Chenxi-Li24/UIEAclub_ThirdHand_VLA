@@ -1,5 +1,16 @@
 'use strict';
 globalThis.ThirdHandI18nCatalog=(globalThis.ThirdHandI18nCatalog||[]).concat([
+ ['页面进入后台，已关闭 SDK 授权通道。请核对设备状态后重新申请。','The page went into the background and closed its SDK authorization channel. Check device state before requesting again.'],
+ ['浏览器心跳已过期。请核对设备状态后重新申请。','Browser heartbeat expired. Check device state before requesting again.'],
+ ['SDK 授权通道已中断。请核对设备状态后重新申请。','The SDK authorization channel was interrupted. Check device state before requesting again.'],
+ ['正在等待模型加载。','Waiting for the model to load.'],
+ ['实测法兰位姿 · 仅编辑草稿','Measured flange pose · editable draft only'],
+ ['跟随实测状态；手动编辑会暂停模型同步。','Follow measured state. Manual edits pause model synchronization.'],
+ ['模型同步已暂停 · 手动草稿。勾选“同步 3D 模型”可恢复。','Model synchronization paused · manual draft. Check Sync 3D model to resume.'],
+ ['等待新的真实反馈 · 保留模型姿态。','Waiting for fresh hardware feedback · model pose retained.'],
+ ['实测姿态超出当前模型可表示范围。','Measured pose cannot be represented by this model.'],
+ ['跟随真机 · 仅显示，不发送运动指令。','Following real robot · display only, no motion commands.'],
+ ['跟随真机 · 仅显示','Following real robot · display only'],
  ['正在申请授权…','Requesting authorization…'],
  ['请求已发送，正在检查浏览器和设备授权；此步骤不会初始化 SDK。','Request sent. Checking browser and device authorization; the SDK is not being initialized.'],
  ['SDK 授权已生效，请点击“连接 SDK”进行初始化。','SDK authorization is active. Choose Connect SDK to initialize.'],

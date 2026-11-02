@@ -42,8 +42,9 @@
       setJoints(angles){const validated=validate(angles);stop();followingLive=false;outcome='idle';publish(validated);},
       playPreset(name){if(!Object.hasOwn(PRESETS,name))throw new Error('Unknown simulation preset');return playSequence([{joints:PRESETS[name],durationMs:400}]);},
       playSequence,stop,
-      followLive(enabled){stop();followingLive=enabled===true;},
-      receiveLive(angles){if(!followingLive)return false;try{publish(validate(angles));return true;}catch{return false;}},
+      followLive(enabled){generation++;playing=false;followingLive=enabled===true;outcome='idle';notify();},
+      setGripper(value){if(!Number.isFinite(value)||value<0||value>1)throw Error('Invalid model gripper');generation++;playing=false;followingLive=false;outcome='idle';armModel.setGripperPosition(value);notify();},
+      receiveLive(angles,gripper){if(!followingLive)return false;try{const joints=validate(angles);if(gripper!==undefined&&(!Number.isFinite(gripper)||gripper<0||gripper>1))return false;if(gripper!==undefined)armModel.setGripperPosition(gripper);publish(joints);return true;}catch{return false;}},
       getState:snapshot,
       subscribe(listener){listeners.add(listener);return ()=>listeners.delete(listener);}
     };

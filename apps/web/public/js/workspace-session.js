@@ -23,7 +23,7 @@
     const el=(tag,attrs={},text)=>{const node=doc.createElement(tag);for(const [key,value]of Object.entries(attrs))node.setAttribute(key,String(value));if(text!==undefined)node.textContent=text;return node;};
     const report=message=>{const notice=byId('workspace-notice');notice.hidden=false;notice.textContent=tr(message);};
     const mode=()=>{byId('workspace-mode').textContent=tr(identity.mode==='admin'?'Administrator · model simulation':'Observer · model simulation');};mode();
-    const sync=byId('chk-sync');if(sync){sync.checked=false;sync.disabled=true;sync.title=tr('Live-state mirroring is unavailable');}
+    const sync=byId('chk-sync');if(sync){sync.checked=true;sync.disabled=true;sync.title=tr('Waiting for the model to load.');}
     if(byId('btn-send'))byId('btn-send').textContent=tr('Apply to model');
     for(const selector of ['#btn-connect','#btn-disconnect','#btn-estop-top','#btn-stop-reconnect','#btn-voice-toggle','#sec-xvision button','#sec-dummy button','#sec-gripper button','#tab-tcp'])for(const button of doc.querySelectorAll(selector)){if(button.classList.contains('sec-toggle'))continue;button.disabled=true;button.title=tr('Real robot control is unavailable');}
     if(identity.mode==='observe'){byId('btn-estop-top').hidden=true;const assistant=doc.querySelector('[data-page="assistant"]');if(assistant)assistant.hidden=true;}
@@ -47,7 +47,7 @@
     const language=new view.MutationObserver(mode);language.observe(doc.documentElement,{attributes:true,attributeFilter:['lang']});
     return {dispose(){unsubscribe?.();language.disconnect();}};
   }
-  function mountModelWorkspace({document:doc,view=root,shell,arm,scene,identity,sessionClient,preferences,simulationClock}){
+  function mountModelWorkspace({document:doc,view=root,shell,arm,scene,identity,sessionClient,preferences,simulationClock,stateStore,modelReady=true}){
     const byId=id=>doc.getElementById(id),tr=value=>view.ThirdHandI18n?.translate(value,doc.documentElement.lang)||value;
     const el=(tag,attrs={},text)=>{const node=doc.createElement(tag);for(const [key,value]of Object.entries(attrs))node.setAttribute(key,String(value));if(text!==undefined)node.textContent=text;return node;};
     const status=el('p',{id:'simulation-status',role:'status',class:'cloud-simulation-status'},'Model simulation · no robot commands');
@@ -57,13 +57,13 @@
     const simulation=simulationApi.createSimulationController({armModel:arm,...(simulationClock?{clock:simulationClock}:{}),onChange:state=>{
       state.joints.forEach((value,index)=>{if(numbers[index])numbers[index].value=String(Number(value.toFixed(2)));if(sliders[index])sliders[index].value=String(value);});
       if(Number.isFinite(state.gripper)){const number=byId('gripper-input'),slider=byId('gripper-slider');if(number)number.value=String(Number((state.gripper*100).toFixed(2)));if(slider)slider.value=String(state.gripper);}
-      status.textContent=tr(state.playing?'Playing model sequence':'Model simulation · no robot commands');
+      status.textContent=tr(state.playing?'Playing model sequence':state.followingLive?'Following real robot · display only, no motion commands.':'Model simulation · no robot commands');
     }});
     const grid=byId('joint-controls-body');grid.replaceChildren();
     arm.jointLimits.forEach(([minimum,maximum],index)=>{
       const row=el('div',{class:'cloud-joint-row'}),label=el('label',{for:`jinput-${index}`},`J${index+1}`),number=el('input',{type:'number',id:`jinput-${index}`,min:minimum,max:maximum,step:.1,'aria-label':`J${index+1} model angle`}),slider=el('input',{type:'range',id:`slider-j${index}`,min:minimum,max:maximum,step:.1,'aria-label':`J${index+1} model angle`}),error=el('span',{id:`jerror-${index}`,role:'alert',class:'cloud-field-error'});
       number.value=slider.value=String(arm.getJointAngles()[index]);numbers.push(number);sliders.push(slider);errors.push(error);row.append(label,number,slider,error);grid.append(row);
-      const edit=event=>{const raw=event.target.value,value=Number(raw);if(raw.trim()===''||!Number.isFinite(value)||value<minimum||value>maximum){error.textContent=tr('Enter a valid angle within the joint limits.');return;}error.textContent='';const angles=arm.getJointAngles();angles[index]=value;simulation.setJoints(angles);};
+      const edit=event=>{const raw=event.target.value;pauseForEdit();event.target.value=raw;const value=Number(raw);if(raw.trim()===''||!Number.isFinite(value)||value<minimum||value>maximum){error.textContent=tr('Enter a valid angle within the joint limits.');return;}error.textContent='';const angles=arm.getJointAngles();angles[index]=value;simulation.setJoints(angles);};
       number.addEventListener('input',edit);slider.addEventListener('input',edit);
     });
     const poses=byId('preset-grid');poses.replaceChildren();
@@ -73,20 +73,61 @@
     const sequence=el('button',{type:'button',id:'play-model-sequence',class:'preset-btn'},'Play model sequence');sequence.addEventListener('click',()=>simulation.playSequence([{joints:[30,70,-110,20,0,0],durationMs:900},{joints:[0,90,-90,0,0,0],durationMs:900}]).catch(()=>report('Model simulation could not finish.')));poses.append(sequence);
     const stop=el('button',{type:'button',id:'stop-model-sequence',class:'action-btn action-secondary'},'Stop model');stop.addEventListener('click',()=>simulation.stop());poses.append(stop);
     const send=byId('btn-send');send.textContent=tr('Apply to model');send.addEventListener('click',()=>{try{if(numbers.some(input=>input.value.trim()===''))throw Error('Empty angle');simulation.setJoints(numbers.map(input=>Number(input.value)));}catch{report('Enter a valid angle within the joint limits.');}});
-    const ui={arm,robotConnected:false,robotStateReady:false,syncMode:false,lastRobotState:{stateName:null},selectWorkspaceControl(id){send.hidden=id!=='joints';}};
+    const ui={arm,robotConnected:false,robotStateReady:false,syncMode:true,lastRobotState:{stateName:null},selectWorkspaceControl(id){send.hidden=id!=='joints';}};
     shell.bindRuntime({ui,scene});
     byId('workspace-mode').textContent=tr(identity.mode==='admin'?'Administrator · model simulation':'Observer · model simulation');
     for(const selector of ['#btn-connect','#btn-disconnect','#btn-estop-top','#btn-stop-reconnect','#btn-voice-toggle','#sec-dummy button','#sec-gripper button']){
       for(const node of doc.querySelectorAll(selector)){if(node.classList.contains('sec-toggle'))continue;node.disabled=true;node.title=tr('Real robot control is unavailable');}
     }
     if(identity.mode==='observe'){byId('btn-estop-top').hidden=true;const assistant=doc.querySelector('[data-page="assistant"]');if(assistant)assistant.hidden=true;}
-    const tcpTab=byId('tab-tcp');if(tcpTab){tcpTab.disabled=true;tcpTab.title=tr('Real robot control is unavailable');}
+    const tcpTab=byId('tab-tcp');if(tcpTab){tcpTab.disabled=false;tcpTab.title=tr('Measured flange pose · editable draft only');}
+    for(const button of doc.querySelectorAll('#sec-tcp button:not(.sec-toggle)')){button.disabled=true;button.title=tr('Real robot control is unavailable');}
     for(const [id,callback]of [['btn-tool-grid',()=>scene.toggleGrid()],['btn-tool-axes',()=>scene.toggleAxes()],['btn-tool-reset',()=>scene.resetView()],['btn-tool-floor',()=>arm.setInstallMode('floor')],['btn-tool-wall',()=>arm.setInstallMode('wall')]])byId(id)?.addEventListener('click',callback);
-    for(const id of ['gripper-input','gripper-slider'])byId(id)?.addEventListener('input',event=>{const raw=event.target.value,value=Number(raw)/(id==='gripper-input'?100:1);if(raw.trim()!==''&&Number.isFinite(value)&&value>=0&&value<=1){simulation.stop();arm.setGripperPosition(value);byId('gripper-input').value=String(value*100);byId('gripper-slider').value=String(value);}});
+    for(const id of ['gripper-input','gripper-slider'])byId(id)?.addEventListener('input',event=>{const raw=event.target.value;pauseForEdit();event.target.value=raw;const value=Number(raw)/(id==='gripper-input'?100:1);if(raw.trim()!==''&&Number.isFinite(value)&&value>=0&&value<=1)simulation.setGripper(value);});
     arm.setGripperPosition(1);
-    const sync=byId('chk-sync');if(sync){sync.checked=false;sync.disabled=true;sync.title=tr('Live-state mirroring is unavailable');}
-    const language=new view.MutationObserver(()=>{byId('workspace-mode').textContent=tr(identity.mode==='admin'?'Administrator · model simulation':'Observer · model simulation');});language.observe(doc.documentElement,{attributes:true,attributeFilter:['lang']});
-    return {simulation,dispose(){simulation.stop();language.disconnect();}};
+    const sync=byId('chk-sync'),followStatus=el('p',{id:'model-follow-status',role:'status',class:'cloud-simulation-status'});
+    sync?.closest('label')?.after(followStatus);
+    let latest=null,applied=null,applyFailed=false,disposed=false;
+    const tcpIds=['tcp-x','tcp-y','tcp-z','tcp-rx','tcp-ry','tcp-rz'];
+    function pauseForEdit(){if(simulation.getState().followingLive)simulation.followLive(false);}
+    for(const id of tcpIds)byId(id)?.addEventListener('input',pauseForEdit);
+    function renderFollow(){
+      const following=simulation.getState().followingLive;
+      ui.syncMode=following;
+      if(sync){sync.checked=following;sync.disabled=!modelReady;sync.title=tr('Follow measured state. Manual edits pause model synchronization.');}
+      const fresh=latest?.fresh&&latest?.status==='connected'&&latest?.sample?.sourceMode==='hardware'&&latest?.sample?.sdkConnected===true;
+      const key=!modelReady?'Waiting for the model to load.':!following?'Model synchronization paused · manual draft. Check Sync 3D model to resume.':!fresh?'Waiting for fresh hardware feedback · model pose retained.':applyFailed?'Measured pose cannot be represented by this model.':'Following real robot · display only, no motion commands.';
+      followStatus.textContent=tr(key);followStatus.dataset.state=!following?'manual':fresh&&!applyFailed?'following':'waiting';
+      if(following)status.textContent=tr(key);
+      byId('workspace-mode').textContent=tr(following&&fresh&&!applyFailed?'Following real robot · display only':identity.mode==='admin'?'Administrator · model simulation':'Observer · model simulation');
+    }
+    function receiveState(s){
+      if(disposed)return;latest=s;
+      const fresh=s?.fresh===true&&s.status==='connected'&&s.sample?.sourceMode==='hardware'&&s.sample.sdkConnected===true;
+      ui.robotConnected=fresh;ui.robotStateReady=fresh;
+      if(modelReady&&simulation.getState().followingLive&&fresh){
+        const key=JSON.stringify([s.deviceId,s.value?.context,s.value?.sequence]);
+        if(key!==applied){
+          const joints=s.sample.jointPositionRad?.map(n=>n*180/Math.PI),gripper=s.sample.gripper?.positionRatio;
+          applyFailed=!simulation.receiveLive(joints,Number.isFinite(gripper)?gripper:undefined);
+          if(!applyFailed){
+            applied=key;
+            const pose=[...(Array.isArray(s.sample.flangePositionM)?s.sample.flangePositionM.map(n=>n*1000):[null,null,null]),...(Array.isArray(s.sample.flangeOrientationEulerRad)?s.sample.flangeOrientationEulerRad.map(n=>n*180/Math.PI):[null,null,null])];
+            tcpIds.forEach((id,i)=>{const node=byId(id);if(node){node.value=Number.isFinite(pose[i])?String(Number(pose[i].toFixed(2))):'';node.placeholder=tr('Not provided');}});
+            errors.forEach(node=>{node.textContent='';});
+          }
+        }
+      }
+      renderFollow();
+    }
+    // Automatic feedback is one-way. User edits, presets and waypoint playback
+    // leave followingLive=false; reconnects must not discard that manual draft.
+    simulation.followLive(true);
+    const unsubscribeSimulation=simulation.subscribe(renderFollow);
+    const resume=()=>{applied=null;simulation.followLive(sync.checked);receiveState(latest);};sync?.addEventListener('change',resume);
+    const unsubscribeState=stateStore?.subscribe(receiveState);
+    const language=new view.MutationObserver(renderFollow);language.observe(doc.documentElement,{attributes:true,attributeFilter:['lang']});renderFollow();
+    return {simulation,setReady(value){modelReady=value===true;simulation.followLive(simulation.getState().followingLive);receiveState(stateStore?.snapshot()||latest);},dispose(){disposed=true;unsubscribeState?.();unsubscribeSimulation();sync?.removeEventListener('change',resume);simulation.stop();language.disconnect();followStatus.remove();}};
   }
   return {createWorkspaceSession,mountWorkspaceEssentials,mountModelWorkspace};
 });

@@ -11,8 +11,23 @@ test('read-only device capability never hides a lost connection authorization',(
   const mounted=mountAdminControl({document,view:{},identity:{role:'observer',mode:'observe'},sessionClient:{},stateStore});
   document.querySelector('option').selected=true;
   mounted.client.close('BROWSER_STALE');
-  assert.equal(document.querySelector('[role="status"]').textContent,'Control connection is stale. Request control again.');
+  assert.equal(document.querySelector('[role="status"]').textContent,'Browser heartbeat expired. Check device state before requesting again.');
   for(const text of ['Connect SDK','Disconnect SDK','Release SDK connection'])assert.equal([...document.querySelectorAll('button')].find(b=>b.textContent===text).disabled,true);
+  mounted.dispose();
+});
+
+test('background visibility explains channel closure without reconnecting or sending commands',()=>{
+  const {document,window}=parseHTML('<html><body><section id="page-system"></section></body></html>');
+  let requests=0,sockets=0;
+  const mounted=mountAdminControl({document,view:{WebSocket:class{constructor(){sockets++;}}},identity:{role:'observer',mode:'observe'},sessionClient:{request(){requests++;}}});
+  document.visibilityState='hidden';document.dispatchEvent(new window.Event('visibilitychange'));
+  assert.equal(mounted.client.state().disconnectReason,'PAGE_HIDDEN');
+  assert.match(document.querySelector('[role="status"]').textContent,/background.*authorization channel/);
+  document.visibilityState='visible';document.dispatchEvent(new window.Event('visibilitychange'));
+  assert.equal(requests,0);assert.equal(sockets,0);
+  mounted.client.close('CONTROL_DISCONNECTED');
+  assert.match(document.querySelector('[role="status"]').textContent,/channel was interrupted/);
+  assert.doesNotMatch(document.querySelector('[role="status"]').textContent,/heartbeat expired/);
   mounted.dispose();
 });
 

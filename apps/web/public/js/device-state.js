@@ -82,13 +82,18 @@
       const values=[value(sample?.gripper?.positionRatio,100,'%'),value(sample?.gripper?.widthM,1000,' mm'),typeof sample?.moving==='boolean'?tr(sample.moving?'Yes':'No'):tr('Unknown'),tr(sample?.sourceMode||'unknown'),tr(s.value?.gatewayOnline?'Online':'Offline'),sample?.capturedAt?new Date(sample.capturedAt).toLocaleString(doc.documentElement.lang):'--',s.value?.receivedAt?new Date(s.value.receivedAt).toLocaleString(doc.documentElement.lang):'--',vector(sample?.flangePositionM,1000,' mm'),vector(sample?.tcpPositionM,1000,' mm'),vector(sample?.jointVelocityRadS,180/Math.PI,' °/s'),vector(sample?.jointTorqueNm,1,' N·m'),vector(sample?.jointCurrentA,1,' A'),vector(sample?.jointTemperatureC,1,' °C')];
       values.forEach((v,i)=>text(fields[i+6],v));
       text(doc.getElementById('gripper-actual'),`${values[0]} · ${values[1]}${sample&&!s.fresh?' · '+tr('Historical'):''}`);
+      const tcpText=`TCP: ${vector(sample?.tcpPositionM,1000,' mm')}${sample&&!s.fresh?' · '+tr('Historical'):''}`;
+      text(doc.getElementById('stcp'),tcpText);text(doc.getElementById('grasp-tcp'),tcpText);
       text(stamp,s.ageMs===null?tr('No measured samples yet.'):`${tr('Sample age')}: ${(s.ageMs/1000).toFixed(1)} s · ${tr('Local time zone')}: ${Intl.DateTimeFormat().resolvedOptions().timeZone}`);
       lights?.setReadOnlyState?.({status:s.status,api:s.api});text(doc.getElementById('conn-ip'),`${tr('Ubuntu device gateway')} · ${tr(s.value?.gatewayOnline?'Online':s.value?'Offline':'Unknown')}`);
       const dot=doc.getElementById('conn-dot');if(dot){dot.classList.toggle('connected',s.value?.gatewayOnline===true);dot.title=tr(s.value?.gatewayOnline?'Online':'Unknown');}
     }
     const unsubscribe=store.subscribe(render),language=new view.MutationObserver(()=>render(store.snapshot()));language.observe(doc.documentElement,{attributes:true,attributeFilter:['lang']});
+    const realtime=doc.getElementById('sec-rt-angles'),toggle=realtime?.querySelector('.sec-toggle');
+    function expandFeedback(event){event.stopPropagation();realtime.classList.toggle('collapsed');toggle.setAttribute('aria-expanded',String(!realtime.classList.contains('collapsed')));}
+    if(toggle){toggle.setAttribute('aria-expanded',String(!realtime.classList.contains('collapsed')));toggle.addEventListener('click',expandFeedback);}
     select.addEventListener('change',()=>store.select(select.value));void store.start();
-    return {store,dispose(){unsubscribe();language.disconnect();store.close();card.remove();feedback.remove();}};
+    return {store,dispose(){unsubscribe();language.disconnect();toggle?.removeEventListener('click',expandFeedback);store.close();card.remove();feedback.remove();}};
   }
   return {createDeviceStateStore,mountDeviceState};
 });

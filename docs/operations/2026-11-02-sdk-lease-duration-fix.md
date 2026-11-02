@@ -38,4 +38,6 @@
 
 本地最终业务回归405/405、Python edge/worker157/157通过，源码边界审计ready。最初回归发现两个旧测试仍假设SDK签名固定1秒，已按新scope规则调整；另发现短签名在正时钟偏差下可能被放到scope上限，已额外按签名本身跨度裁剪，原时钟偏差回归不放宽断言并通过。
 
+源码7d16cca的CI业务job通过，通用Node job有3项frame_policy_source_changed：桥接源码摘要改变触发既有内容绑定。后续只更新仓库中frame policy的桥接摘要及handeye/web-grasp引用ID，添加重新绑定来源说明；工具变换、外参矩阵、physical_validation_added=false均保持。没有删校验或更改历史证据。该三件配置只用于仓库运行一致性，不在本次staging固定8件源码包中。定向Windows验证3项通过，抓取端到端测试受目录fsync的EPERM限制，由Linux CI复验；不改平台持久化保护来绕过此限制。新构建器10项测试通过，包括现场IK保留和漂移拒绝。
+
 使用现有public-access隔离PostgreSQL测试、Node policy/watchdog/bridge测试、Python edge及worker模拟测试。覆盖SDK跨1.5秒间隔续约、3秒边界、control仍1秒、签名1秒即使有时钟偏差也不得变长、过期终止、scope不可升级和多层运动拒绝。真实10分钟授权稳定性和真实SDK读取均待新包获批上线后验收；本轮不继续重复申请掩盖失败。

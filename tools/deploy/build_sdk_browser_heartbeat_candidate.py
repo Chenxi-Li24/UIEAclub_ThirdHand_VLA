@@ -16,7 +16,7 @@ FILES = {'cloud': ('apps/web/public/js/admin-control.js',
                    'services/cloud-api/src/control/leases.js',
                    'services/cloud-api/src/server.js'),
          'robot': ('services/robot/src/startouch-bridge.js',)}
-BASE = PurePosixPath('/home/nieqingcao/.local/share/thirdhand-stage-device/20261031')
+SOURCE_TAIL = PurePosixPath('.local/share/thirdhand-stage-device/20261031')
 UNITS = {'edge': 'thirdhand-stage-edge-read-only.service',
          'robot': 'thirdhand-tcp-calibration-robot.service'}
 NAMES = {'edge': 'agent-sdk-clock-a963153d56dac68d', 'robot': 'robot-sdk-clock-26c8339436ca6daa'}
@@ -43,15 +43,23 @@ def build(cloud_baseline, device_baseline, destination):
     if (len(cloud['files']) != 4658 or device['context']['sdkConnected'] is not False
             or device['context']['readOnly'] is not True):
         raise ValueError('Unexpected inventory or SDK state')
+    bases = set()
     for group, count in [('edge', 24), ('robot', 37)]:
         value = device[group]
-        if (value['source'] != str(BASE / NAMES[group]) or value['links'] or len(value['files']) != count
+        source = PurePosixPath(value['source'])
+        tail = SOURCE_TAIL / NAMES[group]
+        if (not source.is_absolute() or '..' in source.parts or str(source) != value['source']
+                or len(source.parts) != 3 + len(tail.parts) or source.parts[1] != 'home'
+                or source.parts[3:] != tail.parts or value['links'] or len(value['files']) != count
                 or value['state']['ActiveState'] != 'active' or value['state']['NeedDaemonReload'] != 'no'):
             raise ValueError('Active device source changed')
+        bases.add(source.parent)
         for path, digest in value['files'].items():
             if PurePosixPath(path).is_absolute() or '..' in PurePosixPath(path).parts or len(digest) != 64:
                 raise ValueError('Invalid device inventory')
-    if set(device['edge']['pythonpath']) != {'PYTHONPATH=' + str(BASE / NAMES['edge']), 'THIRDHAND_SDK_TIMING=0'}:
+    if len(bases) != 1:
+        raise ValueError('Device source roots differ')
+    if set(device['edge']['pythonpath']) != {'PYTHONPATH=' + device['edge']['source'], 'THIRDHAND_SDK_TIMING=0'}:
         raise ValueError('Edge configuration changed')
     package = {'schema': 1, 'purpose': 'sdk-browser-heartbeat-fix', 'sourceCommit': SOURCE,
                'edgeBaseline': device['edge']}
@@ -71,12 +79,13 @@ def build(cloud_baseline, device_baseline, destination):
                         newRelease='/opt/thirdhand-stage/releases/' + sha(manifest)[:16],
                         newManifestSha256=sha(manifest), manifestBase64=base64.b64encode(manifest).decode())
         else:
-            old = BASE / NAMES[group]
-            binary = '/home/nieqingcao/ThirdHand/UIEAclub_ThirdHand_VLA/local/runtimes/node/bin/node'
+            old = PurePosixPath(device[group]['source'])
+            home = PurePosixPath(*old.parts[:3])
+            binary = str(home / 'ThirdHand/UIEAclub_ThirdHand_VLA/local/runtimes/node/bin/node')
             if 'argv[]=' + binary + ' ' + str(old / 'services/robot/src/server.js') + ' ;' not in device[group]['state']['ExecStart']:
                 raise ValueError('Robot invocation changed')
-            new = BASE / ('robot-sdk-browser-heartbeat-' + sha(pretty(after))[:16])
-            drop = PurePosixPath('/home/nieqingcao/.config/systemd/user') / (UNITS[group] + '.d') / 'zzzzzz-sdk-browser-heartbeat.conf'
+            new = old.parent / ('robot-sdk-browser-heartbeat-' + sha(pretty(after))[:16])
+            drop = home / '.config/systemd/user' / (UNITS[group] + '.d') / 'zzzzzz-sdk-browser-heartbeat.conf'
             config = '[Service]\nExecStart=\nExecStart=' + binary + ' ' + str(new / 'services/robot/src/server.js') + '\n'
             if str(drop) in device[group]['unitHashes']:
                 raise ValueError('Drop-in already exists')

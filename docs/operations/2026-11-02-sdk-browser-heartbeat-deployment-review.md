@@ -4,6 +4,8 @@
 
 用户本轮已允许放宽超时、不发送运动。本候选具体实现是观察模式3000ms，管理员运动模式500ms不变；设备签名/本地1秒租约和1500ms ACK保持。行为、边界与已知限制见[修复记录](2026-11-02-sdk-browser-heartbeat-fix.md)。本次只验收授权，不点击Connect SDK，不执行电机使能/闭爪初始化或后续运动。
 
+用户已批准本固定包上传/应用与验收。打包工具提交c5ed074的CI发现3处个人主目录硬编码（业务job通过），已改为从已核验设备基线派生home/root；14项构建器/边界测试通过，重新构建包SHA仍为下述bf075e0e，六件运行源码、1件配置、操作脚本和部署范围均未改变，不需扩大审批。原源码40d2dac的CI结果保持有效。
+
 ## 固定包与运行范围
 
 本地：`.superpowers/sdd/2026-11-01-sdk-source-audit/browser-heartbeat-candidate/sdk-browser-heartbeat-candidate.json.gz`，729667字节。

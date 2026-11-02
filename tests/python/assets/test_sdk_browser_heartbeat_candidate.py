@@ -2,7 +2,7 @@ import base64
 import gzip
 import importlib.util
 import json
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 import pytest
 
@@ -20,8 +20,9 @@ def inputs(tmp_path, monkeypatch):
     cloud = tmp_path / 'cloud.json'; cloud.write_bytes(raw)
     monkeypatch.setattr(builder, 'OLD_SHA', builder.sha(raw))
     device = {'context': {'sdkConnected': False, 'readOnly': True}}
+    home = PurePosixPath('/') / 'home' / 'synthetic-user'
     for group, count in [('edge', 24), ('robot', 37)]:
-        source = builder.BASE / builder.NAMES[group]
+        source = home / builder.SOURCE_TAIL / builder.NAMES[group]
         files = {p: builder.sha(builder.git_bytes(builder.SOURCE+'^', p)) for p in builder.FILES.get(group, [])}
         files.update({f'preserved/{i}': 'd'*64 for i in range(count-len(files))})
         device[group] = {'source': str(source), 'files': files, 'links': {}, 'unitHashes': {},
@@ -29,7 +30,7 @@ def inputs(tmp_path, monkeypatch):
         if group == 'edge':
             device[group]['pythonpath'] = ['PYTHONPATH='+str(source), 'THIRDHAND_SDK_TIMING=0']
         else:
-            binary = '/home/nieqingcao/ThirdHand/UIEAclub_ThirdHand_VLA/local/runtimes/node/bin/node'
+            binary = str(home / 'ThirdHand/UIEAclub_ThirdHand_VLA/local/runtimes/node/bin/node')
             device[group]['state']['ExecStart'] = '{ argv[]='+binary+' '+str(source / 'services/robot/src/server.js')+' ; }'
     baseline = tmp_path / 'device.json'; baseline.write_text(json.dumps(device))
     return cloud, baseline, tmp_path / 'out'

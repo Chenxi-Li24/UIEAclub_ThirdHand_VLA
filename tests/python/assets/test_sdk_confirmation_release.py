@@ -18,7 +18,7 @@ def load(relative):
     return module
 
 
-@pytest.fixture(params=['confirmation', 'heartbeat', 'renewal', 'diagnostic'])
+@pytest.fixture(params=['confirmation', 'heartbeat', 'renewal', 'diagnostic', 'pipeline'])
 def candidate(tmp_path, monkeypatch, request):
     build = load(f'tools/deploy/build_sdk_{request.param}_release.py')
     apply = load(f'tools/operations/apply_sdk_{request.param}_cloud.py')
@@ -53,7 +53,7 @@ def candidate(tmp_path, monkeypatch, request):
 def test_only_fixed_cloud_changes_and_no_models_device_code_or_credentials(candidate):
     build, apply, base, before, report, destination = candidate
     raw, contents = apply.read_package(base, before)
-    expected_count = 2 if build.__name__ == 'build_sdk_renewal_release' else 1
+    expected_count = 2 if build.__name__ in ('build_sdk_renewal_release', 'build_sdk_pipeline_release') else 1
     assert len(contents) == expected_count
     assert build.FILES == apply.FILES
     assert report['filesCount'] == 4657 and report['preservedFiles'] == 4657 - expected_count

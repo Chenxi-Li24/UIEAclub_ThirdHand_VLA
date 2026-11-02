@@ -7,7 +7,7 @@ const {createLeasesRepository}=require('../../../platform/storage/src/leases');
 const {createBrowserControlRegistry}=require('../../../services/cloud-api/src/control/control-channel');
 const {createControlService}=require('../../../services/cloud-api/src/control/leases');
 
-async function controlFixture(t,{onDiagnostic}={}){
+async function controlFixture(t,{onDiagnostic,timing}={}){
   let service;t.after(()=>service?.close());
   const f=await identityFixture(t),users=createUsersRepository(f.pool),a=await f.verified('holder'),b=await f.verified('takeover');
   await users.bootstrapAdmin({verifiedUserId:a.userId});await users.requestAdmin({userId:b.userId,reason:'test only'});await users.setRole({actorId:a.userId,userId:b.userId,role:'admin',expectedVersion:1,reason:'test only'});
@@ -28,7 +28,7 @@ async function controlFixture(t,{onDiagnostic}={}){
   devices.dispatch=async(...args)=>({confirmation:devices.request(...args)});
   const sign={sign:value=>({keyId:'test',payloadBase64url:Buffer.from(JSON.stringify(value)).toString('base64url'),signatureBase64url:'test-only'})};
   const repo=createLeasesRepository(f.pool,{clock:f.clock});
-  service=createControlService({pool:f.pool,repository:repo,sessions,channels,devices,signer:sign,clock,readiness:async()=>true,onDiagnostic});
+  service=createControlService({pool:f.pool,repository:repo,sessions,channels,devices,signer:sign,clock,readiness:async()=>true,onDiagnostic,timing});
   function browser(p){const clientInstanceId=randomUUID(),messages=[];const connection=channels.open(p,{clientInstanceId,send:v=>messages.push(v)});function refresh(){const challenge=channels.challenge(connection.connectionId);channels.respond(p,{connectionId:connection.connectionId,sequence:challenge.sequence,nonce:challenge.nonce});}refresh();return {clientInstanceId,connectionId:connection.connectionId,refresh,messages};}
   return {...f,first,second,deviceId,context,repo,service,sessions,channels,devices,requests,browser,principal,cookieFor:p=>cookies.get(p.sessionId),setStopState(value){stopState=value;},onStop(callback){afterStop=callback;}};
 }

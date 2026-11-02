@@ -2,11 +2,12 @@
 const {randomUUID,randomBytes,createHash}=require('node:crypto');
 const {authorize}=require('../../../../platform/identity/src/policy');
 const {validOperation}=require('../../../robot/src/control-policy');
+const {createLeaseTiming}=require('../../../device-relay/src/lease-timing');
 const fail=code=>Object.assign(Error(code),{code});
 const BINDING=['deviceId','bootId','executorEpoch','connectionId','certificateId'];
 const same=(left,right)=>left&&right&&BINDING.every(key=>left[key]===right[key]);
 const hash=value=>createHash('sha256').update(value).digest('hex');
-function createControlService({repository,sessions,channels,devices,signer,clock={now:()=>new Date(),monotonic:()=>performance.now()},readiness=async()=>false,onDiagnostic=()=>{}}){
+function createControlService({repository,sessions,channels,devices,signer,clock={now:()=>new Date(),monotonic:()=>performance.now()},readiness=async()=>false,onDiagnostic=()=>{},timing=createLeaseTiming()}){
   const holders=new Map(),pending=new Set(),revocations=new Map();let closed=false;
   const diagnosticCodes=new Set(['FORBIDDEN','BROWSER_STALE','LEASE_CHANGED','LEASE_REQUIRED','DEVICE_UNAVAILABLE','DEVICE_REPLY_UNKNOWN','DEVICE_DISCONNECTED','DEVICE_BUSY','LEASE_UNCONFIRMED']);
   const deviceCodes=new Set(['DEVICE_REQUEST_REJECTED','SUBMISSION_RESULT_UNKNOWN','POLICY_CLOSED','WRONG_EXECUTOR','EXPIRED_COMMAND','STOP_UNCONFIRMED','LEASE_UPDATE_PENDING','INVALID_LEASE','INVALID_LEASE_SCOPE','LEASE_SCOPE_CHANGED','LEASE_CONFLICT','STALE_LEASE','LEASE_EXPIRED','LOCAL_LEASE_GUARD_REJECTED']);
@@ -60,37 +61,46 @@ function createControlService({repository,sessions,channels,devices,signer,clock
     }catch(error){await revoke(lease,'grant_failed');throw error;}
   }
   function dispatchRenewal(principal,input,holder){
+    const trace=holder.lease.scope==='sdk'?timing.begin():null;
+    trace?.mark('queued');
     // Serialize principal/DB checks and writes to the ordered device channel,
     // but do not occupy the send queue while awaiting the return-path ACK.
     const dispatch=(holder.dispatch||Promise.resolve()).catch(()=>{}).then(async()=>{
+      trace?.mark('dequeued');
       const started=clock.monotonic();let stage='principal';
       const stillHeld=()=>{if(holders.get(holder.lease.id)!==holder)throw fail('LEASE_CHANGED');channels.requireFresh(principal,input);};
       try{
         stillHeld();await actor(principal,holder.lease.scope==='sdk'?'sdk.connect':'control.command',input);
+        trace?.mark('principal');
         stage='readiness';stillHeld();
         const binding=context(input.deviceId);
         if(!same(binding,leaseContext(holder.lease))||!await readiness(principal,input.deviceId)){await revoke(holder.lease,'readiness_lost');throw fail('DEVICE_UNAVAILABLE');}
+        trace?.mark('readiness');
         stage='repository';stillHeld();
         const renewed=await repository.renew(principal,holder.lease.id);
+        trace?.mark('repository');
         stage='dispatch';stillHeld();
         if(!same(context(input.deviceId),binding))throw fail('DEVICE_UNAVAILABLE');
         stage='device_reply';
         const envelope=signed('lease_renew',binding,{leaseId:renewed.id,leaseEpoch:renewed.leaseEpoch,sequence:renewed.renewalSequence,scope:renewed.scope});
+        trace?.bind(envelope);trace?.mark('signed');
         // A legacy adapter without a send-completion boundary remains serialized.
         const response=typeof devices.dispatch==='function'?(await devices.dispatch(input.deviceId,envelope)).confirmation:Promise.resolve(await devices.request(input.deviceId,envelope));
+        trace?.mark('dispatched');
         const confirmation=(async()=>{
           try{
             const result=await response;stage='confirmation';
+            trace?.mark('ack');trace?.finish('cloud',['active','rejected','failed'].includes(result?.state)?result.state:'unknown');
             if(result?.state!=='active'||result.leaseId!==renewed.id||result.leaseEpoch!==renewed.leaseEpoch||(renewed.scope==='sdk'&&result.scope!=='sdk')){reportConfirmation('renewal',result,renewed);await revoke(renewed,'renewal_unconfirmed');throw fail('LEASE_UNCONFIRMED');}
             stillHeld();
             // ACKs may arrive in a different order; never regress holder state.
             if(renewed.renewalSequence>holder.lease.renewalSequence)holder.lease=renewed;
             return {renewed:true};
-          }catch(error){reportRenewal(stage,error,started);throw error;}
+          }catch(error){trace?.mark('failed');trace?.finish('cloud','failed');reportRenewal(stage,error,started);throw error;}
         })();
         confirmation.catch(()=>{});
         return {confirmation};
-      }catch(error){reportRenewal(stage,error,started);throw error;}
+      }catch(error){trace?.mark('failed');trace?.finish('cloud','failed');reportRenewal(stage,error,started);throw error;}
     });
     holder.dispatch=dispatch;return dispatch;
   }

@@ -10,7 +10,7 @@
 
 本地证据：忽略目录 `.superpowers/sdd/2026-11-01-sdk-source-audit/browser-heartbeat-expiry-proof.png`、`browser-heartbeat-device-0732.jsonl`；云端私有备份目录 `access-sdk-browser-heartbeat-20261102/authorization-samples-0732.jsonl`。不提交原始账户、租约ID或凭据。
 
-## 修正设计与实现（已部署，稳定性待验收）
+## 修正设计与实现（已部署，600秒目标达到，后续心跳仍中断）
 
 | 边界 | SDK专用授权 | 管理员运动授权 |
 |---|---:|---:|
@@ -47,3 +47,13 @@
 用户批准后已完成固定包双端上传与SHA256校验。云端在安装锁及授权准入阻断下备份、核对4658件文件并发布e9885d6408e68955（仅2件改变）；Ubuntu由现场快照派生agent-sdk-duration-550c774c14102253、robot-sdk-duration-e559fd326a08a276，保留其他任务代码，仅更新6件源码和2件新增入口配置。三个既有服务均active，诊断开关保持关闭。
 
 部署后healthz正常，deviceControl=explicit-read-only；设备SDK=false、readOnly=true；活动租约0，部署后ops.commands新增0。没有初始化SDK或发送运动。600秒授权验收尚未开始，等待用户Observer登录；真实SDK读取及运动验收不属于本轮。旧版本及备份保留，可按部署审阅回退。
+
+## 2026-11-02 授权验收与模型诊断
+
+一次Observer显式申请，不点击连接SDK、不自动重申请。UTC 14:18:49.927确认，14:30:06.803释放，连续676.876秒；release_reason=browser_stale，最终renewal_sequence=2291。600秒目标达到，但后续浏览器心跳中断，因此不能宣称SDK长期稳定性已修复。
+
+云端匿名有界采样共403条，其中327条active，始末为14:18:51.677179至14:29:52.375713，同一租约散列，序号5至2243，采样的数据库有效期最小剩余2.664803秒。采样到660秒后正常退出；退出后仍继续观察，发现676.876秒时授权释放。设备侧73次/约12分钟只读采样均SDK=false、readOnly=true，进程正常退出；释放后再次读取相同。活动租约0，整个验收窗口ops.commands新增0。
+
+设备14:30:06.826收到撤销并报告READ_ONLY_SDK_DISCONNECTED，14:30:06.829记录SOFTWARE_LEASE_CANCELED、reason=browser_stale。本次不是上一轮1秒设备租约先到期。失败窗口内未找到browser_control_timing拒绝日志；租约定时器可以早于WebSocket超时诊断触发，现有日志不足以确定浏览器暂停、主线程阻塞或网络抖动。后续需补齐该提前撤销分支的分段证据，不能仅凭release_reason认定网络根因，也不应继续盲目增加时限。没有追加第二次申请掩盖失败。
+
+同次用户报告模型空白。真实Edge页面日志：THREE.WebGLRenderer无法创建WebGL context，GL_VENDOR/GL_RENDERER=Disabled，BindToCurrentSequence failed；发生在SceneManager创建渲染器时，不能归因于模型资源缺失。用户确认WebGL未开启。浏览器安全规则禁止自动访问edge://gpu，未绕过；已请用户开启图形加速并重启Edge后复验。尚未确认模型恢复，不修改服务器或强制开启实验性/不安全渲染参数。本次只更新验收记录，没有额外运行代码部署。

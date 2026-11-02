@@ -66,5 +66,7 @@ ExecStart=/home/nieqingcao/ThirdHand/UIEAclub_ThirdHand_VLA/local/runtimes/node/
 ## 验证与审批依据
 
 实现与测试口径见[修复记录](2026-11-02-sdk-clock-fix.md)：141项Python通过；392项公网访问覆盖项经完整运行与单项解释器修正补测完成验证；固定包构建/漂移拒绝7项通过，源码边界审计ready。包只从固定Git源码读取，不混入工作树其他任务相机改动。浏览器本地file预览被安全策略拒绝，未绕过，前端自动化目前是DOM/模拟传输；上线后仍需真实浏览器验收。
-此轮只读核对Ubuntu服务均active、NeedDaemonReload=no、SDK断开且readOnly=true。云端预期基线来自上一轮已核验的密码规则发布；应用前须再次全量核对。
+此轮只读核对Ubuntu服务均active、NeedDaemonReload=no、SDK断开且readOnly=true。云端本轮只读复核current为e3f0176566d900ed，全量4658件摘要通过，活动租约/在途命令均0，业务服务active；应用前仍须重复准入检查。
 需批准范围：上传本固定包、云端2件前端源码、Ubuntu3件校验源码及2件入口drop-in、3个现有服务重启，以及上述不初始化SDK的有界授权验收/回退。具体确认来自已批准[C8方案](2026-11-01-C8-ui-sdk-audit-and-design.md)第9节第6步：“固定源码/资源清单、数据库变更和回退材料完成后才申请实际部署。”本轮不延长租约，不实施完整权限分离。
+
+代码与固定材料已推送至origin/login，提交9cff28fe92a47aed93d5479da836457f401952fc；[CI 41396719528](https://github.com/Oliveirah007/UIEAclub_ThirdHand_VLA/actions/runs/41396719528)的public-access和test两个job均已成功，完整CI通过。后续纯文档补记不改变本固定包。

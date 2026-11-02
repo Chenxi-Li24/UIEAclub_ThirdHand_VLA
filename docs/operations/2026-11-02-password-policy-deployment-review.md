@@ -1,6 +1,6 @@
 # 注册密码规则固定部署审阅
 
-状态：本地完成，23项认证测试通过；固定包已构建并核验，尚未上传或应用到staging。
+状态：用户批准后已于2026-11-02部署到staging，当前发布e3f0176566d900ed；23项本地认证测试通过，线上资源和双语提示核验通过。
 
 ## 行为与范围
 
@@ -38,3 +38,14 @@
 23项本地认证测试全部通过，包括真实隔离PostgreSQL的8字符注册／邮箱激活／登录、重置拒绝纯大写且不消耗有效令牌、重置后旧密码失效；前端中英文实时提示、7/8字符、纯数字/纯大写/纯小写拒绝、Unicode上限、旧版密码哈希验证。初次受限HTTP测试EACCES，允许本机访问后通过，测试数据库已停止。未声称本次已完成线上验收。
 
 此固定包改变线上认证规则，超出已批准的SDK诊断包。按已批准的[C8部署流程](2026-11-01-C8-deployment-review.md)“实际服务器变更须审阅固定候选后应用”，需批准以上5件、私有备份目录、原子切换、单服务重启与必要回退后再执行。
+
+
+## 实际上线记录
+
+用户回复“批准上线”。实施前核对current为f72e61d85009b7ea及完整4658件清单；活动租约、在途命令均0；Ubuntu只读检查sdkConnected=false、readOnly=true、recordingHealthy=true。
+
+固定包通过宝塔上传到上述私有目录，SHA256核对通过。使用已摘要核验的保护器、部署锁和零租约准入，保存before-public.json和unit-before-public.json；完整复制原发布，精确替换五件，清单全量验证后原子切换，只重启thirdhand-stage.service。apply-public.json确认applied=true、changed=5、preserved=4653、sdkActions=0、motionCommands=0。cloud.env、展示站及服务配置摘要保持；云端诊断开关仍0；健康检查explicit-read-only通过，未触发回退。
+
+匿名HTTPS验证auth-page.js与i18n-auth-catalog.js均200且SHA256等于固定包；reset-password页面包含新8–128字符与大小写说明。真实Edge注册页中英文说明正确，无横向溢出，验收后恢复英文。没有创建真实账号、发送邮件或代用户输入密码；真实注册/重置流程的23项验证来自本地隔离数据库。线上证据截图：.superpowers/sdd/2026-11-01-sdk-source-audit/password-policy-live-zh.png。
+
+本次未重做SDK连接稳定性验收，SDK后续修复继续以本次新发布作为基线。

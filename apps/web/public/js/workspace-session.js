@@ -55,7 +55,7 @@
     const numbers=[],sliders=[],errors=[];
     const report=text=>{status.textContent=tr(text);};
     const simulation=simulationApi.createSimulationController({armModel:arm,...(simulationClock?{clock:simulationClock}:{}),onChange:state=>{
-      state.joints.forEach((value,index)=>{if(numbers[index])numbers[index].value=String(Number(value.toFixed(2)));if(sliders[index])sliders[index].value=String(value);});
+      state.joints.forEach((value,index)=>{if(numbers[index])numbers[index].value=String(Number(value.toFixed(2)));if(sliders[index]){sliders[index].value=String(value);const [min,max]=arm.jointLimits[index];sliders[index].disabled=state.followingLive&&(value<min||value>max);sliders[index].title=sliders[index].disabled?tr('Measured angle is outside the editable range. Numeric feedback is unchanged.'):'';}});
       if(Number.isFinite(state.gripper)){const number=byId('gripper-input'),slider=byId('gripper-slider');if(number)number.value=String(Number((state.gripper*100).toFixed(2)));if(slider)slider.value=String(state.gripper);}
       status.textContent=tr(state.playing?'Playing model sequence':state.followingLive?'Following real robot · display only, no motion commands.':'Model simulation · no robot commands');
     }});
@@ -63,7 +63,7 @@
     arm.jointLimits.forEach(([minimum,maximum],index)=>{
       const row=el('div',{class:'cloud-joint-row'}),label=el('label',{for:`jinput-${index}`},`J${index+1}`),number=el('input',{type:'number',id:`jinput-${index}`,min:minimum,max:maximum,step:.1,'aria-label':`J${index+1} model angle`}),slider=el('input',{type:'range',id:`slider-j${index}`,min:minimum,max:maximum,step:.1,'aria-label':`J${index+1} model angle`}),error=el('span',{id:`jerror-${index}`,role:'alert',class:'cloud-field-error'});
       number.value=slider.value=String(arm.getJointAngles()[index]);numbers.push(number);sliders.push(slider);errors.push(error);row.append(label,number,slider,error);grid.append(row);
-      const edit=event=>{const raw=event.target.value;pauseForEdit();event.target.value=raw;const value=Number(raw);if(raw.trim()===''||!Number.isFinite(value)||value<minimum||value>maximum){error.textContent=tr('Enter a valid angle within the joint limits.');return;}error.textContent='';const angles=arm.getJointAngles();angles[index]=value;simulation.setJoints(angles);};
+      const edit=event=>{const raw=event.target.value;pauseForEdit();event.target.value=raw;const value=Number(raw);if(raw.trim()===''||!Number.isFinite(value)||value<minimum||value>maximum){error.textContent=tr('Enter a valid angle within the joint limits.');return;}error.textContent='';numbers[index].value=String(value);try{if(numbers.some(input=>input.value.trim()===''))throw Error('Empty draft');simulation.setJoints(numbers.map(input=>Number(input.value)));}catch{report('Enter a valid angle within the joint limits.');}};
       number.addEventListener('input',edit);slider.addEventListener('input',edit);
     });
     const poses=byId('preset-grid');poses.replaceChildren();
@@ -96,7 +96,8 @@
       ui.syncMode=following;
       if(sync){sync.checked=following;sync.disabled=!modelReady;sync.title=tr('Follow measured state. Manual edits pause model synchronization.');}
       const fresh=latest?.fresh&&latest?.status==='connected'&&latest?.sample?.sourceMode==='hardware'&&latest?.sample?.sdkConnected===true;
-      const key=!modelReady?'Waiting for the model to load.':!following?'Model synchronization paused · manual draft. Check Sync 3D model to resume.':!fresh?'Waiting for fresh hardware feedback · model pose retained.':applyFailed?'Measured pose cannot be represented by this model.':'Following real robot · display only, no motion commands.';
+      const outside=simulation.getState().joints.some((value,i)=>value<arm.jointLimits[i][0]||value>arm.jointLimits[i][1]);
+      const key=!modelReady?'Waiting for the model to load.':!following?'Model synchronization paused · manual draft. Check Sync 3D model to resume.':!fresh?'Waiting for fresh hardware feedback · model pose retained.':applyFailed?'Measured pose cannot be represented by this model.':outside?'Following measured pose outside model editing limits · display only. Target limits remain enforced.':'Following real robot · display only, no motion commands.';
       followStatus.textContent=tr(key);followStatus.dataset.state=!following?'manual':fresh&&!applyFailed?'following':'waiting';
       if(following)status.textContent=tr(key);
       byId('workspace-mode').textContent=tr(following&&fresh&&!applyFailed?'Following real robot · display only':identity.mode==='admin'?'Administrator · model simulation':'Observer · model simulation');

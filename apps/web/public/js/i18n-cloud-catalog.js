@@ -1,5 +1,7 @@
 'use strict';
 globalThis.ThirdHandI18nCatalog=(globalThis.ThirdHandI18nCatalog||[]).concat([
+ ['实测角度超出可编辑范围，数值反馈保持原值。','Measured angle is outside the editable range. Numeric feedback is unchanged.'],
+ ['正在显示超出模型编辑限位的实测姿态；仅用于显示，目标限位仍有效。','Following measured pose outside model editing limits · display only. Target limits remain enforced.'],
  ['页面进入后台，已关闭 SDK 授权通道。请核对设备状态后重新申请。','The page went into the background and closed its SDK authorization channel. Check device state before requesting again.'],
  ['浏览器心跳已过期。请核对设备状态后重新申请。','Browser heartbeat expired. Check device state before requesting again.'],
  ['SDK 授权通道已中断。请核对设备状态后重新申请。','The SDK authorization channel was interrupted. Check device state before requesting again.'],

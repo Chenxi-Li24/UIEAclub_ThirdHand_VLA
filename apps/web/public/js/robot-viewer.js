@@ -218,6 +218,25 @@ class ArmModel {
 
   getJointAngles() { return this.jointAngles.slice(); }
 
+  // Display-only measured pose. Target setters and their limits stay unchanged.
+  setMeasuredJointAngles(angles) {
+    if (!this.robot || !Array.isArray(angles) || angles.length !== 6 || !Array.from(angles).every(Number.isFinite)) {
+      throw new Error('Invalid measured joint angles');
+    }
+    const joints = this.jointNames.map(name => this.robot.joints[name]);
+    if (joints.some(joint => !joint)) throw new Error('Measured URDF joint missing');
+    joints.forEach((joint, index) => {
+      const previous = joint.ignoreLimits;
+      try {
+        joint.ignoreLimits = true;
+        joint.setJointValue(angles[index] * Math.PI / 180);
+      } finally {
+        joint.ignoreLimits = previous;
+      }
+    });
+    this.jointAngles = angles.slice();
+  }
+
   setJointLimits(limits) {
     if (!Array.isArray(limits) || limits.length !== 6) return;
     this.jointLimits = limits.map(limit => [Number(limit[0]), Number(limit[1])]);

@@ -8,6 +8,7 @@ function fixture({live=false,layout='workspace',mode='observe',modelReady=true}=
   const shell=require('../../../apps/web/public/js/'+(layout==='classic'?'classic-shell':'workspace-shell')).mountWorkspace(document,view,{calibrationEntry:null,canOpenPage:id=>id!=='assistant'});
   const arm={jointLimits:[[-162,162],[-12,201],[-183,0],[-98,98],[-98,98],[-164,164]],joints:[0,90,-90,0,0,0],getJointAngles(){return this.joints.slice();},setJointAngles(value){this.joints=[...value];},setInstallMode(){},getGripperPosition(){return this.gripper;},setGripperPosition(value){this.gripper=value;}};
   const scene={toggleGrid(){},toggleAxes(){},resetView(){},_onResize(){}};
+  arm.setMeasuredJointAngles=function(value){this.joints=[...value];};
   let time=0;
   let state=null;const listeners=new Set(),stateStore={snapshot:()=>state,subscribe(fn){listeners.add(fn);fn(state);return()=>listeners.delete(fn);}};
   const controls=mountModelWorkspace({document,view,shell,arm,scene,modelReady,stateStore:live?stateStore:undefined,identity:{userId:'local-test-user',role:mode==='admin'?'admin':'observer',mode},sessionClient:{request:async(path,body)=>{requests.push({path,body});return {displayName:'Test user',email:'test@example.invalid',organization:''};}},simulationClock:{now:()=>time,sleep:async ms=>{time+=ms;}}});
@@ -51,10 +52,25 @@ test('late model readiness replays latest fresh state; stale, failed, test-sourc
  const f=fixture({live:true,modelReady:false});try{
   f.push(measured());assert.equal(f.arm.joints[0],0);assert.equal(f.document.getElementById('chk-sync').disabled,true);
   f.controls.setReady(true);const before=[...f.arm.joints];assert.notEqual(before[0],0);
-  for(const overrides of [{fresh:false},{status:'read_failed'},{sample:{...measured().sample,sourceMode:'simulation'}},{sample:{...measured().sample,sdkConnected:false}},{sample:{...measured().sample,jointPositionRad:[999,0,0,0,0,0]}}]){f.push(measured(2,overrides));assert.deepEqual(f.arm.joints,before);}
+  for(const overrides of [{fresh:false},{status:'read_failed'},{sample:{...measured().sample,sourceMode:'simulation'}},{sample:{...measured().sample,sdkConnected:false}},{sample:{...measured().sample,jointPositionRad:[NaN,0,0,0,0,0]}}]){f.push(measured(2,overrides));assert.deepEqual(f.arm.joints,before);}
   assert.match(f.document.getElementById('model-follow-status').textContent,/cannot be represented/);
   f.push(measured(3));assert.equal(f.document.getElementById('model-follow-status').dataset.state,'following');
   f.push(measured(4,{fresh:false,status:'stale'}));assert.equal(f.document.getElementById('model-follow-status').dataset.state,'waiting');assert.equal(f.document.getElementById('chk-sync').checked,true);
+ }finally{f.controls.dispose();}
+});
+
+for(const layout of ['workspace','classic'])test(`${layout}: J2 -12.21 degree measurement is displayed exactly without widening editable target limits`,()=>{
+ const f=fixture({live:true,layout});try{
+  const actual=measured();actual.sample.jointPositionRad=[-1.8,-12.21,-.54,33.04,-5.15,-7.51].map(n=>n*Math.PI/180);
+  f.push(actual);assert.ok(Math.abs(f.arm.joints[1]+12.21)<1e-10);
+  assert.equal(f.document.getElementById('jinput-1').value,'-12.21');assert.equal(f.document.getElementById('jinput-1').getAttribute('min'),'-12');
+  assert.equal(f.document.getElementById('slider-j1').disabled,true);assert.equal(f.document.getElementById('chk-sync').checked,true);
+  assert.match(f.document.getElementById('model-follow-status').textContent,/outside model editing limits/);
+  input(f,'jinput-0','25');assert.equal(f.document.getElementById('chk-sync').checked,false);assert.equal(f.document.getElementById('jinput-0').value,'25');
+  assert.ok(Math.abs(f.arm.joints[0]+1.8)<1e-10,'invalid target vector never silently clamps another joint');
+  input(f,'jinput-1','-12');assert.equal(f.arm.joints[0],25);assert.equal(f.arm.joints[1],-12);
+  assert.throws(()=>f.controls.simulation.setJoints([-1.8,-12.21,-.54,33.04,-5.15,-7.51]),/range limit/);
+  resume(f);assert.ok(Math.abs(f.arm.joints[1]+12.21)<1e-10);assert.equal(f.requests.length,0);
  }finally{f.controls.dispose();}
 });
 test('waypoint/sequence playback pauses following and cannot be overwritten by fresh telemetry',async()=>{

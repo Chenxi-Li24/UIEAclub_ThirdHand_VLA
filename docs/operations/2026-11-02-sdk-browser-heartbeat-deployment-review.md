@@ -1,6 +1,6 @@
 # SDK 浏览器心跳固定部署审阅
 
-状态：用户批准后已上线，等待用户恢复Observer登录后完成真实授权稳定性验收。源码40d2dacb7067c294885c706161188bf63181e102的[CI 41402908893](https://github.com/Oliveirah007/UIEAclub_ThirdHand_VLA/actions/runs/41402908893)两个job均success；本地400项业务回归及9项包构建/漂移拒绝测试通过。
+状态：已上线并完成一次真实授权尝试，49.278秒后因设备本地1秒租约到期释放，未通过10分钟稳定性验收。详见[分范围租约修正](2026-11-02-sdk-lease-duration-fix.md)。源码40d2dacb7067c294885c706161188bf63181e102的[CI 41402908893](https://github.com/Oliveirah007/UIEAclub_ThirdHand_VLA/actions/runs/41402908893)两个job均success；本地400项业务回归及9项包构建/漂移拒绝测试通过。
 
 用户本轮已允许放宽超时、不发送运动。本候选具体实现是观察模式3000ms，管理员运动模式500ms不变；设备签名/本地1秒租约和1500ms ACK保持。行为、边界与已知限制见[修复记录](2026-11-02-sdk-browser-heartbeat-fix.md)。本次只验收授权，不点击Connect SDK，不执行电机使能/闭爪初始化或后续运动。
 
@@ -60,5 +60,5 @@ Observer前台设备页显式申请授权，最多3次尝试；单次成功持�
 - 部署后再次核验云端4658件和Ubuntu37件源码摘要、唯一新增drop-in摘要均一致；healthz正常，deviceControl=explicit-read-only；活动租约0、部署后ops.commands记录0。Ubuntu记录健康，视频未就绪，本包未更改相机。
 - 构建器路径修正提交9634734的[CI 41405311336](https://github.com/Oliveirah007/UIEAclub_ThirdHand_VLA/actions/runs/41405311336)两个job全部success。构建/源码边界14项本地测试通过，固定包未变化。
 - 已准备有界只读采样至云端备份目录authorization-samples.jsonl：每2秒仅保存租约状态/计数/时间，等待首个授权最多360秒，开始后最多660秒，总进程最多1020秒；未出现授权会自动退出。日志只有租约ID散列，没有账号/凭据/nonce。后续重新验收需核对此进程是否已结束，再生成新的独立采样文件，不能误用空采样当验收。
-- 当前Edge验收页登录会话已过期，已保持默认Observer并请求用户本人登录。尚未发起本包真实授权尝试，连续10分钟稳定性未完成；没有初始化SDK或发送运动。不要把成功部署及合成回归记作实机稳定性通过。
+- 用户恢复Observer登录后，仅显式申请一次授权，07:35:06.410Z—07:35:55.688Z，续约序号168；设备先lease_expired，云端随后renewal_unconfirmed，未通过600秒验收。已释放，SDK=false、readOnly=true、活动租约及部署后命令数均0。有界采样已结束。没有初始化SDK或发送运动；下一步3秒SDK专用租约尚未上线。
 - 本地证据：`.superpowers/sdd/2026-11-01-sdk-source-audit/browser-heartbeat-deployed.png`；前次browser_stale证据同目录browser-heartbeat-before.png。备份、before/applied-public记录保留在本文指定两端目录。

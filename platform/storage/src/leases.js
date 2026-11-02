@@ -52,7 +52,7 @@ function createLeasesRepository(pool,{clock={now:()=>new Date()}}={}){
       if(!stored)throw fail('FORBIDDEN');
       await assertPrincipal(client,principal,clock.now(),stored.scope);
       const row=(await client.query(`UPDATE ops.control_leases AS l SET state='active',confirmed_at=$3,expires_at=$4
-        WHERE l.id=$1 AND l.session_id=$2 AND l.state='requested' RETURNING ${COLUMNS}`,[leaseId,principal.sessionId,clock.now(),new Date(clock.now().getTime()+1000)])).rows[0];
+        WHERE l.id=$1 AND l.session_id=$2 AND l.state='requested' RETURNING ${COLUMNS}`,[leaseId,principal.sessionId,clock.now(),new Date(clock.now().getTime()+(stored.scope==='sdk'?3000:1000))])).rows[0];
       if(!row)throw fail('LEASE_CHANGED');return row;
     });},
     async markRevoking(leaseId,reason){await pool.query("UPDATE ops.control_leases SET state='revoking',release_reason=$2 WHERE id=$1 AND state IN ('requested','active')",[leaseId,reason]);},
@@ -62,7 +62,7 @@ function createLeasesRepository(pool,{clock={now:()=>new Date()}}={}){
       if(!stored)throw fail('FORBIDDEN');
       await assertPrincipal(client,principal,clock.now(),stored.scope);
       const result=(await client.query(`UPDATE ops.control_leases AS l SET renewal_sequence=renewal_sequence+1,expires_at=$3
-        WHERE id=$1 AND session_id=$2 AND state='active' AND expires_at>$4 RETURNING ${COLUMNS}`,[leaseId,principal.sessionId,new Date(clock.now().getTime()+1000),clock.now()])).rows[0];if(!result)throw fail('LEASE_CHANGED');return result;
+        WHERE id=$1 AND session_id=$2 AND state='active' AND expires_at>$4 RETURNING ${COLUMNS}`,[leaseId,principal.sessionId,new Date(clock.now().getTime()+(stored.scope==='sdk'?3000:1000)),clock.now()])).rows[0];if(!result)throw fail('LEASE_CHANGED');return result;
     });},
     async requestTakeover(principal,{deviceId,targetEpoch,clientInstanceId,connectionId,nonceHash}){return transaction(pool,async client=>{
       await assertPrincipal(client,principal,clock.now());await lockedDevice(client,deviceId);

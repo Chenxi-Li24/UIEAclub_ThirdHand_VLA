@@ -22,6 +22,27 @@ def fixture():
     return m, guard, clock, events, lease
 
 
+def test_sdk_scope_three_second_deadline_is_immutable_and_terminal():
+    m, guard, clock, events, lease = fixture()
+    lease.update(scope='sdk', expiresAt=1003000)
+    guard.arm(lease)
+    assert guard.deadline == 8.
+    clock.update(mono=6.5, wall=1001.5)
+    renewed = dict(lease, sequence=1, issuedAt=1001500, expiresAt=1004500)
+    guard.renew(renewed)
+    assert guard.deadline == 9.5 and guard.active(renewed)
+    with pytest.raises(m.LeaseGuardError):
+        guard.renew(dict(renewed, scope='control', sequence=2, expiresAt=1002500))
+    assert not guard.active(dict(renewed, scope='control', expiresAt=1002500))
+    with pytest.raises(m.LeaseGuardError):
+        guard.renew(dict(renewed, sequence=2, expiresAt=1004501))
+    clock.update(mono=9.5, wall=1004.5)
+    assert guard.poll() and len(events) == 1
+    with pytest.raises(m.LeaseGuardError):
+        guard.renew(dict(renewed, sequence=3, issuedAt=1004500, expiresAt=1007500))
+    assert not guard.active(renewed)
+
+
 def test_worker_expiry_latches_before_cleanup_and_runs_callback_outside_guard_lock():
     m, guard, clock, events, lease = fixture(); guard.arm(lease)
     clock['mono'] = 5.95

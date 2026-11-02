@@ -16,6 +16,20 @@ function fixture(t,{ack=true}={}){
   return {bridge,clock,lease,sent,errors};
 }
 
+test('worker bridge preserves SDK scope with a three-second cap and blocks every guarded motion',t=>{
+  const f=fixture(t);let mono=50;t.mock.method(performance,'now',()=>mono);
+  const lease={...f.lease,scope:'sdk',expiresAt:1003000};
+  assert.equal(f.bridge.armRemoteLease(lease),true);assert.equal(f.bridge.remoteLeaseDeadline,3050);
+  assert.equal(f.bridge.send({cmd:'connect'}),true);assert.equal(f.sent.at(-1).remote_lease.scope,'sdk');
+  for(const cmd of ['gripper','move_joint','go_home','follow_start'])assert.equal(f.bridge.send({cmd}),false);
+  f.clock.now+=1500;mono+=1500;
+  assert.equal(f.bridge.renewRemoteLease({...lease,sequence:1,issuedAt:f.clock.now,expiresAt:f.clock.now+3000}),true);
+  assert.equal(f.bridge.renewRemoteLease({...lease,scope:'control',sequence:2,issuedAt:f.clock.now,expiresAt:f.clock.now+1000}),false);
+  assert.equal(f.bridge.renewRemoteLease({...lease,sequence:2,issuedAt:f.clock.now,expiresAt:f.clock.now+3001}),false);
+  f.clock.now+=3000;mono+=3000;
+  assert.equal(f.bridge.renewRemoteLease({...lease,sequence:3,issuedAt:f.clock.now,expiresAt:f.clock.now+3000}),false);
+});
+
 test('remote SDK commands fail closed until worker lease is queued and carry a copied original binding',t=>{
   const f=fixture(t);assert.equal(f.bridge.send({cmd:'connect'}),false);assert.equal(f.sent.length,0);
   assert.equal(f.bridge.armRemoteLease(f.lease),true);assert.equal(f.sent[0].cmd,'remote_lease_arm');

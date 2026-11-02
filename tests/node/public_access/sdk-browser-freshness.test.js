@@ -31,13 +31,13 @@ test('motion mode retains the 500ms boundary and at most two outstanding challen
   const oldest=f.challenge();f.challenge();f.challenge();
   assert.throws(()=>f.respond(oldest),{code:'STALE_CHALLENGE'});
 });
-test('SDK timer bridges a missing browser response, keeps 1s signed leases, then revokes at 3s',async t=>{
+test('SDK timer bridges a missing browser response, keeps 3s SDK signed leases, then revokes at 3s',async t=>{
   const f=await controlFixture(t),p=await f.principal(f.first.userId,'observe'),browser=f.browser(p);
   const lease=await f.service.requestLease(p,{deviceId:f.deviceId,...browser});assert.equal(lease.scope,'sdk');
   const tick=async()=>{f.clock.value+=300;await new Promise(resolve=>setTimeout(resolve,110));await f.service.drain();};
   for(let i=0;i<9;i++)await tick();
   const renewals=f.requests.filter(value=>value.purpose==='lease_renew');assert.ok(renewals.length>=9);
-  assert.ok(renewals.every(value=>value.scope==='sdk'&&value.expiresAt-value.issuedAt===1000));
+  assert.ok(renewals.every(value=>value.scope==='sdk'&&value.expiresAt-value.issuedAt===3000));
   assert.equal(f.requests.some(value=>value.purpose==='command'||value.purpose==='stop'),false);
   await tick();assert.equal(f.requests.at(-1).purpose,'stop');
   const count=f.requests.length;await tick();assert.equal(f.requests.length,count);

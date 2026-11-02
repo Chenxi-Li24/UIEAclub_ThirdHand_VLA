@@ -36,5 +36,5 @@ test('cloud records raw ACK before waiting for revocation and never changes leas
   }finally{release();await f.service.drain();}
   assert.equal(records[0].marks.ack,118,'stop completion must not contaminate ACK timing');
   assert.equal(await f.repo.current(f.deviceId),null);assert.equal(f.requests.some(v=>v.purpose==='command'),false);
-  assert.ok(f.requests.every(v=>v.expiresAt-v.issuedAt===1000));
+  assert.ok(f.requests.every(v=>v.expiresAt-v.issuedAt===(v.scope==='sdk'?3000:1000)));
 });

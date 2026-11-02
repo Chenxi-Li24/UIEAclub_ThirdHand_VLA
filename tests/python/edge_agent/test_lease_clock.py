@@ -33,7 +33,18 @@ def test_small_clock_offset_keeps_signed_one_second_span(offset, scope):
     assert value['expiresAt'] - value['issuedAt'] == 1000
 
 
-@pytest.mark.parametrize('offset,span', [(-1000, 1000), (501, 1000), (-500, 1001), (0, 0)])
+@pytest.mark.parametrize('offset,span', [(-1000, 1000), (501, 1000), (-500, 3001), (0, 0)])
 def test_expired_future_or_overlong_lease_still_rejected(offset, span):
     with pytest.raises(ProtocolError):
         verify_lease(*signed(offset, span), now_ms=10000)
+
+
+@pytest.mark.parametrize('scope,span,accepted', [('sdk', 3000, True), ('sdk', 3001, False),
+                                               ('control', 1000, True), ('control', 1001, False)])
+def test_signed_scope_sets_lifetime_cap(scope, span, accepted):
+    args = signed(0, span, scope)
+    if accepted:
+        assert verify_lease(*args, now_ms=10000)['scope'] == scope
+    else:
+        with pytest.raises(ProtocolError):
+            verify_lease(*args, now_ms=10000)

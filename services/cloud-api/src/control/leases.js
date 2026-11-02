@@ -53,7 +53,7 @@ function createControlService({repository,sessions,channels,devices,signer,clock
   }
   async function grant(principal,lease,browser,binding){
     try{
-      const result=await devices.request(lease.deviceId,signed('lease_grant',binding,{leaseId:lease.id,leaseEpoch:lease.leaseEpoch,sequence:0,scope:lease.scope}));
+      const result=await devices.request(lease.deviceId,signed('lease_grant',binding,{leaseId:lease.id,leaseEpoch:lease.leaseEpoch,sequence:0,scope:lease.scope},lease.scope==='sdk'?3000:1000));
       if(result?.state!=='active'||result.leaseId!==lease.id||result.leaseEpoch!==lease.leaseEpoch||(lease.scope==='sdk'&&result.scope!=='sdk')){reportConfirmation('grant',result,lease);throw fail('LEASE_UNCONFIRMED');}
       await actor(principal,lease.scope==='sdk'?'sdk.connect':'control.request',browser);
       if(!same(context(lease.deviceId),binding)||!await readiness(principal,lease.deviceId))throw fail('DEVICE_UNAVAILABLE');
@@ -82,7 +82,7 @@ function createControlService({repository,sessions,channels,devices,signer,clock
         stage='dispatch';stillHeld();
         if(!same(context(input.deviceId),binding))throw fail('DEVICE_UNAVAILABLE');
         stage='device_reply';
-        const envelope=signed('lease_renew',binding,{leaseId:renewed.id,leaseEpoch:renewed.leaseEpoch,sequence:renewed.renewalSequence,scope:renewed.scope});
+        const envelope=signed('lease_renew',binding,{leaseId:renewed.id,leaseEpoch:renewed.leaseEpoch,sequence:renewed.renewalSequence,scope:renewed.scope},renewed.scope==='sdk'?3000:1000);
         trace?.bind(envelope);trace?.mark('signed');
         // A legacy adapter without a send-completion boundary remains serialized.
         const response=typeof devices.dispatch==='function'?(await devices.dispatch(input.deviceId,envelope)).confirmation:Promise.resolve(await devices.request(input.deviceId,envelope));

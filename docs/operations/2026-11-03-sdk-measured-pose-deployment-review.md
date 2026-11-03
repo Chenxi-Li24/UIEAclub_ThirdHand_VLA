@@ -45,3 +45,9 @@
 默认固定应用器预检通过；MEASURED_POSE_APPLY=1执行成功。新发布2719d1b4fcdc6f06，全4658件校验通过，changed=4 / preserved=4654。仅thirdhand-stage.service重启，active；healthz返回thirdhand-cloud-api及explicit-read-only。保护摘要、服务unit、诊断开关均通过检查。未修改Ubuntu或租约参数，未初始化SDK/发送运动。备份和旧发布保留，无回退触发。
 
 后台复核时活跃租约和在途命令仍0。内置浏览器会话已过期，已打开Observer登录验收页；尚未完成新版本真实SDK/3D被动反馈验收，不计作通过。截图为忽略目录measured-pose-deployed.png与measured-pose-health.png。
+
+### 登录后页面验收
+
+用户Observer登录后，内置浏览器新页复用会话。真实Three.js模型加载完成，个人点位读取正常，同步默认勾选并可点击。将本地J1改为10°后同步自动取消，提示manual draft；恢复J1=0°并重新勾选后显示等待新鲜硬件反馈。未申请授权、未初始化SDK、无运动。页面捕获的error日志为空。截图measured-pose-online-waiting.png。
+
+页面资源路径版本为v8a03f54d5f6907ed1d21ce9eb7754c51。网关Online，但SDK Unknown、No measured samples yet；设备页Request SDK connection可用、Connect SDK禁用。此时没有实际值可比对，真实同步（尤其越界姿态）仍待用户显式连接后的被动核验；已将页面留在设备页并向用户说明初始化的使能/闭爪行为。

@@ -1,6 +1,6 @@
 # SDK实测显示修复：固定部署审阅（2026-11-03）
 
-状态：固定候选已完成，未上传/未部署。源码提交 `26937d012cfff89215821d69cfa0059a015c2195`。
+状态：用户批准后已上传并部署；后台校验通过，浏览器被动验收等待重新登录。源码提交 `26937d012cfff89215821d69cfa0059a015c2195`。
 
 ## 具体变更
 
@@ -37,3 +37,11 @@
 78项Node/DOM/ArmModel测试和4项构建器测试通过；包含两套布局和两种角色、越界实测原值、手动目标仍拒绝、URDF编辑限位在异常路径恢复、草稿保留和无运动请求。构建器从提交读取源码，父提交与已部署基线逐文件一致。应用器语法检查通过，远端预检尚未执行。源码26937d0的CI运行41482183785已完成，public-access和test均success。固定包4件内容与Git提交逐字节一致，其余4654件与现行发布一致。
 
 审批范围：上传上述两件固定材料、更新4件云端前端源码、仅重启staging业务API，然后被动反馈验收。依据已批准[C8方案](2026-11-01-C8-ui-sdk-audit-and-design.md)第9节第6步“固定源码/资源清单、数据库变更和回退材料完成后才申请实际部署”。新增robot-viewer.js不在上一六文件包内，因此需批准本次固定候选。
+
+## 实际执行（2026-11-03，Asia/Shanghai）
+
+11:26上传两件固定材料，SHA256与审阅逐字一致，权限收紧为0600，父目录0700。部署前Ubuntu SDK=false、readOnly=true；云端基线a287e6b5558f02b5，活跃租约和在途命令均0。最初只读检查调用旧helper的current_target，因未设置其旧常量而报CURRENT_RELEASE_CHANGED；改用直接只读解析current确认实际基线未漂移，未修改任何部署门禁。
+
+默认固定应用器预检通过；MEASURED_POSE_APPLY=1执行成功。新发布2719d1b4fcdc6f06，全4658件校验通过，changed=4 / preserved=4654。仅thirdhand-stage.service重启，active；healthz返回thirdhand-cloud-api及explicit-read-only。保护摘要、服务unit、诊断开关均通过检查。未修改Ubuntu或租约参数，未初始化SDK/发送运动。备份和旧发布保留，无回退触发。
+
+后台复核时活跃租约和在途命令仍0。内置浏览器会话已过期，已打开Observer登录验收页；尚未完成新版本真实SDK/3D被动反馈验收，不计作通过。截图为忽略目录measured-pose-deployed.png与measured-pose-health.png。

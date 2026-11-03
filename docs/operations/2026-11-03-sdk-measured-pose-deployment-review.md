@@ -51,3 +51,15 @@
 用户Observer登录后，内置浏览器新页复用会话。真实Three.js模型加载完成，个人点位读取正常，同步默认勾选并可点击。将本地J1改为10°后同步自动取消，提示manual draft；恢复J1=0°并重新勾选后显示等待新鲜硬件反馈。未申请授权、未初始化SDK、无运动。页面捕获的error日志为空。截图measured-pose-online-waiting.png。
 
 页面资源路径版本为v8a03f54d5f6907ed1d21ce9eb7754c51。网关Online，但SDK Unknown、No measured samples yet；设备页Request SDK connection可用、Connect SDK禁用。此时没有实际值可比对，真实同步（尤其越界姿态）仍待用户显式连接后的被动核验；已将页面留在设备页并向用户说明初始化的使能/闭爪行为。
+
+### 用户连接后的阻塞诊断（2026-11-03）
+
+用户报告已连接后，原IAB标签绑定返回browser.user unavailable；未刷新原页，使用visible=false的只读核验页复用会话。页面显示Gateway Offline / SDK Disconnected / 无新鲜反馈，不能进行真实同步比对。Ubuntu本地get_context只读返回sdkConnected=false、readOnly=true。
+
+云端最近授权requested_at=2026-11-03 14:25:37.397（Asia/Shanghai），state=revoking、release_reason=browser_disconnected；最近connect completed仍为2026-11-03 00:16:29.856，没有本轮新的connect记录。不能将本轮描述为已完成SDK初始化。
+
+实际服务为systemd --user：robot服务active；edge服务activating并反复报edge.unavailable，errorType=OutboxCapacityError，worker=supervisor，runtime.py:171→outbox.py:144/124/58。最初查询系统级同名unit显示inactive，校正用户级后得到上述真实结果。
+
+以SQLite mode=ro及query_only读取汇总：上限268435456字节（256MiB），主库268058624字节（约255.64MiB），无WAL/SHM，磁盘剩余1531569229824字节。alarm=OUTBOX_CAPACITY。9854批中1批未ACK、其余9853已确认；42634记录中1条未封包。并非整块磁盘已满。源码将容量报警锁存，supervisor先seal_retained再起上传/控制工作进程，封包再次触发容量异常，造成启动循环。现有实现保留已ACK批次及records，没有自动回收策略。
+
+本次四文件前端包未改Ubuntu/outbox，不能把该故障归因为前端发布。未扩大容量、清除报警、删运行记录或重启设备服务；也未发送SDK连接/运动命令。下一步应另行准备保全数据库备份、核对云端ACK、恢复积压上传及有界归档/回收的固定修复；不能仅清空本地数据库或重复要求用户连接。本轮真实同步验收仍被网关离线阻塞。

@@ -12,3 +12,8 @@ body[data-auth-page=register] .auth-card,body[data-auth-page=reset-password] .au
 @media(max-width:520px){.auth-header{padding:18px 19px}.auth-brand{font-size:16px}.auth-tools{gap:3px}.auth-tools #theme-toggle{margin-left:4px}.auth-main{padding:22px 17px 35px}.auth-card{padding:28px 24px 24px;border-radius:18px}h1{font-size:25px}.auth-subtitle{margin-bottom:23px}}
 @media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important;transition:none!important}}
 @media(forced-colors:active){.auth-card{border:1px solid CanvasText;background:Canvas;box-shadow:none}.mode-tabs button[aria-selected=true]{border-color:Highlight}.auth-primary{border:1px solid ButtonText}.auth-page::before,.auth-page::after{display:none}}
+
+.auth-primary{display:flex;align-items:center;justify-content:center;gap:9px}.auth-primary:disabled,.auth-primary:disabled:hover{background:#a8afb5;color:#fff;box-shadow:none;opacity:1;cursor:wait}
+.auth-spinner{width:16px;height:16px;border:2px solid #ffffff60;border-top-color:currentColor;border-radius:50%;animation:auth-spin .8s linear infinite;flex:0 0 auto}.auth-progress{margin:0;color:var(--auth-muted);font-size:12px;line-height:1.6;text-align:center}
+@keyframes auth-spin{to{transform:rotate(360deg)}}
+@media(prefers-reduced-motion:reduce){.auth-spinner{animation:none}}

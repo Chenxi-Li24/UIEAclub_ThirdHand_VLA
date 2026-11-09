@@ -3,6 +3,9 @@ const test=require('node:test'),assert=require('node:assert/strict'),{randomUUID
 const {identityFixture}=require('./identity-fixture'),{createIngestRepository}=require('../../../platform/storage/src/ingest');
 test('exact staged least-privilege grants commit measured data without credential-update authority',async t=>{
   const f=await identityFixture(t),role='ingest_'+randomUUID().replaceAll('-','');
+  // The fixed fixture clock may be in a prior month. Provision its partition
+  // with the migration identity before applying the restricted runtime role.
+  await f.pool.query('SELECT telemetry.ensure_month_partition($1::date)',[f.clock.now().toISOString().slice(0,10)]);
   await f.pool.query(`CREATE ROLE "${role}" NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS`);
   const client=await f.pool.connect();
   try{

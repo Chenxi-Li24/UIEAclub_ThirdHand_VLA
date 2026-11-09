@@ -39,7 +39,7 @@
     },
     {
       "path": "../../services/robot/src/startouch_bridge.py",
-      "sha256": "665ea6ec285a36aa1b1a0df96a7190beeac37ebeb105099b51b32b8d5ccc876b"
+      "sha256": "ac2fa408e460e3c9c7fda6ef442b9ff9470067ec3923bdee6f692b40b66c25ef"
     },
     {
       "path": "../../assets/robot/startouch-v3/FastTouchV3.SLDASM.urdf",
@@ -88,6 +88,11 @@
       "physical_validation_added": false,
       "source_byte_format": "Git LF, identical on Linux and Windows",
       "lfs_bindings": "Restored existing LFS payload bytes, never pointer text"
+    },
+    "sdk_duration_20261102": {
+      "previous_policy_id": "sha256:86b524091d685ce7f361289a43eb3b27d6deb9cb00e25111d4a442ee02203511",
+      "scope": "SDK-only lease and worker motion permission checks; no pose or kinematic code changes",
+      "physical_validation_added": false
     }
   }
 }

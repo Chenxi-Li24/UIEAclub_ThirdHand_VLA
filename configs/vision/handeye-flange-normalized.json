@@ -113,7 +113,7 @@
     "camera_mount_binding_retained_from_existing_runtime_not_physically_revalidated"
   ],
   "frame_normalization": {
-    "policy_id": "sha256:86b524091d685ce7f361289a43eb3b27d6deb9cb00e25111d4a442ee02203511",
+    "policy_id": "sha256:7463c2b4f0a7ce0cddfe445a117bb745c6082f2a410321a7eaf9e4205fc68204",
     "source_calibration_sha256": "d2e322dec9c6dab109212188ccc87b714bbd7f3cd9b0de9f22169cc576764a5b",
     "source_extrinsic_semantics": "T_sdk_tool_camera",
     "T_flange_sdk_tool": [
@@ -164,6 +164,12 @@
     "ci_20261101": {
       "previous_policy_id": "sha256:94c4bdb6a2b688e410d187db8b3737dfb8268842c3eff8a71438562b059bb002",
       "previous_calibration_id": "sha256:9f685e2983fd3ff8140a88036eb2f3919e4f9cd64d185237b687ef754be92bd3",
+      "unchanged_extrinsic": true,
+      "physical_validation_added": false
+    },
+    "sdk_duration_20261102": {
+      "previous_policy_id": "sha256:86b524091d685ce7f361289a43eb3b27d6deb9cb00e25111d4a442ee02203511",
+      "previous_calibration_id": "sha256:07ae32f3bc1646e7aac300451e756a4c66130691c876e94d5b40096da3329bf1",
       "unchanged_extrinsic": true,
       "physical_validation_added": false
     }

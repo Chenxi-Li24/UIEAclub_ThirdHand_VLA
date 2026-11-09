@@ -2,6 +2,9 @@ const byId=id=>document.getElementById(id),tr=text=>globalThis.ThirdHandI18n?.tr
 async function start(){
   const session=globalThis.ThirdHandWorkspaceSession.createWorkspaceSession();let identity;
   try{identity=await session.load();}catch{location.assign('/login');return;}
+  const navigation=document.createElement('nav');navigation.className='history-sections';navigation.setAttribute('aria-label','Data sections');
+  for(const [label,target]of [['Records','#history-filter'],['Model replay','#history-replay-section'],['Export tasks','#history-export-section'],...(identity.mode==='admin'?[['Members & permissions','/control#account-members']]:[])]){const link=document.createElement('a');link.href=target;link.textContent=tr(label);navigation.append(link);}
+  document.querySelector('main').prepend(navigation);document.querySelector('.history-model').id='history-replay-section';document.querySelector('.history-exports').id='history-export-section';
   const preferences=globalThis.ThirdHandPreferences.createPreferenceClient({view:window,request:(path,body)=>session.request(path,body)});
   await preferences.hydrate(identity);preferences.apply(document);
   byId('history-language').value=document.documentElement.lang;

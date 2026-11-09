@@ -12,11 +12,12 @@
     MFA_SETUP_EXPIRED:'The setup has expired. Start a new setup.',
     RATE_LIMITED:'Too many attempts. Please try again later.',
     AUTH_BUSY:'Sign-in is busy. Please try again shortly.',
-    INVALID_PASSWORD:'Use 12–128 characters for your password.',
+    INVALID_PASSWORD:'Use 8–128 characters, including uppercase and lowercase letters.',
     INVALID_TOKEN:'This link is invalid or expired. Request a new link.',
     INVALID_INPUT:'Check the form fields and try again.',
     '23505':'That username or email is already registered.',
     MAIL_UNAVAILABLE:'Email delivery is not configured. Please contact an administrator.',
+    REQUEST_TIMEOUT:'The sign-in request timed out. Check your connection before trying again.',
     SERVICE_UNAVAILABLE:'The service is unavailable. Please try again later.'
   };
   function mountAuthPage(doc,view,{preferences,request,navigate}={}){
@@ -31,7 +32,7 @@
       if(linkToken)view.history?.replaceState(null,'',`/${page}`);
     }
     const messageText=el('span',{},''),switchObserver=el('button',{id:'switch-observer',type:'button',hidden:''},'Switch to Observer');message.append(messageText,switchObserver);
-    let mode='observe',pending=false,notice='',noticeKind='error',verified=false,disposed=false,redirectTimer;
+    let mode='observe',pending=false,notice='',noticeKind='error',verified=false,disposed=false,redirectTimer,navigationTimer,authenticated=false,progress='';
     const passwordFeedback={},passwordTouched=new Set();
     const form=el('form',{class:'auth-form',id:'auth-form',novalidate:''});content.append(form);
     function field(id,label,{type='text',autocomplete,placeholder=label,minimum,maximum=128,feedback=false}={}){
@@ -52,7 +53,9 @@
     }
     function passwordIssues(id){
       const issues=[],length=[...fields[id].value].length;
-      if(length<12)issues.push('Use at least 12 characters.');
+      if(length<8)issues.push('Use at least 8 characters.');
+      if(!/[A-Z]/.test(fields[id].value))issues.push('Include at least one uppercase letter (A–Z).');
+      if(!/[a-z]/.test(fields[id].value))issues.push('Include at least one lowercase letter (a–z).');
       if(length>128)issues.push('Use at most 128 characters.');
       if(id==='confirmPassword'&&fields[id].value!==fields.password.value)issues.push('Passwords do not match.');
       return issues;
@@ -69,10 +72,11 @@
       field('password',label,{type:'password',autocomplete:'new-password',maximum:512,feedback:true});
       field('confirmPassword','Confirm password',{type:'password',autocomplete:'new-password',maximum:512,feedback:true});
       const requirements=el('section',{id:'password-requirements',class:'auth-password-requirements','aria-label':'Password requirements'});
-      requirements.append(el('strong',{},'Password requirements'),el('p',{},'Use 12–128 characters.'),el('p',{},'Both passwords must match.'));form.append(requirements);
+      requirements.append(el('strong',{},'Password requirements'),el('p',{},'Use 8–128 characters.'),el('p',{},'Include uppercase (A–Z) and lowercase (a–z) letters. Numbers and symbols are optional.'),el('p',{},'Both passwords must match.'));form.append(requirements);
     }
     let modeHint,mfaFields,remember;
     function setMode(next){
+      if(pending||authenticated)return;
       mode=next;
       for(const name of ['observe','admin']){const tab=byId(`mode-${name}`);tab.setAttribute('aria-selected',String(name===mode));tab.tabIndex=name===mode?0:-1;}
       modeHint.textContent=tr(mode==='observe'?'View cameras, explore the 3D model and review run history.':'Administrator access requires two-step verification.');
@@ -99,20 +103,40 @@
     }else if(page==='forgot-password'||page==='verify-email'&&!linkToken)field('email','Email',{type:'email',autocomplete:'email',maximum:254});
     else if(page==='reset-password')newPasswordFields('New password');
     const labels={login:'Sign in',register:'Create account','forgot-password':'Send reset link','reset-password':'Save new password','verify-email':linkToken?'Verify email':'Resend verification email'};
-    const submitButton=el('button',{class:'auth-primary',type:'submit'},labels[page]||'Continue');form.append(submitButton);
+    const submitButton=el('button',{class:'auth-primary',type:'submit'}),spinner=el('span',{class:'auth-spinner','aria-hidden':'true',hidden:''}),submitLabel=el('span',{},labels[page]||'Continue');submitButton.append(spinner,submitLabel);form.append(submitButton);
+    const progressMessage=el('p',{class:'auth-progress',role:'status','aria-live':'polite',hidden:''});form.append(progressMessage);
+    function renderProgress(){
+      submitButton.disabled=pending||verified;submitButton.setAttribute('aria-busy',String(pending));spinner.hidden=!pending;
+      if(pending)form.setAttribute('aria-busy','true');else form.removeAttribute('aria-busy');
+      submitLabel.textContent=tr(pending?(authenticated?'Opening workspace…':'Sending…'):authenticated?'Open workspace':labels[page]||'Continue');
+      progressMessage.hidden=!progress;progressMessage.textContent=tr(progress);
+      for(const tab of doc.querySelectorAll('.mode-tabs button'))tab.disabled=pending||authenticated;
+    }
+    function openWorkspace(){
+      progress='Signed in. Opening the workspace…';renderProgress();
+      navigationTimer=view.setTimeout(()=>{if(!disposed){pending=false;progress='Signed in, but the workspace is taking longer to open. Continue without signing in again.';renderProgress();}},15000);
+      (navigate||((path)=>view.location.assign(path)))('/control');
+    }
+    async function bounded(operation,timeoutMs=15000){
+      const controller=new (view.AbortController||globalThis.AbortController)();let timer;
+      try{return await Promise.race([operation(controller.signal),new Promise((_,reject)=>{timer=view.setTimeout(()=>{controller.abort();reject(Object.assign(Error('REQUEST_TIMEOUT'),{code:'REQUEST_TIMEOUT'}));},timeoutMs);})]);}
+      finally{view.clearTimeout(timer);}
+    }
     const bottom=el('p',{class:'auth-bottom'},page==='login'?'New to ThirdHand?':page==='register'?'Already registered?':'Back to');bottom.append(el('a',{href:page==='login'?'/register':'/login'},page==='login'?'Create an account':'Sign in'));content.append(bottom);
     if(['login','register'].includes(page))content.append(el('a',{href:'/verify-email',class:'auth-bottom'},'Resend verification email'));
     function renderMessage(){message.hidden=!notice;messageText.textContent=tr(notice);message.dataset.kind=noticeKind;message.setAttribute('role',noticeKind==='success'?'status':'alert');switchObserver.hidden=page!=='login'||!['This account does not have administrator access.','Sign in as Observer and enable two-step verification in account settings.'].includes(notice);}
     switchObserver.addEventListener('click',()=>{setMode('observe');byId('mode-observe').focus();});
-    const call=request||(async(path,body)=>{const response=await view.fetch(path,{method:body===undefined?'GET':'POST',credentials:'same-origin',headers:body===undefined?{}:{'Content-Type':'application/json'},...(body===undefined?{}:{body:JSON.stringify(body)})});const value=await response.json();if(!response.ok)throw Object.assign(new Error(),{code:value.error});return value;});
+    const transport=request||(async(path,body,signal)=>{const response=await view.fetch(path,{signal,method:body===undefined?'GET':'POST',credentials:'same-origin',headers:body===undefined?{}:{'Content-Type':'application/json'},...(body===undefined?{}:{body:JSON.stringify(body)})});const value=await response.json();if(!response.ok)throw Object.assign(new Error(),{code:value.error});return value;});
+    const call=(path,body)=>bounded(signal=>transport(path,body,signal));
     async function submit(){
       if(pending||verified||disposed)return;
+      if(authenticated){pending=true;openWorkspace();return;}
       if(fields.confirmPassword){
         passwordTouched.add('password');passwordTouched.add('confirmPassword');renderPasswordFeedback();
         if(passwordIssues('password').length||passwordIssues('confirmPassword').length){notice=fields.password.value!==fields.confirmPassword.value?'Passwords do not match.':messages.INVALID_PASSWORD;noticeKind='error';renderMessage();return;}
       }
       if(form.checkValidity?.()===false){form.reportValidity?.();return;}
-      pending=true;submitButton.disabled=true;form.setAttribute('aria-busy','true');notice='';renderMessage();
+      pending=true;progress='Request sent. Please wait; do not submit again.';renderProgress();form.setAttribute('aria-busy','true');notice='';renderMessage();
       try{
         if(page==='login'){
           const body={login:fields.login.value,password:fields.password.value,requestedMode:mode};
@@ -120,8 +144,9 @@
           const result=await call('/api/v1/auth/login',body);
           try{if(remember.checked)view.localStorage?.setItem('thirdhand.remembered-login',fields.login.value);else view.localStorage?.removeItem('thirdhand.remembered-login');}catch{}
           fields.password.value='';fields.mfaCode.value='';
-          if(result.userId)await preferences.hydrate({userId:result.userId,csrfToken:result.csrfToken});
-          (navigate||((path)=>view.location.assign(path)))(result.next==='/control'?result.next:'/control');
+          authenticated=true;progress='Signed in. Loading your preferences…';renderProgress();
+          if(result.userId){try{await bounded(()=>preferences.hydrate({userId:result.userId,csrfToken:result.csrfToken}),5000);}catch{/* Workspace bootstrap can read preferences; never repeat a successful login. */}}
+          if(!disposed)openWorkspace();
         }else if(page==='register'){
           await call('/api/v1/auth/register',{username:fields.username.value,email:fields.email.value,displayName:fields.displayName.value,password:fields.password.value,locale:preferences.current().locale});
           fields.password.value='';fields.confirmPassword.value='';passwordTouched.clear();renderPasswordFeedback();notice='Check your email to verify your account.';noticeKind='success';
@@ -138,7 +163,7 @@
           noticeKind='success';
         }
       }catch(error){notice=messages[error.code]||messages.SERVICE_UNAVAILABLE;noticeKind='error';if(page==='login'&&['MFA_REQUIRED','MFA_INVALID'].includes(error.code)){mfaFields.hidden=false;fields.mfaCode.focus();}}
-      finally{pending=false;submitButton.disabled=verified;form.removeAttribute('aria-busy');renderMessage();}
+      finally{if(!authenticated){pending=false;progress='';form.removeAttribute('aria-busy');}renderProgress();renderMessage();}
     }
     form.addEventListener('submit',event=>{event.preventDefault();submit();});
     const choose=change=>preferences.choose(change).catch(()=>{notice='Could not save preferences. Please try again.';noticeKind='error';renderMessage();});
@@ -150,8 +175,8 @@
     const colorLabel=el('label',{for:'background-color'},'Background color'),color=el('input',{id:'background-color',type:'color'});colorLabel.append(color);appearance.append(kindLabel,colorLabel);
     appearanceToggle.addEventListener('click',()=>{appearance.hidden=!appearance.hidden;appearanceToggle.setAttribute('aria-expanded',String(!appearance.hidden));});
     kind.addEventListener('change',()=>choose({backgroundConfig:{...preferences.current().backgroundConfig,kind:kind.value}}));color.addEventListener('change',()=>choose({backgroundConfig:{...preferences.current().backgroundConfig,color:color.value}}));
-    subscriptions.push(preferences.subscribe(value=>{preferences.apply(doc,value);byId('locale-en').setAttribute('aria-pressed',String(value.locale==='en'));byId('locale-zh').setAttribute('aria-pressed',String(value.locale==='zh-CN'));byId('theme-toggle').setAttribute('aria-pressed',String(value.themeId==='dark'));for(const option of kind.querySelectorAll('option'))option.selected=option.getAttribute('value')===value.backgroundConfig.kind;color.value=value.backgroundConfig.color;renderMessage();renderPasswordFeedback();}));
-    return {submit,ready:Promise.resolve(),dispose(){disposed=true;if(redirectTimer!==undefined)view.clearTimeout(redirectTimer);for(const unsubscribe of subscriptions)unsubscribe();preferences.dispose();}};
+    subscriptions.push(preferences.subscribe(value=>{preferences.apply(doc,value);byId('locale-en').setAttribute('aria-pressed',String(value.locale==='en'));byId('locale-zh').setAttribute('aria-pressed',String(value.locale==='zh-CN'));byId('theme-toggle').setAttribute('aria-pressed',String(value.themeId==='dark'));for(const option of kind.querySelectorAll('option'))option.selected=option.getAttribute('value')===value.backgroundConfig.kind;color.value=value.backgroundConfig.color;renderProgress();renderMessage();renderPasswordFeedback();}));
+    return {submit,ready:Promise.resolve(),dispose(){disposed=true;if(navigationTimer!==undefined)view.clearTimeout(navigationTimer);if(redirectTimer!==undefined)view.clearTimeout(redirectTimer);for(const unsubscribe of subscriptions)unsubscribe();preferences.dispose();}};
   }
   return {mountAuthPage};
 });

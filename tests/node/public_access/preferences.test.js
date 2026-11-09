@@ -10,14 +10,18 @@ test('account preferences are versioned, validated and isolated; only explicit g
   const preferences = createPreferences({ pool:f.pool });
   const principal = userId => ({ userId });
   const initial = await preferences.load({ principal:principal(a.userId) });
-  assert.equal(initial.locale,'en'); assert.equal(initial.themeId,'light');
-  const saved = await preferences.save({ principal:principal(a.userId),value:{ locale:'zh-CN',themeId:'dark',backgroundConfig:{ kind:'plain',color:'#fef8f0' } },expectedRevision:initial.revision });
+  assert.equal(initial.locale,'en'); assert.equal(initial.themeId,'light');assert.equal(initial.layoutId,'workspace');
+  const saved = await preferences.save({ principal:principal(a.userId),value:{ locale:'zh-CN',themeId:'dark',layoutId:'classic',classicThemeId:'industrial',backgroundConfig:{ kind:'plain',color:'#fef8f0' } },expectedRevision:initial.revision });
   await assert.rejects(preferences.save({principal:principal(a.userId),value:{...saved,locale:'en'},expectedRevision:initial.revision}),{code:'CONFLICT'});
   const bValue = await preferences.load({principal:principal(b.userId),guestSelection:{value:saved,changed:[]}});
   assert.equal(bValue.locale,'en'); assert.equal(bValue.themeId,'light');
   const override = await preferences.load({principal:principal(a.userId),guestSelection:{value:{locale:'en',themeId:'light'},changed:['locale']}});
-  assert.equal(override.locale,'en'); assert.equal(override.themeId,'dark');
-  await assert.rejects(preferences.save({principal:principal(a.userId),value:{locale:'en',themeId:'light',backgroundConfig:{kind:'url',url:'javascript:alert(1)'}},expectedRevision:override.revision}),{code:'INVALID_INPUT'});
+  assert.equal(override.locale,'en'); assert.equal(override.themeId,'dark');assert.equal(override.layoutId,'classic');
+  assert.equal((await preferences.load({principal:principal(a.userId)})).layoutId,'classic');
+  const legacy=await preferences.save({principal:principal(a.userId),value:{locale:'en',themeId:'light',backgroundConfig:override.backgroundConfig},expectedRevision:override.revision});
+  assert.equal(legacy.layoutId,'classic');assert.equal(legacy.classicThemeId,'industrial');
+  await assert.rejects(preferences.save({principal:principal(a.userId),value:{...legacy,classicThemeId:'url(unsafe)'},expectedRevision:legacy.revision}),{code:'INVALID_INPUT'});
+  await assert.rejects(preferences.save({principal:principal(a.userId),value:{locale:'en',themeId:'light',backgroundConfig:{kind:'url',url:'javascript:alert(1)'}},expectedRevision:legacy.revision}),{code:'INVALID_INPUT'});
 });
 
 test('blocked browser storage still uses safe defaults and authenticated hydration never copies the previous account cache', async () => {
@@ -57,4 +61,21 @@ test('an unfinished authenticated save is never treated as a new visitor choice 
   assert.equal(calls.at(-1).path,'/api/v1/me/preferences');assert.equal(calls.at(-1).body,undefined);
   finishSave({...initial,locale:'zh-CN',revision:2});await saving;
   assert.equal(client.current().locale,'en');assert.deepEqual(client.explicitSelection().changed,[]);
+});
+
+test('rapid theme and language choices save in order without losing either field or reusing a revision',async()=>{
+  const calls=[];let finishFirst;
+  const initial={locale:'en',themeId:'light',layoutId:'classic',classicThemeId:'deepspace',backgroundConfig:{kind:'soft',color:'#fffcf9'},revision:3};
+  const client=createPreferenceClient({view:{addEventListener(){},removeEventListener(){}},request:async(_path,body)=>{
+    calls.push(body);
+    if(calls.length===1)await new Promise(resolve=>{finishFirst=resolve;});
+    return {...body.value,revision:body.expectedRevision+1};
+  }});
+  await client.hydrate({userId:'one'},initial);
+  const first=client.choose({classicThemeId:'blue'}),second=client.choose({locale:'zh-CN'});
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(calls.length,1,'only the first save may be in flight');finishFirst();
+  await Promise.all([first,second]);
+  assert.equal(calls[1].expectedRevision,4);assert.equal(calls[1].value.classicThemeId,'blue');
+  assert.equal(client.current().locale,'zh-CN');assert.equal(client.current().classicThemeId,'blue');
 });

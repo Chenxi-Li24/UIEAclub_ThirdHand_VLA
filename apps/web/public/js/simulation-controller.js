@@ -42,8 +42,16 @@
       setJoints(angles){const validated=validate(angles);stop();followingLive=false;outcome='idle';publish(validated);},
       playPreset(name){if(!Object.hasOwn(PRESETS,name))throw new Error('Unknown simulation preset');return playSequence([{joints:PRESETS[name],durationMs:400}]);},
       playSequence,stop,
-      followLive(enabled){stop();followingLive=enabled===true;},
-      receiveLive(angles){if(!followingLive)return false;try{publish(validate(angles));return true;}catch{return false;}},
+      followLive(enabled){generation++;playing=false;followingLive=enabled===true;outcome='idle';notify();},
+      setGripper(value){if(!Number.isFinite(value)||value<0||value>1)throw Error('Invalid model gripper');generation++;playing=false;followingLive=false;outcome='idle';armModel.setGripperPosition(value);notify();},
+      receiveLive(angles,gripper){if(!followingLive)return false;try{
+        if(!Array.isArray(angles)||angles.length!==6||!Array.from(angles).every(Number.isFinite))return false;
+        if(gripper!==undefined&&(!Number.isFinite(gripper)||gripper<0||gripper>1))return false;
+        if(typeof armModel.setMeasuredJointAngles==='function')armModel.setMeasuredJointAngles(Array.from(angles));
+        else armModel.setJointAngles(validate(angles));
+        if(gripper!==undefined)armModel.setGripperPosition(gripper);
+        notify();return true;
+      }catch{return false;}},
       getState:snapshot,
       subscribe(listener){listeners.add(listener);return ()=>listeners.delete(listener);}
     };

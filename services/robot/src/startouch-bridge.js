@@ -114,7 +114,7 @@ class StartouchBridge extends EventEmitter {
       return false;
     }
     if (this.config.remoteLeaseGuard === true && GUARDED_COMMANDS.has(message.cmd)) {
-      if (!this._remoteLeaseLive()) {
+      if (!this._remoteLeaseLive() || this.remoteLease.scope==='sdk'&&message.cmd!=='connect') {
         this.emit('bridge_error', { code: 'remote_lease_required', request_id: message.request_id,
           message: 'Current worker lease required for SDK command' });
         return false;
@@ -135,12 +135,13 @@ class StartouchBridge extends EventEmitter {
   _leaseValue(value, wall) {
     if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
     const lease=Object.fromEntries(LEASE_FIELDS.map(key=>[key,value[key]]));
+    if(value.scope!==undefined){if(!['sdk','control'].includes(value.scope))return null;lease.scope=value.scope;}
     if (!['deviceId','bootId','executorEpoch','connectionId','certificateId','leaseId'].every(key=>LEASE_UUID.test(lease[key]))
         || typeof lease.hardwareFingerprint !== 'string' || !/^[a-f0-9]{64}$/.test(lease.hardwareFingerprint)
         || !['leaseEpoch','sequence','issuedAt','expiresAt'].every(key=>Number.isSafeInteger(lease[key]))
         || lease.leaseEpoch < 1 || lease.sequence < 0 || lease.issuedAt > wall + 500
-        || lease.expiresAt <= wall || lease.expiresAt - wall > 1000
-        || lease.expiresAt <= lease.issuedAt || lease.expiresAt - lease.issuedAt > 1000) return null;
+        || lease.expiresAt <= wall
+        || lease.expiresAt <= lease.issuedAt || lease.expiresAt - lease.issuedAt > (lease.scope==='sdk'?3000:1000)) return null;
     return Object.freeze(lease);
   }
 
@@ -155,7 +156,7 @@ class StartouchBridge extends EventEmitter {
   armRemoteLease(value) {
     const mono=performance.now(),wall=Date.now(),lease=this._leaseValue(value,wall);
     if (this.config.remoteLeaseGuard !== true || !lease || this._remoteLeaseLive() || lease.leaseEpoch <= this.remoteLeaseEpoch) return false;
-    const deadline=mono+Math.min(1000,lease.expiresAt-wall);
+    const deadline=mono+Math.min(lease.scope==='sdk'?3000:1000,lease.expiresAt-lease.issuedAt,lease.expiresAt-wall);
     if (performance.now()>=deadline || !this._sendRemoteLease({cmd:'remote_lease_arm',lease})) return false;
     this.remoteLease=lease;this.remoteLeaseEpoch=lease.leaseEpoch;this.remoteLeaseAnchor={mono,wall};this.remoteLeaseDeadline=deadline;
     return true;
@@ -164,8 +165,8 @@ class StartouchBridge extends EventEmitter {
   renewRemoteLease(value) {
     const mono=performance.now(),wall=Date.now(),lease=this._leaseValue(value,wall);
     if (!lease || !this._remoteLeaseLive() || !LEASE_BINDING.every(key=>lease[key]===this.remoteLease[key])
-        || lease.sequence<=this.remoteLease.sequence) return false;
-    const deadline=Math.min(mono+1000,mono+lease.expiresAt-wall,
+        || (lease.scope??'control')!==(this.remoteLease.scope??'control') || lease.sequence<=this.remoteLease.sequence) return false;
+    const deadline=Math.min(mono+(lease.scope==='sdk'?3000:1000),mono+lease.expiresAt-lease.issuedAt,mono+lease.expiresAt-wall,
       this.remoteLeaseAnchor.mono+lease.expiresAt-this.remoteLeaseAnchor.wall);
     if (performance.now()>=deadline || !this._sendRemoteLease({cmd:'remote_lease_renew',lease})) return false;
     this.remoteLease=lease;this.remoteLeaseDeadline=deadline;return true;

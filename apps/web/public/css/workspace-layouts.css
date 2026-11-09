@@ -1,0 +1,88 @@
+/* First paint and additions shared with the authenticated cloud adapters. */
+#app[data-ready=false]{visibility:hidden}
+#workspace-opening{position:fixed;inset:0;display:grid;place-items:center;color:var(--text-primary);background:var(--bg-primary);font:14px system-ui;z-index:9000}
+.cloud-appearance{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.cloud-appearance select{max-width:230px;min-height:38px;padding:8px 12px;border:1px solid var(--border);border-radius:6px;background:var(--bg-secondary);color:var(--text-primary)}
+.cloud-model-loading .action-btn,.cloud-model-loading button{display:block;margin-top:12px;padding:8px 12px}
+.workspace-history-link{display:flex;align-items:center;justify-content:center;gap:8px;min-height:38px;text-decoration:none;font-size:11px}
+/* Classic canvas/drawer/tool geometry and all nine palettes come unchanged from
+   css/classic-source.css at 372ac80. These rules add cloud account entry only. */
+.classic-user-tools{display:flex;align-items:center;gap:6px}
+.classic-user-tools .account-entry{display:flex;align-items:center;gap:7px;max-width:160px;padding:4px 6px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg-card);color:var(--text-primary);cursor:pointer}
+.classic-user-tools .account-entry-copy{display:flex;flex-direction:column;font-size:11px;max-width:110px;overflow:hidden}
+.classic-user-tools .account-entry-copy>span{display:none}
+.classic-user-tools .account-entry-copy strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.classic-user-tools .account-avatar{width:28px;height:28px;flex-basis:28px;background:var(--accent-dim);border-color:var(--border);color:var(--accent)}
+.classic-user-tools .action-btn,.classic-user-tools #workspace-logout{font-size:11px;padding:7px 9px;background:var(--bg-card);color:var(--text-primary);border:1px solid var(--border);border-radius:var(--radius-sm);cursor:pointer}
+#classic-settings{width:min(1000px,calc(100vw - 32px));height:min(760px,calc(100dvh - 48px));margin:auto;padding:18px;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg-primary);color:var(--text-primary);overflow:hidden}
+#classic-settings[open]{display:grid;grid-template:40px minmax(0,1fr)/160px minmax(0,1fr);gap:16px}
+#classic-settings[hidden],#classic-settings [hidden]{display:none!important}
+#classic-settings::backdrop{background:#030711bb}
+#classic-settings-close{grid-column:1/-1;justify-self:end;background:var(--bg-card);color:var(--text-primary);border-color:var(--border)}
+#classic-settings #workspace-nav{display:flex;flex-direction:column;gap:8px;min-width:0;overflow:auto;border-right:1px solid var(--border);padding-right:14px}
+#classic-settings #workspace-nav button{display:flex;align-items:center;gap:8px;padding:11px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg-card);color:var(--text-primary);font:inherit;cursor:pointer}
+#classic-settings #workspace-nav .nav-bottom{margin-top:auto}
+#classic-settings #workspace-nav .nav-footer{font-size:9px;color:var(--text-secondary)}
+#classic-settings #workspace-pages{overflow:auto;min-width:0;padding-right:6px}
+#classic-settings .workspace-heading{margin:0 0 20px}
+#classic-settings .workspace-heading h1{font-size:24px;margin:6px 0}
+#classic-settings .workspace-heading p{color:var(--text-secondary);font-size:12px}
+#classic-settings .account-card{background:var(--bg-card);color:var(--text-primary);border-color:var(--border)}
+#classic-settings .account-card h2,#classic-settings .account-card strong{color:var(--text-primary)}
+#classic-settings .account-field input,#classic-settings .account-card button{background:var(--bg-secondary);color:var(--text-primary);border-color:var(--border)}
+#classic-settings .account-page{max-width:none}
+[data-access-mode=observe] .classic-console #btn-voice-toggle,[data-access-mode=observe] .classic-console #btn-estop-top{display:none!important}
+[data-layout=classic] .cloud-joint-row input{font-size:12px}
+[data-layout=classic] .cloud-model-loading{z-index:2}
+[data-layout=classic] #view-tools svg{width:20px;height:20px}
+@media(max-width:1100px){.classic-user-tools .account-entry-copy,.classic-user-tools #workspace-logout{display:none}.classic-user-tools .action-btn{padding:7px 5px}.classic-user-tools .workspace-history-link .nav-label{display:none}}
+@media(max-width:700px){.classic-user-tools>button:first-child{display:none}#classic-settings[open]{grid-template-columns:1fr;grid-template-rows:40px auto minmax(0,1fr)}#classic-settings #workspace-nav{flex-direction:row;flex-wrap:wrap;max-height:120px;border:0;padding:0}#classic-settings .nav-bottom,#classic-settings .account-back{display:none}#classic-settings #workspace-nav button{font-size:11px;padding:7px}}
+[data-layout=classic] #onboarding-panel{position:fixed;left:80px;top:calc(var(--topbar-h) + 70px);width:min(380px,calc(100vw - 100px));max-height:calc(100dvh - 170px);overflow:auto;z-index:190;background:var(--bg-card);color:var(--text-primary);border-color:var(--accent)}
+[data-layout=classic] #onboarding-panel[hidden]{display:none!important}
+[data-layout=classic] #onboarding-panel h2{color:var(--text-primary)}
+[data-layout=classic] .classic-notice{position:absolute;top:62px;left:80px;padding:10px;background:var(--bg-card);color:var(--text-primary);z-index:22;border:1px solid var(--border);border-radius:var(--radius-sm)}
+[data-layout=classic] .cloud-model-loading{left:80px;top:65px}
+.classic-user-tools{flex:0 0 auto}
+.classic-user-tools .action-btn,.classic-user-tools #workspace-logout{white-space:nowrap}
+.classic-user-tools .workspace-history-link .nav-label{display:none}
+.classic-user-tools .workspace-history-link{min-width:30px;padding:6px}
+.classic-user-tools .account-entry{max-width:125px;flex-shrink:0}
+.classic-user-tools .account-entry-copy{max-width:80px;min-width:0}
+.classic-console #workspace-mode{max-width:160px;overflow:hidden;text-overflow:ellipsis;font-size:11px;white-space:nowrap}
+#classic-settings .onboarding-checklist{background:var(--bg-card);color:var(--text-primary);border-color:var(--border)}
+#classic-settings .onboarding-list-heading,#classic-settings .onboarding-tasks{color:var(--text-primary)}
+.classic-user-tools #workspace-guide{display:flex;align-items:center;justify-content:center;min-width:30px;min-height:30px;padding:6px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg-card);color:var(--text-primary);font:inherit;font-size:12px;cursor:pointer}
+.classic-user-tools #workspace-guide .nav-label{display:none}
+/* C8 shared semantics, without changing the archived classic source. */
+[hidden]{display:none!important}
+.workspace .nav-data{display:flex;align-items:center;gap:12px;padding:12px 16px;color:var(--text-secondary);text-decoration:none;min-height:44px}
+.nav-icon svg{width:20px;height:20px;display:block}.nav-icon{display:inline-flex;align-items:center;justify-content:center;flex:0 0 24px}
+.workspace[data-workspace-group=account] .nav-data{display:none}
+.workspace #workspace-nav-toggle{margin:0 8px 12px;flex-shrink:0}
+.workspace #workspace-nav .nav-label{white-space:normal;overflow-wrap:normal;line-height:1.4;min-width:0}.workspace #workspace-nav [data-page]{height:auto;min-height:44px}.workspace #workspace-nav .nav-index{display:none}
+.workspace #hb-label,.workspace #workspace-web-status{font-size:12px}.workspace #topbar #btn-estop-top,.workspace #topbar #btn-voice-toggle,.classic-console #topbar #btn-estop-top,.classic-console #topbar #btn-voice-toggle{display:none!important}
+.status-chip .service-name,.status-chip .service-value{font-size:12px!important}#admin-user-search{display:block;width:100%;max-width:440px;margin-top:16px;padding:10px 12px;border:1px solid var(--border);border-radius:8px;background:var(--bg-card);color:var(--text-primary);font-size:14px}
+.cloud-users-table td:nth-child(3){min-width:190px}.cloud-users-table td:first-child{min-width:140px}
+.workspace #workspace-logout{white-space:nowrap;min-height:44px;font-size:14px}
+.device-real-state,.device-feedback-summary{font-size:14px;line-height:1.5;min-width:0}
+.device-feedback-summary{padding:16px;border:1px solid var(--border);border-radius:12px;margin-top:16px;background:var(--bg-card)}
+.device-state-values{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:16px 0}
+.device-state-values>div{padding:10px;border-bottom:1px solid var(--border);overflow-wrap:anywhere}.device-state-values dt{font-size:12px;color:var(--text-secondary)}.device-state-values dd{margin:4px 0;font-variant-numeric:tabular-nums}
+.device-state-time,.device-status-help{font-size:12px;line-height:1.6;overflow-wrap:anywhere;margin:16px 0;color:var(--text-secondary)}
+.device-real-state select{min-height:44px;max-width:100%;padding:8px;background:var(--bg-card);color:var(--text-primary);border:1px solid var(--border);border-radius:6px}
+[data-state=stale],[data-state=connecting],[data-state=waiting]{color:#ae741d}[data-state=read_failed],[data-state=disconnected]{color:var(--danger,#c54858)}
+.cloud-admin-confirm{position:fixed;inset:0;margin:auto;width:min(520px,calc(100vw - 32px));max-height:calc(100dvh - 32px);overflow:auto;border:1px solid var(--border);border-radius:14px;padding:24px;background:var(--bg-card);color:var(--text-primary)}
+.cloud-admin-confirm::backdrop{background:#17233188}.cloud-admin-confirm .account-form{display:grid;grid-template-columns:1fr;gap:16px;margin-top:20px}.cloud-admin-confirm input{min-width:0;width:100%;min-height:44px;padding:10px;background:var(--bg-secondary);color:var(--text-primary);border:1px solid var(--border);border-radius:6px}
+.cloud-admin-confirm button,.cloud-live-control button,.cloud-security button{min-height:40px;padding:10px 14px;font-size:14px;white-space:normal;word-break:normal}
+.cloud-users-table{display:table;font-size:13px}.cloud-users-table th:first-child,.cloud-users-table td:first-child{position:sticky;left:0;background:var(--bg-card);z-index:1}.cloud-users-table th:last-child,.cloud-users-table td:last-child{position:sticky;right:0;background:var(--bg-card);min-width:160px;z-index:1}.cloud-users-table button{width:100%;font-size:12px;min-height:40px;white-space:normal;word-break:normal}
+#classic-settings[data-section=devices][open]{grid-template-columns:1fr}#classic-settings[data-section=devices] #workspace-nav{display:none}
+.classic-console #topbar{gap:8px;overflow:visible}.classic-console .topbar-brand{flex:0 1 auto;min-width:0}.classic-console .topbar-status{min-width:0;flex:1 1 auto;overflow:hidden}.classic-console .topbar-actions{flex:0 0 auto;min-width:0;gap:6px}.classic-console #btn-drawer-toggle{flex:0 0 40px;width:40px;min-height:40px;margin-left:4px}
+.classic-console .classic-user-tools{gap:6px;min-width:0}.classic-console .classic-user-tools .account-entry-copy{display:none}.classic-console .classic-user-tools .account-entry{max-width:44px;padding:5px}.classic-console #device-status-entry{max-width:130px;font-size:12px;white-space:normal;min-height:40px}.classic-console .classic-more{position:relative;font-size:12px}.classic-more summary{cursor:pointer;min-height:40px;display:flex;align-items:center;padding:8px;border:1px solid var(--border);border-radius:6px}.classic-more-content{position:absolute;right:0;top:100%;z-index:180;display:grid;gap:10px;min-width:180px;padding:16px;background:var(--bg-card);border:1px solid var(--border);border-radius:8px}.classic-more-content select{max-width:100%}
+.classic-console .status-chip{font-size:12px}.classic-console .topbar-brand .brand-sub{display:none}
+.classic-user-tools .workspace-history-link{color:var(--text-primary);padding:8px;border:1px solid var(--border);border-radius:6px;min-height:40px}.classic-user-tools .workspace-history-link .nav-label{display:inline}.classic-user-tools .workspace-history-link .nav-icon{display:none}.classic-console #workspace-guide{min-height:40px;min-width:40px}.classic-console #statusbar-joints{font-size:12px;gap:12px;flex-wrap:wrap}
+@media(max-width:900px){.classic-console .brand-name{display:none}.classic-console #workspace-mode{max-width:100px}.classic-console .topbar-status .service-name{display:none}.classic-console .classic-user-tools>.action-btn{display:none}.classic-console #device-status-entry{max-width:90px}.classic-console .classic-user-tools .account-entry{display:flex}}
+@media(max-width:650px){
+ .device-state-values{grid-template-columns:1fr}.cloud-admin-confirm{padding:16px}.cloud-admin-confirm button,.cloud-live-control button,.cloud-security button{min-height:44px}
+ .cloud-users-table,.cloud-users-table tbody,.cloud-users-table tr,.cloud-users-table td{display:block;width:100%;min-width:0!important}.cloud-users-table thead{display:none}.cloud-users-table tr{border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:12px}.cloud-users-table td{position:static!important;display:grid;grid-template-columns:minmax(85px,35%) minmax(0,1fr);gap:8px;padding:8px 0}.cloud-users-table td::before{content:attr(data-label);font-size:12px;color:var(--text-secondary)}.cloud-users-table td:last-child{display:flex;flex-wrap:wrap;gap:8px}.cloud-users-table td:last-child::before{display:none}.cloud-users-scroll{overflow:visible}
+ .classic-console #workspace-web-status,.classic-console #workspace-mode{display:none}.classic-console .topbar-status{flex:1 1 60px}.classic-console .classic-user-tools{gap:4px}.classic-console #device-status-entry{font-size:11px;max-width:66px}.classic-console .classic-more summary{padding:6px}.classic-console #topbar{padding-left:6px;padding-right:6px}.classic-console .topbar-brand{display:none}
+}

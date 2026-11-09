@@ -12,6 +12,8 @@ History/legacy-calibration-20261008/source/HANDOVER.md whitespace=-blank-at-eol
 local/** -text
 assets/robot/startouch-v3/** -text
 assets/robot/startouch-v3/meshes/** filter=lfs diff=lfs merge=lfs -text
+assets/robot/startouch-v3/web/*.glb* filter=lfs diff=lfs merge=lfs -text
+assets/robot/startouch-v3/web/*.json text eol=lf
 apps/dummy/models/*.tflite filter=lfs diff=lfs merge=lfs -text
 local/models/**/*.pt filter=lfs diff=lfs merge=lfs -text
 local/models/**/*.bin filter=lfs diff=lfs merge=lfs -text
@@ -28,3 +30,17 @@ services/robot/src/startouch_bridge.py text eol=lf
 configs/vision/sdk-tool-frame-policy.json text eol=lf
 configs/vision/handeye-flange-normalized.json text eol=lf
 apps/web/configs/web-grasp.json text eol=lf
+# User-selected classic presentation snapshot: retain exact source commit bytes.
+apps/web/public/classic.html -text -whitespace
+apps/web/public/css/classic-source.css -text -whitespace
+# C8 fixed deployment artifacts are hashed before upload.
+deploy/public-access/staging/device/c8-active-pins.json text eol=lf
+tools/operations/apply_ui_sdk_active_device.py text eol=lf
+tools/operations/apply_ui_sdk_followup_cloud.py text eol=lf
+tools/operations/apply_login_wait_cloud.py text eol=lf
+tools/operations/apply_sdk_scope_cloud.py text eol=lf
+tools/operations/apply_sdk_scope_device.py text eol=lf
+tools/operations/apply_sdk_confirmation_cloud.py text eol=lf
+deploy/public-access/staging/device/sdk-scope-pins.json text eol=lf
+tools/operations/apply_sdk_heartbeat_cloud.py text eol=lf
+tools/operations/apply_sdk_renewal_cloud.py text eol=lf

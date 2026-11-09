@@ -1,6 +1,6 @@
 /* Reusable Three.js rendering only. No SDK, transport or application bootstrap. */
 'use strict';
-(function(root,factory){const api={createRobotViewer:factory};if(typeof module==='object'&&module.exports)module.exports=api;root.ThirdHandRobotViewer=api;})(globalThis,function({THREE,OrbitControls,STLLoader,ColladaLoader,baseDirections,assetBase='.'}={}){
+(function(root,factory){const api={createRobotViewer:factory};if(typeof module==='object'&&module.exports)module.exports=api;root.ThirdHandRobotViewer=api;})(globalThis,function({THREE,OrbitControls,STLLoader,ColladaLoader,baseDirections,assetBase='.',loadVisualMeshes}={}){
   const BASE_TO_THREE_DIRECTIONS=baseDirections||Object.freeze({x:[1,0,0],y:[0,0,-1],z:[0,1,0]});
 // === SceneManager ===
 class SceneManager {
@@ -81,7 +81,7 @@ class SceneManager {
     this.resizeObserver.observe(this.container);
     // 监听主题切换更新背景色
     const observer = new MutationObserver(() => this._updateBgColor());
-    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme','data-appearance','data-layout'] });
 
     this._animate();
   }
@@ -168,11 +168,18 @@ class ArmModel {
   async _loadModel() {
     // The bundled URDF loader is UMD, so expose the module build of Three.js to it.
     globalThis.THREE = { ...THREE, STLLoader, ColladaLoader };
-    await import('./lib/URDFLoader.js');
+    const [,visualMeshes]=await Promise.all([import('./lib/URDFLoader.js'),loadVisualMeshes?.(assetBase)]);
 
     const manager = new THREE.LoadingManager();
-    this.geometryReady = new Promise(resolve => { manager.onLoad = resolve; });
+    this.geometryReady = new Promise((resolve,reject) => { manager.onLoad = resolve;manager.onError=url=>reject(Error('Model mesh failed: '+url)); });
+    this.geometryReady.catch(()=>{}); // The caller awaits this after the URDF promise.
     const loader = new globalThis.URDFLoader(manager);
+    if(visualMeshes)loader.loadMeshCb=(url,loadingManager,done)=>{
+      const name=url.split('/').pop().replace(/\.stl$/i,''),mesh=visualMeshes.get(name);
+      if(!mesh){loadingManager.itemError(url);done(null,Error('Compact visual missing: '+name));return;}
+      const copy=mesh.clone();done(copy);
+      copy.traverse(node=>{if(node.isMesh){for(const material of Array.isArray(node.material)?node.material:[node.material]){material.flatShading=true;material.needsUpdate=true;}}});
+    };
     globalThis.ThirdHandCameraLighting.configureModelMaterials(loader);
     loader.packages = {
       'FastTouchV3.SLDASM': `${assetBase}/models/startouch-v3`,
@@ -210,6 +217,25 @@ class ArmModel {
   }
 
   getJointAngles() { return this.jointAngles.slice(); }
+
+  // Display-only measured pose. Target setters and their limits stay unchanged.
+  setMeasuredJointAngles(angles) {
+    if (!this.robot || !Array.isArray(angles) || angles.length !== 6 || !Array.from(angles).every(Number.isFinite)) {
+      throw new Error('Invalid measured joint angles');
+    }
+    const joints = this.jointNames.map(name => this.robot.joints[name]);
+    if (joints.some(joint => !joint)) throw new Error('Measured URDF joint missing');
+    joints.forEach((joint, index) => {
+      const previous = joint.ignoreLimits;
+      try {
+        joint.ignoreLimits = true;
+        joint.setJointValue(angles[index] * Math.PI / 180);
+      } finally {
+        joint.ignoreLimits = previous;
+      }
+    });
+    this.jointAngles = angles.slice();
+  }
 
   setJointLimits(limits) {
     if (!Array.isArray(limits) || limits.length !== 6) return;

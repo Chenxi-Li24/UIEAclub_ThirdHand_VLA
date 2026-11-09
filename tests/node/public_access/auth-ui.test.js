@@ -18,9 +18,9 @@ function fixture(page='login', saved=null, hash='') {
   view.ThirdHandI18n=context.ThirdHandI18n;
   const preferences=createPreferenceClient({view});
   let response={error:'ADMIN_PERMISSION_REQUIRED'};
-  const request=async(route,body)=>{calls.push({route,body}); if(response.error)throw Object.assign(Error(),{code:response.error});return response;};
+  const request=async(route,body)=>{calls.push({route,body}); if(typeof response==='function')return response(); if(response.error)throw Object.assign(Error(),{code:response.error});return response;};
   const mounted=mountAuthPage(document,view,{preferences,request,navigate:path=>navigations.push(path)});
-  return {document,window,view,stored,calls,navigations,timers,mounted,setResponse:value=>response=value};
+  return {document,window,view,preferences,stored,calls,navigations,timers,mounted,setResponse:value=>response=value};
 }
 
 test('verification page without a token offers an explicit resend form with a generic confirmation',async()=>{
@@ -79,30 +79,49 @@ test('new password feedback updates live and rechecks confirmation when the orig
   const input=(field,value)=>{field.value=value;field.dispatchEvent(new f.window.Event('input'));};
   input(password,'short');
   assert.equal(password.getAttribute('aria-invalid'),'true');
-  assert.match(f.document.getElementById('password-feedback').textContent,/at least 12/i);
+  assert.match(f.document.getElementById('password-feedback').textContent,/at least 8/i);
   assert.match(password.getAttribute('aria-describedby'),/password-requirements/);
-  assert.match(f.document.getElementById('password-requirements').textContent,/12–128/);
-  input(password,'long enough password');input(confirm,'different password');
+  assert.match(f.document.getElementById('password-requirements').textContent,/8–128/);
+  input(password,'Long enough password');input(confirm,'different password');
   assert.match(f.document.getElementById('confirmPassword-feedback').textContent,/do not match/i);
-  input(confirm,'long enough password');assert.equal(confirm.getAttribute('aria-invalid'),'false');
-  input(password,'another long password');assert.equal(confirm.getAttribute('aria-invalid'),'true');
+  input(confirm,'Long enough password');assert.equal(confirm.getAttribute('aria-invalid'),'false');
+  input(password,'Another long password');assert.equal(confirm.getAttribute('aria-invalid'),'true');
   assert.match(f.document.getElementById('confirmPassword-feedback').textContent,/do not match/i);
   f.document.getElementById('locale-zh').click();
   assert.match(f.document.getElementById('confirmPassword-feedback').textContent,/不一致/);
   assert.match(f.document.getElementById('password-requirements').textContent,/密码要求/);
-  assert.ok(!JSON.stringify([...f.stored]).includes('another long password'));
+  assert.ok(!JSON.stringify([...f.stored]).includes('Another long password'));
 });
 
 test('new passwords enforce server Unicode length boundaries before a request',async()=>{
   for(const page of ['register','reset-password']){
     const f=fixture(page,null,'#token=unit-test-token');f.setResponse({status:'pending_email'});
-    for(const id of ['password','confirmPassword'])f.document.getElementById(id).value='😀'.repeat(129);
+    for(const id of ['password','confirmPassword'])f.document.getElementById(id).value='Aa'+'😀'.repeat(127);
     await f.mounted.submit();assert.equal(f.calls.length,0);
     assert.match(f.document.getElementById('password-feedback').textContent,/at most 128/i);
-    for(const id of ['password','confirmPassword'])f.document.getElementById(id).value='😀'.repeat(128);
+    for(const id of ['password','confirmPassword'])f.document.getElementById(id).value='Aa'+'😀'.repeat(126);
     await f.mounted.submit();assert.equal(f.calls.length,1);
-    assert.equal(f.calls[0].body.password,'😀'.repeat(128));
+    assert.equal(f.calls[0].body.password,'Aa'+'😀'.repeat(126));
     assert.equal(f.document.getElementById('password-feedback').textContent,'');
+  }
+});
+
+test('register and reset show missing letter cases live in both languages and accept eight letters',async()=>{
+  for(const page of ['register','reset-password']){
+    const f=fixture(page,null,'#token=unit-test-token');f.setResponse({accepted:true});
+    const password=f.document.getElementById('password'),confirm=f.document.getElementById('confirmPassword');
+    for(const [value,missing]of [['abcdefgh',/uppercase/],['ABCDEFGH',/lowercase/],['12345678',/uppercase.*lowercase/],['Abcdefg',/at least 8/]]){
+      password.value=confirm.value=value;password.dispatchEvent(new f.window.Event('input'));
+      assert.match(f.document.getElementById('password-feedback').textContent,missing);
+      await f.mounted.submit();assert.equal(f.calls.length,0);
+    }
+    password.value='abcdefgh';password.dispatchEvent(new f.window.Event('input'));
+    f.document.getElementById('locale-zh').click();
+    assert.match(f.document.getElementById('password-feedback').textContent,/大写英文字母/);
+    assert.match(f.document.getElementById('password-requirements').textContent,/8–128.*大写.*小写/);
+    f.document.getElementById('locale-en').click();
+    password.value=confirm.value='Abcdefgh';await f.mounted.submit();
+    assert.equal(f.calls.length,1);assert.equal(f.calls[0].body.password,'Abcdefgh');
   }
 });
 
@@ -123,4 +142,37 @@ test('verification failure and resend never redirect, and disposal cancels a suc
   await resend.mounted.submit();assert.equal(resend.timers.size,0);
   const disposed=fixture('verify-email',null,'#token=unit-test-token');disposed.setResponse({verified:true});
   await disposed.mounted.submit();disposed.mounted.dispose();assert.equal(disposed.timers.size,0);assert.deepEqual(disposed.navigations,[]);
+});
+
+
+test('pending login disables submission and mode tabs, shows a spinner and rejects duplicate submits',async()=>{
+  const f=fixture();let finish;f.setResponse(()=>new Promise(resolve=>{finish=resolve;}));
+  const pending=f.mounted.submit(),button=f.document.querySelector('.auth-primary');
+  assert.equal(button.disabled,true);assert.equal(button.getAttribute('aria-busy'),'true');assert.equal(f.document.querySelector('.auth-spinner').hidden,false);
+  assert.match(f.document.querySelector('.auth-progress').textContent,/Request sent/);
+  assert.equal(f.document.getElementById('mode-admin').disabled,true);
+  await f.mounted.submit();assert.equal(f.calls.length,1);
+  f.document.getElementById('locale-zh').click();assert.match(button.textContent,/正在发送/);
+  finish({next:'/control'});await pending;assert.deepEqual(f.navigations,['/control']);assert.equal(button.disabled,true);
+  assert.match(button.textContent,/正在打开工作台/);f.mounted.dispose();
+});
+
+test('login timeout restores retry and a late success cannot navigate or submit itself',async()=>{
+  const f=fixture();let finish;f.setResponse(()=>new Promise(resolve=>{finish=resolve;}));
+  const pending=f.mounted.submit();const timer=[...f.timers.values()].find(x=>x.delay===15000);timer.fn();await pending;
+  assert.equal(f.document.querySelector('.auth-primary').disabled,false);assert.equal(f.document.querySelector('.auth-spinner').hidden,true);
+  assert.match(f.document.getElementById('auth-message').textContent,/timed out/);
+  finish({userId:'late',next:'/control'});await new Promise(setImmediate);assert.deepEqual(f.navigations,[]);assert.equal(f.calls.length,1);
+});
+
+test('successful authentication is not repeated when preferences or workspace navigation stall',async()=>{
+  const f=fixture();f.setResponse({userId:'test-user',csrfToken:'test-csrf'});f.preferences.hydrate=()=>new Promise(()=>{});
+  const pending=f.mounted.submit();await new Promise(setImmediate);
+  assert.match(f.document.querySelector('.auth-progress').textContent,/Loading your preferences/);
+  [...f.timers.values()].find(x=>x.delay===5000).fn();await pending;
+  assert.deepEqual(f.navigations,['/control']);assert.equal(f.document.querySelector('.auth-primary').disabled,true);
+  [...f.timers.values()].find(x=>x.delay===15000).fn();
+  assert.equal(f.document.querySelector('.auth-primary').disabled,false);assert.match(f.document.querySelector('.auth-primary').textContent,/Open workspace/);
+  assert.equal(f.document.getElementById('auth-form').hasAttribute('aria-busy'),false);
+  await f.mounted.submit();assert.equal(f.calls.length,1);assert.deepEqual(f.navigations,['/control','/control']);f.mounted.dispose();
 });

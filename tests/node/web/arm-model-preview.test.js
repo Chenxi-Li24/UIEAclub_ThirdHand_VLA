@@ -104,3 +104,17 @@ test('TypeLJ TCP uses the measured flange-to-tool offset', () => {
   assert.match(viewerSource, /tcpOffsetMeters\s*=\s*0\.17334/);
   assert.match(viewerSource, /endEffector\.position\.set\(this\.tcpOffsetMeters, 0, 0\)/);
 });
+
+test('measured display preserves out-of-target-range angles and restores URDF edit limits',()=>{
+  const arm=Object.create(ArmModel.prototype);
+  arm.jointNames=['j1','j2','j3','j4','j5','j6'];arm.jointAngles=[0,0,0,0,0,0];
+  arm.jointLimits=[[-162,162],[-12,201],[-183,0],[-98,98],[-98,98],[-164,164]];
+  arm.robot={joints:Object.fromEntries(arm.jointNames.map((name,i)=>[name,{ignoreLimits:false,limit:{lower:arm.jointLimits[i][0]*Math.PI/180,upper:arm.jointLimits[i][1]*Math.PI/180},setJointValue(value){this.value=this.ignoreLimits?value:Math.max(this.limit.lower,Math.min(this.limit.upper,value));}}]))};
+  const actual=[-1.8,-12.21,-.54,33.04,-5.15,-7.51],limits=JSON.stringify(arm.jointLimits);
+  arm.setMeasuredJointAngles(actual);assert.deepEqual(arm.getJointAngles(),actual);
+  assert.ok(Math.abs(arm.robot.joints.j2.value+12.21*Math.PI/180)<1e-12);
+  assert.ok(Object.values(arm.robot.joints).every(j=>j.ignoreLimits===false));assert.equal(JSON.stringify(arm.jointLimits),limits);
+  arm.setJointAngles(actual);assert.equal(arm.getJointAngles()[1],-12);assert.equal(arm.robot.joints.j2.value,-12*Math.PI/180);
+  const before=arm.getJointAngles();assert.throws(()=>arm.setMeasuredJointAngles([NaN,0,0,0,0,0]),/Invalid/);assert.deepEqual(arm.getJointAngles(),before);
+  arm.robot.joints.j2.setJointValue=()=>{throw Error('renderer failed');};assert.throws(()=>arm.setMeasuredJointAngles(actual),/renderer failed/);assert.equal(arm.robot.joints.j2.ignoreLimits,false);
+});

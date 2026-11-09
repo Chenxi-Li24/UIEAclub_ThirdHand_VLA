@@ -5,6 +5,8 @@ const {EventEmitter}=require('node:events');
 const {X509Certificate,randomUUID,randomBytes,verify}=require('node:crypto');
 const {WebSocketServer,WebSocket}=require('ws');
 const {parseMessage,validateHello,decodeBase64url,validateEnvelope,object,UUID}=require('./protocol');
+const {createLatestState,same}=require('./latest-state');
+const {createLeaseTiming}=require('./lease-timing');
 
 function mediaNegotiation(headers){
   const version=headers['x-thirdhand-media-grant'],digest=headers['x-thirdhand-media-credentials'];
@@ -16,10 +18,13 @@ function mediaNegotiation(headers){
   return {format:'compact-v1',credentialDigest:digest};
 }
 
-function createDeviceRelay({store,ingestBatch,mediaPublisher,tls=null,trustedUnixProxy=false,clock={now:()=>new Date()},handshakeTimeoutMs=5000,heartbeatTimeoutMs=15000,maxDevices=128}){
+function createDeviceRelay({store,ingestBatch,mediaPublisher,tls=null,trustedUnixProxy=false,clock={now:()=>new Date()},handshakeTimeoutMs=5000,heartbeatTimeoutMs=15000,maxDevices=128,timing=createLeaseTiming()}){
   if(!store?.resolveCertificate||(!tls&&!trustedUnixProxy)||tls&&trustedUnixProxy)throw Error('Choose mTLS or a private Unix proxy');
   const active=new Map(),sockets=new Set(),networkSockets=new Set(),events=new EventEmitter();
   const now=()=>clock.now().getTime();
+  const latestState=createLatestState({wallNow:now,capacity:maxDevices,contextFor:id=>{
+    const entry=active.get(id);return entry?.ws.readyState===WebSocket.OPEN&&entry.ready?entry.context:null;
+  }});
   async function stillRegistered(registered){
     if(now()>=registered.validUntil)return false;
     const row=await store.resolveCertificate(registered.fingerprint);
@@ -49,6 +54,18 @@ function createDeviceRelay({store,ingestBatch,mediaPublisher,tls=null,trustedUni
     response.setHeader('Cache-Control','no-store');response.setHeader('Content-Type','application/json');
     let uploadVerified=false;
     try{
+      if(request.url==='/edge/v1/state'&&request.method==='POST'){
+        const registered=await identity(request);
+        if(!registered.remoteControlEnabled||!/^application\/json(?:\s*;.*)?$/i.test(request.headers['content-type']||''))throw Error('INVALID_STATE_REQUEST');
+        const chunks=[];let size=0;for await(const chunk of request){size+=chunk.length;if(size>24000)throw Error('STATE_TOO_LARGE');chunks.push(chunk);}
+        const envelope=JSON.parse(Buffer.concat(chunks).toString('utf8'));
+        if(!object(envelope,['payloadBase64url','signatureBase64url'])||Object.keys(envelope).length!==2)throw Error('INVALID_STATE_REQUEST');
+        const bytes=decodeBase64url(envelope.payloadBase64url);
+        if(!verify(null,bytes,registered.publicKey,decodeBase64url(envelope.signatureBase64url,86)))throw Error('INVALID_STATE_SIGNATURE');
+        const body=JSON.parse(new TextDecoder('utf-8',{fatal:true}).decode(bytes)),entry=active.get(registered.id);
+        if(!entry?.ready||body.context?.certificateId!==registered.certificateId||!same(body.context,entry.context))throw Error('INVALID_STATE_CONTEXT');
+        const result=latestState.accept(entry.context,body);response.end(JSON.stringify(result));return;
+      }
       if(request.url==='/edge/v1/media-grant'&&request.method==='POST'&&mediaPublisher){
         const registered=await identity(request);
         const negotiation=mediaNegotiation(request.headers);
@@ -98,15 +115,16 @@ function createDeviceRelay({store,ingestBatch,mediaPublisher,tls=null,trustedUni
     const timer=setTimeout(()=>ws.close(1008,'Authentication timeout'),handshakeTimeoutMs);timer.unref();
     const send=value=>ws.send(JSON.stringify(value));
     ws.on('error',()=>{});
-    ws.on('close',()=>{clearTimeout(timer);sockets.delete(ws);for(const pending of pendingRequests.values()){clearTimeout(pending.timer);pending.reject(Error('DEVICE_DISCONNECTED'));}pendingRequests.clear();if(context){if(active.get(context.deviceId)?.context.connectionId===context.connectionId)active.delete(context.deviceId);events.emit('disconnected',context);}});
+    ws.on('close',()=>{clearTimeout(timer);sockets.delete(ws);for(const pending of pendingRequests.values()){pending.trace?.mark('failed');pending.trace?.finish('relay','failed');clearTimeout(pending.timer);pending.reject(Error('DEVICE_DISCONNECTED'));}pendingRequests.clear();if(context){if(active.get(context.deviceId)?.context.connectionId===context.connectionId)active.delete(context.deviceId);events.emit('disconnected',context);}});
     ws.on('message',async(raw,isBinary)=>{
       let message;
       try{message=parseMessage(raw,isBinary);}catch{ws.close(1008,'Device protocol rejected');return;}
       // Receipts do not grant authority by themselves. Match them to this exact
       // authenticated socket without placing stop ACK behind a storage query.
       if(state==='active'&&message.type==='result'){
-        if(active.get(context.deviceId)!==entry||!object(message,['type','requestId','outcome'])||typeof message.requestId!=='string'||!object(message.outcome,['state','commandId','leaseId','leaseEpoch','code'])||!['active','accepted','started','completed','stopped','rejected','failed','unknown'].includes(message.outcome.state)){ws.close(1008,'Invalid result');return;}
+        if(active.get(context.deviceId)!==entry||!object(message,['type','requestId','outcome'])||typeof message.requestId!=='string'||!object(message.outcome,['state','commandId','leaseId','leaseEpoch','code','scope'])||!['active','accepted','started','completed','stopped','rejected','failed','unknown'].includes(message.outcome.state)||('scope' in message.outcome&&(message.outcome.state!=='active'||!['sdk','control'].includes(message.outcome.scope)))){ws.close(1008,'Invalid result');return;}
         const pending=pendingRequests.get(message.requestId);if(!pending)return;
+        pending.trace?.mark('ack');pending.trace?.finish('relay',['active','rejected','failed'].includes(message.outcome.state)?message.outcome.state:'unknown');
         clearTimeout(pending.timer);pendingRequests.delete(message.requestId);pending.resolve(message.outcome);return;
       }
       if(busy){ws.close(1008,'Unexpected concurrent message');return;}busy=true;
@@ -149,19 +167,32 @@ function createDeviceRelay({store,ingestBatch,mediaPublisher,tls=null,trustedUni
     try{for(const item of active.values()){let valid=false;try{valid=await stillRegistered(item.registered);}catch{/* Storage failure denies a device channel. */}if(!valid||now()-item.ws.lastSeen()>=heartbeatTimeoutMs)item.ws.close(1008,'Device authorization expired');}}
     finally{sweeping=false;}
   },1000);sweep.unref();
-  return {server,devices:{events,get(deviceId){const entry=active.get(deviceId);return entry?.ws.readyState===WebSocket.OPEN?{...entry.context,controlAccepted:entry.ready,readOnly:entry.registered.readOnly===true}:null;},async request(deviceId,envelope){
+  async function dispatch(deviceId,envelope){
     validateEnvelope(envelope);const item=active.get(deviceId),payload=JSON.parse(decodeBase64url(envelope.payloadBase64url));
+    const trace=payload.scope==='sdk'&&payload.purpose==='lease_renew'?timing.begin(envelope):null;
+    trace?.mark('queued');
+    try{
     if(!item?.ready||item.ws.readyState!==WebSocket.OPEN||now()>=item.registered.validUntil||!['deviceId','bootId','executorEpoch','connectionId','certificateId'].every(key=>payload[key]===item.context[key]))throw Error('DEVICE_UNAVAILABLE');
     const priorityStop=payload.purpose==='stop'&&payload.opcode==='software_stop';
     if(item.registered.readOnly===true&&payload.purpose==='command'&&!['connect','disconnect'].includes(payload.opcode))throw Error('READ_ONLY_DEVICE');
     if(!priorityStop&&!await stillRegistered(item.registered)||active.get(deviceId)!==item)throw Error('DEVICE_UNAVAILABLE');
+    trace?.mark('registered');
     if(item.pendingRequests.size>=(priorityStop?9:8))throw Error('DEVICE_BUSY');
-    return new Promise((resolve,reject)=>{
+    const confirmation=new Promise((resolve,reject)=>{
       const requestId=randomUUID(),timeout=payload.purpose==='command'?35000:priorityStop?4000:1500;
-      const timer=setTimeout(()=>{item.pendingRequests.delete(requestId);reject(Error('DEVICE_REPLY_UNKNOWN'));},timeout);timer.unref();
-      item.pendingRequests.set(requestId,{resolve,reject,timer});
-      item.ws.send(JSON.stringify({type:'request',requestId,envelope}),error=>{if(error){clearTimeout(timer);item.pendingRequests.delete(requestId);reject(Error('DEVICE_DISCONNECTED'));}});
+      const timer=setTimeout(()=>{trace?.mark('failed');trace?.finish('relay','failed');item.pendingRequests.delete(requestId);reject(Error('DEVICE_REPLY_UNKNOWN'));},timeout);timer.unref();
+      item.pendingRequests.set(requestId,{resolve,reject,timer,trace});
+      item.ws.send(JSON.stringify({type:'request',requestId,envelope}),error=>{trace?.mark('write_callback');if(error){trace?.finish('relay','failed');clearTimeout(timer);item.pendingRequests.delete(requestId);reject(Error('DEVICE_DISCONNECTED'));}});
+      trace?.mark('dispatched');
     });
+    // The caller may enqueue the next signed lease only after all async
+    // registration checks above and this ordered WebSocket write have run.
+    confirmation.catch(()=>{});
+    return {confirmation};
+    }catch(error){trace?.mark('failed');trace?.finish('relay','failed');throw error;}
+  }
+  return {server,latestState,devices:{events,get(deviceId){const entry=active.get(deviceId);return entry?.ws.readyState===WebSocket.OPEN?{...entry.context,controlAccepted:entry.ready,readOnly:entry.registered.readOnly===true}:null;},dispatch,async request(deviceId,envelope){
+    return (await dispatch(deviceId,envelope)).confirmation;
   },async send(deviceId,envelope){
     validateEnvelope(envelope);const item=active.get(deviceId);
     if(!item||item.ws.readyState!==WebSocket.OPEN||!await stillRegistered(item.registered)||active.get(deviceId)!==item)throw Error('DEVICE_UNAVAILABLE');

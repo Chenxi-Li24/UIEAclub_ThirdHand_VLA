@@ -15,6 +15,7 @@ const {waypointsRoute}=require('./routes/waypoints');
 const { serveAuthPage } = require('./auth-pages');
 const { writeAudit }=require('../../../platform/storage/src/audit');
 const {isWorkspacePath,serveWorkspacePage}=require('./workspace-pages');
+const {loadWorkspaceBootstrap}=require('./workspace-bootstrap');
 const {tutorialRoute}=require('./routes/tutorial');
 const {profileRoute}=require('./routes/profile');
 const {controlRoute}=require('./routes/control');
@@ -33,7 +34,7 @@ const STATUS = { INVALID_INPUT:400, INVALID_PASSWORD:400, INVALID_TOKEN:400, BOD
   INVALID_CURSOR:400,HISTORY_UNAVAILABLE:503,HISTORY_BUSY:429,EXPORT_SERVICE_UNAVAILABLE:503,EXPORT_BUSY:429,EXPORT_EXPIRED:410,EXPORT_NOT_READY:409,
   MEDIA_UNAVAILABLE:503,MEDIA_BUSY:429,MEDIA_PUBLISHER_BUSY:409,MEDIA_REVOCATION_PENDING:503,STALE_VIDEO_FRAME:409,WAYPOINT_LIMIT_REACHED:409 };
 
-function createCloudApi({ pool, accounts, sessions, mfa, publicOrigin, tutorialAdapter, controlService,controlChannels,history,exports,mediaService, trustProxyLoopback=false, clock = { now:()=>new Date() } }) {
+function createCloudApi({ pool, accounts, sessions, mfa, publicOrigin, tutorialAdapter, controlService,controlChannels,history,exports,mediaService,latestState, trustProxyLoopback=false, clock = { now:()=>new Date() } }) {
   const origin = new URL(publicOrigin).origin;
   if (!publicOrigin.startsWith('https://') || publicOrigin.replace(/\/$/,'') !== origin) throw new Error('Exact HTTPS publicOrigin required');
   const server = http.createServer(async (request, response) => {
@@ -50,7 +51,8 @@ function createCloudApi({ pool, accounts, sessions, mfa, publicOrigin, tutorialA
       if(isWorkspacePath(path)&&['GET','HEAD'].includes(request.method)){
         const authenticated=await sessions?.resolveSession(request);
         if(!authenticated){if(['/control','/history'].includes(path)){response.writeHead(302,{Location:'/login','Cache-Control':'no-store'});response.end();}else json(response,401,{error:'UNAUTHENTICATED'});return;}
-        if(await serveWorkspacePage(request,response,path,{publicOrigin:origin}))return;
+        const bootstrap=path==='/control'?await loadWorkspaceBootstrap(pool,authenticated):undefined;
+        if(await serveWorkspacePage(request,response,path,{publicOrigin:origin,bootstrap}))return;
       }
       if (!path.startsWith('/api/v1/')) return json(response,404,{error:'NOT_FOUND'});
       if (!['GET','POST'].includes(request.method)) return json(response,405,{error:'METHOD_NOT_ALLOWED'});
@@ -71,7 +73,7 @@ function createCloudApi({ pool, accounts, sessions, mfa, publicOrigin, tutorialA
         if (!publicAuth && !sessions.verifyCsrf(request,principal)) throw identityError('FORBIDDEN');
         body = await readBody(request);
       }
-      const context = { path,request,response,body,principal,pool,accounts,sessions,mfa,sourceKey,clock,tutorialAdapter,controlService,history,exports,mediaService };
+      const context = { path,request,response,body,principal,pool,accounts,sessions,mfa,sourceKey,clock,tutorialAdapter,controlService,history,exports,mediaService,latestState };
       if (publicAuth && request.method === 'POST') await authRoute(context);
       if (!response.writableEnded && !publicAuth) {
         for (const route of [sessionRoute,adminApplicationsRoute,adminRoute,profileRoute,preferencesRoute,waypointsRoute,tutorialRoute,historyRoute,exportsRoute,mediaRoute,controlRoute,workspaceRoute]) { await route(context); if (response.writableEnded||response.destroyed) break; }
@@ -86,7 +88,7 @@ function createCloudApi({ pool, accounts, sessions, mfa, publicOrigin, tutorialA
     }
   });
   server.requestTimeout = 15000; server.headersTimeout = 10000; server.keepAliveTimeout = 5000;
-  const controlChannel=controlService&&controlChannels?createControlWebSocket({sessions,channels:controlChannels,controlService,publicOrigin:origin}):null;
+  const controlChannel=controlService&&controlChannels?createControlWebSocket({sessions,channels:controlChannels,controlService,publicOrigin:origin,onTiming:value=>{if(value.outcome==='rejected')console.warn(JSON.stringify({component:'browser_control_timing',...value}));}}):null;
   server.controlChannel=controlChannel;
   server.on('upgrade', async(request,socket,head) => { if(controlChannel&&await controlChannel.upgrade(request,socket,head))return;socket.end('HTTP/1.1 404 Not Found\r\nConnection: close\r\n\r\n'); });
   return server;

@@ -16,3 +16,10 @@ test('session monitoring is read-only while actual human input alone submits act
   listeners.get('pointerdown')();await Promise.resolve();assert.equal(requests.at(-1).path,'/api/v1/session/activity');assert.equal(requests.at(-1).options.headers['X-CSRF-Token'],'csrf');
   assert.equal(requests.at(-1).options.body,'{}');client.close();assert.equal(listeners.size,0);
 });
+test('stalled requests time out, abort transport and remain retryable without logging out a valid session',async()=>{
+  let signal,revoked=0;
+  const view={document:{removeEventListener(){}},fetch:async(_path,options)=>{signal=options.signal;return new Promise(()=>{});}};
+  const client=createWorkspaceSession({view,timeoutMs:10,onRevoked:()=>revoked++,initialIdentity:{userId:'a',csrfToken:'fixture'}});
+  await assert.rejects(client.request('/api/v1/me/profile'),{code:'REQUEST_TIMEOUT'});
+  assert.equal(signal.aborted,true);assert.equal(revoked,0);client.close();
+});

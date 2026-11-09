@@ -1,5 +1,5 @@
 'use strict';
-globalThis.ThirdHandI18nCatalog=(globalThis.ThirdHandI18nCatalog||[]).concat([ ['所有设备','All devices'],
+globalThis.ThirdHandI18nCatalog=(globalThis.ThirdHandI18nCatalog||[]).concat([ ['记录','Records'],['导出任务','Export tasks'],['成员与权限','Members & permissions'],['数据分类','Data sections'], ['所有设备','All devices'],
  ['开始','From'],['结束','To'],['开始日期','Start date'],['开始时间','Start time'],['结束日期','End date'],['结束时间','End time'],['最近 24 小时','Last 24 hours'],['时区','Time zone'],
  ['日期和时间按你的本地时区填写，记录和下载使用 UTC。','Dates and times use your local time zone. Records and downloads use UTC.'],
  ['SDK 断开时仍可查看已存记录。此页面不会连接机械臂。','Stored records remain available when the SDK is disconnected. This page does not connect the robot.'],

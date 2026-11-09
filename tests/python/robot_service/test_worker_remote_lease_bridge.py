@@ -51,6 +51,18 @@ def test_remote_connect_without_worker_lease_never_constructs_sdk(monkeypatch):
     assert calls == [] and not b.connected
 
 
+def test_worker_sdk_scope_allows_lifecycle_but_denies_motion_checks(monkeypatch):
+    m, b, lease, _, calls, _ = fixture(monkeypatch)
+    lease.update(scope='sdk', expiresAt=1003000)
+    b.remote_lease_guard.arm(lease)
+    b._require_remote_lease(lease, lifecycle=True)
+    with pytest.raises(m.LeaseGuardError, match='SDK_CONNECTION_ONLY'):
+        b._require_remote_lease(lease)
+    with pytest.raises(m.LeaseGuardError):
+        b._require_remote_lease(dict(lease, scope='control', expiresAt=1000950))
+    assert calls == [] and not b.connected
+
+
 def test_expiry_during_pending_constructor_refuses_commit_and_releases_only_after_late_cleanup(monkeypatch):
     m, b, lease, clock, calls, events = fixture(monkeypatch); b.remote_lease_guard.arm(lease)
     def constructor():

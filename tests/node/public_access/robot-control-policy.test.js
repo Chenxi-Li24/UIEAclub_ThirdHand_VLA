@@ -16,12 +16,59 @@ function fixture(){
   return {clock,state,calls,policy,context,lease,command};
 }
 
+test('SDK three-second lease tolerates a one-second gap, denies motion and cannot revive after expiry',async()=>{
+  const f=fixture();
+  try{
+    assert.equal((await f.policy.handle({...f.lease,scope:'sdk',expiresAt:13000})).state,'active');
+    f.clock.wall+=1500;f.clock.mono+=1500;
+    const renew={...f.lease,purpose:'lease_renew',scope:'sdk',sequence:1,issuedAt:11500,expiresAt:14500};
+    assert.equal((await f.policy.handle(renew)).state,'active');
+    assert.equal((await f.policy.handle(f.command({issuedAt:11500,expiresAt:12000,opcode:'gripper',parameters:{position:1}}))).code,'SDK_CONNECTION_ONLY');
+    assert.equal((await f.policy.handle({...renew,scope:'control',expiresAt:12500,sequence:2})).code,'LEASE_SCOPE_CHANGED');
+    f.clock.wall=14500;f.clock.mono=9500;
+    assert.equal((await f.policy.handle({...renew,sequence:3,issuedAt:14500,expiresAt:17500})).code,'STALE_LEASE');
+    assert.equal(f.policy.currentLease(),null);
+    assert.deepEqual(f.calls.map(x=>x.opcode),['software_stop']);
+  }finally{await f.policy.close();}
+  const strict=fixture();
+  try{assert.equal((await strict.policy.handle({...strict.lease,scope:'control',expiresAt:13000})).code,'INVALID_LEASE');}
+  finally{await strict.policy.close();}
+});
+
+test('SDK-scoped signed leases reject all motion and cannot be upgraded by renewal or command fields',async()=>{
+  const f=fixture();
+  assert.equal((await f.policy.handle({...f.lease,scope:'sdk'})).scope,'sdk');
+  assert.equal((await f.policy.handle(f.command())).state,'completed');
+  for(const [opcode,parameters] of [['move_joint',{joints:[0,0,0,0,0,0]}],['gripper',{position:1}],['preset',{name:'home'}]]){
+    assert.equal((await f.policy.handle(f.command({sequence:2,scope:'control',opcode,parameters}))).code,'SDK_CONNECTION_ONLY');
+  }
+  assert.equal((await f.policy.handle({...f.lease,purpose:'lease_renew',sequence:1,scope:'control'})).code,'LEASE_SCOPE_CHANGED');
+  assert.equal((await f.policy.handle({...f.lease,purpose:'lease_renew',sequence:1,scope:'sdk'})).scope,'sdk');
+  assert.deepEqual(f.calls.map(x=>x.opcode),['connect']);
+  assert.equal((await f.policy.handle(f.command({sequence:3,opcode:'disconnect'}))).state,'stopped');
+});
+
 test('bind and state subscription do not connect; only current bound lease can submit',async()=>{
   const f=fixture();assert.equal(f.calls.length,0);
   assert.equal((await f.policy.handle(f.command())).state,'rejected');
   assert.equal((await f.policy.handle(f.lease)).state,'active');
   assert.equal((await f.policy.handle(f.command())).state,'completed');assert.equal(f.calls.length,1);
   assert.equal((await f.policy.handle(f.command())).state,'rejected');assert.equal(f.calls.length,1);
+});
+
+test('renewal after local expiry reports stale lease without reviving SDK authority',async()=>{
+  const f=fixture();
+  try{
+    await f.policy.handle({...f.lease,scope:'sdk'});
+    f.clock.wall+=1001;f.clock.mono+=1001;
+    const result=await f.policy.handle({...f.lease,purpose:'lease_renew',scope:'sdk',sequence:1,
+      issuedAt:f.clock.wall,expiresAt:f.clock.wall+1000});
+    assert.equal(result.code,'STALE_LEASE');
+    assert.equal(f.policy.currentLease(),null);
+    assert.deepEqual(f.calls.map(value=>value.opcode),['software_stop']);
+    assert.equal(f.calls[0].reason,'lease_expired');
+    assert.equal((await f.policy.handle(f.command({issuedAt:f.clock.wall,expiresAt:f.clock.wall+500}))).code,'LEASE_REQUIRED');
+  }finally{await f.policy.close();}
 });
 
 test('independent monotonic watchdog revokes before requesting priority stop, despite wall clock rollback',async()=>{

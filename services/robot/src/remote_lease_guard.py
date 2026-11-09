@@ -61,14 +61,15 @@ class RemoteLeaseGuard:
         return mono, wall, self._fresh_mono()
 
     def _validate(self, value):
-        require(type(value) is dict and set(value) == FIELDS, 'REMOTE_LEASE_INVALID')
+        require(type(value) is dict and FIELDS <= set(value) <= FIELDS | {'scope'}
+                and value.get('scope', 'control') in ('sdk', 'control'), 'REMOTE_LEASE_INVALID')
         require(all(isinstance(value[key], str) and UUID.fullmatch(value[key])
                     for key in ('deviceId', 'bootId', 'executorEpoch', 'connectionId', 'certificateId', 'leaseId'))
                 and isinstance(value['hardwareFingerprint'], str) and HASH.fullmatch(value['hardwareFingerprint']),
                 'REMOTE_LEASE_INVALID')
         require(all(type(value[key]) is int for key in ('leaseEpoch', 'sequence', 'issuedAt', 'expiresAt'))
                 and value['leaseEpoch'] >= 1 and value['sequence'] >= 0
-                and 0 < value['expiresAt'] - value['issuedAt'] <= 1000, 'REMOTE_LEASE_INVALID')
+                and 0 < value['expiresAt'] - value['issuedAt'] <= (3000 if value.get('scope') == 'sdk' else 1000), 'REMOTE_LEASE_INVALID')
         return dict(value)
 
     def _latch(self, reason):
@@ -85,9 +86,12 @@ class RemoteLeaseGuard:
         return self.deadline is not None and not self.stopping and not self.closed.is_set()
 
     def _deadline(self, value, mono, wall):
-        require(value['issuedAt'] <= wall + 500 and 0 < value['expiresAt'] - wall <= 1000,
+        # _validate bounds the signed span; small existing clock tolerance must
+        # not make a valid lease look overlong. Keep the scope-specific local cap.
+        require(value['issuedAt'] <= wall + 500 and value['expiresAt'] > wall,
                 'REMOTE_LEASE_EXPIRED')
-        return min(mono + 1., mono + (value['expiresAt'] - wall) / 1000,
+        return min(mono + (3. if value.get('scope') == 'sdk' else 1.),
+                   mono + (value['expiresAt'] - value['issuedAt']) / 1000, mono + (value['expiresAt'] - wall) / 1000,
                    self.anchor[0] + (value['expiresAt'] - self.anchor[1]) / 1000)
 
     def arm(self, value):
@@ -110,6 +114,7 @@ class RemoteLeaseGuard:
             mono, wall, fresh = self._sample()
             require(self._current(fresh, wall), 'REMOTE_LEASE_TERMINAL')
             require(all(value[key] == self.lease[key] for key in BINDING)
+                    and value.get('scope', 'control') == self.lease.get('scope', 'control')
                     and value['sequence'] > self.lease['sequence'], 'REMOTE_LEASE_REPLAYED')
             deadline = self._deadline(value, mono, wall)
             fresh = self._fresh_mono()
@@ -129,7 +134,8 @@ class RemoteLeaseGuard:
             value = self._validate(binding)
             with self.lock:
                 mono, wall, fresh = self._sample()
-                if not self._current(fresh, wall) or any(value[key] != self.lease[key] for key in BINDING):
+                if (not self._current(fresh, wall) or any(value[key] != self.lease[key] for key in BINDING)
+                        or value.get('scope', 'control') != self.lease.get('scope', 'control')):
                     return False
                 if not original_expiry:
                     return self._current(self._fresh_mono(), wall)

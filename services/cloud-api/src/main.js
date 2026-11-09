@@ -28,7 +28,7 @@ async function startCloudService(config=loadCloudConfig(),{stagingMailbox}={}){
     else if(config.media){mediaRuntime=createCameraMediaRuntime({pool,sessions,config:config.media});await mediaRuntime.listen();}
     const history=createHistoryRepository(pool,{cursorKey:config.historyCursorKey});
     const exports=config.exportRoot?createExportService({pool,history,root:config.exportRoot}):null;
-    server=createCloudApi({pool,accounts,sessions,mfa,history,exports,mediaService:mediaRuntime?.mediaService,controlService:mediaRuntime?.controlService,controlChannels:mediaRuntime?.controlChannels,publicOrigin:config.publicOrigin,trustProxyLoopback:config.trustProxyLoopback});
+    server=createCloudApi({pool,accounts,sessions,mfa,history,exports,mediaService:mediaRuntime?.mediaService,latestState:mediaRuntime?.latestState,controlService:mediaRuntime?.controlService,controlChannels:mediaRuntime?.controlChannels,publicOrigin:config.publicOrigin,trustProxyLoopback:config.trustProxyLoopback});
     await new Promise((resolve,reject)=>{server.once('error',reject);server.listen(config.port,config.host,resolve);});
     return {server,async close(){await mediaRuntime?.close();await server.controlChannel?.close();await new Promise(resolve=>{server.closeAllConnections();server.close(resolve);});await sessions.close();mail.close?.();await pool.end();}};
   }catch(error){if(server)server.close();await mediaRuntime?.close();await sessions?.close();mail?.close?.();await pool.end();throw error;}

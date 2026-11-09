@@ -30,6 +30,22 @@ test('password is checked before administrator permission and unknown-account er
   await assert.rejects(f.accounts.authenticate({ login: 'user_observer', password: f.password, requestedMode: 'root' }), { code: 'INVALID_INPUT' });
 });
 
+test('registration and reset enforce mixed case at the service boundary and accept eight letters',async t=>{
+  const f=await identityFixture(t);
+  const input={username:'eight_letters',email:'eight@example.invalid',displayName:'Eight',password:'abcdefgh'};
+  await assert.rejects(f.accounts.register(input),{code:'INVALID_PASSWORD'});
+  assert.equal((await f.pool.query('SELECT count(*)::int n FROM auth.users')).rows[0].n,0);
+  await f.accounts.register({...input,password:'Abcdefgh'});
+  await f.accounts.verifyEmail({token:f.token(f.mailbox.at(-1))});
+  assert.equal((await f.accounts.authenticate({login:input.username,password:'Abcdefgh'})).mode,'observe');
+  await f.accounts.requestPasswordReset({email:input.email});
+  const token=f.token(f.mailbox.at(-1));
+  await assert.rejects(f.accounts.resetPassword({token,password:'ABCDEFGH'}),{code:'INVALID_PASSWORD'});
+  await f.accounts.resetPassword({token,password:'Xyzabcde'});
+  assert.equal((await f.accounts.authenticate({login:input.username,password:'Xyzabcde'})).mode,'observe');
+  await assert.rejects(f.accounts.authenticate({login:input.username,password:'Abcdefgh'}),{code:'INVALID_CREDENTIALS'});
+});
+
 test('reset request is generic; reset token expires and successful reset revokes all sessions', async t => {
   const f = await identityFixture(t); const user = await f.verified('reset');
   const known = await f.accounts.requestPasswordReset({ email: 'reset@example.invalid' });

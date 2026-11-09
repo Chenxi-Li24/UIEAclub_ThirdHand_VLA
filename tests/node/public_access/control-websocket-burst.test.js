@@ -9,8 +9,8 @@ const {createBrowserControlRegistry}=require('../../../services/cloud-api/src/co
 const {createControlWebSocket}=require('../../../services/cloud-api/src/control/websocket');
 
 function deferred(){let resolve;const promise=new Promise(done=>resolve=done);return {promise,resolve};}
-async function fixture(t){
-  const principal={userId:randomUUID(),sessionId:randomUUID(),role:'admin',mode:'admin',roleVersion:1,mfaVerifiedAt:new Date()};
+async function fixture(t,mode='admin'){
+  const principal={userId:randomUUID(),sessionId:randomUUID(),role:'admin',mode,roleVersion:1,mfaVerifiedAt:new Date()};
   const clock={value:1000,monotonic(){return this.value;}};
   const channels=createBrowserControlRegistry({clock}),events=new EventEmitter();
   let hold=null,valid=true;
@@ -59,6 +59,23 @@ test('two valid control responses delivered as a burst survive an in-flight iden
   const allowed=['traceId','stage','outcome','elapsedMs','queueMs','authMs','code'];
   for(const row of f.timings){assert.ok(Object.keys(row).every(key=>allowed.includes(key)));assert.ok(row.elapsedMs>=0&&row.queueMs>=0&&row.authMs>=0);}
   assert.equal(JSON.stringify(f.timings).includes(f.first.nonce),false);
+});
+
+test('observation channel survives six queued responses and a 1.2s challenge age after identity lookup',async t=>{
+  const f=await fixture(t,'observe'),hold=f.block();assert.equal(f.bound.freshnessMs,3000);
+  f.respond(f.first);await hold.started.promise;
+  for(let i=0;i<5;i++){f.clock.value+=200;await f.deliver(f.channels.challenge(f.bound.connectionId));}
+  f.clock.value+=200;hold.release.resolve();
+  await f.waitFor(value=>value.type==='fresh'&&value.sequence===6);
+  assert.deepEqual(f.messages.filter(value=>value.type==='fresh').map(value=>value.sequence),[1,2,3,4,5,6]);
+  assert.equal(f.closed,false);
+});
+
+test('observation queue still rejects responses at 3s and never ACKs revoked identity',async t=>{
+  const f=await fixture(t,'observe'),hold=f.block();f.respond(f.first);await hold.started.promise;
+  f.clock.value+=3000;hold.release.resolve();await once(f.socket,'close');
+  assert.equal(f.messages.some(value=>value.type==='fresh'),false);
+  assert.ok(f.timings.some(value=>value.code==='STALE_CHALLENGE'));
 });
 
 test('a queued response still expires at the original 500ms challenge boundary',async t=>{

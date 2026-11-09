@@ -1,6 +1,20 @@
 /* Subscribe-only camera viewing. No microphone, SDK or robot command adapter. */
 (function(root,factory){const api=factory(root);if(typeof module==='object'&&module.exports)module.exports=api;root.ThirdHandCameraView=api;})(globalThis,function(root){
   'use strict';
+  const libraries=new WeakMap();
+  function loadVideoLibrary(view){
+    if(view.LivekitClient)return Promise.resolve(view.LivekitClient);
+    if(libraries.has(view))return libraries.get(view);
+    const loading=new Promise((resolve,reject)=>{
+      const script=view.document.createElement('script');let base='/control-assets';
+      try{base=JSON.parse(view.document.getElementById('workspace-bootstrap')?.textContent||'{}').assetBase||base;}catch{}
+      script.src=base+'/js/lib/livekit-client.umd.js';script.async=true;
+      const timer=(view.setTimeout||root.setTimeout)(()=>{script.remove();reject(Error('MEDIA_LIBRARY_TIMEOUT'));},12000);
+      const done=error=>{(view.clearTimeout||root.clearTimeout)(timer);if(error||!view.LivekitClient){script.remove();reject(error||Error('MEDIA_LIBRARY_UNAVAILABLE'));}else resolve(view.LivekitClient);};
+      script.onload=()=>done();script.onerror=()=>done(Error('MEDIA_LIBRARY_UNAVAILABLE'));view.document.head.append(script);
+    }).catch(error=>{libraries.delete(view);throw error;});
+    libraries.set(view,loading);return loading;
+  }
   function createCameraClient({view=root,sessionClient,video,onChange=()=>{},createRoom}){
     let room=null,grant=null,worker=null,track=null,frameCallback=null,epoch=0,opening=false,acknowledging=false,lastAck=-Infinity,state='unavailable';
     let intent=null,retryTimer=null,activeAttempt=null,progressAt=null,disposed=false,pendingViews=0,cleanupTail=Promise.resolve(true);
@@ -47,6 +61,7 @@
       try{
         const released=await cleanup;if(current!==epoch||!wanted(value))return;
         if(!released)throw failure('MEDIA_CLOSE_UNCONFIRMED');
+        if(!createRoom&&!view.LivekitClient){await timed(loadVideoLibrary(view),12000);if(current!==epoch||!wanted(value))return;}
         if(retrying){
           const identity=await timed(sessionClient.load?sessionClient.load():sessionClient.request('/api/v1/session'),12000);
           if(current!==epoch||!wanted(value))return;
@@ -93,14 +108,20 @@
     const tr=text=>view.ThirdHandI18n?.translate(text)||text,el=(tag,text)=>{const node=doc.createElement(tag);if(text)node.textContent=tr(text);return node;};
     const label=doc.getElementById('cam-label'),dot=doc.getElementById('cam-dot'),container=doc.getElementById('xvision-feed').parentElement,placeholder=container.querySelector('.camera-empty'),video=el('video');video.autoplay=true;video.muted=true;video.playsInline=true;video.className='cloud-camera-video';video.setAttribute('aria-label',tr('Live camera · view only'));doc.getElementById('xvision-feed').hidden=true;container.append(video);
     const panel=el('div'),select=el('select');select.setAttribute('aria-label',tr('Camera device'));panel.className='cloud-camera-controls';body.prepend(panel);panel.append(select);
-    const messages={unavailable:'Camera unavailable',connecting:'Connecting camera…',timing_unknown:'Video timing unavailable · view only',fresh:'Live frame verified'};
-    const client=createCameraClient({view,sessionClient,video,onChange:state=>{label.textContent=tr(messages[state]);dot.classList.toggle('connected',state==='fresh');if(placeholder)placeholder.hidden=['fresh','timing_unknown'].includes(state);}});
-    function button(text,action){const node=el('button',text);node.type='button';node.className='action-btn action-secondary';node.addEventListener('click',async()=>{node.disabled=true;try{await action();}catch{label.textContent=tr('Camera unavailable');}finally{node.disabled=false;}});panel.append(node);}
-    button('Load cameras',async()=>{const result=await sessionClient.request('/api/v1/devices');select.replaceChildren();for(const device of result.devices.filter(value=>value.camera===true)){const option=el('option');option.value=device.id;option.textContent=device.name;select.append(option);}});
-    button('Watch camera',()=>client.watch(select.value));button('Close camera',()=>client.close());label.textContent=tr('Camera unavailable');
+    const messages={unavailable:'Camera unavailable',connecting:'Connecting camera…',timing_unknown:'Video timing unavailable · view only',fresh:'Live frame verified',loading:'Loading cameras…',idle:'Camera selected · not watching',offline:'Camera gateway offline',failed:'Camera request failed',empty:'No cameras registered',unloaded:'Load the camera directory to begin'};
+    let devices=[],display='empty',disposed=false;
+    function show(state){display=state;label.textContent=tr(messages[state]);label.dataset.cameraState=state;dot.classList.toggle('connected',state==='fresh');if(placeholder)placeholder.hidden=['fresh','timing_unknown'].includes(state);}
+    const idle=()=>devices.length?(devices.find(d=>d.id===select.value)?.online===false?'offline':'idle'):'empty';
+    const client=createCameraClient({view,sessionClient,video,onChange:state=>show(state==='unavailable'?idle():state)});
+    function button(text,action){const node=el('button',text);node.type='button';node.className='action-btn action-secondary';node.addEventListener('click',async()=>{node.disabled=true;try{await action();}catch{show('failed');}finally{node.disabled=false;}});panel.append(node);}
+    async function load(){show('loading');const result=await sessionClient.request('/api/v1/devices');if(disposed)return;devices=(result.devices||[]).filter(value=>value.camera===true);select.replaceChildren();for(const device of devices){const option=el('option');option.value=device.id;option.textContent=device.name;select.append(option);}show(idle());}
+    button('Load cameras',load);
+    button('Watch camera',async()=>{if(!select.value){show('unloaded');return;}if(idle()==='offline'){show('offline');return;}show('connecting');await client.watch(select.value);});button('Close camera',()=>client.close());show('unloaded');
+    select.addEventListener('change',()=>{void client.close();show(idle());});
+    const language=new view.MutationObserver(()=>show(display));language.observe(doc.documentElement,{attributes:true,attributeFilter:['lang']});
     const logout=doc.getElementById('workspace-logout'),signingOut=()=>{void client.close();};logout?.addEventListener('click',signingOut,{capture:true});
     const timer=view.setInterval(()=>client.checkFreshness(),250);
-    return {client,dispose(){view.clearInterval(timer);logout?.removeEventListener('click',signingOut,{capture:true});void client.dispose();panel.remove();}};
+    return {client,dispose(){disposed=true;language.disconnect();view.clearInterval(timer);logout?.removeEventListener('click',signingOut,{capture:true});void client.dispose();panel.remove();}};
   }
-  return {createCameraClient,mountCameraView};
+  return {createCameraClient,mountCameraView,loadVideoLibrary};
 });

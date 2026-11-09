@@ -37,7 +37,7 @@ function robotOptions(runtime) {
     readyFile: path.join(runtime, 'robot.ready'),
     executionToken: 'a'.repeat(64),
     robot: {
-      python: 'python3', sdkPath: path.resolve('local/sdk/startouch'), canInterface: 'can0',
+      python: process.env.PYTHON || 'python3', sdkPath: path.resolve('local/sdk/startouch'), canInterface: 'can0',
       gripper: true, requireCanRx: false, canRxStaleSec: 1, simulate: true, dryRun: false,
       pollIntervalMs: 20, jointLogIntervalMs: 1000, initSettleSec: 0,
       initSampleCount: 2, initMaxDriftDeg: 2, speedScale: 1,
@@ -403,8 +403,11 @@ test('protected pregrasp rejects stale state and never sends motion', async (t) 
   };
   const cases = [
     ['stale_start_joints', { startJointsDeg: joints.map((v, i) => v + (i === 0 ? 1 : 0)) }],
-    ['stale_state_sequence', { minimumStateSequence: service.controller.stateSequence + 1 }],
-    ['stale_producer_state', { minimumProducerMonotonicNs: service.controller.latestProducerMonotonicNs + 1 }],
+    // Polling continues during WebSocket delivery. A +1 requirement can already
+    // be satisfied by the next frame, making this rejection test issue a move.
+    // Keep valid integer requirements beyond any sample in this test session.
+    ['stale_state_sequence', { minimumStateSequence: Number.MAX_SAFE_INTEGER }],
+    ['stale_producer_state', { minimumProducerMonotonicNs: Number.MAX_SAFE_INTEGER }],
   ];
   for (const [code, parameters] of cases) {
     const primitive = pregraspPrimitive(service, joints, {

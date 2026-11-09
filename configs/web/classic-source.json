@@ -1,0 +1,17 @@
+{
+  "files": {
+    "apps/web/public/classic.html": {
+      "bytes": 27107,
+      "sha256": "f61a58529141ac8d66e99d9f81695aa6bb775b704be7eafb1ff5b839c4dc8294",
+      "source": "apps/web/public/index.html"
+    },
+    "apps/web/public/css/classic-source.css": {
+      "bytes": 60146,
+      "sha256": "1dd9790284eaf2515624f5f2c47ae5bb6135473443eb468d3041802d1f2481de",
+      "source": "apps/web/public/css/style.css"
+    }
+  },
+  "presentationJsSha256": "b4c44efdaec2ed1ed4afbf4d0b7a4e49773bf2af87d31f62977e0cc346ad5f08",
+  "presentationJsSource": "apps/web/public/js/main.js",
+  "sourceCommit": "372ac80a98e279e85bd25dfe8f219b399b97cb80"
+}

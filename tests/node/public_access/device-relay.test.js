@@ -12,6 +12,7 @@ const https=require('node:https');
 const {WebSocket}=require('ws');
 const {createDeviceRelay}=require('../../../services/device-relay/src/server');
 const {createEnvelopeSigner}=require('../../../services/device-relay/src/envelope');
+const {createLeaseTiming}=require('../../../services/device-relay/src/lease-timing');
 const run=promisify(execFile), python=process.env.EDGE_TEST_PYTHON||'python';
 function nextMessage(ws){return new Promise((resolve,reject)=>{
   const cleanup=()=>{ws.off('message',message);ws.off('close',closed);ws.off('error',failed);};
@@ -19,7 +20,7 @@ function nextMessage(ws){return new Promise((resolve,reject)=>{
   ws.once('message',message);ws.once('close',closed);ws.once('error',failed);
 });}
 
-async function fixture(t,{control=false,ingestBatch,mediaPublisher}={}){
+async function fixture(t,{control=false,ingestBatch,mediaPublisher,timing}={}){
   const dir=await fs.mkdtemp(path.join(os.tmpdir(),'thirdhand-relay-'));
   const children=[];
   t.after(async()=>{for(const child of children)if(child.exitCode===null&&child.signalCode===null){const exited=once(child,'close');child.kill();await exited;}const checked=path.resolve(dir);assert.equal(path.dirname(checked),path.resolve(os.tmpdir()));assert.ok(path.basename(checked).startsWith('thirdhand-relay-'));await fs.rm(checked,{recursive:true,force:true,maxRetries:5,retryDelay:50});});
@@ -29,7 +30,7 @@ async function fixture(t,{control=false,ingestBatch,mediaPublisher}={}){
   let enabled=true;
   let binding=identity;
   const store={async resolveCertificate(fingerprint){return enabled&&fingerprint===identity.fingerprint?binding:null;},async registerExecution(){return true;}};
-  const relay=createDeviceRelay({store,ingestBatch,mediaPublisher,tls:{key:await pem('server.key'),cert:await pem('server.pem'),ca:await pem('ca.pem')},handshakeTimeoutMs:1000});
+  const relay=createDeviceRelay({store,ingestBatch,mediaPublisher,timing,tls:{key:await pem('server.key'),cert:await pem('server.pem'),ca:await pem('ca.pem')},handshakeTimeoutMs:1000});
   await new Promise(resolve=>relay.server.listen(0,'127.0.0.1',resolve));
   t.after(()=>relay.close());
   const url=`wss://localhost:${relay.server.address().port}/edge/v1/connect`;
@@ -58,6 +59,21 @@ test('mTLS identity requires device key proof; reconnected device gets a fresh u
   assert.equal(f.relay.devices.get(f.identity.id),null);
 });
 
+test('live snapshots require signed bound context and never renew repeated or displaced frames',async t=>{
+  const f=await fixture(t,{control:true}),ws=await f.socket(),welcome=await f.auth(ws,{executorEpoch:randomUUID()});
+  const bound=nextMessage(ws);ws.send(JSON.stringify({type:'bound',executorEpoch:welcome.context.executorEpoch,hardwareFingerprint:'c'.repeat(64)}));await bound;
+  const report={schema:1,purpose:'latest_state',context:welcome.context,sequence:1,producerMonotonicNs:1234,sourceAgeMs:10,issuedAt:Date.now()-10,sample:{capturedAt:new Date(Date.now()-20).toISOString(),clockQuality:'estimated',jointPositionRad:[0,1,2,3,4,5],sdkConnected:true,moving:false,fieldAvailability:{sdkConnected:true,moving:true},extra:{sourceMode:'simulation'}}};
+  async function submit(value,badSignature=false){
+    const payload=Buffer.from(JSON.stringify(value)),body=JSON.stringify({payloadBase64url:payload.toString('base64url'),signatureBase64url:badSignature?'A'.repeat(86):sign(null,payload,await f.pem('device.key')).toString('base64url')});
+    const options={method:'POST',key:await f.pem('device.key'),cert:await f.pem('device.pem'),ca:await f.pem('ca.pem'),headers:{'content-type':'application/json'}};
+    return new Promise((resolve,reject)=>{const request=https.request(f.url.replace('wss:','https:').replace('/edge/v1/connect','/edge/v1/state'),options,response=>{let raw='';response.on('data',chunk=>raw+=chunk);response.on('end',()=>resolve({status:response.statusCode,body:JSON.parse(raw)}));});request.on('error',reject);request.end(body);});
+  }
+  assert.equal((await submit(report,true)).status,403);assert.equal(f.relay.latestState.get(f.identity.id).sample,null);
+  assert.equal((await submit(report)).status,200);assert.equal(f.relay.latestState.get(f.identity.id).fresh,true);
+  const received=f.relay.latestState.get(f.identity.id).receivedAt;assert.equal((await submit(report)).status,403);assert.equal(f.relay.latestState.get(f.identity.id).receivedAt,received);
+  const newer=await f.socket();await f.auth(newer,{executorEpoch:randomUUID()});assert.equal((await submit({...report,sequence:2,producerMonotonicNs:2345})).status,403);assert.equal(f.relay.latestState.get(f.identity.id).fresh,false);
+});
+
 test('bound executor is unavailable for commands until local binding ACK; replies are connection scoped',async t=>{
   const f=await fixture(t,{control:true}),ws=await f.socket(),welcome=await f.auth(ws,{executorEpoch:randomUUID()});
   assert.equal(f.relay.devices.get(f.identity.id).controlAccepted,false);
@@ -72,6 +88,23 @@ test('bound executor is unavailable for commands until local binding ACK; replie
   const pendingMessage=nextMessage(ws),lost=assert.rejects(f.relay.devices.request(f.identity.id,envelope));await pendingMessage;
   const newer=await f.socket();await f.auth(newer,{executorEpoch:randomUUID()});await lost;
   assert.equal(f.relay.devices.get(f.identity.id).controlAccepted,false);
+});
+
+test('ordered relay dispatch finishes after sending, before ACK, and still rejects revoked credentials',async t=>{
+  const f=await fixture(t,{control:true}),ws=await f.socket(),welcome=await f.auth(ws,{executorEpoch:randomUUID()});
+  const bound=nextMessage(ws);ws.send(JSON.stringify({type:'bound',executorEpoch:welcome.context.executorEpoch,hardwareFingerprint:'d'.repeat(64)}));await bound;
+  const keys=generateKeyPairSync('ed25519'),signer=createEnvelopeSigner({keyId:'test',privateKey:keys.privateKey}),leaseId=randomUUID();
+  const envelope=sequence=>{const now=Date.now();return signer.sign({schema:1,purpose:'lease_renew',...welcome.context,leaseId,leaseEpoch:1,sequence,scope:'sdk',issuedAt:now,expiresAt:now+1000});};
+  const incoming1=nextMessage(ws),first=await f.relay.devices.dispatch(f.identity.id,envelope(1)),message1=JSON.parse(await incoming1);
+  let firstConfirmed=false;first.confirmation.then(()=>{firstConfirmed=true;});
+  const incoming2=nextMessage(ws),second=await f.relay.devices.dispatch(f.identity.id,envelope(2)),message2=JSON.parse(await incoming2);
+  assert.equal(firstConfirmed,false);
+  assert.deepEqual([message1,message2].map(m=>JSON.parse(Buffer.from(m.envelope.payloadBase64url,'base64url')).sequence),[1,2]);
+  const outcome={state:'active',leaseId,leaseEpoch:1,scope:'sdk'};
+  ws.send(JSON.stringify({type:'result',requestId:message2.requestId,outcome}));assert.deepEqual(await second.confirmation,outcome);
+  assert.equal(firstConfirmed,false);
+  ws.send(JSON.stringify({type:'result',requestId:message1.requestId,outcome}));assert.deepEqual(await first.confirmation,outcome);
+  f.disable();await assert.rejects(f.relay.devices.dispatch(f.identity.id,envelope(3)),/DEVICE_UNAVAILABLE/);
 });
 
 test('a probe cannot replace an existing bound-executor connection',async t=>{
@@ -93,25 +126,45 @@ test('media publisher lease uses separate mTLS plus device-signed current contex
   const result=await submit(report);assert.equal(result.status,200);assert.ok(result.body.envelope);assert.equal(accepted.length,1);assert.equal(f.relay.devices.get(f.identity.id).controlAccepted,false);assert.equal(context.executorEpoch,null);
 });
 
-test('Python bound transport forwards signed lease and journaled command once without implicit SDK connect',async t=>{
-  const f=await fixture(t,{control:true}),keys=generateKeyPairSync('ed25519'),signer=createEnvelopeSigner({keyId:'test',privateKey:keys.privateKey});
+for(const leaseScope of [undefined,'control','sdk'])test(`Python bound transport preserves ${leaseScope||'legacy'} lease scope and journals commands once`,async t=>{
+  const timingRecords=[],timing=createLeaseTiming({enabled:true,sink:r=>timingRecords.push(r)});
+  const f=await fixture(t,{control:true,timing}),keys=generateKeyPairSync('ed25519'),signer=createEnvelopeSigner({keyId:'test',privateKey:keys.privateKey});
   const input={url:f.url,device_id:f.identity.id,boot_id:randomUUID(),certificate:path.join(f.dir,'device.pem'),private_key:path.join(f.dir,'device.key'),ca_file:path.join(f.dir,'ca.pem'),heartbeat_seconds:0.1};
   const executorEpoch=randomUUID();
-  const script=`import asyncio,json,sys\nfrom pathlib import Path\nfrom websockets.exceptions import ConnectionClosed\nfrom thirdhand_edge.transport import DeviceConfig\nfrom thirdhand_edge.bound_transport import connect_bound_device\nfrom thirdhand_edge.journal import CommandJournal\nv=json.load(sys.stdin)\nclass FakeRobot:\n def __init__(self): self.calls=[]\n async def get_context(self): return {'deviceId':v['config']['device_id'],'executorEpoch':v['executorEpoch'],'hardwareFingerprint':'f'*64,'controlAccepted':True}\n async def bind(self,c): return {'bound':True,'context':c,'controlAuthorized':False}\n async def submit_envelope(self,p):\n  self.calls.append(p['purpose'])\n  if p['purpose'].startswith('lease_'): return {'state':'active','leaseId':p['leaseId'],'leaseEpoch':p['leaseEpoch']}\n  return {'state':'completed','commandId':p['commandId']}\nr=FakeRobot()\nj=CommandJournal(v['journal'])\ntry: asyncio.run(connect_bound_device(DeviceConfig(**v['config']),robot=r,trusted_keys={'test':v['publicKey']},journal=j))\nexcept ConnectionClosed: pass\nfinally:\n j.close()\n print(json.dumps({'calls':r.calls}))`;
-  const child=require('node:child_process').spawn(python,['-c',script],{env:{...process.env,PYTHONPATH:path.resolve('services/edge-agent/src')},stdio:['pipe','pipe','pipe']});
+  const script=`import asyncio,json,sys\nfrom pathlib import Path\nfrom websockets.exceptions import ConnectionClosed\nfrom thirdhand_edge.transport import DeviceConfig\nfrom thirdhand_edge.bound_transport import connect_bound_device\nfrom thirdhand_edge.journal import CommandJournal\nv=json.load(sys.stdin)\nclass FakeRobot:\n def __init__(self): self.calls=[]\n async def get_context(self): return {'deviceId':v['config']['device_id'],'executorEpoch':v['executorEpoch'],'hardwareFingerprint':'f'*64,'controlAccepted':True}\n async def bind(self,c): return {'bound':True,'context':c,'controlAuthorized':False}\n async def submit_envelope(self,p):\n  self.calls.append(p['purpose'])\n  if p['purpose'].startswith('lease_'): return {'state':'active','leaseId':p['leaseId'],'leaseEpoch':p['leaseEpoch'],'privateDiagnostic':'must-not-leak',**({'scope':p['scope']} if 'scope' in p else {})}\n  return {'state':'completed','commandId':p['commandId']}\nr=FakeRobot()\nj=CommandJournal(v['journal'])\ntry: asyncio.run(connect_bound_device(DeviceConfig(**v['config']),robot=r,trusted_keys={'test':v['publicKey']},journal=j))\nexcept ConnectionClosed: pass\nfinally:\n j.close()\n print(json.dumps({'calls':r.calls}))`;
+  const child=require('node:child_process').spawn(python,['-c',script],{env:{...process.env,THIRDHAND_SDK_TIMING:'1',PYTHONPATH:path.resolve('services/edge-agent/src')},stdio:['pipe','pipe','pipe']});
   f.track(child);
   let stdout='',stderr='';child.stdout.on('data',v=>stdout+=v);child.stderr.on('data',v=>stderr+=v);
   const bound=once(f.relay.devices.events,'bound',{signal:AbortSignal.timeout(5000)});
   child.stdin.end(JSON.stringify({config:input,executorEpoch,journal:path.join(f.dir,'bound.sqlite'),publicKey:keys.publicKey.export({type:'spki',format:'pem'}).toString()}));
   await bound;
   const binding=f.relay.devices.get(f.identity.id),context=Object.fromEntries(['deviceId','bootId','executorEpoch','connectionId','certificateId'].map(key=>[key,binding[key]]));
-  const leaseId=randomUUID(),now=Date.now();
-  assert.equal((await f.relay.devices.request(f.identity.id,signer.sign({schema:1,purpose:'lease_grant',...context,leaseId,leaseEpoch:1,sequence:0,issuedAt:now,expiresAt:now+1000}))).state,'active');
+  const leaseId=randomUUID();
+  // This integration checks scope and journaling, not the exact TTL boundary.
+  // Node/Python wall clocks can differ by 1ms on Windows; use a valid 900ms
+  // fixture lease. Deterministic clock tests cover the production 1000ms limit.
+  const grant=()=>{const now=Date.now();return {schema:1,purpose:'lease_grant',...context,leaseId,leaseEpoch:1,sequence:0,issuedAt:now,expiresAt:now+900,...(leaseScope?{scope:leaseScope}:{})};};
+  for(const scope of ['all','',null,{},true])assert.equal((await f.relay.devices.request(f.identity.id,signer.sign({...grant(),scope}))).state,'rejected');
+  assert.equal((await f.relay.devices.request(f.identity.id,signer.sign({...grant(),extra:true}))).state,'rejected');
+  const granted=await f.relay.devices.request(f.identity.id,signer.sign(grant()));
+  assert.equal(granted.state,'active');assert.equal(granted.scope,leaseScope);
+  assert.equal(granted.privateDiagnostic,undefined);
+  const renewed=await f.relay.devices.request(f.identity.id,signer.sign({...grant(),purpose:'lease_renew',sequence:1}));
+  assert.equal(renewed.state,'active');assert.equal(renewed.scope,leaseScope);
   const command=signer.sign({schema:1,purpose:'command',...context,leaseId,leaseEpoch:1,sequence:1,commandId:randomUUID(),opcode:'connect',parameters:{},issuedAt:Date.now(),expiresAt:Date.now()+1000});
   assert.equal((await f.relay.devices.request(f.identity.id,command)).state,'completed');
   assert.equal((await f.relay.devices.request(f.identity.id,command)).state,'completed');
   const exited=once(child,'close');await f.relay.close();assert.equal((await exited)[0],0,stderr);
-  assert.deepEqual(JSON.parse(stdout).calls,['lease_grant','command']);
+  assert.deepEqual(JSON.parse(stdout).calls,['lease_grant','lease_renew','command']);
+  const edgeRecords=stderr.split(/\r?\n/).filter(line=>line.startsWith('{')).map(line=>JSON.parse(line)).filter(v=>v.component==='sdk_segment_timing');
+  if(leaseScope==='sdk'){
+    assert.equal(timingRecords.length,1);assert.equal(edgeRecords.length,1);
+    assert.equal(timingRecords[0].trace,edgeRecords[0].trace);
+    assert.equal(edgeRecords[0].outcome,'active');assert.equal(timingRecords[0].outcome,'active');
+    assert.ok(edgeRecords[0].marks.local_reply>=edgeRecords[0].marks.lock_acquired);
+    assert.ok(timingRecords[0].marks.ack>=timingRecords[0].marks.registered);
+    for(const privateValue of [leaseId,input.device_id,'must-not-leak'])assert.ok(!JSON.stringify([...timingRecords,...edgeRecords]).includes(privateValue));
+  }else{assert.deepEqual(timingRecords,[]);assert.deepEqual(edgeRecords,[]);}
 });
 
 test('bounded probe CLI measures sustained ping and planned reconnects without printing credentials',async t=>{

@@ -8,6 +8,8 @@ const files=new Map(pages.flatMap(name=>[[`/${name}`,`${name}.html`],[`/${name}.
 for(const file of ['css/auth.css','js/i18n-catalog.js','js/i18n-auth-catalog.js','js/i18n.js','js/preferences.js','js/auth-page.js'])files.set(`/${file}`,file);
 const CSP="default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self' data:; font-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'";
 async function serveAuthPage(request,response,pathname){
+  // Content-version workspace URLs retain the authenticated asset boundary.
+  if(pathname.startsWith('/control-assets/v'))return false;
   pathname=assetPath(pathname);
   if(!['GET','HEAD'].includes(request.method)||!files.has(pathname))return false;
   const file=files.get(pathname),original=await fs.readFile(path.join(publicRoot,file)),bytes=file.endsWith('.html')?Buffer.from(isolateAssets(original.toString('utf8'))):original;

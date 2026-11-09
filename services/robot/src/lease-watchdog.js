@@ -27,11 +27,12 @@ class LeaseWatchdog {
        ||typeof binding.hardwareFingerprint!=='string'||!binding.hardwareFingerprint
        ||!Number.isSafeInteger(binding.leaseEpoch)||binding.leaseEpoch<1
        ||!Object.values(binding).every(value=>typeof value==='string'||typeof value==='number'&&Number.isFinite(value)))throw failure('LEASE_BINDING_REQUIRED');
+    if(binding.scope!==undefined&&!['sdk','control'].includes(binding.scope))throw failure('LEASE_BINDING_REQUIRED');
     if(binding.leaseEpoch<=this.lastLeaseEpoch)throw failure('LEASE_GENERATION_REPLAYED');
     this.clear();this.binding=Object.freeze({...binding});this.lastLeaseEpoch=binding.leaseEpoch;this.terminal=false;
   }
   renew(ttlMs,{deadline=null}={}){
-    if(!Number.isFinite(ttlMs)||ttlMs<=0||ttlMs>1000)throw failure('INVALID_LEASE_TTL');
+    if(!Number.isFinite(ttlMs)||ttlMs<=0||ttlMs>(this.binding?.scope==='sdk'?3000:1000))throw failure('INVALID_LEASE_TTL');
     if(this.closed||this.terminal)throw failure(this.closed?'WATCHDOG_CLOSED':'LEASE_TERMINAL');
     let current;
     try{current=this._now();}catch(error){if(this.deadline!==null)void this._trip('monotonic_clock_invalid',null);throw error;}

@@ -101,7 +101,7 @@ function createRemoteRobotGateway({controller,deviceId,token,signingKeys,readOnl
   function sourceWrite(response,event,value){if(response.destroyed||response.writableEnded)return;const writable=response.write(`event: ${event}\ndata: ${JSON.stringify(value)}\n\n`);if(!writable){removeSource(response);response.end();}}
   const publish=message=>{
     if(!['robot_state','connection','command_status','software_stop','error','remote_command_outcome','remote_stop_receipt','remote_lease_status','remote_lease_expired'].includes(message?.type))return;
-    const value={type:'robot_event',sequence:++sourceSequence,receivedAt:new Date(clock.now()).toISOString(),executorEpoch,sourceMode:controller.config.simulate?'simulation':controller.config.dryRun?'dry-run':'hardware',hardwareFingerprint:hardwareFingerprint(),commandId:activeSourceCommand,message};
+    const value={type:'robot_event',sequence:++sourceSequence,sourceMonotonicNs:Number(process.hrtime.bigint()),receivedAt:new Date(clock.now()).toISOString(),executorEpoch,sourceMode:controller.config.simulate?'simulation':controller.config.dryRun?'dry-run':'hardware',hardwareFingerprint:hardwareFingerprint(),commandId:activeSourceCommand,message};
     sourceTimes.set(sourceSequence,clock.monotonic());if(sourceTimes.size>4096)sourceTimes.delete(sourceTimes.keys().next().value);
     for(const response of sources)sourceWrite(response,'robot_event',value);
   };

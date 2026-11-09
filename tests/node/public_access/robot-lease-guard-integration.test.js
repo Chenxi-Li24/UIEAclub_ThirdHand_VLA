@@ -16,6 +16,25 @@ function fixture(t,{onLeaseChange=()=>true,onLeaseRevoke=()=>{}}={}){
   return {clock,state,calls,policy,context,grant,command};
 }
 
+for(const scope of ['sdk','control'])for(const offset of [-100,-10,-1,0,1,10,100,500]){
+  test(`clock offset ${offset}ms in ${scope} is accepted but expires within one local second`,async t=>{
+    const f=fixture(t),grant={...f.grant,scope,issuedAt:10000+offset,expiresAt:11000+offset};
+    assert.equal((await f.policy.handle(grant)).state,'active');
+    f.clock.mono+=Math.min(1000,1000+offset)-1;
+    await f.policy.expire();assert.ok(f.policy.currentLease());
+    f.clock.mono+=1;await f.policy.expire();assert.equal(f.policy.currentLease(),null);
+    assert.deepEqual(f.calls.map(x=>x.opcode),['software_stop']);
+    assert.equal((await f.policy.handle({...grant,purpose:'lease_renew',sequence:1})).state,'rejected');
+  });
+}
+for(const [issuedAt,expiresAt] of [[10000,10000],[9000,10000],[10501,11501],[9500,10501]]){
+  test(`invalid signed lease bounds ${issuedAt}/${expiresAt} remain rejected`,async t=>{
+    const f=fixture(t);
+    assert.equal((await f.policy.handle({...f.grant,issuedAt,expiresAt})).state,'rejected');
+    assert.equal(f.policy.currentLease(),null);assert.equal(f.calls.length,0);
+  });
+}
+
 test('accepted grants and renewals propagate the original immutable lease to the worker guard',async t=>{
   const updates=[],revocations=[],f=fixture(t,{onLeaseChange:(value,isGrant)=>{updates.push({value,isGrant});return true;},onLeaseRevoke:value=>revocations.push(value)});
   assert.equal((await f.policy.handle(f.grant)).state,'active');

@@ -24,7 +24,7 @@ test('migrations serialize concurrent startup, can be rerun, and preserve existi
   await migrate(pool);
   assert.equal((await users.findByLogin('user_migration')).id, original.id);
   const versions = await pool.query('SELECT version FROM public.thirdhand_schema_migrations ORDER BY version');
-  assert.deepEqual(versions.rows.map(r => r.version), ['001-identity.sql', '002-devices-runs.sql', '003-telemetry.sql', '004-auth-rate-limits.sql', '005-profile-session-notifications.sql', '006-control-bindings.sql', '007-raw-batch-payloads.sql', '008-export-jobs.sql', '009-scoped-device-control.sql', '010-admin-applications.sql']);
+  assert.deepEqual(versions.rows.map(r => r.version), ['001-identity.sql', '002-devices-runs.sql', '003-telemetry.sql', '004-auth-rate-limits.sql', '005-profile-session-notifications.sql', '006-control-bindings.sql', '007-raw-batch-payloads.sql', '008-export-jobs.sql', '009-scoped-device-control.sql', '010-admin-applications.sql', '011-workspace-layout.sql', '012-sdk-connection-scope.sql']);
   assert.equal((await pool.query("SELECT to_regclass('auth.user_onboarding') AS table_name")).rows[0].table_name, null);
 });
 

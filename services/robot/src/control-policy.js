@@ -80,23 +80,29 @@ function createRobotControlPolicy({deviceId,getExecutionState,submit,onStopRecei
       if(stopping)return reject('STOP_UNCONFIRMED',value.commandId);
       if(value.purpose==='lease_grant'||value.purpose==='lease_renew'){
         if(leaseUpdate)return reject('LEASE_UPDATE_PENDING');
-        if(!Number.isSafeInteger(value.leaseEpoch)||value.leaseEpoch<1||!Number.isSafeInteger(value.sequence)||value.sequence<0||typeof value.leaseId!=='string'||!/^[a-f0-9-]{36}$/i.test(value.leaseId)||value.expiresAt-wall>1000)return reject('INVALID_LEASE');
+        if(!Number.isSafeInteger(value.leaseEpoch)||value.leaseEpoch<1||!Number.isSafeInteger(value.sequence)||value.sequence<0||typeof value.leaseId!=='string'||!/^[a-f0-9-]{36}$/i.test(value.leaseId)||value.expiresAt-value.issuedAt>(value.scope==='sdk'?3000:1000))return reject('INVALID_LEASE');
+        const scope=value.scope??'control';
+        if(!['sdk','control'].includes(scope))return reject('INVALID_LEASE_SCOPE');
         const isGrant=value.purpose==='lease_grant';
+        // Expiry clears the lease before a delayed renewal is processed. That
+        // is a stale lease, not an attempted permission-scope change.
+        if(!isGrant&&lease&&lease.scope!==scope)return reject('LEASE_SCOPE_CHANGED');
         if(value.purpose==='lease_grant'){
           if(lease||value.leaseEpoch<=lastEpoch)return reject('LEASE_CONFLICT');
           lastEpoch=value.leaseEpoch;lastSequence=-1;lastRenewal=-1;
         }else if(!lease||lease.leaseId!==value.leaseId||lease.leaseEpoch!==value.leaseEpoch||value.sequence<=lastRenewal)return reject('STALE_LEASE');
         const target={...context,hardwareFingerprint:hardware,leaseId:value.leaseId,leaseEpoch:value.leaseEpoch};
-        const update=Object.freeze({...target,sequence:value.sequence,issuedAt:value.issuedAt,expiresAt:value.expiresAt});
-        const signedDeadline=receivedMono+Math.min(1000,value.expiresAt-wall);
+        const update=Object.freeze({...target,...(scope==='sdk'?{scope}:{}),sequence:value.sequence,issuedAt:value.issuedAt,expiresAt:value.expiresAt});
+        const ttl=Math.min(scope==='sdk'?3000:1000,value.expiresAt-value.issuedAt);
+        const signedDeadline=receivedMono+Math.min(ttl,value.expiresAt-wall);
         leaseTarget=target;
         try{
-          if(isGrant)watchdog.reset(target);
-          watchdog.renew(value.expiresAt-wall,{deadline:signedDeadline});
+          if(isGrant)watchdog.reset({...target,scope});
+          watchdog.renew(Math.min(ttl,value.expiresAt-wall),{deadline:signedDeadline});
         }catch{
           await stop('lease_expired');return reject('LEASE_EXPIRED');
         }
-        lastRenewal=value.sequence;lease={leaseId:value.leaseId,leaseEpoch:value.leaseEpoch};leaseTarget=target;
+        lastRenewal=value.sequence;lease={leaseId:value.leaseId,leaseEpoch:value.leaseEpoch,scope};leaseTarget=target;
         leaseUpdate=update;leaseReady=false;
         try{
           const armed=await onLeaseChange(update,isGrant);
@@ -116,6 +122,7 @@ function createRobotControlPolicy({deviceId,getExecutionState,submit,onStopRecei
       if(typeof value.commandId!=='string'||!/^[a-f0-9-]{36}$/i.test(value.commandId))return reject('INVALID_COMMAND_ID');
       if(!lease||value.leaseId!==lease.leaseId||value.leaseEpoch!==lease.leaseEpoch)return reject('LEASE_REQUIRED',value.commandId);
       if(!leaseReady)return reject('LEASE_NOT_READY',value.commandId);
+      if(lease.scope==='sdk'&&!['connect','disconnect'].includes(value.opcode))return reject('SDK_CONNECTION_ONLY',value.commandId);
       if(!Number.isSafeInteger(value.sequence)||value.sequence<=lastSequence)return reject('SEQUENCE_REPLAYED',value.commandId);
       if(!['connect','disconnect'].includes(value.opcode)&&(!Number.isFinite(getExecutionState().freshAt)||wall-getExecutionState().freshAt>500||wall-getExecutionState().freshAt< -50))return reject('ROBOT_STATE_STALE',value.commandId);
       if(value.opcode==='disconnect'){lastSequence=value.sequence;return stop('sdk_disconnect',value.commandId);}

@@ -22,6 +22,27 @@ def fixture():
     return m, guard, clock, events, lease
 
 
+def test_sdk_scope_three_second_deadline_is_immutable_and_terminal():
+    m, guard, clock, events, lease = fixture()
+    lease.update(scope='sdk', expiresAt=1003000)
+    guard.arm(lease)
+    assert guard.deadline == 8.
+    clock.update(mono=6.5, wall=1001.5)
+    renewed = dict(lease, sequence=1, issuedAt=1001500, expiresAt=1004500)
+    guard.renew(renewed)
+    assert guard.deadline == 9.5 and guard.active(renewed)
+    with pytest.raises(m.LeaseGuardError):
+        guard.renew(dict(renewed, scope='control', sequence=2, expiresAt=1002500))
+    assert not guard.active(dict(renewed, scope='control', expiresAt=1002500))
+    with pytest.raises(m.LeaseGuardError):
+        guard.renew(dict(renewed, sequence=2, expiresAt=1004501))
+    clock.update(mono=9.5, wall=1004.5)
+    assert guard.poll() and len(events) == 1
+    with pytest.raises(m.LeaseGuardError):
+        guard.renew(dict(renewed, sequence=3, issuedAt=1004500, expiresAt=1007500))
+    assert not guard.active(renewed)
+
+
 def test_worker_expiry_latches_before_cleanup_and_runs_callback_outside_guard_lock():
     m, guard, clock, events, lease = fixture(); guard.arm(lease)
     clock['mono'] = 5.95
@@ -115,3 +136,24 @@ def test_utc_forward_jump_expires_poll_and_continuing_while_rollback_still_canno
     clock.update(mono=5.1, wall=1001.)
     assert not guard.active(lease, original_expiry=False)
     assert guard.poll() is True and len(events) == 1
+
+
+@pytest.mark.parametrize('offset', [-100, -10, -1, 0, 1, 10, 100, 500])
+def test_clock_offset_accepts_signed_span_but_never_exceeds_one_local_second(offset):
+    _, guard, clock, events, lease = fixture()
+    lease.update(issuedAt=1000000+offset, expiresAt=1001000+offset)
+    guard.arm(lease)
+    assert guard.deadline == pytest.approx(5 + min(1000, 1000+offset)/1000)
+    clock['mono'] = guard.deadline
+    assert guard.poll() and len(events) == 1 and not guard.active(lease)
+
+
+def test_future_skew_renewal_cannot_revive_expired_local_deadline():
+    m, guard, clock, events, lease = fixture()
+    lease.update(issuedAt=1000100, expiresAt=1001100)
+    guard.arm(lease)
+    clock.update(mono=6.0, wall=1000.9)
+    with pytest.raises(m.LeaseGuardError):
+        guard.renew({**lease, 'sequence': 1, 'issuedAt': 1001000, 'expiresAt': 1002000})
+    guard.poll()
+    assert len(events) == 1 and not guard.active(lease)

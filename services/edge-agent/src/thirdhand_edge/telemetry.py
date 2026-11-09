@@ -27,6 +27,8 @@ def normalize_robot_state(message, *, monotonic_ns=None, received_at=None, versi
     received_at = received_at or dt.datetime.now(dt.timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
     versions = versions or {}
     flags = []
+    if message.get('healthy') is False:
+        flags.append('SDK_READ_FAILED')
     captured_at = message.get("captured_at")
     if not isinstance(captured_at, str):
         source_ms = message.get("ts")
@@ -54,6 +56,11 @@ def normalize_robot_state(message, *, monotonic_ns=None, received_at=None, versi
     availability = {name: value is not None and (name != "jointPositionRad" or len(value) == 6 and all(item is not None for item in value)) for name, value in measured.items()}
     connected, moving = message.get("connected"), message.get("moving")
     availability["sdkConnected"], availability["moving"] = type(connected) is bool, type(moving) is bool
+    def measured_scalar(value, minimum, maximum=math.inf):
+        return value if type(value) in (int, float) and math.isfinite(value) and minimum <= value <= maximum else None
+    gripper = {"positionRatio": measured_scalar(message.get("gripper_position"), 0, 1),
+               "widthM": measured_scalar(message.get("gripper_width_m"), 0)}
+    availability["gripperPosition"], availability["gripperWidth"] = gripper["positionRatio"] is not None, gripper["widthM"] is not None
     if type(connected) is not bool:
         flags.append("SDK_STATE_UNKNOWN")
     if type(moving) is not bool:
@@ -76,7 +83,7 @@ def normalize_robot_state(message, *, monotonic_ns=None, received_at=None, versi
     if quality not in ("synchronized", "estimated", "unreliable"):
         quality = "unreliable"
     result = {"capturedAt": captured_at, "monotonicNs": str(time.monotonic_ns() if monotonic_ns is None else monotonic_ns),
-              "clockQuality": quality, **measured, "fieldAvailability": availability,
+              "clockQuality": quality, **measured, "fieldAvailability": availability, "gripper": gripper,
               "tcpPositionM": tcp_position, "tcpOrientationXyzw": tcp_orientation,
               "tcpFrameId": frame if tcp_position is not None else None,
               "toolVersion": versions.get("tool", versions.get("toolVersion")), "calibrationVersion": versions.get("calibration", versions.get("calibrationVersion")),

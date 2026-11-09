@@ -249,10 +249,12 @@ class RobotBridge:
         self.state_thread.start()
         self.follow_thread.start()
 
-    def _require_remote_lease(self, binding, *, continuing=False):
+    def _require_remote_lease(self, binding, *, continuing=False, lifecycle=False):
         guard = getattr(self, "remote_lease_guard", None)
         if guard is not None:
             guard.require_active(binding, original_expiry=not continuing)
+            if guard.enabled and binding.get('scope') == 'sdk' and not lifecycle:
+                raise LeaseGuardError('SDK_CONNECTION_ONLY')
 
     def _remote_lease_expired(self, event):
         # This invokes the SDK's documented best-effort cancellation/cleanup,
@@ -760,7 +762,7 @@ class RobotBridge:
         return log_message, result
 
     def connect(self, remote_lease=None) -> None:
-        self._require_remote_lease(remote_lease)
+        self._require_remote_lease(remote_lease, lifecycle=True)
         with self.arm_lock:
             if getattr(self, "release_unconfirmed", False):
                 emit("connection", connected=False, interface=CAN_INTERFACE,
@@ -813,7 +815,7 @@ class RobotBridge:
                     f"CAN RX before={rx_before}"
                 ),
             )
-            self._require_remote_lease(remote_lease)
+            self._require_remote_lease(remote_lease, lifecycle=True)
             if SIMULATE:
                 arm = SimulatedArm()
             else:
@@ -841,7 +843,7 @@ class RobotBridge:
                     message="SingleArm constructor returned; sampling joint state",
                 )
 
-            self._require_remote_lease(remote_lease, continuing=True)
+            self._require_remote_lease(remote_lease, continuing=True, lifecycle=True)
             with self.arm_lock:
                 if generation != self.connection_generation:
                     raise RuntimeError("SDK initialization cancelled")
@@ -863,7 +865,7 @@ class RobotBridge:
                     "refusing to enable web motion"
                 )
             with self.arm_lock:
-                self._require_remote_lease(remote_lease, continuing=True)
+                self._require_remote_lease(remote_lease, continuing=True, lifecycle=True)
                 if generation != self.connection_generation:
                     raise RuntimeError("SDK initialization cancelled")
                 self.arm = arm

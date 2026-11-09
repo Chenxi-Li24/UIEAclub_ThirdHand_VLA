@@ -7,6 +7,7 @@ import urllib.error
 
 from .command_gate import CommandGate
 from .lease import verify_lease
+from .lease_timing import TIMING
 from .protocol import ProtocolError, parse_json, verify_envelope
 from .transport import authenticated_connection
 
@@ -59,24 +60,49 @@ async def connect_bound_device(config, *, robot, trusted_keys, journal, on_ready
         if on_ready:
             await on_ready(context)
 
-        async def request(message):
+        async def request(message, trace):
             request_id = message["requestId"]
+            if trace:
+                trace.mark('task_started')
             try:
                 uuid.UUID(request_id)
                 payload = verify_envelope(message["envelope"], trusted_keys, context, now_ms=clock())
+                if trace:
+                    trace.mark('verified')
                 if payload.get("purpose") in ("lease_grant", "lease_renew"):
+                    if trace:
+                        trace.mark('lock_wait')
                     async with lease_lock:
+                        if trace:
+                            trace.mark('lock_acquired')
                         lease = verify_lease(message["envelope"], trusted_keys, context, now_ms=clock())
                         outcome = await robot.submit_envelope({**lease, "signedEnvelope": message["envelope"]})
+                        if trace:
+                            trace.mark('local_reply')
                 else:
                     outcome = await gate.handle_envelope(message["envelope"], context)
             except Exception:
+                if trace:
+                    trace.mark('failed')
                 outcome = {"state": "rejected", "code": "DEVICE_REQUEST_REJECTED"}
+            except asyncio.CancelledError:
+                if trace:
+                    trace.mark('failed')
+                    trace.finish('unknown')
+                raise
             # Do not forward an arbitrary Robot response or credential diagnostic.
             if not isinstance(outcome, dict) or outcome.get("state") not in ("active", "accepted", "started", "completed", "stopped", "rejected", "failed", "unknown"):
                 outcome = {"state": "unknown", "code": "SUBMISSION_RESULT_UNKNOWN"}
             safe = {key: outcome[key] for key in ("state", "commandId", "leaseId", "leaseEpoch", "code") if key in outcome}
-            await ws.send(json.dumps({"type": "result", "requestId": request_id, "outcome": safe}, allow_nan=False))
+            if outcome.get("state") == "active" and outcome.get("scope") in ("sdk", "control"):
+                safe["scope"] = outcome["scope"]
+            try:
+                await ws.send(json.dumps({"type": "result", "requestId": request_id, "outcome": safe}, allow_nan=False))
+                if trace:
+                    trace.mark('reply_sent')
+            finally:
+                if trace:
+                    trace.finish(safe['state'])
 
         async def heartbeats():
             nonlocal pending_ping
@@ -95,6 +121,7 @@ async def connect_bound_device(config, *, robot, trusted_keys, journal, on_ready
             nonlocal last_pong
             while True:
                 raw = await ws.recv()
+                received = (time.monotonic(), time.time())
                 if not isinstance(raw, str):
                     raise ProtocolError("TEXT_MESSAGE_REQUIRED")
                 message = parse_json(raw.encode("utf-8"))
@@ -103,7 +130,10 @@ async def connect_bound_device(config, *, robot, trusted_keys, journal, on_ready
                 if message.get("type") == "pong" and message.get("nonce") == pending_ping:
                     last_pong = time.monotonic()
                 elif message.get("type") == "request" and set(message) == {"type", "requestId", "envelope"} and len(tasks) < 9:
-                    task = asyncio.create_task(request(message))
+                    trace = TIMING.begin(message['envelope'], received)
+                    if trace:
+                        trace.mark('received')
+                    task = asyncio.create_task(request(message, trace))
                     tasks.add(task)
                     def finished(value):
                         tasks.discard(value)

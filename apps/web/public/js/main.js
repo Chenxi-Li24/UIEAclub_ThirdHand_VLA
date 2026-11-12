@@ -1316,6 +1316,7 @@ class UIControls {
   }
 
   languageControlReady() {
+    if (!this.arm.loaded) return false;
     if (this.languageBackend === 'formal-3000-upstream') {
       return Boolean(
         this.languageRobotState.connected &&
@@ -2085,11 +2086,10 @@ function startApp() {
     });
   }
 
-  arm.loadingPromise.then(() => {
+  // Network state and chat must not wait for a remote model download.
     ui.build();
     ui.bindViewControls(scene);
     workspace.bindRuntime({ ws, ui, voice, scene });
-    arm.geometryReady.then(() => scene.fitModel(arm.mount));
     let measuredFrame = false;
     ws.on('robot_state', () => {
       if (!measuredFrame && ui.robotStateReady && scene.modelObject) {
@@ -2102,11 +2102,12 @@ function startApp() {
     ws.on('language_backend', () => voice.handleRobotMessage({ type: 'runtime-readiness' }));
     visionWs.connect();
     ws.connect();
-    arm.setJointAngles([0, 0, 0, 0, 0, 0]);
-    ui.setJointValues([0, 0, 0, 0, 0, 0]);
     console.log('[App] Ready.');
+  arm.loadingPromise.then(() => {
+    return arm.geometryReady.then(() => scene.fitModel(arm.mount));
   }).catch(e => {
     console.error('[App] Model load failed:', e);
+    ui._log('3D model download failed. Reload to retry. Live status and chat remain available.');
   });
 }
 

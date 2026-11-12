@@ -227,7 +227,10 @@
     audioClose.addEventListener('click',()=>{if(runtime.voice?.recording||runtime.voice?.starting)return;showAudio(false);voiceToggle.focus();});
     const candidateObserver=new win.MutationObserver(()=>{if(!byId('voice-intent-card').hidden)showReplies(true);});
     candidateObserver.observe(byId('voice-intent-card'),{attributes:true,attributeFilter:['hidden']});
-    const replyObserver=new win.MutationObserver(()=>showReplies(true));
+    const replyObserver=new win.MutationObserver(records=>{
+      // Background reconnect notices must not reopen a window the user dismissed.
+      if(records.some(record=>Array.from(record.addedNodes||[]).some(node=>node.nodeType===1&&node.matches?.('.voice-message--ai,.voice-message--user'))))showReplies(true);
+    });
     replyObserver.observe(byId('voice-conversation'),{childList:true,subtree:true,characterData:true});
     win.addEventListener('pagehide',()=>{candidateObserver.disconnect();replyObserver.disconnect();},{once:true});
 

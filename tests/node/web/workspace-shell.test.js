@@ -15,21 +15,18 @@ function fixture({navPreference,narrow=false,storageBlocked=false}={}) {
   const { mountWorkspace } = require(path.join(root, 'apps/web/public/js/workspace-shell.js'));
   return { document, window, shell: mountWorkspace(document, view), mountWorkspace, view, preferences, media };
 }
-test('bottom conversation preserves draft, switches input method and guards active work',()=>{
- const {document,shell}=fixture();const voice={recording:false,starting:false,openPanel(){},closePanel(){}};
- shell.bindRuntime({voice});shell.go('assistant');
+test('minimal composer keeps drafts while independent reply and voice popovers open and close',()=>{
+ const {document,shell}=fixture();let requests=0;
+ shell.bindRuntime({voice:{openPanel(){},closePanel(){},startRecording(){requests++;}}});shell.go('assistant');
+ const input=document.getElementById('voice-text-input');input.value='Move left';
+ const replies=document.getElementById('chat-replies');assert.equal(replies.hidden,true);
+ document.getElementById('chat-replies-toggle').click();assert.equal(replies.hidden,false);
+ document.getElementById('chat-replies-close').click();assert.equal(replies.hidden,true);
+ assert.equal(input.closest('[hidden]'),null);assert.equal(input.value,'Move left');
+ document.getElementById('chat-voice').click();assert.equal(document.getElementById('chat-audio').hidden,false);assert.equal(requests,0);
+ document.querySelector('#chat-audio > button').click();assert.equal(document.getElementById('chat-audio').hidden,true);
  assert.ok(document.querySelector('.nav-bottom [data-page="assistant"]'));
- const draft=document.getElementById('voice-text-input');draft.value='Move left';
- const buttons=document.querySelectorAll('.chat-input-modes button');buttons[1].click();
- assert.equal(document.getElementById('voice-panel').dataset.inputMode,'voice');
- assert.equal(document.querySelector('.voice-capture-block').hidden,false);
- voice.recording=true;buttons[0].click();assert.equal(document.getElementById('voice-panel').dataset.inputMode,'voice');
- document.getElementById('chat-collapse').click();assert.equal(document.getElementById('chat-collapse').getAttribute('aria-expanded'),'true');
- voice.recording=false;buttons[0].click();assert.equal(draft.value,'Move left');
- document.getElementById('chat-collapse').click();assert.equal(document.querySelector('.voice-panel-body').hidden,true);
- document.getElementById('chat-collapse').click();assert.equal(document.querySelector('.voice-panel-body').hidden,false);
- document.getElementById('voice-panel-close').click();assert.equal(document.getElementById('page-assistant').hidden,true);
- shell.go('assistant');assert.equal(draft.value,'Move left');
+ assert.equal(document.getElementById('chat-collapse'),null);
 });
 test('sidebar toggle changes only navigation width, retains calibration/model state and sends no commands',()=>{
  const {document,shell,preferences,view}=fixture(),app=document.getElementById('app');

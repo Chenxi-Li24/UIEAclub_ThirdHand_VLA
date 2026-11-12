@@ -198,44 +198,39 @@
     naturalEntry.querySelector('.nav-index').remove();
     navBottom.prepend(naturalEntry);
     const chat=byId('voice-panel');
-    chat.classList.add('chat-dock');
-    chat.dataset.inputMode='text';
+    chat.classList.add('chat-dock','chat-minimal');
     const chatBody=chat.querySelector('.voice-panel-body');
+    const replies=element('section',{id:'chat-replies',class:'chat-replies','aria-label':'AI replies',hidden:''});
+    const replyClose=element('button',{type:'button',class:'chat-icon',id:'chat-replies-close','aria-label':'Close replies'},'×');
+    replies.append(replyClose,byId('voice-conversation'),byId('voice-intent-card'));
+    const composer=byId('voice-text-form');
+    const rail=composer.querySelector('.voice-text-rail');
+    const replyToggle=element('button',{type:'button',class:'chat-icon',id:'chat-replies-toggle','aria-label':'Show replies','aria-controls':'chat-replies','aria-expanded':'false'});
+    replyToggle.append(icon('assistant'));
+    const voiceToggle=element('button',{type:'button',class:'chat-icon',id:'chat-voice','aria-label':'Voice input','aria-expanded':'false','aria-controls':'chat-audio'});
+    voiceToggle.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="9" y="3" width="6" height="12" rx="3"/><path d="M5 11v1a7 7 0 0 0 14 0v-1M12 19v3M8 22h8"/></svg>';
+    rail.prepend(replyToggle);rail.append(voiceToggle);
+    byId('voice-text-input').placeholder='Message…';
+    byId('voice-text-send').setAttribute('aria-label','Send message');
+    const audio=element('section',{id:'chat-audio',class:'chat-audio',hidden:'','aria-label':'Voice input'});
+    const audioClose=element('button',{type:'button',class:'chat-icon','aria-label':'Close voice input'},'×');
     const settingsDrawer=element('details',{class:'chat-settings'});
-    settingsDrawer.append(element('summary',{},'Audio & AI settings'));
+    settingsDrawer.append(element('summary',{},'Settings'));
     chatBody.querySelectorAll('.voice-config-block').forEach(node=>settingsDrawer.append(node));
-    const capture=chat.querySelector('.voice-capture-block');
-    const conversation=chat.querySelector('.voice-conversation-block');
-    chatBody.append(conversation,byId('voice-intent-card'),capture,settingsDrawer);
-    const inputModes=element('div',{class:'chat-input-modes',role:'group','aria-label':'Input method'});
-    const modeButtons=new Map();
-    for(const [id,label]of [['text','Text'],['voice','Voice']]){
-      const button=element('button',{type:'button','aria-pressed':String(id==='text')},label);
-      button.addEventListener('click',()=>{
-        if(runtime.voice?.recording||runtime.voice?.starting){announce('Stop or cancel recording before changing input mode.','Stop or cancel recording before changing input mode.');return;}
-        chat.dataset.inputMode=id;
-        for(const [key,node]of modeButtons)node.setAttribute('aria-pressed',String(key===id));
-        capture.hidden=id!=='voice';byId('voice-text-form').hidden=id!=='text';
-        if(id==='voice')settingsDrawer.open=true;
-        else byId('voice-text-input').focus();
-      });modeButtons.set(id,button);inputModes.append(button);
-    }
-    capture.hidden=true;chatBody.append(inputModes);
-    const collapseChat=element('button',{type:'button',class:'voice-icon-button',id:'chat-collapse','aria-label':'Collapse conversation','aria-expanded':'true'},'−');
-    chat.querySelector('.voice-header-actions').prepend(collapseChat);
-    collapseChat.addEventListener('click',()=>{
-      if(runtime.voice?.recording||runtime.voice?.starting||!byId('voice-intent-card').hidden){announce('Finish recording or resolve the candidate before collapsing.','Finish recording or resolve the candidate before collapsing.');return;}
-      const collapsed=chat.classList.toggle('chat-collapsed');
-      chatBody.hidden=collapsed;
-      collapseChat.textContent=collapsed?'+':'−';
-      collapseChat.setAttribute('aria-expanded',String(!collapsed));
-      collapseChat.setAttribute('aria-label',collapsed?'Expand conversation':'Collapse conversation');
-    });
-    const candidateObserver=new win.MutationObserver(()=>{
-      if(!byId('voice-intent-card').hidden){chat.classList.remove('chat-collapsed');chatBody.hidden=false;collapseChat.textContent='−';collapseChat.setAttribute('aria-expanded','true');collapseChat.setAttribute('aria-label','Collapse conversation');}
-    });
+    audio.append(audioClose,byId('voice-mic-toggle'),chat.querySelector('.voice-capture-block'),settingsDrawer);
+    chatBody.append(replies,audio,composer);
+    function showReplies(open){replies.hidden=!open;replyToggle.setAttribute('aria-expanded',String(open));replyToggle.setAttribute('aria-label',open?'Hide replies':'Show replies');}
+    replyToggle.addEventListener('click',()=>showReplies(replies.hidden));
+    replyClose.addEventListener('click',()=>{showReplies(false);replyToggle.focus();});
+    function showAudio(open){audio.hidden=!open;voiceToggle.setAttribute('aria-expanded',String(open));}
+    voiceToggle.addEventListener('click',()=>showAudio(audio.hidden));
+    audioClose.addEventListener('click',()=>{if(runtime.voice?.recording||runtime.voice?.starting)return;showAudio(false);voiceToggle.focus();});
+    const candidateObserver=new win.MutationObserver(()=>{if(!byId('voice-intent-card').hidden)showReplies(true);});
     candidateObserver.observe(byId('voice-intent-card'),{attributes:true,attributeFilter:['hidden']});
-    win.addEventListener('pagehide',()=>candidateObserver.disconnect(),{once:true});
+    const replyObserver=new win.MutationObserver(()=>showReplies(true));
+    replyObserver.observe(byId('voice-conversation'),{childList:true,subtree:true,characterData:true});
+    win.addEventListener('pagehide',()=>{candidateObserver.disconnect();replyObserver.disconnect();},{once:true});
+
     const calibration = pageNodes.get('calibration');
     const calibrationInfo = element('div', { class: 'workspace-calibration-info' });
     calibrationInfo.append(element('p', {}, 'TCP calibration uses the existing service. Hand-eye collection is not exposed by this gateway.'),

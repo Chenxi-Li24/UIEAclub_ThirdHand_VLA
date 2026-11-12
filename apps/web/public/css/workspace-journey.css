@@ -20,3 +20,19 @@
 .workspace #voice-panel.chat-collapsed .voice-panel-footer{display:none}
 .workspace #voice-panel.chat-dock [hidden]{display:none!important}
 @media(max-width:700px){.workspace #voice-panel.chat-dock{right:12px;bottom:44px;width:calc(100vw - 24px);max-height:72dvh}}
+.workspace #page-assistant>.workspace-heading{display:none}
+.workspace #voice-panel.chat-minimal{background:transparent;border:0;box-shadow:none;overflow:visible;max-height:none}
+.workspace #voice-panel.chat-minimal>.voice-panel-header,.workspace #voice-panel.chat-minimal>.voice-panel-footer,.chat-minimal .voice-conversation-block,.chat-minimal .voice-text-help,.chat-minimal .voice-text-channel{display:none!important}
+.workspace #voice-panel.chat-minimal .voice-panel-body{display:block;padding:0;overflow:visible;background:transparent}
+.chat-minimal .voice-text-composer{margin:0;border:0;padding:0}
+.workspace .chat-minimal .voice-text-rail{display:flex;align-items:center;gap:8px;background:#fff;border:1px solid #dedfe2;border-radius:24px;padding:12px;box-shadow:0 6px 24px #28313b12}
+.workspace .chat-minimal #voice-text-input{flex:1;min-width:0;border:0;box-shadow:none;background:transparent;padding:8px 0;font-size:15px;line-height:24px;min-height:40px}
+.chat-minimal .chat-icon{display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;width:36px;height:36px;padding:8px;border:0;border-radius:50%;background:transparent;color:#5b6169;cursor:pointer}
+.chat-minimal .chat-icon:hover{background:#f1f2f4}.chat-minimal .chat-icon:focus-visible{outline:2px solid #f97316;outline-offset:2px}.chat-minimal .chat-icon svg{width:21px;height:21px}
+.workspace .chat-minimal #voice-text-send{border-radius:50%;width:36px;min-width:36px;height:36px;padding:0;background:#25272b;color:#fff}
+.chat-minimal #voice-text-send span:first-child{display:none}
+.workspace #voice-panel.chat-minimal .chat-replies,.workspace #voice-panel.chat-minimal .chat-audio{position:absolute;bottom:calc(100% + 12px);left:0;right:0;max-height:55dvh;overflow:auto;padding:16px;border:1px solid #e5e7eb;border-radius:20px;background:#fff;box-shadow:0 12px 40px #28313b1c}
+.chat-minimal #chat-replies-close,.chat-minimal .chat-audio>.chat-icon{margin-left:auto;display:flex}
+.workspace #voice-panel.chat-minimal .voice-conversation{max-height:28vh;min-height:0;background:#fff}
+.chat-minimal .voice-empty{display:none}.chat-minimal .voice-capture-block>.voice-block-heading{display:none}
+.chat-minimal .chat-audio{z-index:2}

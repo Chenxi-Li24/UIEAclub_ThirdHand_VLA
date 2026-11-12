@@ -39,3 +39,27 @@
 .workspace #voice-panel.chat-minimal{left:50%;right:auto;transform:translateX(-50%);width:min(720px,calc(100vw - 48px))}
 .workspace #voice-panel.chat-minimal[hidden]{display:none!important}
 .system-checks{list-style:none;padding:0;margin:20px 0;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.system-checks li{display:grid;grid-template-columns:1fr auto;gap:8px;padding:16px;border:1px solid #e4e7eb;border-radius:12px;background:#fafbfc}.system-checks li p{grid-column:1/-1;font-size:12px;margin:0;min-height:18px}.check-badge{font-size:11px;font-weight:600;color:#6c7681}.system-checks [data-status=passed] .check-badge{color:#21834c}.system-checks [data-status=failed] .check-badge{color:#bf3434}.system-checks [data-status=warning] .check-badge{color:#a56611}.system-checks [data-status=running]{border-color:#f4af7e;background:#fff8f2}.system-checks [data-status=running] .check-badge::before{content:'';display:inline-block;width:10px;height:10px;margin-right:6px;border:2px solid #efcdb5;border-top-color:#df6a25;border-radius:50%;animation:check-spin .8s linear infinite}.check-progress{height:7px;border-radius:10px;background:#edf0f2;overflow:hidden}.check-progress>span{display:block;width:0;height:100%;border-radius:inherit;background:linear-gradient(90deg,#f8b476,#df6a25);transition:width .35s ease}.check-setup{font-size:12px;color:#687583}.check-setup summary{cursor:pointer}.workspace-journey[aria-busy=true] #system-ready-button{opacity:.7;cursor:wait}@keyframes check-spin{to{transform:rotate(360deg)}}@media(max-width:700px){.system-checks{grid-template-columns:1fr}}@media(prefers-reduced-motion:reduce){.check-progress>span{transition:none}.system-checks [data-status=running] .check-badge::before{animation:none}}
+/* Keep the system check focused; the persistent model is restored on other pages. */
+#app.workspace:has(#page-overview:not([hidden])) #workspace-body{grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(0,1fr)}
+#app.workspace:has(#page-overview:not([hidden])) #workspace-model{display:none}
+#page-overview>.workspace-heading,#page-overview>.overview-grid,#page-overview #onboarding-welcome{display:none!important}
+#page-overview .workspace-journey{max-width:680px;margin:32px auto 100px;padding:36px 40px;background:#fff;border:1px solid #eee7e1;border-radius:24px;box-shadow:0 12px 50px #68350806}
+#page-overview .workspace-journey h2{font-size:26px;margin-bottom:6px}
+#page-overview .workspace-journey>p{margin:0;color:#8a8179;font-size:13px}
+#page-overview .check-percentage{display:block;font-size:52px;line-height:1;font-weight:650;letter-spacing:-2px;color:#d96a25;margin:32px 0 10px;font-variant-numeric:tabular-nums}
+#page-overview #system-ready-result{min-height:22px;font-size:12px;margin-bottom:14px}
+#page-overview .check-progress{height:14px;background:#f5eee8;border-radius:20px;margin-bottom:24px}
+#page-overview .check-progress>span{position:relative;transition:width .65s cubic-bezier(.22,1,.36,1);background:linear-gradient(90deg,#f6b77c,#ec762b);box-shadow:0 0 14px #ef8c4560;min-width:0}
+#page-overview .workspace-journey[aria-busy=true] .check-progress>span::after{content:'';position:absolute;inset:0;background:repeating-linear-gradient(110deg,transparent 0 12px,#fff6 12px 24px);background-size:52px 100%;animation:check-flow 1s linear infinite}
+#page-overview .system-checks{display:block;margin:0 0 24px}
+#page-overview .system-checks li{border:0;border-bottom:1px solid #f0eeeb;border-radius:0;padding:14px 4px;background:transparent;align-items:center;transition:background .3s}
+#page-overview .system-checks li strong{font-size:13px;font-weight:500}
+#page-overview .system-checks li p{display:none}
+#page-overview .system-checks li:is([data-status=failed],[data-status=warning],[data-status=unknown]) p{display:block}
+#page-overview .system-checks [data-status=running]{background:#fff5eb;border-radius:8px;padding-left:12px;padding-right:12px}
+#page-overview .system-checks [data-status=running] .check-badge::before{width:14px;height:14px;vertical-align:middle}
+#page-overview #system-ready-button{min-height:46px;border-radius:12px}
+#page-overview .check-setup{margin-top:18px;font-size:11px;color:#958b83}
+@keyframes check-flow{to{background-position:52px 0}}
+@media(max-width:700px){#page-overview .workspace-journey{margin:12px auto 90px;padding:24px 20px}#page-overview .check-percentage{font-size:42px}}
+@media(prefers-reduced-motion:reduce){#page-overview .check-progress>span{transition:none}#page-overview .workspace-journey[aria-busy=true] .check-progress>span::after{animation:none}}

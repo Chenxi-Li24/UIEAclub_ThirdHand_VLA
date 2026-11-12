@@ -224,3 +224,15 @@ test('overview includes camera readiness and ongoing depth/following work off-pa
   assert.equal(document.getElementById('workspace-task').hidden,false);
   assert.match(document.getElementById('workspace-task').textContent,/uncertain/i);
 });
+
+test('system check advances on results, continues after failures and supports retry without motion',async()=>{
+ const {document,view}=fixture();let calls=[];
+ view.fetch=async url=>{calls.push(url);if(url.includes('sdk'))throw Error('offline');return {ok:true,json:async()=>url==='/health'?{status:'ready'}:{status:'passed',detail:'Reachable'}};};
+ const button=document.getElementById('system-ready-button');button.click();button.click();
+ for(let i=0;i<20;i++)await new Promise(setImmediate);
+ assert.equal(calls.length,6);assert.ok(calls.every(url=>url==='/health'||url.startsWith('/api/system-diagnostics?check=')));
+ assert.equal(document.querySelector('[role=progressbar]').getAttribute('aria-valuenow'),'100');
+ assert.match(document.getElementById('system-ready-result').textContent,/1 item need attention/);
+ assert.equal(document.querySelectorAll('.system-checks [data-status=failed]').length,1);
+ button.click();for(let i=0;i<20;i++)await new Promise(setImmediate);assert.equal(calls.length,12);
+});

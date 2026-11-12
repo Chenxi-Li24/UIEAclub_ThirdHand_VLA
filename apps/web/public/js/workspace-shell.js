@@ -143,45 +143,56 @@
       button.addEventListener('click', () => go(id)); shortcuts.appendChild(button);
     }
     const journey = element('section', {class:'workspace-journey'});
-    journey.append(element('h2', {}, 'Start it. Say it. See it safely.'), element('p', {}, '01 Prepare services → 02 Describe a movement → 03 Preview and confirm'));
-    journey.append(element('p', {}, 'On the Ubuntu control host, run the preparation command. This does not connect, enable or move the robot.'), element('code', {tabindex:'0'}, './thirdhand ensure --profile manual-control'));
-    const journeyActions = element('div', {class:'workspace-shortcuts'});
-    for (const [id,label] of [['assistant','02 · Natural Language Motion'],['control','03 · Digital Twin Preview']]) {
-      if(options.canOpenPage && !options.canOpenPage(id))continue;
-      const button=element('button',{type:'button',class:'action-btn'},label);
-      button.addEventListener('click',()=>go(id,{focus:true}));journeyActions.append(button);
-    }
-    journey.append(journeyActions,element('p',{},'Inspect the candidate pose, then confirm or reject in the language panel. Execution results come from robot feedback.'));
+    journey.append(element('h2', {}, 'System check'), element('p', {}, 'Check connections before starting your workspace. No robot movement is performed.'));
     overview.before(journey);shortcuts.hidden=true;
-    const readyButton=element('button',{type:'button',class:'action-btn action-primary',disabled:'',id:'system-ready-button'},'Prepare system');
-    const readyResult=element('p',{role:'status',id:'system-ready-result'},'Checking preparation availability…');
-    const readyServices=element('ul',{id:'system-ready-services'});
-    journey.append(readyButton,readyResult,readyServices);
-    let readyTimer, disposed=false, requesting=false;
-    async function refreshPreparation(){
-      if(!win.fetch || disposed)return;
-      try{
-        const response=await win.fetch('/api/system-ready',{cache:'no-store',signal:win.AbortSignal?.timeout(8000)});
-        if(!response.ok)throw Error('unavailable');
-        const status=await response.json();if(disposed)return;
-        readyButton.disabled=!status.available||status.pending||requesting;
-        readyResult.textContent=status.available ? [status.overall,status.reason, status.can?.reason].filter(Boolean).join(' · ') : 'Preparation is available only on the Ubuntu control host (localhost).';
-        readyServices.replaceChildren();
-        for(const [name,value] of Object.entries(status.services||{}))readyServices.append(element('li',{},name+' · '+value.state+(value.lastError?' · '+value.lastError:'')));
-      }catch{readyButton.disabled=true;readyResult.textContent='Preparation service unavailable. Use the host command above.';}
-      finally{if(!disposed)readyTimer=win.setTimeout?.(refreshPreparation,3000);}
+    const readyButton=element('button',{type:'button',class:'action-btn action-primary',id:'system-ready-button'},'Run system check');
+    const readyResult=element('p',{role:'status','aria-live':'polite',id:'system-ready-result'},'Ready to check');
+    const progress=element('div',{class:'check-progress',role:'progressbar','aria-label':'System check progress','aria-valuemin':'0','aria-valuemax':'100','aria-valuenow':'0'});
+    const fill=element('span');progress.append(fill);
+    const readyServices=element('ul',{id:'system-ready-services',class:'system-checks'});
+    const checks=[['api','Web API'],['sdk','SDK feedback'],['ai','AI service'],['vision','Vision service'],['network','Host network'],['wifi','Host Wi-Fi']];
+    const rows=new Map();
+    for(const [id,label] of checks){
+      const row=element('li',{'data-status':'pending'});
+      const name=element('strong',{},label),badge=element('span',{class:'check-badge'},'Not checked'),detail=element('p',{},'');
+      row.append(name,badge,detail);readyServices.append(row);rows.set(id,{row,badge,detail});
     }
+    journey.append(readyButton,readyResult,progress,readyServices);
+    const setup=element('details',{class:'check-setup'});setup.append(element('summary',{},'Service setup'));
+    setup.append(element('p',{},'To start missing services, run this command on Ubuntu, then run the check again.'),element('code',{tabindex:'0'},'./thirdhand ensure --profile manual-control'));
+    journey.append(setup);
+    let disposed=false,requesting=false;
+    const labels={pending:'Not checked',running:'Checking',passed:'Passed',failed:'Failed',warning:'Warning',unknown:'Unavailable',skipped:'Not applicable'};
     readyButton.addEventListener('click',async()=>{
-      requesting=true;readyButton.disabled=true;
-      try{
-        const response=await win.fetch('/api/system-ready',{method:'POST',headers:{'X-ThirdHand-Action':'prepare'},signal:win.AbortSignal?.timeout(8000)});
-        if(!response.ok){const result=await response.json();throw Error(result.error||'Preparation rejected');}
-        readyResult.textContent='Preparing services…';
-      }catch(error){readyResult.textContent=error.message;}
-      finally{requesting=false;}
+      if(requesting||disposed)return;
+      requesting=true;readyButton.disabled=true;readyButton.textContent='Checking…';journey.setAttribute('aria-busy','true');
+      progress.setAttribute('aria-valuenow','0');fill.style.width='0%';
+      for(const {row,badge,detail} of rows.values()){row.dataset.status='pending';badge.textContent=labels.pending;detail.textContent='';}
+      let completed=0,issues=0;
+      for(const [id,label] of checks){
+        if(disposed)break;
+        const {row,badge,detail}=rows.get(id);row.dataset.status='running';badge.textContent=labels.running;
+        readyResult.textContent=`Checking ${label} · ${completed} / ${checks.length}`;
+        try{
+          if(!win.fetch)throw Error('unavailable');
+          const response=await win.fetch(id==='api'?'/health':'/api/system-diagnostics?check='+id,{cache:'no-store',signal:win.AbortSignal?.timeout(8000)});
+          if(!response.ok)throw Error('unavailable');
+          const data=await response.json();
+          if(disposed)break;
+          const state=id==='api'?(data.status==='ready'?'passed':'warning'):data.status;
+          if(!['passed','failed','warning','unknown','skipped'].includes(state))throw Error('invalid');
+          row.dataset.status=state;badge.textContent=labels[state];
+          detail.textContent=id==='api'?(state==='passed'?'Gateway API responded successfully.':'Gateway responded but is not ready.') : data.detail;
+          if(['failed','warning','unknown'].includes(state))issues++;
+        }catch{if(disposed)break;row.dataset.status='failed';badge.textContent=labels.failed;detail.textContent='Check unavailable or timed out. Check your connection and retry.';issues++;}
+        completed++;const percent=Math.round(completed/checks.length*100);fill.style.width=percent+'%';progress.setAttribute('aria-valuenow',String(percent));
+      }
+      if(disposed)return;
+      readyResult.textContent=issues?`Check complete · ${issues} item${issues===1?'':'s'} need attention`:'Check complete · All applicable checks passed';
+      readyResult.textContent+=' · '+new Date().toLocaleTimeString('en-GB');
+      requesting=false;readyButton.disabled=false;readyButton.textContent='Run again';journey.setAttribute('aria-busy','false');
     });
-    void refreshPreparation();
-    win.addEventListener('pagehide',()=>{disposed=true;win.clearTimeout?.(readyTimer);},{once:true});
+    win.addEventListener('pagehide',()=>{disposed=true;},{once:true});
     const sidebarStatus=element('section',{class:'workspace-live-status','aria-label':'Live status'});
     sidebarStatus.append(element('h2',{},'Live status'));
     for(const [label,id] of [['Connection','conn-ip'],['SDK','hb-label'],['Robot','state-badge'],['AI','voice-ai-status']]) {

@@ -27,3 +27,11 @@ Cloud assets include the new stylesheet. Existing access checks and model-only n
 ## Validation
 
 Node 24: 21 targeted shell/preparation tests pass. Full Web suite: 437/450 pass; failures include missing local SDK configuration and Windows directory fsync EPERM. Cloud startup/entry tests: 3/4 pass; the remaining integration test requires TEST_DATABASE_URL. Chrome inspection of static frontend confirmed default overview, ordered feature entries, sidebar offline feedback, unavailable preparation, and no horizontal overflow. Static preview does not validate robot geometry delivery or hardware. No physical movement or deployment was performed.
+
+## One-click system check
+
+The overview now provides Run system check and Run again. Six rows inspect the gateway API, fresh SDK feedback, AI service port, vision service port, host network interfaces, and Ubuntu Wi-Fi. Progress advances only after each result, with an animated active-row indicator and reduced-motion support. Failures do not stop remaining checks; duplicate runs are ignored. Completion shows an issue count and time. Existing global chat remains available across pages.
+
+GET /api/system-diagnostics?check=sdk|ai|vision|network|wifi returns {id,status,detail,checkedAt}. SDK uses existing robot state freshness. Service probes have a three-second timeout and do not perform inference or motion. Network checks address assignment, not internet reachability. Wi-Fi reads fixed nmcli TYPE,STATE fields with a three-second timeout; no adapter is skipped, disconnected Wi-Fi is a warning, unavailable inspection is unknown. No SSID or credentials are collected. Browser requests time out after eight seconds. This read-only endpoint works over Tailscale; existing localhost-only preparation remains unchanged. Missing services can be started with the command under Service setup. No new dependencies, database changes or configuration are required. Restart the web gateway after installing the new server module; frontend assets use the existing static server.
+
+Validation: 28 focused Node tests pass, including stale SDK rejection, Wi-Fi result distinctions, failure continuation, progress completion, duplicate-run suppression, and retry. Physical motion and AI inference are not part of self-check acceptance.

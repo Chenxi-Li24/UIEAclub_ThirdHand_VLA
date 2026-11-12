@@ -183,7 +183,7 @@ test('unavailable services stay unknown and real grasp status remains visible ou
   shell.bindRuntime({ ui }); shell.go('overview'); shell.refresh();
   assert.equal(document.getElementById('workspace-task').hidden, false);
   assert.match(document.getElementById('workspace-task').textContent, /approach/);
-  assert.match(document.getElementById('workspace-summary-connection').textContent, /未连接|Disconnected/);
+  assert.match(document.getElementById('workspace-summary-connection').textContent, /Not connected|Disconnected/);
 });
 test('overview includes camera readiness and ongoing depth/following work off-page', () => {
   const { document, shell } = fixture(); const ui = { activeDepthStatus: { active: true, phase: 'observing' } };

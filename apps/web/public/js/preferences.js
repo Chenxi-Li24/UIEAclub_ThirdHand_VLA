@@ -5,7 +5,7 @@
   const defaults=()=>({locale:'en',themeId:'light',classicThemeId:'deepspace',layoutId:'workspace',backgroundConfig:{kind:'soft',color:'#fffcf9'},revision:0});
   const copy=value=>JSON.parse(JSON.stringify(value));
   function normalize(value){
-    const next=defaults();if(['en','zh-CN'].includes(value?.locale))next.locale=value.locale;
+    const next=defaults();next.locale='en';
     if(['light','dark'].includes(value?.themeId))next.themeId=value.themeId;
     if(['workspace','classic'].includes(value?.layoutId))next.layoutId=value.layoutId;
     if(['deepspace','industrial','cyber','dark','green','blue','purple','orange','light'].includes(value?.classicThemeId))next.classicThemeId=value.classicThemeId;
@@ -29,7 +29,7 @@
     const read=key=>{try{return JSON.parse(view.localStorage?.getItem(key)||'null');}catch{return null;}};
     const store=(key,next)=>{try{view.localStorage?.setItem(key,JSON.stringify(next));}catch{/* Session-only preferences still work. */}};
     const guest=read(GUEST);value=normalize(guest);
-    if(!guest){try{const legacy=view.localStorage?.getItem('thirdhand.ui-language');if(['en','zh-CN'].includes(legacy))value.locale=legacy;}catch{}}
+    value.locale='en';
     const call=(path,body,identity=session)=>request?request(path,body,identity):apiRequest(path,body,identity,view);
     const key=()=>session?`thirdhand.preferences.user.${session.userId}.v1`:GUEST;
     const emit=()=>{for(const fn of listeners)fn(copy(value));};

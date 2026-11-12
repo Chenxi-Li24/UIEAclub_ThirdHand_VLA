@@ -1,5 +1,9 @@
 # Three-step local control workspace
 
+## English-only interface
+
+All shipped HTML pages now contain English initial labels, tooltips and accessibility text. Chinese language controls are removed. The translation layer always selects English, and legacy guest/account language preferences normalize to English. Camera diagnostics and TCP calibration include English static and dynamic copy. Existing translation catalogs remain as compatibility mappings for legacy controller messages; user-provided command content and backend payloads are not rewritten. A source scan of HTML and a rendered workspace text/attribute scan verify that no Chinese interface text is present in the checked states. External/user content is not covered by that guarantee.
+
 The default local workspace opens System ready, followed by Natural language and Digital twin. Existing voice candidates, preview, reject/confirm, manual controls, history and waypoints retain their controllers. The sidebar mirrors the existing connection, SDK, robot and AI status elements, including unavailable states.
 
 ## Preparation

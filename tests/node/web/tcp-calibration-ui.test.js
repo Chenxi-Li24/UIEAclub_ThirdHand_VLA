@@ -9,17 +9,18 @@ const ROOT=path.resolve(__dirname,'../../..');
 const html=()=>fs.readFileSync(path.join(ROOT,'apps/web/public/tcp-calibration.html'),'utf8');
 const script=()=>fs.readFileSync(path.join(ROOT,'apps/web/public/js/tcp-calibration.js'),'utf8');
 
-test('standalone page exposes seven Chinese safety-gated stages and main entry',()=>{
+test('standalone page exposes seven English safety-gated stages and main entry',()=>{
  const page=html(),index=fs.readFileSync(path.join(ROOT,'apps/web/public/index.html'),'utf8');
- for(const label of ['第0关：连接与安全检查','第1关：8姿态采集','第2关：求解与诊断','第3关：独立验证','第4关：换算夹爪TCP','第5关：保存候选结果','第6关：激活与回滚'])assert.match(page,new RegExp(label));
- for(const safety of ['人工示教','急停人员','同一个固定尖点','探针没有弯曲','带重力补偿'])assert.match(page,new RegExp(safety));
- for(const label of ['进入拖动示教','锁定当前姿态','20 + 60 = 80 mm'])assert.match(page,new RegExp(label.replace('+','\\+')));
- assert.match(index,/href="tcp-calibration\.html"[^>]*>TCP标定</);
+ for(const label of ['Step 0: Connection and safety','Step 1: Capture eight poses','Step 2: Solve and diagnose','Step 3: Independent validation','Step 4: Derive gripper TCP','Step 5: Save candidate','Step 6: Activation and rollback'])assert.match(page,new RegExp(label));
+ for(const safety of ['manual teaching','emergency-stop operator','same pivot','without bending','gravity compensation'])assert.match(page,new RegExp(safety));
+ for(const label of ['Enter teaching','Hold current pose','20 + 60 = 80 mm'])assert.match(page,new RegExp(label.replace('+','\\+')));
+ assert.match(index,/href="tcp-calibration\.html"[^>]*>TCP Calibration</);
 });
 
 test('browser controller uses same-origin HTTP and contains no direct robot or camera transport',()=>{
  const source=script();
- for(const forbidden of ['ws://','wss://','move_l','servo','preset','gripper','3100','WebSocket'])assert.doesNotMatch(source,new RegExp(forbidden,'i'));
+ for(const forbidden of ['ws://','wss://','move_l','servo','preset','3100','WebSocket'])assert.doesNotMatch(source,new RegExp(forbidden,'i'));
+ assert.doesNotMatch(source,/\.(?:gripper|servo|move_l)\s*\(/);
  assert.match(source,/this\.json\('\/api\/tcp-calibration/);
  assert.doesNotMatch(source,/countdown|score|reward|speed bonus/i);
 });
@@ -78,7 +79,7 @@ test('an unavailable embedded wizard explains the failure and disables unbound m
  const wizard=new context.ExportedWizard({document,fetch:context.fetch,crypto:context.crypto});
  wizard.showUnavailable('tcp_calibration_disabled');
  assert.match(document.getElementById('service-warning').textContent,/tcp_calibration_disabled/);
- assert.match(document.getElementById('next-step').textContent,/不可用/);
+ assert.match(document.getElementById('next-step').textContent,/unavailable/);
  assert.ok([...document.querySelectorAll('main button')].every(button=>button.disabled));
  assert.equal(document.getElementById('software-stop').disabled,true);
  wizard.bound=true;document.getElementById('software-stop').disabled=false;wizard.showUnavailable('temporary_snapshot_failure');
@@ -119,7 +120,7 @@ test('empty samples cannot be deleted and the next step explains the disconnecte
  const {wizard,element,requests}=browser([state({robot:{connected:false,locked:true}})]);
  await wizard.init();
  assert.equal(element('delete-fit').disabled,true);
- assert.match(element('next-step').textContent,/连接/);
+ assert.match(element('next-step').textContent,/connection/);
  await element('delete-fit').onclick();
  assert.equal(requests.some(item=>item.options.method==='DELETE'),false);
  assert.doesNotMatch(element('message').textContent,/request_invalid/);
@@ -128,11 +129,11 @@ test('progress and next instruction follow confirmed teach and sample state',()=
  const {wizard,element}=browser([state()]);
  wizard.render(state({fitSamples:[{id:'one'}],robot:{...state().robot,teachActive:true}}));
  assert.match(element('fit-progress').textContent,/1.*8/);
- assert.match(element('next-step').textContent,/锁定/);
+ assert.match(element('next-step').textContent,/Hold/);
  wizard.render(state({robot:{...state().robot,teachSupported:true}}));
- assert.match(element('next-step').textContent,/进入拖动/);
+ assert.match(element('next-step').textContent,/Teach/);
  wizard.message('duplicate_orientation');
- assert.match(element('message').textContent,/角度/);
+ assert.match(element('message').textContent,/orientation/);
 });
 
 test('LAN HTTP can generate request IDs when randomUUID is unavailable',()=>{
@@ -148,7 +149,7 @@ test('zero uncertainty is rejected before submitting a calibration session',asyn
  const {wizard,element,requests}=browser([state()]);
  element('tool-axis').value='1,0,0';element('needle-mm').value='20';element('distance-mm').value='60';
  element('uncertainty-mm').value='0';
- await assert.rejects(wizard.start(),/测量不确定度/);
+ await assert.rejects(wizard.start(),/measurement uncertainty/);
  assert.equal(requests.length,0);
 });
 
@@ -159,7 +160,7 @@ test('teach mode blocks both sample types and offers hold based on server state'
  assert.equal(element('teach-hold').disabled,false);
  assert.equal(element('record-validation').disabled,true);
  assert.equal(element('record-fit').disabled,true);
- assert.match(element('robot-status').textContent,/0 阻尼/);
+ assert.match(element('robot-status').textContent,/Zero-damping/);
 });
 test('teach rejection does not claim an active mode or start heartbeats',async()=>{
  const {wizard,element}=browser([state()]);wizard.render(state());
@@ -193,7 +194,7 @@ test('fit and validation controls stay separate and diagnostics are text-labelle
  assert.equal(element('derive').disabled,true);
  element('confirm-derive').checked=true;wizard.render(wizard.state);
  assert.equal(element('derive').disabled,false);
- assert.match(element('diagnostics').textContent,/黄色/);
+ assert.match(element('diagnostics').textContent,/Yellow/);
  assert.match(element('diagnostics').textContent,/rank 6/);
 });
 
@@ -224,14 +225,14 @@ test('restored artifact status keeps rollback available after a page reload',()=
 test('two-person capture requires fresh human confirmations and consumes them after each sample',async()=>{
  const {wizard,element,requests}=browser([state()]);await wizard.init();
  assert.equal(element('teach-start').disabled,true);
- await assert.rejects(wizard.teach('start'),/搭档/);
- await assert.rejects(wizard.record('fit'),/本次/);
+ await assert.rejects(wizard.teach('start'),/partner/);
+ await assert.rejects(wizard.record('fit'),/current hold/);
  assert.equal(requests.some(x=>x.options.method==='POST'),false);
  element('support-ready').checked=true;wizard.render(wizard.state);
  assert.equal(element('teach-start').disabled,false);
  element('contact-ready').checked=element('pose-stable').checked=true;wizard.render(wizard.state);
  assert.equal(element('record-fit').disabled,true);
- await assert.rejects(wizard.record('fit'),/确认本次锁定/);
+ await assert.rejects(wizard.record('fit'),/Confirm the current hold/);
  wizard.captureHeld=true;wizard.render(wizard.state);
  await wizard.record('fit');
  assert.equal(requests.filter(x=>x.options.method==='POST').length,1);
@@ -245,7 +246,7 @@ test('stale contact checks cannot enable recording before a confirmed hold',asyn
  element('contact-ready').checked=element('pose-stable').checked=true;
  wizard.render(wizard.state);
  assert.equal(element('record-fit').disabled,true);
- await assert.rejects(wizard.record('fit'),/确认本次锁定/);
+ await assert.rejects(wizard.record('fit'),/Confirm the current hold/);
  assert.equal(requests.some(item=>item.options.method==='POST'),false);
 });
 
@@ -291,6 +292,6 @@ test('stale, moving or teaching feedback clears confirmation and manual capture 
  element('contact-ready').checked=element('pose-stable').checked=true;wizard.render(wizard.state);
  assert.equal(element('record-fit').disabled,true);
  assert.equal(element('service-warning').hidden,false);
- await assert.rejects(wizard.record('fit'),/确认本次锁定/);
+ await assert.rejects(wizard.record('fit'),/Confirm the current hold/);
  assert.equal(requests.length,0);
 });

@@ -61,6 +61,7 @@ test('onboarding pauses unknown teaching and a configured but failed snapshot',(
 });
 test('workspace preserves actual controls, input state and listeners across six pages and three tabs', () => {
   const { document, shell, mountWorkspace, view } = fixture();
+  shell.go('control');
   const input = document.getElementById('tcp-x'), send = document.getElementById('btn-send');
   document.getElementById('workspace-pages').scrollTop=120;
   input.value = '321'; let clicks = 0; send.addEventListener('click', () => clicks++);

@@ -1,0 +1,6 @@
+.workspace-journey{padding:24px;border:1px solid #e2e6ea;border-radius:16px;background:#fff;margin-bottom:20px;color:#26313b}
+.workspace-journey h2{font-size:24px;margin:0 0 12px}.workspace-journey p{line-height:1.65;color:#586573}
+.workspace-journey code{display:block;padding:16px;margin:16px 0;background:#f4f6f8;border-radius:8px;overflow-wrap:anywhere;user-select:all}
+.workspace-live-status{margin:16px 12px;padding:12px;border-top:1px solid #dce2e6;font-size:12px}.workspace-live-status h2{font-size:12px;text-transform:uppercase;letter-spacing:.08em}.workspace-live-status strong{display:block;overflow-wrap:anywhere;margin-top:4px}
+#app[data-nav-state="collapsed"] .workspace-live-status{display:none}
+@media(max-width:700px){.workspace-journey{padding:16px}}

@@ -7,11 +7,11 @@
   'use strict';
   const mounted = new WeakMap();
   const pages = [
-    ['overview', '◫', 'Overview', 'Connection, tasks and tool state at a glance.'],
-    ['control', '⌁', 'Manual control', 'Preview the model, then use the existing controls to send a target.'],
+    ['overview', '◫', '01 · System ready', 'Prepare services and check connection feedback.'],
+    ['control', '⌁', '03 · Digital twin', 'Preview targets before confirming a movement.'],
     ['vision', '◎', 'Vision tasks', 'Select a detected target and follow depth acquisition and grasp progress.'],
     ['calibration', '⊹', 'Calibration', 'Use the existing TCP wizard and its measured results.'],
-    ['assistant', '✧', 'Assistant', 'Voice and text with the existing confirmation flow.'],
+    ['assistant', '✧', '02 · Natural language', 'Describe a movement, inspect the candidate, then confirm or reject.'],
     ['system', '⚙', 'System', 'Live communication logs and interface settings.'],
   ];
   const iconPaths = {
@@ -142,6 +142,56 @@
       const button = element('button', { type: 'button', class: 'action-btn' }, label);
       button.addEventListener('click', () => go(id)); shortcuts.appendChild(button);
     }
+    const journey = element('section', {class:'workspace-journey'});
+    journey.append(element('h2', {}, 'Start it. Say it. See it safely.'), element('p', {}, '01 Prepare services → 02 Describe a movement → 03 Preview and confirm'));
+    journey.append(element('p', {}, 'On the Ubuntu control host, run the preparation command. This does not connect, enable or move the robot.'), element('code', {tabindex:'0'}, './thirdhand ensure --profile manual-control'));
+    const journeyActions = element('div', {class:'workspace-shortcuts'});
+    for (const [id,label] of [['assistant','02 · Natural Language Motion'],['control','03 · Digital Twin Preview']]) {
+      if(options.canOpenPage && !options.canOpenPage(id))continue;
+      const button=element('button',{type:'button',class:'action-btn'},label);
+      button.addEventListener('click',()=>go(id,{focus:true}));journeyActions.append(button);
+    }
+    journey.append(journeyActions,element('p',{},'Inspect the candidate pose, then confirm or reject in the language panel. Execution results come from robot feedback.'));
+    overview.before(journey);shortcuts.hidden=true;
+    const readyButton=element('button',{type:'button',class:'action-btn action-primary',disabled:'',id:'system-ready-button'},'Prepare system');
+    const readyResult=element('p',{role:'status',id:'system-ready-result'},'Checking preparation availability…');
+    const readyServices=element('ul',{id:'system-ready-services'});
+    journey.append(readyButton,readyResult,readyServices);
+    let readyTimer, disposed=false, requesting=false;
+    async function refreshPreparation(){
+      if(!win.fetch || disposed)return;
+      try{
+        const response=await win.fetch('/api/system-ready',{cache:'no-store',signal:win.AbortSignal?.timeout(8000)});
+        if(!response.ok)throw Error('unavailable');
+        const status=await response.json();if(disposed)return;
+        readyButton.disabled=!status.available||status.pending||requesting;
+        readyResult.textContent=status.available ? [status.overall,status.reason, status.can?.reason].filter(Boolean).join(' · ') : 'Preparation is available only on the Ubuntu control host (localhost).';
+        readyServices.replaceChildren();
+        for(const [name,value] of Object.entries(status.services||{}))readyServices.append(element('li',{},name+' · '+value.state+(value.lastError?' · '+value.lastError:'')));
+      }catch{readyButton.disabled=true;readyResult.textContent='Preparation service unavailable. Use the host command above.';}
+      finally{if(!disposed)readyTimer=win.setTimeout?.(refreshPreparation,3000);}
+    }
+    readyButton.addEventListener('click',async()=>{
+      requesting=true;readyButton.disabled=true;
+      try{
+        const response=await win.fetch('/api/system-ready',{method:'POST',headers:{'X-ThirdHand-Action':'prepare'},signal:win.AbortSignal?.timeout(8000)});
+        if(!response.ok){const result=await response.json();throw Error(result.error||'Preparation rejected');}
+        readyResult.textContent='Preparing services…';
+      }catch(error){readyResult.textContent=error.message;}
+      finally{requesting=false;}
+    });
+    void refreshPreparation();
+    win.addEventListener('pagehide',()=>{disposed=true;win.clearTimeout?.(readyTimer);},{once:true});
+    const sidebarStatus=element('section',{class:'workspace-live-status','aria-label':'Live status'});
+    sidebarStatus.append(element('h2',{},'Live status'));
+    for(const [label,id] of [['Connection','conn-ip'],['SDK','hb-label'],['Robot','state-badge'],['AI','voice-ai-status']]) {
+      const row=element('p');row.append(element('span',{},label+' · '),element('strong',{id:'sidebar-'+id},'Unknown'));sidebarStatus.append(row);
+    }
+    nav.insertBefore(sidebarStatus,navBottom);
+    for(const [index,id] of ['overview','assistant','control','vision','calibration','system'].entries()) {
+      nav.insertBefore(navNodes.get(id),sidebarStatus);
+      navNodes.get(id).querySelector('.nav-index').textContent=String(index+1).padStart(2,'0');
+    }
     const calibration = pageNodes.get('calibration');
     const calibrationInfo = element('div', { class: 'workspace-calibration-info' });
     calibrationInfo.append(element('p', {}, 'TCP calibration uses the existing service. Hand-eye collection is not exposed by this gateway.'),
@@ -237,6 +287,7 @@
       for (const [id, , source] of summaries) set(`workspace-summary-${id}`, byId(source)?.textContent || text('Unknown', '未知'));
       set('workspace-summary-vision', [byId('cam-label')?.textContent, byId('vision-lock-reason')?.textContent].filter(Boolean).join(' · ') || text('Unknown', '未知'));
       set('workspace-calibration-tcp', byId('grasp-tcp')?.textContent || 'TCP: --');
+      for(const id of ['conn-ip','hb-label','state-badge','voice-ai-status']) set('sidebar-'+id,byId(id)?.textContent||text('Unknown','未知'));
       const grasp = runtime.ui?.webGraspStatus;
       const depth = runtime.ui?.activeDepthStatus;
       const following = byId('sec-dummy')?.dataset.running === 'true';
@@ -281,7 +332,7 @@
     redirect(doc.querySelector('a[href="tcp-calibration.html"]'), 'calibration');
     win.addEventListener('hashchange', () => go(win.location.hash.slice(1)));
     const observer = new win.MutationObserver(refresh);
-    for (const id of [...summaries.map(item => item[2]), 'grasp-phase', 'active-depth-phase', 'cam-label', 'dummy-phase', 'workspace-web-status']) {
+    for (const id of [...summaries.map(item => item[2]), 'grasp-phase', 'active-depth-phase', 'cam-label', 'dummy-phase', 'workspace-web-status', 'state-badge', 'voice-ai-status']) {
       if (byId(id)) observer.observe(byId(id), { childList: true, subtree: true, characterData: true });
     }
     observer.observe(byId('sec-dummy'), { attributes: true, attributeFilter: ['data-running'] });
@@ -305,7 +356,7 @@
     }
     const account=win.ThirdHandAccountSettings?.mountAccountSettings(doc,win,{go,registerPage(id,page,button){pageNodes.set(id,page);navNodes.set(id,button);}});
     const shell = { go, selectControl, bindRuntime, refresh, installOnboarding, setAccountDataProvider:provider=>account?.setDataProvider(provider) };
-    mounted.set(doc, shell); selectControl('joints'); go(win.location.hash.slice(1) || 'control');
+    mounted.set(doc, shell); selectControl('joints'); go(win.location.hash.slice(1) || 'overview');
     return shell;
   }
   return { mountWorkspace };

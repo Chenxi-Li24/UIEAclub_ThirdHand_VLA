@@ -168,7 +168,7 @@
       if(requesting||disposed)return;
       requesting=true;readyButton.disabled=true;readyButton.textContent='Checking…';journey.setAttribute('aria-busy','true');
       progress.setAttribute('aria-valuenow','0');fill.style.width='0%';percentage.textContent='0%';
-      for(const {row,badge,detail} of rows.values()){row.dataset.status='pending';badge.textContent=labels.pending;detail.textContent='';}
+      for(const {row,badge,detail} of rows.values()){row.dataset.status='pending';badge.textContent=labels.pending;badge.removeAttribute('title');detail.textContent='';}
       let completed=0,issues=0;
       for(const [id,label] of checks){
         if(disposed)break;
@@ -177,14 +177,23 @@
         const dwell=win.setTimeout ? new Promise(resolve=>win.setTimeout(resolve,1100)) : Promise.resolve();
         try{
           if(!win.fetch)throw Error('unavailable');
+          const clock=()=>win.performance?.now?.() ?? Date.now();
+          const started=clock();
           const response=await win.fetch(id==='api'?'/health':'/api/system-diagnostics?check='+id,{cache:'no-store',signal:win.AbortSignal?.timeout(8000)});
           if(!response.ok)throw Error('unavailable');
           const data=await response.json();
+          const roundTripMs=Math.max(0,clock()-started);
           await dwell;
           if(disposed)break;
           const state=id==='api'?(data.status==='ready'?'passed':'warning'):data.status;
           if(!['passed','failed','warning','unknown','skipped'].includes(state))throw Error('invalid');
           row.dataset.status=state;badge.textContent=labels[state];
+          const latency=id==='api'?roundTripMs:data.latencyMs;
+          if(state==='passed'&&Number.isFinite(latency)&&latency>=0){
+            const kind=id==='api'?'RTT':'TCP';
+            badge.textContent+=` · ${kind} ${latency<1?'<1':Math.round(latency)} ms`;
+            badge.title=id==='api'?'Browser to Ubuntu HTTP round trip, including response processing. Animation delay excluded.':'Ubuntu to service TCP connection time. Not model inference or browser latency.';
+          }
           detail.textContent=id==='api'?(state==='passed'?'Gateway API responded successfully.':'Gateway responded but is not ready.') : data.detail;
           if(['failed','warning','unknown'].includes(state))issues++;
         }catch{await dwell;if(disposed)break;row.dataset.status='failed';badge.textContent=labels.failed;detail.textContent='Check unavailable or timed out. Check your connection and retry.';issues++;}

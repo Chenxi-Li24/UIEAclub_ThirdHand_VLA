@@ -14,3 +14,10 @@ test('Wi-Fi distinguishes connected, absent, disconnected and unavailable',async
  const check=createSystemDiagnostics({platform:'linux',execute:async()=>{throw Error('missing');},interfaces:()=>({lo:[{internal:true}]})});
  assert.equal((await check('wifi')).status,'unknown');assert.equal((await check('network')).status,'failed');assert.equal((await check('invalid')).status,'unknown');
 });
+
+test('service connection latency uses measured time and failed connections have no latency',async()=>{
+ let time=100,ok=true;
+ const check=createSystemDiagnostics({clock:()=>time,connect:async()=>{time+=12.5;return ok;}});
+ const passed=await check('ai');assert.equal(passed.latencyMs,12.5);assert.equal(passed.latencyKind,'host-tcp-connect');
+ ok=false;assert.equal((await check('vision')).latencyMs,null);
+});

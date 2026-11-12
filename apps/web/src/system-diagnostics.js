@@ -17,7 +17,7 @@ function probe(url) {
     } catch { socket?.destroy(); resolve(false); }
   });
 }
-function createSystemDiagnostics({ getRobotState = () => ({}), voiceUrl, visionUrl, connect = probe, interfaces = os.networkInterfaces, execute = run, platform = process.platform } = {}) {
+function createSystemDiagnostics({ getRobotState = () => ({}), voiceUrl, visionUrl, connect = probe, interfaces = os.networkInterfaces, execute = run, platform = process.platform, clock = () => performance.now() } = {}) {
   return async function check(id) {
     try {
       if (id === 'sdk') {
@@ -25,8 +25,11 @@ function createSystemDiagnostics({ getRobotState = () => ({}), voiceUrl, visionU
         return result(id, state.connected && state.stateFresh ? 'passed' : 'failed', !state.connected ? 'SDK disconnected. Check the robot service and CAN connection.' : !state.stateFresh ? 'SDK feedback is stale. Check the robot service.' : 'SDK connected with fresh robot feedback.');
       }
       if (id === 'ai' || id === 'vision') {
+        const started = clock();
         const ok = await connect(id === 'ai' ? voiceUrl : visionUrl);
-        return result(id, ok ? 'passed' : 'failed', ok ? 'Service port reachable. Model inference is not tested.' : 'Service unavailable or timed out. Check the host service.');
+        const latencyMs = Math.max(0, Math.round((clock() - started) * 10) / 10);
+        return { ...result(id, ok ? 'passed' : 'failed', ok ? 'Service port reachable. Model inference is not tested.' : 'Service unavailable or timed out. Check the host service.'),
+          latencyMs: ok ? latencyMs : null, latencyKind: 'host-tcp-connect' };
       }
       if (id === 'network') {
         const active = Object.values(interfaces()).some(entries => entries?.some(address => !address.internal));

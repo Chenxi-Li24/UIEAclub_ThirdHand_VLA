@@ -236,3 +236,12 @@ test('system check advances on results, continues after failures and supports re
  assert.equal(document.querySelectorAll('.system-checks [data-status=failed]').length,1);
  button.click();for(let i=0;i<20;i++)await new Promise(setImmediate);assert.equal(calls.length,12);
 });
+
+test('API latency excludes presentation dwell and service latency uses host measurement',async()=>{
+ const {document,view}=fixture();let time=0;
+ view.performance={now:()=>time};view.setTimeout=fn=>{time+=1100;fn();};
+ view.fetch=async url=>{time+=35;return {ok:true,json:async()=>url==='/health'?{status:'ready'}:{status:'passed',latencyMs:2.4,detail:'Reachable'}};};
+ document.getElementById('system-ready-button').click();for(let i=0;i<20;i++)await new Promise(setImmediate);
+ const badges=Array.from(document.querySelectorAll('.check-badge')).map(e=>e.textContent);
+ assert.match(badges[0],/RTT 35 ms/);assert.match(badges[2],/TCP 2 ms/);
+});

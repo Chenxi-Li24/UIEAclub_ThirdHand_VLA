@@ -39,3 +39,7 @@ Validation: 28 focused Node tests pass, including stale SDK rejection, Wi-Fi res
 ### Focused check presentation
 
 The system-check overview now uses one centered card. The overview-only model pane, duplicate heading, onboarding welcome and summary cards are hidden; the same model remains mounted and is shown on other workspace pages. Successful rows stay compact; warning/failure explanations remain visible. A large percentage and 14-pixel animated progress bar replace the subtle progress treatment. Each check is displayed for at least 1.1 seconds (roughly 6.6 seconds minimum overall), concurrently with its real request; only completed results advance the percentage. Reduced-motion preferences disable the animations. The 25 relevant interface/diagnostic tests pass after this presentation adjustment.
+
+### Connection latency
+
+Successful Web API results now show RTT in milliseconds measured from browser request start through response JSON receipt. AI and vision results show TCP connection time measured on Ubuntu using a monotonic clock. These are different paths and labeled explicitly; tooltips explain the scope. Values below one millisecond display <1 ms. Failed probes have null latency and no numeric badge. SDK feedback and Wi-Fi status do not claim a measured ping. Presentation dwell is excluded. Twenty-seven relevant tests pass, including measured service timing, failure handling, and separation of API timing from presentation delay. No dependency or database changes.

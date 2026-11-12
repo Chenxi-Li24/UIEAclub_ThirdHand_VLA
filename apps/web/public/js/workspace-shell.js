@@ -192,6 +192,50 @@
       nav.insertBefore(navNodes.get(id),sidebarStatus);
       navNodes.get(id).querySelector('.nav-index').textContent=String(index+1).padStart(2,'0');
     }
+    const naturalEntry=navNodes.get('assistant');
+    naturalEntry.classList.add('nav-natural-language');
+    naturalEntry.querySelector('.nav-label').textContent='Natural language';
+    naturalEntry.querySelector('.nav-index').remove();
+    navBottom.prepend(naturalEntry);
+    const chat=byId('voice-panel');
+    chat.classList.add('chat-dock');
+    chat.dataset.inputMode='text';
+    const chatBody=chat.querySelector('.voice-panel-body');
+    const settingsDrawer=element('details',{class:'chat-settings'});
+    settingsDrawer.append(element('summary',{},'Audio & AI settings'));
+    chatBody.querySelectorAll('.voice-config-block').forEach(node=>settingsDrawer.append(node));
+    const capture=chat.querySelector('.voice-capture-block');
+    const conversation=chat.querySelector('.voice-conversation-block');
+    chatBody.append(conversation,byId('voice-intent-card'),capture,settingsDrawer);
+    const inputModes=element('div',{class:'chat-input-modes',role:'group','aria-label':'Input method'});
+    const modeButtons=new Map();
+    for(const [id,label]of [['text','Text'],['voice','Voice']]){
+      const button=element('button',{type:'button','aria-pressed':String(id==='text')},label);
+      button.addEventListener('click',()=>{
+        if(runtime.voice?.recording||runtime.voice?.starting){announce('Stop or cancel recording before changing input mode.','Stop or cancel recording before changing input mode.');return;}
+        chat.dataset.inputMode=id;
+        for(const [key,node]of modeButtons)node.setAttribute('aria-pressed',String(key===id));
+        capture.hidden=id!=='voice';byId('voice-text-form').hidden=id!=='text';
+        if(id==='voice')settingsDrawer.open=true;
+        else byId('voice-text-input').focus();
+      });modeButtons.set(id,button);inputModes.append(button);
+    }
+    capture.hidden=true;chatBody.append(inputModes);
+    const collapseChat=element('button',{type:'button',class:'voice-icon-button',id:'chat-collapse','aria-label':'Collapse conversation','aria-expanded':'true'},'−');
+    chat.querySelector('.voice-header-actions').prepend(collapseChat);
+    collapseChat.addEventListener('click',()=>{
+      if(runtime.voice?.recording||runtime.voice?.starting||!byId('voice-intent-card').hidden){announce('Finish recording or resolve the candidate before collapsing.','Finish recording or resolve the candidate before collapsing.');return;}
+      const collapsed=chat.classList.toggle('chat-collapsed');
+      chatBody.hidden=collapsed;
+      collapseChat.textContent=collapsed?'+':'−';
+      collapseChat.setAttribute('aria-expanded',String(!collapsed));
+      collapseChat.setAttribute('aria-label',collapsed?'Expand conversation':'Collapse conversation');
+    });
+    const candidateObserver=new win.MutationObserver(()=>{
+      if(!byId('voice-intent-card').hidden){chat.classList.remove('chat-collapsed');chatBody.hidden=false;collapseChat.textContent='−';collapseChat.setAttribute('aria-expanded','true');collapseChat.setAttribute('aria-label','Collapse conversation');}
+    });
+    candidateObserver.observe(byId('voice-intent-card'),{attributes:true,attributeFilter:['hidden']});
+    win.addEventListener('pagehide',()=>candidateObserver.disconnect(),{once:true});
     const calibration = pageNodes.get('calibration');
     const calibrationInfo = element('div', { class: 'workspace-calibration-info' });
     calibrationInfo.append(element('p', {}, 'TCP calibration uses the existing service. Hand-eye collection is not exposed by this gateway.'),

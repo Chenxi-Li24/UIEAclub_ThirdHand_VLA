@@ -1,5 +1,9 @@
 # Three-step local control workspace
 
+## Bottom conversation panel
+
+Natural language is anchored in the lower-left navigation. Its existing conversation and candidate controls are presented in a bottom-right dock, with Text/Voice selectors beneath the composer. Audio/AI configuration is folded into a details section. Selecting Voice does not acquire a microphone or begin recording. Drafts and controller listeners survive mode changes, collapse and reopen. Collapse is blocked during recording or a pending candidate; a newly received candidate expands the panel. Close and Escape retain the existing recording navigation guard. The panel remains responsive and all added text is English. Validation: 21 shell/English-interface tests pass; browser inspection verifies input modes, panel positioning and absence of Chinese interface text. Hardware speech/control was not exercised.
+
 ## English-only interface
 
 All shipped HTML pages now contain English initial labels, tooltips and accessibility text. Chinese language controls are removed. The translation layer always selects English, and legacy guest/account language preferences normalize to English. Camera diagnostics and TCP calibration include English static and dynamic copy. Existing translation catalogs remain as compatibility mappings for legacy controller messages; user-provided command content and backend payloads are not rewritten. A source scan of HTML and a rendered workspace text/attribute scan verify that no Chinese interface text is present in the checked states. External/user content is not covered by that guarantee.

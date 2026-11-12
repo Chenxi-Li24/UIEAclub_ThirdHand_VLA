@@ -4,3 +4,19 @@
 .workspace-live-status{margin:16px 12px;padding:12px;border-top:1px solid #dce2e6;font-size:12px}.workspace-live-status h2{font-size:12px;text-transform:uppercase;letter-spacing:.08em}.workspace-live-status strong{display:block;overflow-wrap:anywhere;margin-top:4px}
 #app[data-nav-state="collapsed"] .workspace-live-status{display:none}
 @media(max-width:700px){.workspace-journey{padding:16px}}
+.workspace #workspace-nav .nav-natural-language{margin-bottom:14px;background:#fff3e9;color:#c95412;border:1px solid #ffdbc2;border-radius:12px}
+.workspace #voice-panel.chat-dock{position:fixed;left:auto;top:auto;right:24px;bottom:48px;width:min(660px,calc(100vw - 310px));max-height:70vh;min-height:0;z-index:50;display:flex;flex-direction:column;border:1px solid #e6dfd9;border-radius:20px;box-shadow:0 18px 70px #28313b26;overflow:hidden}
+.workspace #voice-panel.chat-dock .voice-panel-header{min-height:58px;padding:12px 18px;flex-shrink:0}
+.workspace #voice-panel.chat-dock .voice-panel-body{min-height:0;overflow:auto;padding:12px 16px;gap:10px}
+.workspace #voice-panel.chat-dock .voice-conversation{min-height:100px;max-height:22vh;overflow:auto}
+.workspace #voice-panel.chat-dock .voice-conversation-block{padding:0;border:0;box-shadow:none}
+.workspace #voice-panel.chat-dock .voice-conversation-block>.voice-block-heading,.workspace #voice-panel.chat-dock .voice-signal-ribbon,.workspace #voice-panel.chat-dock .voice-kicker{display:none}
+.workspace #voice-panel.chat-dock #voice-panel-close{display:inline-flex}
+.workspace #voice-panel.chat-dock .voice-panel-footer{padding:10px 16px;font-size:11px;flex-shrink:0}
+.workspace #voice-panel.chat-dock .chat-input-modes{display:flex;gap:6px;border-top:1px solid #eceff1;padding-top:10px}
+.chat-input-modes button{border:1px solid #e3e7eb;border-radius:20px;background:white;padding:7px 18px;color:#586573;cursor:pointer}
+.chat-input-modes button[aria-pressed="true"]{background:#fff0e4;border-color:#f7bc92;color:#ba4b0b}
+.chat-settings summary{cursor:pointer;font-size:12px;color:#687583;padding:8px 0}
+.workspace #voice-panel.chat-collapsed .voice-panel-footer{display:none}
+.workspace #voice-panel.chat-dock [hidden]{display:none!important}
+@media(max-width:700px){.workspace #voice-panel.chat-dock{right:12px;bottom:44px;width:calc(100vw - 24px);max-height:72dvh}}

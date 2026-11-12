@@ -4,6 +4,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { STLLoader } from 'three/addons/loaders/STLLoader.js';
 import { ColladaLoader } from 'three/addons/loaders/ColladaLoader.js';
 import './robot-viewer.js';
+import { createViewer } from './model-resources.js';
 import { VoiceControl } from './voice-control.js?v=12';
 console.log('[main.js] Modules imported, THREE keys:', Object.keys(THREE).length);
 
@@ -148,9 +149,7 @@ const BASE_TO_THREE_DIRECTIONS = Object.freeze({
 
 // === SceneManager ===
 // The shared viewer has no transport startup; legacy local controls keep their own bootstrap.
-const { SceneManager, ArmModel } = globalThis.ThirdHandRobotViewer.createRobotViewer({
-  THREE, OrbitControls, STLLoader, ColladaLoader, baseDirections: BASE_TO_THREE_DIRECTIONS,
-});
+const { SceneManager, ArmModel } = createViewer({assetBase:'.',timeoutMs:120000});
 
 // === WSClient ===
 class WSClient {
@@ -791,6 +790,7 @@ class UIControls {
 
     // ── XVisio vision and grasp controls ──────────────────
     const xvisionFeed = document.getElementById('xvision-feed');
+    const visionPage = document.getElementById('page-vision');
     let xvisionStream = 'vision';
     let xvisionRetryTimer = null;
     let xvisionRetryCount = 0;
@@ -809,6 +809,7 @@ class UIControls {
       if (resetBackoff) xvisionRetryCount = 0;
       if (xvisionRetryTimer) clearTimeout(xvisionRetryTimer);
       xvisionRetryTimer = null;
+      if (visionPage?.hidden) { xvisionFeed.removeAttribute('src'); return; }
       xvisionFeed.src = `/camera/xvisio/${xvisionStream}?stream=${Date.now()}`;
     };
 
@@ -824,6 +825,7 @@ class UIControls {
         xvisionFeed.alt = `XVisio ${describeXVisionStream()}`;
       });
       xvisionFeed.addEventListener('error', () => {
+        if (visionPage?.hidden) return;
         const dot = document.getElementById('cam-dot');
         const label = document.getElementById('cam-label');
         if (dot) dot.className = 'cam-dot';
@@ -837,6 +839,11 @@ class UIControls {
         }, delayMs);
       });
       reloadXVisionFeed(true);
+      if (visionPage) {
+        const visibilityObserver = new MutationObserver(() => reloadXVisionFeed(true));
+        visibilityObserver.observe(visionPage, { attributes: true, attributeFilter: ['hidden'] });
+        window.addEventListener('pagehide', () => { visibilityObserver.disconnect(); clearTimeout(xvisionRetryTimer); }, { once: true });
+      }
     }
 
     document.querySelectorAll('[data-xvision-stream]').forEach(button => {

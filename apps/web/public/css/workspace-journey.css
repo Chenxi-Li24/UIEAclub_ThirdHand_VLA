@@ -36,3 +36,5 @@
 .workspace #voice-panel.chat-minimal .voice-conversation{max-height:28vh;min-height:0;background:#fff}
 .chat-minimal .voice-empty{display:none}.chat-minimal .voice-capture-block>.voice-block-heading{display:none}
 .chat-minimal .chat-audio{z-index:2}
+.workspace #voice-panel.chat-minimal{left:50%;right:auto;transform:translateX(-50%);width:min(720px,calc(100vw - 48px))}
+.workspace #voice-panel.chat-minimal[hidden]{display:none!important}

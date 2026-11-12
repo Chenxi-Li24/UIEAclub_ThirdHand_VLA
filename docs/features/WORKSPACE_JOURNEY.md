@@ -2,6 +2,8 @@
 
 ## Bottom conversation panel
 
+The composer is now a viewport-centered bottom overlay attached directly to the workspace root. Opening Natural language does not change the current route. Navigation among overview, model, vision, calibration and system pages retains the conversation, draft and recording state. The lower-left entry toggles visibility; closing remains blocked during active/starting recording. Existing calibration navigation guards still apply to page changes. Reply windows remain anchored above the composer. Validation: 22 shell/English-interface tests pass; browser checks confirm horizontal centering, persistent drafts across four pages, and close/reopen without route changes.
+
 Natural language remains in the lower-left navigation. The bottom-right composer is a single rounded input with a reply toggle, send button and right-hand microphone icon. It has no heading, description, footer or Text/Voice tabs. Replies and action confirmations appear in a separate floating window above the input; users can close and reopen it without losing drafts. New messages or candidates reopen the reply window. The microphone icon opens compact voice controls without acquiring a microphone or starting recording automatically. Audio settings remain in a details section. Voice controls cannot be closed while recording starts or runs. Existing execution confirmation and recording navigation guards remain intact. Validation: 21 shell/English-interface tests pass. Browser inspection confirms a 76-pixel-high composer, hidden headings, independent reply dismissal and English-only visible text. Hardware speech/control was not exercised.
 
 ## English-only interface

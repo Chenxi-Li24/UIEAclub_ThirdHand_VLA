@@ -28,6 +28,15 @@ test('minimal composer keeps drafts while independent reply and voice popovers o
  assert.ok(document.querySelector('.nav-bottom [data-page="assistant"]'));
  assert.equal(document.getElementById('chat-collapse'),null);
 });
+test('global chat coexists with pages and toggles without changing routes or losing drafts',()=>{
+ const {document,shell,view}=fixture();shell.go('control');
+ shell.go('assistant');const panel=document.getElementById('voice-panel');
+ assert.equal(view.location.hash,'#control');assert.equal(panel.parentElement.id,'app');
+ const input=document.getElementById('voice-text-input');input.value='Move left';
+ for(const page of ['vision','system','overview','control']){shell.go(page);assert.equal(panel.hidden,false);assert.equal(document.getElementById('page-'+page).hidden,false);assert.equal(input.value,'Move left');}
+ const entry=document.querySelector('[data-page="assistant"]');entry.click();assert.equal(panel.hidden,true);assert.equal(view.location.hash,'#control');
+ entry.click();assert.equal(panel.hidden,false);assert.equal(input.value,'Move left');
+});
 test('sidebar toggle changes only navigation width, retains calibration/model state and sends no commands',()=>{
  const {document,shell,preferences,view}=fixture(),app=document.getElementById('app');
  const toggle=document.getElementById('workspace-nav-toggle');assert.ok(toggle,'a visible collapse control is required');
@@ -106,7 +115,7 @@ test('the same model stays visible beside every page and receives resize without
     assert.equal(viewport.closest('[hidden]'),null,`model hidden on ${page}`);
     assert.equal(document.getElementById('three-container').firstChild,canvas);
     assert.equal(document.getElementById('viewport'),viewport);
-    assert.ok(resizes>before,`model not resized on ${page}`);
+    if(page!=='assistant')assert.ok(resizes>before,`model not resized on ${page}`);
   }
   assert.equal(writes,0);
 });
@@ -134,13 +143,15 @@ test('route switches never write robot commands or reconnect clients; real confi
   assert.match(document.getElementById('workspace-task').textContent, /motion/i);
 });
 test('assistant remains visible while recording or starting and navigation never starts recording', () => {
-  const { shell } = fixture(); let opens = 0, closes = 0;
+  const { shell,document,view } = fixture(); let opens = 0, closes = 0;
   const voice = { recording: false, starting: false, openPanel() { opens++; }, closePanel() { closes++; } };
   shell.bindRuntime({ voice }); shell.go('assistant');
-  voice.starting = true; assert.equal(shell.go('control'), false);
-  voice.starting = false; voice.recording = true; assert.equal(shell.go('vision'), false);
+  voice.starting = true; assert.equal(shell.go('control'), true);
+  voice.starting = false; voice.recording = true; assert.equal(shell.go('vision'), true);
+  assert.equal(document.getElementById('voice-panel').hidden,false);
+  assert.equal(view.location.hash,'#vision');
   voice.recording = false; assert.equal(shell.go('control'), true);
-  assert.equal(opens, 1); assert.equal(closes, 1);
+  assert.equal(opens, 1); assert.equal(closes, 0);
 });
 test('Escape cannot hide or inert the assistant while recording', () => {
   const { document, window, shell } = fixture(); const panel = document.getElementById('voice-panel');
@@ -149,7 +160,7 @@ test('Escape cannot hide or inert the assistant while recording', () => {
   panel.addEventListener('keydown', event => { if (event.key === 'Escape') voice.closePanel(); });
   const event = new window.Event('keydown', { bubbles: true, cancelable: true });
   Object.defineProperty(event, 'key', { value: 'Escape' }); panel.dispatchEvent(event);
-  assert.equal(panel.inert, false); assert.equal(document.getElementById('page-assistant').hidden, false);
+  assert.equal(panel.inert, false); assert.equal(panel.hidden, false);
 });
 test('the visible manual tab owns send dispatch and gripper has no hidden arm send action', () => {
   const { document, shell } = fixture(); const choices = [];

@@ -65,7 +65,7 @@
       const button = element('button', { type: 'button', 'data-page': id, 'aria-label': label, title: label });
       const navIcon = element('span', { class: 'nav-icon', 'aria-hidden': 'true' }); navIcon.appendChild(icon(id));
       button.append(navIcon, element('span', { class: 'nav-label' }, label), element('span',{class:'nav-index','aria-hidden':'true'},String(index+1).padStart(2,'0')));
-      button.addEventListener('click', () => go(id)); nav.appendChild(button); navNodes.set(id, button);
+      button.addEventListener('click', () => id==='assistant'?setChatOpen(!chatOpen):go(id)); nav.appendChild(button); navNodes.set(id, button);
       const page = element('section', { id: `page-${id}`, class: 'workspace-page', 'aria-labelledby': `heading-${id}`, hidden: '' });
       const heading = element('div', { class: 'workspace-heading' });
       heading.append(element('div',{class:'page-eyebrow','aria-hidden':'true','data-i18n-skip':''},`THIRDHAND / 0${index+1}`), element('h1', { id: `heading-${id}`, tabindex: '-1' }, label), element('p', {}, detail));
@@ -198,6 +198,19 @@
     naturalEntry.querySelector('.nav-index').remove();
     navBottom.prepend(naturalEntry);
     const chat=byId('voice-panel');
+    app.append(chat);chat.hidden=true;
+    let chatOpen=false;
+    function setChatOpen(open){
+      if(open&&options.canOpenPage&&!options.canOpenPage('assistant'))return false;
+      if(!open&&(runtime.voice?.recording||runtime.voice?.starting)){announce('Stop or cancel recording before closing voice input.','Stop or cancel recording before closing voice input.');return false;}
+      chatOpen=open;chat.hidden=!open;
+      naturalEntry.setAttribute('aria-expanded',String(open));
+      naturalEntry.classList.toggle('active',open);
+      if(open)runtime.voice?.openPanel();else runtime.voice?.closePanel();
+      if(open)byId('voice-text-input').focus();else naturalEntry.focus();
+      return true;
+    }
+    naturalEntry.setAttribute('aria-controls','voice-panel');naturalEntry.setAttribute('aria-expanded','false');
     chat.classList.add('chat-dock','chat-minimal');
     const chatBody=chat.querySelector('.voice-panel-body');
     const replies=element('section',{id:'chat-replies',class:'chat-replies','aria-label':'AI replies',hidden:''});
@@ -264,9 +277,6 @@
     navMedia?.addEventListener?.('change',event=>{if(navPreference===null)setNavigationExpanded(event.matches);});
     function announce(en, zh) { notice.textContent = text(en, zh); notice.hidden = false; }
     function canLeave() {
-      if (current === 'assistant' && (runtime.voice?.recording || runtime.voice?.starting)) {
-        announce('Stop or cancel recording before changing pages.', '请先停止或取消录音，再切换页面。'); return false;
-      }
       if (current === 'calibration' && frame) {
         try {
           const state = frame.contentWindow?.ThirdHandCalibrationNavigationState?.();
@@ -285,6 +295,10 @@
       return true;
     }
     function go(id, { focus = false } = {}) {
+      if(id==='assistant'){
+        if(!current)go('overview');
+        return setChatOpen(true);
+      }
       if (id === 'account-connections' && doc.getElementById('workspace-bootstrap')) id = 'system';
       if (!pageNodes.has(id) || options.canOpenPage && !options.canOpenPage(id)) id = 'control';
       if (id !== current && !canLeave()) { win.history.replaceState(null, '', `#${current}`); return false; }
@@ -298,7 +312,7 @@
       for (const [key, page] of pageNodes) page.hidden = key !== id;
       main.scrollTop = scrollPositions.get(id) || 0;
       for (const [key, button] of navNodes) {
-        button.classList.toggle('active', key === id);
+        button.classList.toggle('active', key === 'assistant' ? chatOpen : key === id);
         if (key === id) button.setAttribute('aria-current', 'page'); else button.removeAttribute('aria-current');
       }
       if (id === 'calibration' && !frame && options.calibrationEntry !== null) {
@@ -357,7 +371,7 @@
         });
         values.ws.on('robot_state', state => { moving = state.moving === true || state.motionActive === true; robotStateName=state.stateName||null; refresh(); });
       }
-      if (values.voice && current === 'assistant') values.voice.openPanel();
+      if (values.voice && chatOpen) values.voice.openPanel();
       if (values.scene) guide?.bindScene(values.scene);
       win.requestAnimationFrame(() => runtime.scene?._onResize());
       refresh();
@@ -365,10 +379,11 @@
     const redirect = (node, page) => node?.addEventListener('click', event => {
       event.preventDefault(); event.stopImmediatePropagation(); go(page, { focus: true });
     }, true);
-    redirect(byId('btn-voice-toggle'), 'assistant'); redirect(byId('voice-panel-close'), 'control');
+    byId('btn-voice-toggle').addEventListener('click',event=>{event.preventDefault();event.stopImmediatePropagation();setChatOpen(!chatOpen);},true);
+    byId('voice-panel-close').addEventListener('click',event=>{event.preventDefault();event.stopImmediatePropagation();setChatOpen(false);},true);
     byId('voice-panel').addEventListener('keydown', event => {
       if (event.key !== 'Escape') return;
-      event.preventDefault(); event.stopImmediatePropagation(); go('control', { focus: true });
+      event.preventDefault(); event.stopImmediatePropagation(); setChatOpen(false);
     }, true);
     redirect(byId('btn-log-toggle'), 'system'); redirect(byId('btn-log-close'), 'control');
     redirect(doc.querySelector('a[href="tcp-calibration.html"]'), 'calibration');

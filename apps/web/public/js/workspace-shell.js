@@ -183,18 +183,22 @@
           if(!win.fetch)throw Error('unavailable');
           const clock=()=>win.performance?.now?.() ?? Date.now();
           const started=clock();
+          let data;
+          if(options.runSystemCheck)data=await options.runSystemCheck(id);
+          else {
           const response=await win.fetch((id==='api'||id==='tcp')?'/health':'/api/system-diagnostics?check='+id,{cache:'no-store',signal:win.AbortSignal?.timeout(8000)});
           if(!response.ok)throw Error('unavailable');
-          const data=await response.json();
+          data=await response.json();
           if(id==='tcp'){
             const tcp=data.dependencies?.tcpCalibration;
             data.status=tcp?.ready===true?'passed':tcp?'warning':'unknown';
             data.detail=tcp?.ready===true?'TCP calibration service is ready. Physical calibration accuracy is not verified.':tcp?.reason==='tcp_calibration_disabled'?'TCP calibration is disabled on the host. Enable and configure the calibration service.':'TCP calibration is unavailable or not configured. Check host configuration.';
           }
+          }
           const roundTripMs=Math.max(0,clock()-started);
           await dwell;
           if(disposed)break;
-          const state=id==='api'?(data.status==='ready'?'passed':'warning'):data.status;
+          const state=id==='api'&&!options.runSystemCheck?(data.status==='ready'?'passed':'warning'):data.status;
           if(!['passed','failed','warning','unknown','skipped'].includes(state))throw Error('invalid');
           row.dataset.status=state;badge.textContent=labels[state];
           const latency=id==='api'?roundTripMs:data.latencyMs;

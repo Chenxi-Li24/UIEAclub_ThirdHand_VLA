@@ -11,7 +11,11 @@
     const preferences=get('ThirdHandPreferences').createPreferenceClient({view,request:(path,body)=>session.request(path,body)});
     await preferences.hydrate(identity,bootstrap.preferences);preferences.apply(doc);
     const tutorialView=get('ThirdHandTutorialAdapter').scopedTutorialView(view,identity.userId);
-    const shell=get(bootstrap.preferences?.layoutId==='classic'?'ThirdHandClassicShell':'ThirdHandWorkspace').mountWorkspace(doc,tutorialView,{calibrationEntry:null,canOpenPage:id=>identity.mode==='admin'||id!=='assistant'});
+    const shell=get(bootstrap.preferences?.layoutId==='classic'?'ThirdHandClassicShell':'ThirdHandWorkspace').mountWorkspace(doc,tutorialView,{calibrationEntry:null,canOpenPage:id=>identity.mode==='admin'||id!=='assistant',runSystemCheck:async id=>{
+      if(id==='api'){await session.request('/api/v1/session');return {status:'passed',detail:'Authenticated cloud API is reachable.'};}
+      if(id==='sdk'||id==='network'){await deviceState?.store.refresh();const state=deviceState?.store.snapshot();const ok=id==='sdk'?state?.status==='connected':state?.value?.gatewayOnline===true;return {status:ok?'passed':'warning',detail:ok?'Verified cloud device feedback is available.':'No fresh device connection is available. Open System for device diagnostics.'};}
+      return {status:'unknown',detail:({ai:'The local AI service is not exposed through this cloud gateway.',vision:'Vision service health is not reported by this cloud gateway.',wifi:'Ubuntu Wi-Fi status is not available in cloud telemetry.',tcp:'TCP calibration status is not available in cloud telemetry.'})[id]||'This check is unavailable.'};
+    }});
     const essentials=api.mountWorkspaceEssentials({document:doc,view,shell,identity,sessionClient:session,preferences});
     get('ThirdHandAccountSecurity').mountAccountSecurity({document:doc,view,identity,sessionClient:session});
     const navigation=get('ThirdHandWorkspaceNavigation')?.mount({document:doc,view,shell,identity});

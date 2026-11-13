@@ -15,6 +15,28 @@ function fixture({navPreference,narrow=false,storageBlocked=false}={}) {
   const { mountWorkspace } = require(path.join(root, 'apps/web/public/js/workspace-shell.js'));
   return { document, window, shell: mountWorkspace(document, view), mountWorkspace, view, preferences, media };
 }
+test('minimal composer keeps drafts while independent reply and voice popovers open and close',()=>{
+ const {document,shell}=fixture();let requests=0;
+ shell.bindRuntime({voice:{openPanel(){},closePanel(){},startRecording(){requests++;}}});shell.go('assistant');
+ const input=document.getElementById('voice-text-input');input.value='Move left';
+ const replies=document.getElementById('chat-replies');assert.equal(replies.hidden,true);
+ document.getElementById('chat-replies-toggle').click();assert.equal(replies.hidden,false);
+ document.getElementById('chat-replies-close').click();assert.equal(replies.hidden,true);
+ assert.equal(input.closest('[hidden]'),null);assert.equal(input.value,'Move left');
+ document.getElementById('chat-voice').click();assert.equal(document.getElementById('chat-audio').hidden,false);assert.equal(requests,0);
+ document.querySelector('#chat-audio > button').click();assert.equal(document.getElementById('chat-audio').hidden,true);
+ assert.ok(document.querySelector('.nav-bottom [data-page="assistant"]'));
+ assert.equal(document.getElementById('chat-collapse'),null);
+});
+test('global chat coexists with pages and toggles without changing routes or losing drafts',()=>{
+ const {document,shell,view}=fixture();shell.go('control');
+ shell.go('assistant');const panel=document.getElementById('voice-panel');
+ assert.equal(view.location.hash,'#control');assert.equal(panel.parentElement.id,'app');
+ const input=document.getElementById('voice-text-input');input.value='Move left';
+ for(const page of ['vision','system','overview','control']){shell.go(page);assert.equal(panel.hidden,false);assert.equal(document.getElementById('page-'+page).hidden,false);assert.equal(input.value,'Move left');}
+ const entry=document.querySelector('[data-page="assistant"]');entry.click();assert.equal(panel.hidden,true);assert.equal(view.location.hash,'#control');
+ entry.click();assert.equal(panel.hidden,false);assert.equal(input.value,'Move left');
+});
 test('sidebar toggle changes only navigation width, retains calibration/model state and sends no commands',()=>{
  const {document,shell,preferences,view}=fixture(),app=document.getElementById('app');
  const toggle=document.getElementById('workspace-nav-toggle');assert.ok(toggle,'a visible collapse control is required');
@@ -61,6 +83,7 @@ test('onboarding pauses unknown teaching and a configured but failed snapshot',(
 });
 test('workspace preserves actual controls, input state and listeners across six pages and three tabs', () => {
   const { document, shell, mountWorkspace, view } = fixture();
+  shell.go('control');
   const input = document.getElementById('tcp-x'), send = document.getElementById('btn-send');
   document.getElementById('workspace-pages').scrollTop=120;
   input.value = '321'; let clicks = 0; send.addEventListener('click', () => clicks++);
@@ -92,7 +115,7 @@ test('the same model stays visible beside every page and receives resize without
     assert.equal(viewport.closest('[hidden]'),null,`model hidden on ${page}`);
     assert.equal(document.getElementById('three-container').firstChild,canvas);
     assert.equal(document.getElementById('viewport'),viewport);
-    assert.ok(resizes>before,`model not resized on ${page}`);
+    if(page!=='assistant')assert.ok(resizes>before,`model not resized on ${page}`);
   }
   assert.equal(writes,0);
 });
@@ -120,13 +143,15 @@ test('route switches never write robot commands or reconnect clients; real confi
   assert.match(document.getElementById('workspace-task').textContent, /motion/i);
 });
 test('assistant remains visible while recording or starting and navigation never starts recording', () => {
-  const { shell } = fixture(); let opens = 0, closes = 0;
+  const { shell,document,view } = fixture(); let opens = 0, closes = 0;
   const voice = { recording: false, starting: false, openPanel() { opens++; }, closePanel() { closes++; } };
   shell.bindRuntime({ voice }); shell.go('assistant');
-  voice.starting = true; assert.equal(shell.go('control'), false);
-  voice.starting = false; voice.recording = true; assert.equal(shell.go('vision'), false);
+  voice.starting = true; assert.equal(shell.go('control'), true);
+  voice.starting = false; voice.recording = true; assert.equal(shell.go('vision'), true);
+  assert.equal(document.getElementById('voice-panel').hidden,false);
+  assert.equal(view.location.hash,'#vision');
   voice.recording = false; assert.equal(shell.go('control'), true);
-  assert.equal(opens, 1); assert.equal(closes, 1);
+  assert.equal(opens, 1); assert.equal(closes, 0);
 });
 test('Escape cannot hide or inert the assistant while recording', () => {
   const { document, window, shell } = fixture(); const panel = document.getElementById('voice-panel');
@@ -135,7 +160,7 @@ test('Escape cannot hide or inert the assistant while recording', () => {
   panel.addEventListener('keydown', event => { if (event.key === 'Escape') voice.closePanel(); });
   const event = new window.Event('keydown', { bubbles: true, cancelable: true });
   Object.defineProperty(event, 'key', { value: 'Escape' }); panel.dispatchEvent(event);
-  assert.equal(panel.inert, false); assert.equal(document.getElementById('page-assistant').hidden, false);
+  assert.equal(panel.inert, false); assert.equal(panel.hidden, false);
 });
 test('the visible manual tab owns send dispatch and gripper has no hidden arm send action', () => {
   const { document, shell } = fixture(); const choices = [];
@@ -182,7 +207,7 @@ test('unavailable services stay unknown and real grasp status remains visible ou
   shell.bindRuntime({ ui }); shell.go('overview'); shell.refresh();
   assert.equal(document.getElementById('workspace-task').hidden, false);
   assert.match(document.getElementById('workspace-task').textContent, /approach/);
-  assert.match(document.getElementById('workspace-summary-connection').textContent, /未连接|Disconnected/);
+  assert.match(document.getElementById('workspace-summary-connection').textContent, /Not connected|Disconnected/);
 });
 test('overview includes camera readiness and ongoing depth/following work off-page', () => {
   const { document, shell } = fixture(); const ui = { activeDepthStatus: { active: true, phase: 'observing' } };
@@ -198,4 +223,35 @@ test('overview includes camera readiness and ongoing depth/following work off-pa
   document.getElementById('sec-dummy').dataset.running='false';ui.activeDepthStatus={active:false,phase:'uncertain'};shell.refresh();
   assert.equal(document.getElementById('workspace-task').hidden,false);
   assert.match(document.getElementById('workspace-task').textContent,/uncertain/i);
+});
+
+test('system check advances on results, continues after failures and supports retry without motion',async()=>{
+ const {document,view}=fixture();let calls=[];
+ view.fetch=async url=>{calls.push(url);if(url.includes('sdk'))throw Error('offline');return {ok:true,json:async()=>url==='/health'?{status:'ready',dependencies:{tcpCalibration:{ready:true}}}:{status:'passed',detail:'Reachable'}};};
+ const button=document.getElementById('system-ready-button');button.click();button.click();
+ for(let i=0;i<20;i++)await new Promise(setImmediate);
+ assert.equal(calls.length,7);assert.ok(calls.every(url=>url==='/health'||url.startsWith('/api/system-diagnostics?check=')));
+ assert.equal(document.querySelector('[role=progressbar]').getAttribute('aria-valuenow'),'100');
+ assert.match(document.getElementById('system-ready-result').textContent,/1 item need attention/);
+ assert.equal(document.querySelectorAll('.system-checks [data-status=failed]').length,1);
+ button.click();for(let i=0;i<20;i++)await new Promise(setImmediate);assert.equal(calls.length,14);
+});
+
+test('API latency excludes presentation dwell and service latency uses host measurement',async()=>{
+ const {document,view}=fixture();let time=0;
+ view.performance={now:()=>time};view.setTimeout=fn=>{time+=1100;fn();};
+ view.fetch=async url=>{time+=35;return {ok:true,json:async()=>url==='/health'?{status:'ready',dependencies:{tcpCalibration:{ready:true}}}:{status:'passed',latencyMs:2.4,detail:'Reachable'}};};
+ document.getElementById('system-ready-button').click();for(let i=0;i<20;i++)await new Promise(setImmediate);
+ const badges=Array.from(document.querySelectorAll('.check-badge')).map(e=>e.textContent);
+ assert.match(badges[0],/RTT 35 ms/);assert.match(badges[2],/TCP 2 ms/);
+});
+
+test('navigation is unnumbered and disabled TCP calibration is reported as a warning',async()=>{
+ const {document,view}=fixture();
+ assert.equal(document.querySelectorAll('.nav-index').length,0);
+ assert.equal(document.querySelector('[data-page=overview] .nav-label').textContent,'System Check');
+ assert.equal(document.querySelector('.voice-toggle-label').textContent,'AI Agent');
+ view.fetch=async()=>({ok:true,json:async()=>({status:'ready',dependencies:{tcpCalibration:{ready:false,reason:'tcp_calibration_disabled'}}})});
+ document.getElementById('system-ready-button').click();for(let i=0;i<20;i++)await new Promise(setImmediate);
+ const tcp=document.querySelector('.system-checks li:last-child');assert.equal(tcp.dataset.status,'warning');assert.match(tcp.textContent,/disabled on the host/);
 });

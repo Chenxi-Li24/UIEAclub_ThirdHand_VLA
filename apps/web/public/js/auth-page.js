@@ -167,7 +167,7 @@
     }
     form.addEventListener('submit',event=>{event.preventDefault();submit();});
     const choose=change=>preferences.choose(change).catch(()=>{notice='Could not save preferences. Please try again.';noticeKind='error';renderMessage();});
-    byId('locale-en').addEventListener('click',()=>choose({locale:'en'}));byId('locale-zh').addEventListener('click',()=>choose({locale:'zh-CN'}));
+    byId('locale-en').addEventListener('click',()=>choose({locale:'en'}));byId('locale-zh')?.addEventListener('click',()=>choose({locale:'zh-CN'}));
     byId('theme-toggle').addEventListener('click',()=>choose({themeId:preferences.current().themeId==='light'?'dark':'light'}));
     const appearance=byId('appearance-options'),appearanceToggle=byId('appearance-toggle');
     const kindLabel=el('label',{for:'background-kind'},'Background'),kind=el('select',{id:'background-kind'});
@@ -175,7 +175,7 @@
     const colorLabel=el('label',{for:'background-color'},'Background color'),color=el('input',{id:'background-color',type:'color'});colorLabel.append(color);appearance.append(kindLabel,colorLabel);
     appearanceToggle.addEventListener('click',()=>{appearance.hidden=!appearance.hidden;appearanceToggle.setAttribute('aria-expanded',String(!appearance.hidden));});
     kind.addEventListener('change',()=>choose({backgroundConfig:{...preferences.current().backgroundConfig,kind:kind.value}}));color.addEventListener('change',()=>choose({backgroundConfig:{...preferences.current().backgroundConfig,color:color.value}}));
-    subscriptions.push(preferences.subscribe(value=>{preferences.apply(doc,value);byId('locale-en').setAttribute('aria-pressed',String(value.locale==='en'));byId('locale-zh').setAttribute('aria-pressed',String(value.locale==='zh-CN'));byId('theme-toggle').setAttribute('aria-pressed',String(value.themeId==='dark'));for(const option of kind.querySelectorAll('option'))option.selected=option.getAttribute('value')===value.backgroundConfig.kind;color.value=value.backgroundConfig.color;renderProgress();renderMessage();renderPasswordFeedback();}));
+    subscriptions.push(preferences.subscribe(value=>{preferences.apply(doc,value);byId('locale-en').setAttribute('aria-pressed',String(value.locale==='en'));byId('locale-zh')?.setAttribute('aria-pressed',String(value.locale==='zh-CN'));byId('theme-toggle').setAttribute('aria-pressed',String(value.themeId==='dark'));for(const option of kind.querySelectorAll('option'))option.selected=option.getAttribute('value')===value.backgroundConfig.kind;color.value=value.backgroundConfig.color;renderProgress();renderMessage();renderPasswordFeedback();}));
     return {submit,ready:Promise.resolve(),dispose(){disposed=true;if(navigationTimer!==undefined)view.clearTimeout(navigationTimer);if(redirectTimer!==undefined)view.clearTimeout(redirectTimer);for(const unsubscribe of subscriptions)unsubscribe();preferences.dispose();}};
   }
   return {mountAuthPage};

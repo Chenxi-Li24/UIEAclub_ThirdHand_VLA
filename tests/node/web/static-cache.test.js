@@ -1,0 +1,20 @@
+const test=require('node:test');
+const assert=require('node:assert/strict');
+const http=require('node:http');
+const fs=require('node:fs');
+const os=require('node:os');
+const path=require('node:path');
+const {gunzipSync}=require('node:zlib');
+const {serveStatic}=require('../../../apps/web/src/static-server');
+test('static files compress, revalidate and refresh after edits',async t=>{
+ const dir=fs.mkdtempSync(path.join(os.tmpdir(),'thirdhand-cache-'));
+ const file=path.join(dir,'index.html');fs.writeFileSync(file,'<html>initial content</html>');
+ const server=http.createServer((req,res)=>serveStatic(req,res,{publicDir:dir,assetsDir:dir}));
+ await new Promise(r=>server.listen(0,'127.0.0.1',r));
+ t.after(async()=>{await new Promise(r=>server.close(r));fs.rmSync(dir,{recursive:true,force:true});});
+ const request=headers=>new Promise((resolve,reject)=>http.get({hostname:'127.0.0.1',port:server.address().port,path:'/',headers},res=>{const chunks=[];res.on('data',c=>chunks.push(c));res.on('end',()=>resolve({status:res.statusCode,headers:res.headers,body:Buffer.concat(chunks)}));}).on('error',reject));
+ const first=await request({'accept-encoding':'gzip'});assert.equal(first.headers['content-encoding'],'gzip');assert.equal(first.headers['cache-control'],'no-cache');assert.match(gunzipSync(first.body).toString(),/initial/);
+ assert.equal((await request({'if-none-match':first.headers.etag})).status,304);
+ fs.writeFileSync(file,'<html>updated longer content</html>');
+ const updated=await request({'if-none-match':first.headers.etag,'accept-encoding':'gzip;q=0'});assert.equal(updated.status,200);assert.equal(updated.headers['content-encoding'],undefined);assert.match(updated.body.toString(),/updated/);
+});

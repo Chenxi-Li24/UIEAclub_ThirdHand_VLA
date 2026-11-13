@@ -7,11 +7,11 @@
   'use strict';
   const mounted = new WeakMap();
   const pages = [
-    ['overview', '◫', 'Overview', 'Connection, tasks and tool state at a glance.'],
-    ['control', '⌁', 'Manual control', 'Preview the model, then use the existing controls to send a target.'],
+    ['overview', '◫', 'System Check', 'Prepare services and check connection feedback.'],
+    ['control', '⌁', 'Digital Twin', 'Preview targets before confirming a movement.'],
     ['vision', '◎', 'Vision tasks', 'Select a detected target and follow depth acquisition and grasp progress.'],
     ['calibration', '⊹', 'Calibration', 'Use the existing TCP wizard and its measured results.'],
-    ['assistant', '✧', 'Assistant', 'Voice and text with the existing confirmation flow.'],
+    ['assistant', '✧', 'AI Agent', 'Describe a movement, inspect the candidate, then confirm or reject.'],
     ['system', '⚙', 'System', 'Live communication logs and interface settings.'],
   ];
   const iconPaths = {
@@ -64,11 +64,11 @@
     for (const [index, [id, , label, detail]] of pages.entries()) {
       const button = element('button', { type: 'button', 'data-page': id, 'aria-label': label, title: label });
       const navIcon = element('span', { class: 'nav-icon', 'aria-hidden': 'true' }); navIcon.appendChild(icon(id));
-      button.append(navIcon, element('span', { class: 'nav-label' }, label), element('span',{class:'nav-index','aria-hidden':'true'},String(index+1).padStart(2,'0')));
-      button.addEventListener('click', () => go(id)); nav.appendChild(button); navNodes.set(id, button);
+      button.append(navIcon, element('span', { class: 'nav-label' }, label));
+      button.addEventListener('click', () => id==='assistant'?setChatOpen(!chatOpen):go(id)); nav.appendChild(button); navNodes.set(id, button);
       const page = element('section', { id: `page-${id}`, class: 'workspace-page', 'aria-labelledby': `heading-${id}`, hidden: '' });
       const heading = element('div', { class: 'workspace-heading' });
-      heading.append(element('div',{class:'page-eyebrow','aria-hidden':'true','data-i18n-skip':''},`THIRDHAND / 0${index+1}`), element('h1', { id: `heading-${id}`, tabindex: '-1' }, label), element('p', {}, detail));
+      heading.append(element('div',{class:'page-eyebrow','aria-hidden':'true','data-i18n-skip':''},'THIRDHAND'), element('h1', { id: `heading-${id}`, tabindex: '-1' }, label), element('p', {}, detail));
       page.appendChild(heading); main.appendChild(page); pageNodes.set(id, page);
     }
     const navBottom=element('div',{class:'nav-bottom'});
@@ -89,6 +89,10 @@
       const button=byId(id);button.setAttribute('aria-label',button.title);button.replaceChildren(icon(name));
     }
     byId('viewport').appendChild(element('div',{class:'model-hint','aria-hidden':'true'},'Drag to orbit · Scroll to zoom'));
+    const modelLoading=element('div',{id:'model-loading',role:'status',style:'position:absolute;inset:0;z-index:3;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:12px;background:#ffffffed'});
+    modelLoading.append(element('span',{id:'model-loading-text'},'Loading 3D workspace…'));
+    const retryModel=element('button',{type:'button',class:'action-btn'},'Reload model');
+    retryModel.addEventListener('click',()=>win.location.reload());modelLoading.append(retryModel);byId('viewport').append(modelLoading);
     const controls = element('section', { class: 'control-card', 'aria-label': 'Manual targets' }); layout.appendChild(controls);
     const tabs = element('div', { class: 'workspace-tabs', role: 'tablist', 'aria-label': 'Control type' }); controls.appendChild(tabs);
     const tabNodes = new Map(), panes = new Map();
@@ -142,6 +146,144 @@
       const button = element('button', { type: 'button', class: 'action-btn' }, label);
       button.addEventListener('click', () => go(id)); shortcuts.appendChild(button);
     }
+    const journey = element('section', {class:'workspace-journey'});
+    journey.append(element('h2', {}, 'System check'), element('p', {}, 'Seven system checks. One click.'));
+    overview.before(journey);shortcuts.hidden=true;
+    const readyButton=element('button',{type:'button',class:'action-btn action-primary',id:'system-ready-button'},'Run system check');
+    const readyResult=element('p',{role:'status','aria-live':'polite',id:'system-ready-result'},'Ready to check');
+    const progress=element('div',{class:'check-progress',role:'progressbar','aria-label':'System check progress','aria-valuemin':'0','aria-valuemax':'100','aria-valuenow':'0'});
+    const fill=element('span');progress.append(fill);
+    const percentage=element('span',{class:'check-percentage','aria-hidden':'true'},'0%');
+    const readyServices=element('ul',{id:'system-ready-services',class:'system-checks'});
+    const checks=[['api','Web API'],['sdk','SDK feedback'],['ai','AI service'],['vision','Vision service'],['network','Host network'],['wifi','Host Wi-Fi'],['tcp','TCP calibration']];
+    const rows=new Map();
+    for(const [id,label] of checks){
+      const row=element('li',{'data-status':'pending'});
+      const name=element('strong',{},label),badge=element('span',{class:'check-badge'},'Not checked'),detail=element('p',{},'');
+      row.append(name,badge,detail);readyServices.append(row);rows.set(id,{row,badge,detail});
+    }
+    journey.append(percentage,readyResult,progress,readyServices,readyButton);
+    const setup=element('details',{class:'check-setup'});setup.append(element('summary',{},'Service setup'));
+    setup.append(element('p',{},'To start missing services, run this command on Ubuntu, then run the check again.'),element('code',{tabindex:'0'},'./thirdhand ensure --profile manual-control'));
+    journey.append(setup);
+    let disposed=false,requesting=false;
+    const labels={pending:'Not checked',running:'Checking',passed:'Passed',failed:'Failed',warning:'Warning',unknown:'Unavailable',skipped:'Not applicable'};
+    readyButton.addEventListener('click',async()=>{
+      if(requesting||disposed)return;
+      requesting=true;readyButton.disabled=true;readyButton.textContent='Checking…';journey.setAttribute('aria-busy','true');
+      progress.setAttribute('aria-valuenow','0');fill.style.width='0%';percentage.textContent='0%';
+      for(const {row,badge,detail} of rows.values()){row.dataset.status='pending';badge.textContent=labels.pending;badge.removeAttribute('title');detail.textContent='';}
+      let completed=0,issues=0;
+      for(const [id,label] of checks){
+        if(disposed)break;
+        const {row,badge,detail}=rows.get(id);row.dataset.status='running';badge.textContent=labels.running;
+        readyResult.textContent=`Checking ${label} · ${completed} / ${checks.length}`;
+        const dwell=win.setTimeout ? new Promise(resolve=>win.setTimeout(resolve,1100)) : Promise.resolve();
+        try{
+          if(!win.fetch)throw Error('unavailable');
+          const clock=()=>win.performance?.now?.() ?? Date.now();
+          const started=clock();
+          let data;
+          if(options.runSystemCheck)data=await options.runSystemCheck(id);
+          else {
+          const response=await win.fetch((id==='api'||id==='tcp')?'/health':'/api/system-diagnostics?check='+id,{cache:'no-store',signal:win.AbortSignal?.timeout(8000)});
+          if(!response.ok)throw Error('unavailable');
+          data=await response.json();
+          if(id==='tcp'){
+            const tcp=data.dependencies?.tcpCalibration;
+            data.status=tcp?.ready===true?'passed':tcp?'warning':'unknown';
+            data.detail=tcp?.ready===true?'TCP calibration service is ready. Physical calibration accuracy is not verified.':tcp?.reason==='tcp_calibration_disabled'?'TCP calibration is disabled on the host. Enable and configure the calibration service.':'TCP calibration is unavailable or not configured. Check host configuration.';
+          }
+          }
+          const roundTripMs=Math.max(0,clock()-started);
+          await dwell;
+          if(disposed)break;
+          const state=id==='api'&&!options.runSystemCheck?(data.status==='ready'?'passed':'warning'):data.status;
+          if(!['passed','failed','warning','unknown','skipped'].includes(state))throw Error('invalid');
+          row.dataset.status=state;badge.textContent=labels[state];
+          const latency=id==='api'?roundTripMs:data.latencyMs;
+          if(state==='passed'&&Number.isFinite(latency)&&latency>=0){
+            const kind=id==='api'?'RTT':'TCP';
+            badge.textContent+=` · ${kind} ${latency<1?'<1':Math.round(latency)} ms`;
+            badge.title=id==='api'?'Browser to Ubuntu HTTP round trip, including response processing. Animation delay excluded.':'Ubuntu to service TCP connection time. Not model inference or browser latency.';
+          }
+          detail.textContent=id==='api'?(state==='passed'?'Gateway API responded successfully.':'Gateway responded but is not ready.') : data.detail;
+          if(['failed','warning','unknown'].includes(state))issues++;
+        }catch{await dwell;if(disposed)break;row.dataset.status='failed';badge.textContent=labels.failed;detail.textContent='Check unavailable or timed out. Check your connection and retry.';issues++;}
+        completed++;const percent=Math.round(completed/checks.length*100);fill.style.width=percent+'%';percentage.textContent=percent+'%';progress.setAttribute('aria-valuenow',String(percent));
+      }
+      if(disposed)return;
+      readyResult.textContent=issues?`Check complete · ${issues} item${issues===1?'':'s'} need attention`:'Check complete · All applicable checks passed';
+      readyResult.textContent+=' · '+new Date().toLocaleTimeString('en-GB');
+      requesting=false;readyButton.disabled=false;readyButton.textContent='Run again';journey.setAttribute('aria-busy','false');
+    });
+    win.addEventListener('pagehide',()=>{disposed=true;},{once:true});
+    const sidebarStatus=element('section',{class:'workspace-live-status','aria-label':'Live status'});
+    sidebarStatus.append(element('h2',{},'Live status'));
+    for(const [label,id] of [['Connection','conn-ip'],['SDK','hb-label'],['Robot','state-badge'],['AI','voice-ai-status']]) {
+      const row=element('p');row.append(element('span',{},label+' · '),element('strong',{id:'sidebar-'+id},'Unknown'));sidebarStatus.append(row);
+    }
+    nav.insertBefore(sidebarStatus,navBottom);
+    for(const [index,id] of ['overview','assistant','control','vision','calibration','system'].entries()) {
+      nav.insertBefore(navNodes.get(id),sidebarStatus);
+    }
+    const naturalEntry=navNodes.get('assistant');
+    naturalEntry.classList.add('nav-natural-language');
+    naturalEntry.querySelector('.nav-label').textContent='AI Agent';
+    byId('btn-voice-toggle').querySelector('.voice-toggle-label').textContent='AI Agent';
+    byId('btn-voice-toggle').title='AI Agent';
+    byId('btn-voice-toggle').setAttribute('aria-label','AI Agent');
+    navBottom.prepend(naturalEntry);
+    const chat=byId('voice-panel');
+    app.append(chat);chat.hidden=true;
+    let chatOpen=false;
+    function setChatOpen(open){
+      if(open&&options.canOpenPage&&!options.canOpenPage('assistant'))return false;
+      if(!open&&(runtime.voice?.recording||runtime.voice?.starting)){announce('Stop or cancel recording before closing voice input.','Stop or cancel recording before closing voice input.');return false;}
+      chatOpen=open;chat.hidden=!open;
+      naturalEntry.setAttribute('aria-expanded',String(open));
+      naturalEntry.classList.toggle('active',open);
+      if(open)runtime.voice?.openPanel();else runtime.voice?.closePanel();
+      if(open)byId('voice-text-input').focus();else naturalEntry.focus();
+      return true;
+    }
+    naturalEntry.setAttribute('aria-controls','voice-panel');naturalEntry.setAttribute('aria-expanded','false');
+    chat.classList.add('chat-dock','chat-minimal');
+    const chatBody=chat.querySelector('.voice-panel-body');
+    const replies=element('section',{id:'chat-replies',class:'chat-replies','aria-label':'AI replies',hidden:''});
+    const replyClose=element('button',{type:'button',class:'chat-icon',id:'chat-replies-close','aria-label':'Close replies'},'×');
+    replies.append(replyClose,byId('voice-conversation'),byId('voice-intent-card'));
+    const composer=byId('voice-text-form');
+    const rail=composer.querySelector('.voice-text-rail');
+    const replyToggle=element('button',{type:'button',class:'chat-icon',id:'chat-replies-toggle','aria-label':'Show replies','aria-controls':'chat-replies','aria-expanded':'false'});
+    replyToggle.append(icon('assistant'));
+    const voiceToggle=element('button',{type:'button',class:'chat-icon',id:'chat-voice','aria-label':'Voice input','aria-expanded':'false','aria-controls':'chat-audio'});
+    voiceToggle.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="9" y="3" width="6" height="12" rx="3"/><path d="M5 11v1a7 7 0 0 0 14 0v-1M12 19v3M8 22h8"/></svg>';
+    rail.prepend(replyToggle);rail.append(voiceToggle);
+    byId('voice-text-input').placeholder='Message…';
+    byId('voice-text-send').setAttribute('aria-label','Send message');
+    const audio=element('section',{id:'chat-audio',class:'chat-audio',hidden:'','aria-label':'Voice input'});
+    const audioClose=element('button',{type:'button',class:'chat-icon','aria-label':'Close voice input'},'×');
+    const settingsDrawer=element('details',{class:'chat-settings'});
+    settingsDrawer.append(element('summary',{},'Settings'));
+    chatBody.querySelectorAll('.voice-config-block').forEach(node=>settingsDrawer.append(node));
+    audio.append(audioClose,byId('voice-mic-toggle'),chat.querySelector('.voice-capture-block'),settingsDrawer);
+    chatBody.append(replies,audio,composer);
+    function showReplies(open){replies.hidden=!open;replyToggle.setAttribute('aria-expanded',String(open));replyToggle.setAttribute('aria-label',open?'Hide replies':'Show replies');}
+    replyToggle.addEventListener('click',()=>showReplies(replies.hidden));
+    replyClose.addEventListener('click',()=>{showReplies(false);replyToggle.focus();});
+    function showAudio(open){audio.hidden=!open;voiceToggle.setAttribute('aria-expanded',String(open));}
+    voiceToggle.addEventListener('click',()=>showAudio(audio.hidden));
+    audioClose.addEventListener('click',()=>{if(runtime.voice?.recording||runtime.voice?.starting)return;showAudio(false);voiceToggle.focus();});
+    const candidateObserver=new win.MutationObserver(()=>{if(!byId('voice-intent-card').hidden)showReplies(true);});
+    candidateObserver.observe(byId('voice-intent-card'),{attributes:true,attributeFilter:['hidden']});
+    const replyObserver=new win.MutationObserver(records=>{
+      // Background reconnect notices must not reopen a window the user dismissed.
+      if(records.some(record=>Array.from(record.addedNodes||[]).some(node=>node.nodeType===1&&node.matches?.('.voice-message--ai,.voice-message--user'))))showReplies(true);
+    });
+    replyObserver.observe(byId('voice-conversation'),{childList:true,subtree:true,characterData:true});
+    win.addEventListener('pagehide',()=>{candidateObserver.disconnect();replyObserver.disconnect();},{once:true});
+
     const calibration = pageNodes.get('calibration');
     const calibrationInfo = element('div', { class: 'workspace-calibration-info' });
     calibrationInfo.append(element('p', {}, 'TCP calibration uses the existing service. Hand-eye collection is not exposed by this gateway.'),
@@ -172,9 +314,6 @@
     navMedia?.addEventListener?.('change',event=>{if(navPreference===null)setNavigationExpanded(event.matches);});
     function announce(en, zh) { notice.textContent = text(en, zh); notice.hidden = false; }
     function canLeave() {
-      if (current === 'assistant' && (runtime.voice?.recording || runtime.voice?.starting)) {
-        announce('Stop or cancel recording before changing pages.', '请先停止或取消录音，再切换页面。'); return false;
-      }
       if (current === 'calibration' && frame) {
         try {
           const state = frame.contentWindow?.ThirdHandCalibrationNavigationState?.();
@@ -193,6 +332,10 @@
       return true;
     }
     function go(id, { focus = false } = {}) {
+      if(id==='assistant'){
+        if(!current)go('overview');
+        return setChatOpen(true);
+      }
       if (id === 'account-connections' && doc.getElementById('workspace-bootstrap')) id = 'system';
       if (!pageNodes.has(id) || options.canOpenPage && !options.canOpenPage(id)) id = 'control';
       if (id !== current && !canLeave()) { win.history.replaceState(null, '', `#${current}`); return false; }
@@ -206,7 +349,7 @@
       for (const [key, page] of pageNodes) page.hidden = key !== id;
       main.scrollTop = scrollPositions.get(id) || 0;
       for (const [key, button] of navNodes) {
-        button.classList.toggle('active', key === id);
+        button.classList.toggle('active', key === 'assistant' ? chatOpen : key === id);
         if (key === id) button.setAttribute('aria-current', 'page'); else button.removeAttribute('aria-current');
       }
       if (id === 'calibration' && !frame && options.calibrationEntry !== null) {
@@ -237,6 +380,7 @@
       for (const [id, , source] of summaries) set(`workspace-summary-${id}`, byId(source)?.textContent || text('Unknown', '未知'));
       set('workspace-summary-vision', [byId('cam-label')?.textContent, byId('vision-lock-reason')?.textContent].filter(Boolean).join(' · ') || text('Unknown', '未知'));
       set('workspace-calibration-tcp', byId('grasp-tcp')?.textContent || 'TCP: --');
+      for(const id of ['conn-ip','hb-label','state-badge','voice-ai-status']) set('sidebar-'+id,byId(id)?.textContent||text('Unknown','未知'));
       const grasp = runtime.ui?.webGraspStatus;
       const depth = runtime.ui?.activeDepthStatus;
       const following = byId('sec-dummy')?.dataset.running === 'true';
@@ -264,7 +408,7 @@
         });
         values.ws.on('robot_state', state => { moving = state.moving === true || state.motionActive === true; robotStateName=state.stateName||null; refresh(); });
       }
-      if (values.voice && current === 'assistant') values.voice.openPanel();
+      if (values.voice && chatOpen) values.voice.openPanel();
       if (values.scene) guide?.bindScene(values.scene);
       win.requestAnimationFrame(() => runtime.scene?._onResize());
       refresh();
@@ -272,16 +416,17 @@
     const redirect = (node, page) => node?.addEventListener('click', event => {
       event.preventDefault(); event.stopImmediatePropagation(); go(page, { focus: true });
     }, true);
-    redirect(byId('btn-voice-toggle'), 'assistant'); redirect(byId('voice-panel-close'), 'control');
+    byId('btn-voice-toggle').addEventListener('click',event=>{event.preventDefault();event.stopImmediatePropagation();setChatOpen(!chatOpen);},true);
+    byId('voice-panel-close').addEventListener('click',event=>{event.preventDefault();event.stopImmediatePropagation();setChatOpen(false);},true);
     byId('voice-panel').addEventListener('keydown', event => {
       if (event.key !== 'Escape') return;
-      event.preventDefault(); event.stopImmediatePropagation(); go('control', { focus: true });
+      event.preventDefault(); event.stopImmediatePropagation(); setChatOpen(false);
     }, true);
     redirect(byId('btn-log-toggle'), 'system'); redirect(byId('btn-log-close'), 'control');
     redirect(doc.querySelector('a[href="tcp-calibration.html"]'), 'calibration');
     win.addEventListener('hashchange', () => go(win.location.hash.slice(1)));
     const observer = new win.MutationObserver(refresh);
-    for (const id of [...summaries.map(item => item[2]), 'grasp-phase', 'active-depth-phase', 'cam-label', 'dummy-phase', 'workspace-web-status']) {
+    for (const id of [...summaries.map(item => item[2]), 'grasp-phase', 'active-depth-phase', 'cam-label', 'dummy-phase', 'workspace-web-status', 'state-badge', 'voice-ai-status']) {
       if (byId(id)) observer.observe(byId(id), { childList: true, subtree: true, characterData: true });
     }
     observer.observe(byId('sec-dummy'), { attributes: true, attributeFilter: ['data-running'] });
@@ -305,7 +450,7 @@
     }
     const account=win.ThirdHandAccountSettings?.mountAccountSettings(doc,win,{go,registerPage(id,page,button){pageNodes.set(id,page);navNodes.set(id,button);}});
     const shell = { go, selectControl, bindRuntime, refresh, installOnboarding, setAccountDataProvider:provider=>account?.setDataProvider(provider) };
-    mounted.set(doc, shell); selectControl('joints'); go(win.location.hash.slice(1) || 'control');
+    mounted.set(doc, shell); selectControl('joints'); go(win.location.hash.slice(1) || 'overview');
     return shell;
   }
   return { mountWorkspace };

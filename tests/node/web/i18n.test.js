@@ -25,43 +25,43 @@ function harness(saved, blocked = false) {
   return { api: context.ThirdHandI18n, writes };
 }
 
-test('a fresh browser displays English and an explicit choice persists', () => {
+test('English remains active after every locale request', () => {
   const { api, writes } = harness(null);
   assert.equal(api.locale, 'en');
   assert.equal(api.translate('关节控制'), 'Joint Control');
   assert.equal(api.setLocale('zh-CN'), true);
-  assert.equal(api.translate('关节控制'), '关节控制');
-  assert.equal(writes.at(-1)[1], 'zh-CN');
-  assert.equal(api.setLocale('invalid'), false);
-  assert.equal(api.locale, 'zh-CN');
+  assert.equal(api.translate('关节控制'), 'Joint Control');
+  assert.equal(writes.at(-1)[1], 'en');
+  assert.equal(api.setLocale('invalid'), true);
+  assert.equal(api.locale, 'en');
 });
-test('workspace navigation, send actions and dynamic mode remain bilingual', () => {
+test('workspace navigation, send actions and dynamic mode remain English', () => {
   const { api }=harness('zh-CN');
   for(const label of ['Overview','Manual control','Vision tasks','Calibration','Assistant','System','Send joint target','Send TCP target','Local simulation']) {
-    assert.notEqual(api.translate(label),label);
+    assert.equal(api.translate(label),label);
     assert.equal(api.translate(api.translate(label),'en'),label);
   }
 });
-test('account settings and profile status switch between Chinese and English without losing labels',()=>{
+test('account settings and profile status retain English labels',()=>{
  const {api}=harness('zh-CN');
  for(const label of ['Account and settings','Profile','Preferences','Display name','Account data service is not connected.','Back to workspace']){
-  const chinese=api.translate(label);assert.notEqual(chinese,label);assert.equal(api.translate(chinese,'en'),label);
+  const chinese=api.translate(label);assert.equal(chinese,label);assert.equal(api.translate(chinese,'en'),label);
  }
 });
-test('live status lamp descriptions remain bilingual for offline and waiting states',()=>{
+test('live status lamp descriptions remain English for offline and waiting states',()=>{
  const {api}=harness('zh-CN');
  for(const label of ['SDK online','SDK disconnected','SDK feedback lost','Waiting for SDK feedback','Web control link disconnected']){
-  const chinese=api.translate(label);assert.notEqual(chinese,label);assert.equal(api.translate(chinese,'en'),label);
+  const chinese=api.translate(label);assert.equal(chinese,label);assert.equal(api.translate(chinese,'en'),label);
  }
 });
 
-test('saved Chinese is restored; unsupported preferences and blocked storage default to English', () => {
-  assert.equal(harness('zh-CN').api.locale, 'zh-CN');
+test('saved non-English preferences and blocked storage retain English', () => {
+  assert.equal(harness('zh-CN').api.locale, 'en');
   assert.equal(harness('fr').api.locale, 'en');
   const { api } = harness(null, true);
   assert.equal(api.locale, 'en');
   assert.doesNotThrow(() => api.setLocale('zh-CN'));
-  assert.equal(api.translate('软件停止'), '软件停止');
+  assert.equal(api.translate('软件停止'), 'Software Stop');
 });
 
 test('switching updates safety text without weakening the hardware emergency stop warning', () => {
@@ -71,7 +71,7 @@ test('switching updates safety text without weakening the hardware emergency sto
   assert.match(api.translate(source), /independent hardware emergency stop/i);
   assert.match(api.translate(source), /not.*hardware emergency stop/i);
   api.setLocale('zh-CN');
-  assert.equal(api.translate(source), source);
+  assert.doesNotMatch(api.translate(source), /\p{Script=Han}/u);
 });
 
 test('dynamic messages retain numbers, units, target IDs and literal quoted user content', () => {
@@ -85,10 +85,10 @@ test('dynamic messages retain numbers, units, target IDs and literal quoted user
   assert.equal(api.translate('unknown_backend_reason: 42'), 'unknown_backend_reason: 42');
 });
 
-test('English-origin vision hints also switch back to Chinese', () => {
+test('English-origin vision hints remain English', () => {
   const { api } = harness('zh-CN');
-  assert.equal(api.translate('No objects detected'), '未检测到物体');
-  assert.equal(api.translate('depth: unavailable'), '深度：不可用');
+  assert.equal(api.translate('No objects detected'), 'No objects detected');
+  assert.equal(api.translate('depth: unavailable'), 'depth: unavailable');
 });
 
 test('multi-joint limit warnings translate individually without swallowing adjacent warnings', () => {
@@ -97,7 +97,7 @@ test('multi-joint limit warnings translate individually without swallowing adjac
   const translated = 'Execution blocked by mechanical limits: J1 target 170.0° is outside joint limits (allowed -162°–162°); J2 target 210.0° is outside joint limits (allowed -12°–201°)';
   assert.equal(api.translate(source), translated);
   api.setLocale('zh-CN');
-  assert.equal(api.translate(translated), source);
+  assert.equal(api.translate(translated), translated);
   api.setLocale('en');
   assert.equal(api.translate('Home 机械限位禁止执行：J1 限位或目标数据无效；J2 限位或目标数据无效'),
     'Home execution blocked by mechanical limits: J1 limit or target data is invalid; J2 limit or target data is invalid');
@@ -146,8 +146,8 @@ test('language changes update existing and new UI nodes but preserve controls an
   assert.equal(input.disabled, true);
   api.setLocale('zh-CN');
   api.translateTree(root);
-  assert.equal(label.nodeValue, '关节控制');
-  assert.equal(input.getAttribute('aria-label'), '夹爪目标开度');
+  assert.equal(label.nodeValue, 'Joint Control');
+  assert.equal(input.getAttribute('aria-label'), 'Gripper target opening');
   label.nodeValue = '软件停止';
   api.setLocale('en');
   api.translateTree(root);
@@ -161,7 +161,7 @@ test('native validation follows language selection without reviving a cleared er
   assert.equal(input.validationMessage, 'X is outside limits (150–660)');
   api.setLocale('zh-CN');
   api.translateTree(input);
-  assert.equal(input.validationMessage, 'X超出限位（150～660）');
+  assert.equal(input.validationMessage, 'X is outside limits (150–660)');
   input.setCustomValidity('');
   api.setLocale('en');
   api.translateTree(input);

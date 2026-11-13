@@ -3,15 +3,16 @@ const test=require('node:test'),assert=require('node:assert/strict'),fs=require(
 const {parseHTML}=require('linkedom');
 const root=path.resolve(__dirname,'../../..');
 const {mountWorkspace}=require(path.join(root,'apps/web/public/js/workspace-shell.js'));
-function fixture({saved,language='en',blocked=false,route='overview'}={}){
+function fixture({saved,language='en',blocked=false,route='overview',guest=false}={}){
  const {document,window}=parseHTML(fs.readFileSync(path.join(root,'apps/web/public/index.html'),'utf8'));
- const storage=new Map(saved?[['thirdhand.onboarding.v1',saved]]:[]);
+ if(guest)document.getElementById('app').dataset.guestDemo='true';
+ const storage=new Map(saved?[['thirdhand.onboarding.v2',saved]]:[]);
  const i18n=vm.createContext({localStorage:{getItem:()=>language,setItem(){}}});
  for(const file of ['i18n-catalog.js','i18n-voice-catalog.js','i18n-onboarding-catalog.js','i18n.js']){
   const filename=path.join(root,'apps/web/public/js',file);if(fs.existsSync(filename))vm.runInContext(fs.readFileSync(filename,'utf8'),i18n);
  }
  document.documentElement.lang=i18n.ThirdHandI18n.locale;
- const view={ThirdHandOnboardingSpotlight:require('../../../apps/web/public/js/onboarding-spotlight.js'),location:{hash:'#'+route},history:{replaceState(_a,_b,url){view.location.hash=url;}},addEventListener(){},requestAnimationFrame(fn){queueMicrotask(fn);},MutationObserver:window.MutationObserver,
+ const view={ThirdHandOnboardingSpotlight:require('../../../apps/web/public/js/onboarding-spotlight.js'),location:{hash:'#'+route},history:{replaceState(_a,_b,url){view.location.hash=url;}},addEventListener(){},requestAnimationFrame(fn){queueMicrotask(fn);},MutationObserver:window.MutationObserver,Event:window.Event,
   ThirdHandI18n:i18n.ThirdHandI18n,localStorage:{getItem(key){if(blocked)throw Error('blocked');return storage.get(key);},setItem(key,value){if(blocked)throw Error('blocked');storage.set(key,value);}}};
  const shell=mountWorkspace(document,view);let busy=false,reject=false,angles=[0,0,0,0,0,0];const navigation=[];
  // Layout is absent in linkedom; lesson elements use a measured, on-screen fixture.
@@ -32,7 +33,7 @@ test('fresh overview welcomes in English; skip saves dismissal without completin
  const f=fixture();assert.match(f.document.getElementById('onboarding-welcome-title').textContent,/Welcome/);
  f.click('onboarding-later');assert.equal(f.document.getElementById('onboarding-welcome').hidden,true);
  assert.equal(f.completed('orbit'),false);assert.equal(f.completed('preview'),false);
- const restored=fixture({saved:f.storage.get('thirdhand.onboarding.v1')});
+ const restored=fixture({saved:f.storage.get('thirdhand.onboarding.v2')});
  assert.equal(restored.document.getElementById('onboarding-welcome').hidden,true);
  assert.equal(restored.document.getElementById('onboarding-checklist').hidden,false);
 });
@@ -43,7 +44,7 @@ test('tour completes informational acknowledgments without fabricating practical
  assert.equal(f.completed('status'),true);assert.equal(f.completed('vision'),true);
  assert.equal(f.completed('orbit'),false);assert.equal(f.completed('preview'),false);
  assert.equal(f.document.querySelectorAll('.onboarding-highlight').length,0);
- assert.ok(f.navigation.includes('vision'));assert.ok(f.navigation.includes('calibration'));
+ assert.ok(f.navigation.includes('vision'));assert.ok(f.navigation.includes('assistant'));assert.ok(f.navigation.includes('system'));assert.equal(f.completed('ai'),false);
 });
 test('busy and guarded routes pause the tour without advancing it or activating controls',()=>{
  const f=fixture();let commands=0;for(const id of ['btn-connect','btn-send','btn-grasp-start','btn-estop-top','voice-mic-toggle'])f.document.getElementById(id).addEventListener('click',()=>commands++);
@@ -55,7 +56,7 @@ test('busy and guarded routes pause the tour without advancing it or activating 
 });
 test('skip/continue resumes its step; restart preserves actual learning progress',()=>{
  const f=fixture();f.click('onboarding-start');f.click('onboarding-next');f.click('onboarding-skip');
- const restored=fixture({saved:f.storage.get('thirdhand.onboarding.v1')});restored.click('onboarding-start');
+ const restored=fixture({saved:f.storage.get('thirdhand.onboarding.v2')});restored.click('onboarding-start');
  assert.match(restored.document.getElementById('onboarding-step').textContent,/2/);
  restored.click('onboarding-skip');restored.click('onboarding-restart');
  assert.match(restored.document.getElementById('onboarding-step').textContent,/1/);assert.equal(restored.completed('status'),true);
@@ -98,15 +99,25 @@ test('page help never navigates; manual route changes remove stale highlights',(
  f.click('onboarding-start');f.guide.routeChanged('system');assert.equal(f.document.querySelectorAll('.onboarding-highlight').length,0);
 });
 test('a hidden guide target pauses Next rather than acknowledging a missing control',()=>{
- const f=fixture();f.document.getElementById('topbar').hidden=true;f.click('onboarding-start');
+ const f=fixture();f.document.getElementById('topbar').hidden=true;f.document.getElementById('system-ready-result').hidden=true;f.click('onboarding-start');
  assert.equal(f.document.getElementById('onboarding-next').disabled,true);f.click('onboarding-next');
  assert.equal(f.completed('status'),false);
  f.document.getElementById('topbar').hidden=false;f.guide.refresh();assert.equal(f.document.getElementById('onboarding-next').disabled,false);
 });
-test('saved Chinese and live language switch update all guide copy; corrupt or blocked storage stays usable',async()=>{
- const f=fixture({language:'zh-CN'});assert.match(f.document.getElementById('onboarding-welcome-title').textContent,/欢迎/);
+test('guide stays English with a saved Chinese locale; corrupt or blocked storage stays usable',async()=>{
+ const f=fixture({language:'zh-CN'});assert.match(f.document.getElementById('onboarding-welcome-title').textContent,/Welcome/);
  f.view.ThirdHandI18n.setLocale('en');f.document.documentElement.lang='en';await Promise.resolve();f.guide.refresh();assert.match(f.document.getElementById('onboarding-welcome-title').textContent,/Welcome/);
  for(const options of [{saved:'{invalid'},{saved:'{"version":1,"step":999,"done":["hardware","orbit"]}'},{blocked:true}]){
   const g=fixture(options);assert.doesNotThrow(()=>{g.click('onboarding-start');g.click('onboarding-skip');});
  }
+});
+
+test('guest tour explains public access and fills an example without submitting',()=>{
+ const f=fixture({guest:true});let requests=0;f.document.getElementById('voice-text-form').addEventListener('submit',()=>requests++);
+ assert.equal(f.document.getElementById('onboarding-checklist').parentElement.id,'page-control');
+ f.click('onboarding-start');assert.match(f.document.getElementById('onboarding-panel').textContent,/skipped, not passed/);
+ f.click('onboarding-next');f.click('onboarding-example');assert.match(f.document.getElementById('voice-text-input').value,/J1 at 20/);assert.equal(requests,0);assert.equal(f.completed('ai'),false);
+ f.document.dispatchEvent(new f.window.Event('thirdhand:ai-reply'));assert.equal(f.completed('ai'),true);
+ f.document.dispatchEvent(new f.window.Event('thirdhand:model-preview'));assert.equal(f.completed('preview'),true);
+ for(let i=0;i<3;i++)f.click('onboarding-next');assert.match(f.document.getElementById('onboarding-panel').textContent,/every two seconds/);
 });

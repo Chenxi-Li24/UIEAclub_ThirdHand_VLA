@@ -1,0 +1,11 @@
+# Public workspace deployment — 2026-11-13
+
+Published the updated workspace at https://staging.uiea-thirdhand.com/control using the existing authenticated cloud API. Anonymous visitors are redirected to /login. The marketing site at uiea-thirdhand.com was not replaced.
+
+Host: 47.94.95.244. Active release: /opt/thirdhand-stage/releases/workspace-20261113. Previous release retained: /opt/thirdhand-stage/releases/2719d1b4fcdc6f06. Created a full copy of the existing 81 MB release and applied only the frontend delta plus services/cloud-api/src/workspace-pages.js. Verified the cloud entry, startup and shell baseline hashes against origin/main before applying. Updated the release manifest hashes and switched /opt/thirdhand-stage/current atomically. Restarted only thirdhand-stage.service. No database, user, credential, device agent, Nginx, port or motion configuration changes.
+
+Cloud self-check uses the authenticated session API and existing cloud device-state store for API, SDK and gateway feedback. AI, vision health, Ubuntu Wi-Fi and TCP calibration telemetry are not available through this gateway and explicitly return unknown rather than contacting private local endpoints or claiming success. Existing observer/admin restrictions remain. This deployment does not connect the local voice service to the internet. Cloud model assets use existing authenticated, versioned, compressed routes.
+
+Validation: 28 focused shell/auth/bootstrap tests passed; 5 startup/device-state tests passed. The real PostgreSQL workspace-entry integration test could not run locally without TEST_DATABASE_URL. Server-side rendering passed on the new release. Public login returned 200, anonymous /control returned 302, private asset access returned 401, service health returned thirdhand-cloud-api with explicit-read-only device control, and browser navigation opened the login page. No user account was impersonated; a logged-in browser acceptance run is still needed with the user's account.
+
+Rollback: atomically point /opt/thirdhand-stage/current back to /opt/thirdhand-stage/releases/2719d1b4fcdc6f06 and restart thirdhand-stage.service. The previous release and all existing databases remain intact. No SSH password was written into deployment artifacts or repository files.

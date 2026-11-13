@@ -1,0 +1,63 @@
+# Three-step local control workspace
+
+## Bottom conversation panel
+
+The composer is now a viewport-centered bottom overlay attached directly to the workspace root. Opening Natural language does not change the current route. Navigation among overview, model, vision, calibration and system pages retains the conversation, draft and recording state. The lower-left entry toggles visibility; closing remains blocked during active/starting recording. Existing calibration navigation guards still apply to page changes. Reply windows remain anchored above the composer. Validation: 22 shell/English-interface tests pass; browser checks confirm horizontal centering, persistent drafts across four pages, and close/reopen without route changes.
+
+Natural language remains in the lower-left navigation. The bottom-right composer is a single rounded input with a reply toggle, send button and right-hand microphone icon. It has no heading, description, footer or Text/Voice tabs. Replies and action confirmations appear in a separate floating window above the input; users can close and reopen it without losing drafts. New messages or candidates reopen the reply window. The microphone icon opens compact voice controls without acquiring a microphone or starting recording automatically. Audio settings remain in a details section. Voice controls cannot be closed while recording starts or runs. Existing execution confirmation and recording navigation guards remain intact. Validation: 21 shell/English-interface tests pass. Browser inspection confirms a 76-pixel-high composer, hidden headings, independent reply dismissal and English-only visible text. Hardware speech/control was not exercised.
+
+## English-only interface
+
+All shipped HTML pages now contain English initial labels, tooltips and accessibility text. Chinese language controls are removed. The translation layer always selects English, and legacy guest/account language preferences normalize to English. Camera diagnostics and TCP calibration include English static and dynamic copy. Existing translation catalogs remain as compatibility mappings for legacy controller messages; user-provided command content and backend payloads are not rewritten. A source scan of HTML and a rendered workspace text/attribute scan verify that no Chinese interface text is present in the checked states. External/user content is not covered by that guarantee.
+
+The default local workspace opens System ready, followed by Natural language and Digital twin. Existing voice candidates, preview, reject/confirm, manual controls, history and waypoints retain their controllers. The sidebar mirrors the existing connection, SDK, robot and AI status elements, including unavailable states.
+
+## Preparation
+
+GET /api/system-ready returns availability, pending, overall, CAN and per-service results. POST starts asynchronous preparation and requires a loopback peer, localhost Host, same Origin and X-ThirdHand-Action: prepare on Linux. Duplicate requests and active robot/grasp/depth/teaching operations are rejected. No caller-supplied command or profile is accepted.
+
+The fixed manual-control profile is loaded by apps/web/src/system-ready.js. It reuses CanInterfaceManager and ServiceSupervisor.ensureAll, excluding the already-running web gateway. CAN failure stops preparation. Full-profile CAN recovery is refused with host_recovery_required; use ./thirdhand ensure --profile manual-control on the host for that case. The operation does not connect, enable, home or command the arm. Preparation results are in-memory, reset on gateway restart, and describe the last attempt, not perpetual service health.
+
+The browser polls every three seconds, disables unsupported/duplicate actions, and lists actual service results. An unavailable API is never rendered ready. The web gateway must already be running to serve the button. On a cold host use the existing launcher command first. No new database, dependencies or environment variables are required; existing runtime assets, sudo CAN permissions and configuration are still required.
+
+## Cloud boundary
+
+Cloud assets include the new stylesheet. Existing access checks and model-only navigation remain authoritative; restricted assistant shortcuts are omitted. Cloud startup is not proxied into a local privileged launcher: preparation is explicitly unavailable remotely. Cloud admin motion and database integration require separate deployment validation.
+
+## Validation
+
+Node 24: 21 targeted shell/preparation tests pass. Full Web suite: 437/450 pass; failures include missing local SDK configuration and Windows directory fsync EPERM. Cloud startup/entry tests: 3/4 pass; the remaining integration test requires TEST_DATABASE_URL. Chrome inspection of static frontend confirmed default overview, ordered feature entries, sidebar offline feedback, unavailable preparation, and no horizontal overflow. Static preview does not validate robot geometry delivery or hardware. No physical movement or deployment was performed.
+
+## One-click system check
+
+The overview now provides Run system check and Run again. Six rows inspect the gateway API, fresh SDK feedback, AI service port, vision service port, host network interfaces, and Ubuntu Wi-Fi. Progress advances only after each result, with an animated active-row indicator and reduced-motion support. Failures do not stop remaining checks; duplicate runs are ignored. Completion shows an issue count and time. Existing global chat remains available across pages.
+
+GET /api/system-diagnostics?check=sdk|ai|vision|network|wifi returns {id,status,detail,checkedAt}. SDK uses existing robot state freshness. Service probes have a three-second timeout and do not perform inference or motion. Network checks address assignment, not internet reachability. Wi-Fi reads fixed nmcli TYPE,STATE fields with a three-second timeout; no adapter is skipped, disconnected Wi-Fi is a warning, unavailable inspection is unknown. No SSID or credentials are collected. Browser requests time out after eight seconds. This read-only endpoint works over Tailscale; existing localhost-only preparation remains unchanged. Missing services can be started with the command under Service setup. No new dependencies, database changes or configuration are required. Restart the web gateway after installing the new server module; frontend assets use the existing static server.
+
+Validation: 28 focused Node tests pass, including stale SDK rejection, Wi-Fi result distinctions, failure continuation, progress completion, duplicate-run suppression, and retry. Physical motion and AI inference are not part of self-check acceptance.
+
+### Focused check presentation
+
+The system-check overview now uses one centered card. The overview-only model pane, duplicate heading, onboarding welcome and summary cards are hidden; the same model remains mounted and is shown on other workspace pages. Successful rows stay compact; warning/failure explanations remain visible. A large percentage and 14-pixel animated progress bar replace the subtle progress treatment. Each check is displayed for at least 1.1 seconds (roughly 6.6 seconds minimum overall), concurrently with its real request; only completed results advance the percentage. Reduced-motion preferences disable the animations. The 25 relevant interface/diagnostic tests pass after this presentation adjustment.
+
+### Connection latency
+
+Successful Web API results now show RTT in milliseconds measured from browser request start through response JSON receipt. AI and vision results show TCP connection time measured on Ubuntu using a monotonic clock. These are different paths and labeled explicitly; tooltips explain the scope. Values below one millisecond display <1 ms. Failed probes have null latency and no numeric badge. SDK feedback and Wi-Fi status do not claim a measured ping. Presentation dwell is excluded. Twenty-seven relevant tests pass, including measured service timing, failure handling, and separation of API timing from presentation delay. No dependency or database changes.
+
+### Navigation and TCP check
+
+Navigation names are now unnumbered: System Check, Digital Twin, Vision tasks, Calibration, System and AI Agent. The top voice/chat entry also reads AI Agent; the microphone action still reads Voice input. TCP calibration is the seventh check and reads the gateway health dependency. Ready means the calibration service is available, not that physical calibration accuracy has been validated. Disabled/unconfigured services produce a warning with an explanation; missing status is unknown. No calibration or motion is triggered. The seven-step minimum presentation time is approximately 7.7 seconds.
+
+### Startup and cache correction
+
+Mount the navigation/self-check shell before the model module graph loads, reusing the existing mounted instance during runtime initialization. Bump shell, journey CSS and main asset URLs. Static responses now use no-cache with ETag revalidation, returning 304 for unchanged resources, and negotiate gzip for text assets. This avoids repeatedly transferring unchanged models and reduces JavaScript/CSS transfer size. No new dependencies or configuration. Restart the gateway for static-server changes. Twenty-six targeted tests pass, including gzip round-trip, conditional GET, and refreshing changed content.
+
+### Model loading feedback
+
+A live browser session encountered a 502 on model-waypoints.js and an unfinished Three.js request, preventing the module graph from starting while the shell remained usable. Added a visible model loading overlay, dependency-load and model-load failure messages, and a Reload model action. Successful geometry loading removes the overlay. Bumped entry asset versions. The reload action reloads the page and sends no motion. Twenty-five targeted checks pass.
+
+A direct download measured only 375,324 bytes in 25 seconds despite HTTP 200. At that observed rate the 3 MB model exceeds the former 120-second timeout. Local model loading now allows up to ten minutes and displays actual received-byte progress; cloud default remains 15 seconds. No synthetic model progress is used.
+
+### Public deployment preparation (2026-11-13)
+
+Existing staging DNS resolves to 47.94.95.244, but the current workstation SSH identity is rejected for root. No public deployment has been applied. Updated cloud HTML conversion to remove the local early inline bootstrap and replace the main module even with its error handler attribute, preserving the cloud session-aware startup and CSP. Cloud model success/failure now clears the local loading overlay. Five focused auth/bootstrap tests pass. The older classic-source exact-byte test fails because prior English UI edits changed classic.html; that unrelated baseline was not rewritten. Public diagnostics still need adaptation to authenticated cloud device state before deployment; local Ubuntu diagnostic endpoints must not be exposed anonymously.

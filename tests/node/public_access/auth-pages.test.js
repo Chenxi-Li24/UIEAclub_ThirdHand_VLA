@@ -20,3 +20,12 @@ test('auth pages serve only their public resources, with a strict CSP and no acc
   assert.equal((await fetch(base+'/css/auth.css')).status,200);assert.equal((await fetch(base+'/js/auth-page.js')).status,200);
   for(const route of ['/package.json','/.env','/src/server.js','/js/main.js','/index.html','/assets/../../package.json'])assert.equal((await fetch(base+route)).status,404);
 });
+
+test('latest local HTML converts to authenticated cloud entry without inline local startup',()=>{
+ const source=require('node:fs').readFileSync('apps/web/public/index.html','utf8');
+ const {html}=workspaceHtml(source);
+ assert.ok(html.includes('/js/cloud-workspace.js'));
+ assert.ok(!html.includes('ThirdHandWorkspace.mountWorkspace(document, window)'));
+ assert.ok(!html.includes('onerror='));
+ assert.ok(!html.includes('src="js/main.js'));
+});

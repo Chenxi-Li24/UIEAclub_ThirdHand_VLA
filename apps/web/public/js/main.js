@@ -4,6 +4,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { STLLoader } from 'three/addons/loaders/STLLoader.js';
 import { ColladaLoader } from 'three/addons/loaders/ColladaLoader.js';
 import './robot-viewer.js';
+import { createViewer } from './model-resources.js';
 import { VoiceControl } from './voice-control.js?v=12';
 console.log('[main.js] Modules imported, THREE keys:', Object.keys(THREE).length);
 
@@ -148,9 +149,10 @@ const BASE_TO_THREE_DIRECTIONS = Object.freeze({
 
 // === SceneManager ===
 // The shared viewer has no transport startup; legacy local controls keep their own bootstrap.
-const { SceneManager, ArmModel } = globalThis.ThirdHandRobotViewer.createRobotViewer({
-  THREE, OrbitControls, STLLoader, ColladaLoader, baseDirections: BASE_TO_THREE_DIRECTIONS,
-});
+const { SceneManager, ArmModel } = createViewer({assetBase:'.',timeoutMs:600000,onProgress:(received,total)=>{
+  const label=document.getElementById('model-loading-text');
+  if(label)label.textContent=total?`Downloading robot model · ${Math.round(received/total*100)}%`:`Downloading robot model · ${Math.round(received/1024)} KB`;
+}});
 
 // === WSClient ===
 class WSClient {
@@ -791,6 +793,7 @@ class UIControls {
 
     // ── XVisio vision and grasp controls ──────────────────
     const xvisionFeed = document.getElementById('xvision-feed');
+    const visionPage = document.getElementById('page-vision');
     let xvisionStream = 'vision';
     let xvisionRetryTimer = null;
     let xvisionRetryCount = 0;
@@ -809,6 +812,7 @@ class UIControls {
       if (resetBackoff) xvisionRetryCount = 0;
       if (xvisionRetryTimer) clearTimeout(xvisionRetryTimer);
       xvisionRetryTimer = null;
+      if (visionPage?.hidden) { xvisionFeed.removeAttribute('src'); return; }
       xvisionFeed.src = `/camera/xvisio/${xvisionStream}?stream=${Date.now()}`;
     };
 
@@ -824,6 +828,7 @@ class UIControls {
         xvisionFeed.alt = `XVisio ${describeXVisionStream()}`;
       });
       xvisionFeed.addEventListener('error', () => {
+        if (visionPage?.hidden) return;
         const dot = document.getElementById('cam-dot');
         const label = document.getElementById('cam-label');
         if (dot) dot.className = 'cam-dot';
@@ -837,6 +842,11 @@ class UIControls {
         }, delayMs);
       });
       reloadXVisionFeed(true);
+      if (visionPage) {
+        const visibilityObserver = new MutationObserver(() => reloadXVisionFeed(true));
+        visibilityObserver.observe(visionPage, { attributes: true, attributeFilter: ['hidden'] });
+        window.addEventListener('pagehide', () => { visibilityObserver.disconnect(); clearTimeout(xvisionRetryTimer); }, { once: true });
+      }
     }
 
     document.querySelectorAll('[data-xvision-stream]').forEach(button => {
@@ -1309,6 +1319,7 @@ class UIControls {
   }
 
   languageControlReady() {
+    if (!this.arm.loaded) return false;
     if (this.languageBackend === 'formal-3000-upstream') {
       return Boolean(
         this.languageRobotState.connected &&
@@ -2078,11 +2089,10 @@ function startApp() {
     });
   }
 
-  arm.loadingPromise.then(() => {
+  // Network state and chat must not wait for a remote model download.
     ui.build();
     ui.bindViewControls(scene);
     workspace.bindRuntime({ ws, ui, voice, scene });
-    arm.geometryReady.then(() => scene.fitModel(arm.mount));
     let measuredFrame = false;
     ws.on('robot_state', () => {
       if (!measuredFrame && ui.robotStateReady && scene.modelObject) {
@@ -2095,11 +2105,17 @@ function startApp() {
     ws.on('language_backend', () => voice.handleRobotMessage({ type: 'runtime-readiness' }));
     visionWs.connect();
     ws.connect();
-    arm.setJointAngles([0, 0, 0, 0, 0, 0]);
-    ui.setJointValues([0, 0, 0, 0, 0, 0]);
     console.log('[App] Ready.');
+  arm.loadingPromise.then(() => {
+    return arm.geometryReady.then(() => {
+      scene.fitModel(arm.mount);
+      document.getElementById('model-loading')?.remove();
+    });
   }).catch(e => {
     console.error('[App] Model load failed:', e);
+    const loading=document.getElementById('model-loading-text');
+    if(loading)loading.textContent='Model download failed. Check your connection and reload.';
+    ui._log('3D model download failed. Reload to retry. Live status and chat remain available.');
   });
 }
 

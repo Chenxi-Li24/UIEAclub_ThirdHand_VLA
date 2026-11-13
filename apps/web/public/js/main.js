@@ -2104,9 +2104,14 @@ function startApp() {
     ws.connect();
     console.log('[App] Ready.');
   arm.loadingPromise.then(() => {
-    return arm.geometryReady.then(() => scene.fitModel(arm.mount));
+    return arm.geometryReady.then(() => {
+      scene.fitModel(arm.mount);
+      document.getElementById('model-loading')?.remove();
+    });
   }).catch(e => {
     console.error('[App] Model load failed:', e);
+    const loading=document.getElementById('model-loading-text');
+    if(loading)loading.textContent='Model download failed. Check your connection and reload.';
     ui._log('3D model download failed. Reload to retry. Live status and chat remain available.');
   });
 }

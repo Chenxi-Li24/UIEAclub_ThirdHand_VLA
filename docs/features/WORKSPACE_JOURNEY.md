@@ -51,3 +51,7 @@ Navigation names are now unnumbered: System Check, Digital Twin, Vision tasks, C
 ### Startup and cache correction
 
 Mount the navigation/self-check shell before the model module graph loads, reusing the existing mounted instance during runtime initialization. Bump shell, journey CSS and main asset URLs. Static responses now use no-cache with ETag revalidation, returning 304 for unchanged resources, and negotiate gzip for text assets. This avoids repeatedly transferring unchanged models and reduces JavaScript/CSS transfer size. No new dependencies or configuration. Restart the gateway for static-server changes. Twenty-six targeted tests pass, including gzip round-trip, conditional GET, and refreshing changed content.
+
+### Model loading feedback
+
+A live browser session encountered a 502 on model-waypoints.js and an unfinished Three.js request, preventing the module graph from starting while the shell remained usable. Added a visible model loading overlay, dependency-load and model-load failure messages, and a Reload model action. Successful geometry loading removes the overlay. Bumped entry asset versions. The reload action reloads the page and sends no motion. Twenty-five targeted checks pass.

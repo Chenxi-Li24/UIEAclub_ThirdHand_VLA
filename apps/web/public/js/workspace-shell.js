@@ -89,6 +89,10 @@
       const button=byId(id);button.setAttribute('aria-label',button.title);button.replaceChildren(icon(name));
     }
     byId('viewport').appendChild(element('div',{class:'model-hint','aria-hidden':'true'},'Drag to orbit · Scroll to zoom'));
+    const modelLoading=element('div',{id:'model-loading',role:'status',style:'position:absolute;inset:0;z-index:3;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:12px;background:#ffffffed'});
+    modelLoading.append(element('span',{id:'model-loading-text'},'Loading 3D workspace…'));
+    const retryModel=element('button',{type:'button',class:'action-btn'},'Reload model');
+    retryModel.addEventListener('click',()=>win.location.reload());modelLoading.append(retryModel);byId('viewport').append(modelLoading);
     const controls = element('section', { class: 'control-card', 'aria-label': 'Manual targets' }); layout.appendChild(controls);
     const tabs = element('div', { class: 'workspace-tabs', role: 'tablist', 'aria-label': 'Control type' }); controls.appendChild(tabs);
     const tabNodes = new Map(), panes = new Map();

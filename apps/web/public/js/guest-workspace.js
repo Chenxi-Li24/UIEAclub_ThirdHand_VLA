@@ -10,7 +10,7 @@ const close=node('button','Continue exploring');close.className='action-btn';clo
 const requireControl=()=>{if(!permission.open)permission.showModal();};
 const hardwareIds=['btn-connect','btn-disconnect','btn-estop-top','btn-stop-reconnect','btn-send','btn-gripper-send','btn-fixed-tcp-demo','dummy-start','dummy-stop','dummy-confirm-start','btn-active-depth-start','btn-active-depth-stop','btn-grasp-start','btn-grasp-cancel','voice-intent-confirm'];
 for(const id of hardwareIds){const button=doc.getElementById(id);if(button){button.disabled=false;button.addEventListener('click',requireControl);}}
-for(const selector of ['#workspace-nav .nav-bottom button:not(#workspace-nav-toggle)','#language-select'])doc.querySelector(selector)?.setAttribute('hidden','');
+for(const selector of ['#workspace-nav .nav-bottom button:not([data-page]):not(#workspace-nav-toggle)','#language-select'])doc.querySelector(selector)?.setAttribute('hidden','');
 for(const id of ['state-badge','hb-label','conn-ip']){const el=doc.getElementById(id);if(el)el.textContent='Simulation mode';}
 const mode=doc.getElementById('workspace-mode');mode.textContent='Guest mode';
 for(const child of doc.querySelector('.topbar-status').children)if(child!==mode)child.style.display='none';
@@ -49,10 +49,38 @@ new window.MutationObserver(cameraVisibility).observe(doc.getElementById('page-v
 window.addEventListener('hashchange',cameraVisibility);doc.addEventListener('visibilitychange',cameraVisibility);
 cameraRefresh.addEventListener('click',()=>{clearTimeout(cameraTimer);void refreshCamera();});
 if(cameraVisible())void refreshCamera();
-const reply=node('p','AI service is not connected to this public demo. You can still explore the model and saved demo poses.');reply.id='guest-ai-status';doc.getElementById('chat-replies').append(reply);
-doc.getElementById('voice-text-send').disabled=false;
-doc.getElementById('voice-text-form').addEventListener('submit',event=>{event.preventDefault();reply.textContent='AI service is not connected to this public demo. No instruction was sent to a robot.';doc.getElementById('chat-replies').hidden=false;});
-for(const id of ['voice-ai-reconnect','voice-record-toggle','voice-mic-toggle']){const button=doc.getElementById(id);if(button){button.disabled=false;button.addEventListener('click',()=>{reply.textContent='Voice and AI services are not configured for this public demo.';doc.getElementById('chat-replies').hidden=false;});}}
+let modelPreview=null;
+const conversation=doc.getElementById('voice-conversation');conversation.replaceChildren();
+const aiState=doc.getElementById('voice-ai-status');aiState.textContent='AI ready';
+const addMessage=(role,text)=>{const item=node('div',text);item.className='voice-message voice-message--'+role;item.style.whiteSpace='pre-wrap';conversation.append(item);doc.getElementById('chat-replies').hidden=false;item.scrollIntoView?.({block:'nearest'});return item;};
+const welcome=node('p','Ask a question or describe a model pose. Real robot control requires permission.');conversation.append(welcome);
+const messages=[];let aiBusy=false;
+const send=doc.getElementById('voice-text-send'),messageInput=doc.getElementById('voice-text-input');send.disabled=false;
+doc.getElementById('voice-text-help').textContent='AI replies in English. Model previews only.';
+async function sendMessage(event){
+ event.preventDefault();const message=messageInput.value.trim();if(!message||aiBusy)return;
+ aiBusy=true;send.disabled=true;messageInput.value='';addMessage('user',message);const pending=addMessage('ai','Thinking…');aiState.textContent='Thinking…';
+ try{
+  const response=await fetch('/guest-ai/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message,history:messages.slice(-8),joints:modelPreview?.joints()||[0,90,-90,0,0,0]}),signal:AbortSignal.timeout(35000)});
+  if(!response.ok){pending.textContent=response.status===429?'AI is busy. Please wait a minute and try again.':'AI is temporarily unavailable. Please try again.';aiState.textContent='AI unavailable';return;}
+  const result=await response.json();pending.textContent=result.reply;aiState.textContent='AI ready';
+  messages.push({role:'user',content:message},{role:'assistant',content:result.reply});if(messages.length>8)messages.splice(0,messages.length-8);
+  if(result.joints||result.gripper!==null){
+   const preview=node('button','Preview in model');preview.className='action-btn';pending.append(doc.createElement('br'),preview);
+   preview.addEventListener('click',()=>{
+    if(!modelPreview){preview.textContent='Model is loading. Try again.';return;}
+    if(result.joints&&result.joints.some((v,i)=>v<modelPreview.limits[i][0]||v>modelPreview.limits[i][1])){preview.textContent='Pose exceeds model limits. Please revise.';return;}
+    modelPreview.apply(result);shell.go('control');preview.textContent='Preview applied';
+   });
+   const control=node('button','Request robot access');control.className='action-btn';control.addEventListener('click',requireControl);pending.append(control);
+  }
+ }catch{pending.textContent='AI request timed out or lost connection. Please try again.';aiState.textContent='AI unavailable';}
+ finally{aiBusy=false;send.disabled=false;}
+}
+doc.getElementById('voice-text-form').addEventListener('submit',sendMessage);
+messageInput.addEventListener('keydown',event=>{if(event.key==='Enter'&&!event.shiftKey&&!event.isComposing)void sendMessage(event);});
+for(const id of ['voice-record-toggle','voice-mic-toggle']){const button=doc.getElementById(id);button.disabled=false;button.addEventListener('click',()=>addMessage('ai','Voice input is not available in this demo yet. Please type your message.'));}
+doc.getElementById('voice-ai-reconnect').addEventListener('click',()=>addMessage('ai','Send a message to retry the AI connection.'));
 const label=doc.getElementById('model-loading-text');
 try{
  const {createViewer}=await import('./model-resources.js');
@@ -79,6 +107,7 @@ try{
  save.addEventListener('click',()=>{const name=input.value.trim();if(!name)return;waypoints.push({name,joints:arm.getJointAngles()});waypoints=waypoints.slice(-50);try{localStorage.setItem('thirdhand.guest.waypoints',JSON.stringify(waypoints));}catch{}input.value='';render();record('Saved '+name);});
  const gripper=doc.getElementById('gripper-slider'),gripperNumber=doc.getElementById('gripper-input');
  const previewGripper=value=>{arm.setGripperPosition(value);gripper.value=value;gripperNumber.value=Math.round(value*100);};
+ modelPreview={joints:()=>arm.getJointAngles(),limits:arm.jointLimits,apply:result=>{if(result.joints)loadPose('AI model preview',result.joints);if(result.gripper!==null)previewGripper(result.gripper);}};
  gripper.addEventListener('input',()=>previewGripper(Number(gripper.value)));gripperNumber.addEventListener('change',()=>previewGripper(Math.max(0,Math.min(1,Number(gripperNumber.value)/100))));
  for(const [id,value] of [['btn-gripper-open',1],['btn-gripper-close',0]])doc.getElementById(id).addEventListener('click',()=>previewGripper(value));
  const exportButton=node('button','Export demo history');exportButton.className='action-btn';system.append(exportButton);exportButton.addEventListener('click',()=>{const csv='Time,Action,J1,J2,J3,J4,J5,J6\n'+history.map(r=>[r.at,'"'+r.name.replace(/^[=+@\-]/,"' $&").replaceAll('"','""')+'"',...r.joints].join(',')).join('\n');const url=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));const link=node('a','');link.href=url;link.download='thirdhand-demo-history.csv';link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);});

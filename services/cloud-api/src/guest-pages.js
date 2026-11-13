@@ -4,10 +4,12 @@ const path=require('node:path');
 const {createHash}=require('node:crypto');
 const {serveWorkspacePage,protectedHtml}=require('./workspace-pages');
 const serveCamera=require('./guest-camera').createGuestCamera();
+const serveAi=require('./guest-ai').createGuestAi();
 const root=path.resolve(__dirname,'../../../apps/web/public');
 const guestFiles=new Set(['js/guest-workspace.js','js/workspace-shell.js','js/camera-lighting.js','js/model-resources.js','js/robot-viewer.js','js/model-waypoints.js']);
 function guestAssetAllowed(file){return guestFiles.has(file)||/^css\/[a-z0-9-]+\.css$/.test(file)||/^js\/lib\/(?:[a-zA-Z0-9_-]+\/)*[a-zA-Z0-9_.-]+\.js$/.test(file)||/^models\/startouch-v3\/(?:FastTouchV3\.SLDASM\.urdf|web\/robot-visuals\.glb)$/.test(file);}
 async function serveGuestPage(request,response,pathname,{publicOrigin}={}){
+ if(await serveAi(request,response,pathname,{publicOrigin}))return true;
  if(await serveCamera(request,response,pathname))return true;
  if(!['GET','HEAD'].includes(request.method))return false;
  if(pathname==='/guest'){

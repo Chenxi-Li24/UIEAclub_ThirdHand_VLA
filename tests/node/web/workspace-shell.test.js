@@ -5,7 +5,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { parseHTML } = require('linkedom');
 const root = path.resolve(__dirname, '../../..');
-function fixture({navPreference,narrow=false,storageBlocked=false}={}) {
+function fixture({navPreference,narrow=false,storageBlocked=false,runSystemCheck}={}) {
   const { document, window } = parseHTML(fs.readFileSync(path.join(root, 'apps/web/public/index.html'), 'utf8'));
   const preferences=new Map(navPreference?[['thirdhand.nav-state',navPreference]]:[]);
   const media={matches:!narrow,addEventListener(_event,handler){this.changed=handler;}};
@@ -13,7 +13,7 @@ function fixture({navPreference,narrow=false,storageBlocked=false}={}) {
     addEventListener() {}, requestAnimationFrame(fn) { fn(); }, MutationObserver: window.MutationObserver,
     matchMedia(){return media;},localStorage:{getItem(key){if(storageBlocked)throw Error('blocked');return preferences.get(key);},setItem(key,value){if(storageBlocked)throw Error('blocked');preferences.set(key,value);}}};
   const { mountWorkspace } = require(path.join(root, 'apps/web/public/js/workspace-shell.js'));
-  return { document, window, shell: mountWorkspace(document, view), mountWorkspace, view, preferences, media };
+  return { document, window, shell: mountWorkspace(document, view, {runSystemCheck}), mountWorkspace, view, preferences, media };
 }
 test('minimal composer keeps drafts while independent reply and voice popovers open and close',()=>{
  const {document,shell}=fixture();let requests=0;
@@ -235,6 +235,36 @@ test('system check advances on results, continues after failures and supports re
  assert.match(document.getElementById('system-ready-result').textContent,/1 item need attention/);
  assert.equal(document.querySelectorAll('.system-checks [data-status=failed]').length,1);
  button.click();for(let i=0;i<20;i++)await new Promise(setImmediate);assert.equal(calls.length,14);
+});
+
+test('all skipped checks finish as demo-only and retry can report actual passing checks',async()=>{
+ let status='skipped',writes=0;const checks=[];
+ const {document,view,shell}=fixture({runSystemCheck:async id=>{checks.push(id);return {status,detail:'Guest preview does not report live hardware status.'};}});
+ view.fetch=()=>assert.fail('Guest checks must not request live diagnostics');
+ shell.bindRuntime({ws:{on(){},send(){writes++;},connect(){writes++;}}});
+ const button=document.getElementById('system-ready-button');button.click();
+ for(let i=0;i<20;i++)await new Promise(setImmediate);
+ assert.equal(checks.length,7);assert.equal(writes,0);
+ assert.equal(document.querySelector('[role=progressbar]').getAttribute('aria-valuenow'),'100');
+ assert.equal(document.querySelectorAll('.system-checks [data-status=skipped]').length,7);
+ assert.match(document.getElementById('system-ready-result').textContent,/^Demo mode · Hardware readiness unavailable · /);
+ assert.doesNotMatch(document.getElementById('system-ready-result').textContent,/\bpassed\b|\bready\b/i);
+ assert.equal(button.disabled,false);
+ status='passed';button.click();for(let i=0;i<20;i++)await new Promise(setImmediate);
+ assert.equal(checks.length,14);assert.equal(writes,0);
+ assert.equal(document.querySelectorAll('.system-checks [data-status=passed]').length,7);
+ assert.match(document.getElementById('system-ready-result').textContent,/^Check complete · All applicable checks passed · /);
+});
+
+test('skipped checks preserve applicable pass and warning summaries',async()=>{
+ for(const [status,summary] of [['passed',/^Check complete · All applicable checks passed · /],['warning',/^Check complete · 1 item need attention · /]]){
+  const {document,view}=fixture({runSystemCheck:async id=>({status:id==='api'?status:'skipped',detail:'Check result'})});
+  view.fetch=()=>assert.fail('The diagnostics adapter must supply each result');
+  document.getElementById('system-ready-button').click();for(let i=0;i<20;i++)await new Promise(setImmediate);
+  assert.equal(document.querySelectorAll('.system-checks [data-status=skipped]').length,6);
+  assert.equal(document.querySelector('[role=progressbar]').getAttribute('aria-valuenow'),'100');
+  assert.match(document.getElementById('system-ready-result').textContent,summary);
+ }
 });
 
 test('API latency excludes presentation dwell and service latency uses host measurement',async()=>{

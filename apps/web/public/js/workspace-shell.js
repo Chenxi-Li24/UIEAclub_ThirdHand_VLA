@@ -173,7 +173,7 @@
       requesting=true;readyButton.disabled=true;readyButton.textContent='Checking…';journey.setAttribute('aria-busy','true');
       progress.setAttribute('aria-valuenow','0');fill.style.width='0%';percentage.textContent='0%';
       for(const {row,badge,detail} of rows.values()){row.dataset.status='pending';badge.textContent=labels.pending;badge.removeAttribute('title');detail.textContent='';}
-      let completed=0,issues=0;
+      let completed=0,issues=0,skipped=0;
       for(const [id,label] of checks){
         if(disposed)break;
         const {row,badge,detail}=rows.get(id);row.dataset.status='running';badge.textContent=labels.running;
@@ -209,11 +209,12 @@
           }
           detail.textContent=id==='api'?(state==='passed'?'Gateway API responded successfully.':'Gateway responded but is not ready.') : data.detail;
           if(['failed','warning','unknown'].includes(state))issues++;
+          if(state==='skipped')skipped++;
         }catch{await dwell;if(disposed)break;row.dataset.status='failed';badge.textContent=labels.failed;detail.textContent='Check unavailable or timed out. Check your connection and retry.';issues++;}
         completed++;const percent=Math.round(completed/checks.length*100);fill.style.width=percent+'%';percentage.textContent=percent+'%';progress.setAttribute('aria-valuenow',String(percent));
       }
       if(disposed)return;
-      readyResult.textContent=issues?`Check complete · ${issues} item${issues===1?'':'s'} need attention`:'Check complete · All applicable checks passed';
+      readyResult.textContent=skipped===checks.length?'Demo mode · Hardware readiness unavailable':issues?`Check complete · ${issues} item${issues===1?'':'s'} need attention`:'Check complete · All applicable checks passed';
       readyResult.textContent+=' · '+new Date().toLocaleTimeString('en-GB');
       requesting=false;readyButton.disabled=false;readyButton.textContent='Run again';journey.setAttribute('aria-busy','false');
     });

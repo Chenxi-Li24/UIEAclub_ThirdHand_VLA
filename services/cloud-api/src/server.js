@@ -47,6 +47,7 @@ function createCloudApi({ pool, accounts, sessions, mfa, publicOrigin, tutorialA
       // No legacy proxy endpoints and no permissive WebSocket forwarding.
       if (['/ws','/execution','/voice','/vision'].some(prefix=>path===prefix||path.startsWith(`${prefix}/`))) return json(response,404,{error:'NOT_FOUND'});
       if (path === '/healthz' && request.method === 'GET') return json(response,200,{service:'thirdhand-cloud-api',deviceControl:controlService?'explicit-read-only':'unavailable'});
+      if (await require('./guest-pages').serveGuestPage(request,response,path,{publicOrigin:origin})) return;
       if (await serveAuthPage(request,response,path)) return;
       if(isWorkspacePath(path)&&['GET','HEAD'].includes(request.method)){
         const authenticated=await sessions?.resolveSession(request);

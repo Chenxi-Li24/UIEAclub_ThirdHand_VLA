@@ -6,7 +6,7 @@ const {createHash}=require('node:crypto');
 const {assetPath,isolateAssets}=require('./asset-paths');
 const root=path.resolve(__dirname,'../../../apps/web/public'),models=path.resolve(__dirname,'../../../assets/robot');
 const files=new Set([
-  'css/workspace-journey.css','css/auth.css','js/preferences.js','js/i18n.js','js/i18n-catalog.js','js/i18n-auth-catalog.js',
+  'js/guest-workspace.js','css/workspace-journey.css','css/auth.css','js/preferences.js','js/i18n.js','js/i18n-catalog.js','js/i18n-auth-catalog.js',
   'css/classic-source.css','js/classic-shell.js',
   'js/workspace-navigation.js','js/device-state.js','js/workspace-startup.js','js/model-resources.js','css/workspace-layouts.css',
   'js/model-waypoints.js','css/model-waypoints.css',
@@ -92,4 +92,4 @@ async function serveWorkspacePage(request,response,pathname,options={}){
   response.writeHead(200,{...headers,'Content-Length':stat.size});
   if(request.method==='HEAD')response.end();else{const stream=fs.createReadStream(filename);stream.on('error',()=>response.destroy());stream.pipe(response);}return true;
 }
-module.exports={isWorkspacePath,serveWorkspacePage,workspaceHtml};
+module.exports={isWorkspacePath,serveWorkspacePage,workspaceHtml,protectedHtml};

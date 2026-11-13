@@ -8,7 +8,7 @@ export function createViewer({assetBase,timeoutMs=15000}){
   return globalThis.ThirdHandRobotViewer.createRobotViewer({THREE,OrbitControls,assetBase,loadVisualMeshes:async base=>{
     const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),timeoutMs);
     try{
-      const result=await fetch(`${base}/models/startouch-v3/web/robot-visuals.glb`,{credentials:'same-origin',signal:controller.signal});
+      const result=await fetch(`${base}/models/startouch-v3/web/robot-visuals.glb?v=20261113c`,{credentials:'same-origin',signal:controller.signal});
       if(!result.ok)throw Error('Model download failed');
       const raw=await result.arrayBuffer(),loader=new GLTFLoader();loader.setMeshoptDecoder(MeshoptDecoder);
       const gltf=await loader.parseAsync(raw,base+'/models/startouch-v3/web/');

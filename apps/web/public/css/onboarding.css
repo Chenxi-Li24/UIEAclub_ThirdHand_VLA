@@ -69,3 +69,15 @@
  #onboarding-spotlight .onboarding-panel h2 { font-size: 17px; }
  #onboarding-spotlight .onboarding-panel > p { font-size: 11px; }
 }
+/* Feature-first tour: visible progress, compact checklist and touch-sized actions. */
+#onboarding-progress { display:block; width:100%; height:5px; margin:0 0 16px; border:0; border-radius:8px; accent-color:#e9843c; }
+#onboarding-progress::-webkit-progress-bar { background:#f0ece8; border-radius:8px; }
+#onboarding-progress::-webkit-progress-value { background:#e9843c; border-radius:8px; transition:width .25s ease; }
+#onboarding-progress[hidden] { display:none; }
+.onboarding-checklist { padding:18px 20px; }
+.onboarding-tasks { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:0 18px; }
+.onboarding-task-open { min-width:36px; min-height:36px; }
+#onboarding-spotlight .onboarding-actions button { min-height:44px; }
+#onboarding-example { margin-right:auto; color:#b85d24; text-align:left; }
+@media(max-width:600px) { .onboarding-tasks { grid-template-columns:1fr; } .onboarding-checklist { padding:16px; } }
+@media(prefers-reduced-motion:reduce) { #onboarding-progress::-webkit-progress-value { transition:none; } }

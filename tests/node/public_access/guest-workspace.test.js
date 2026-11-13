@@ -5,7 +5,7 @@ test('guest preview is public but private data and hardware APIs remain protecte
  await new Promise(r=>server.listen(0,'127.0.0.1',r));t.after(()=>new Promise(r=>{server.closeAllConnections();server.close(r);}));
  const base='http://127.0.0.1:'+server.address().port;
  const guest=await fetch(base+'/guest');assert.equal(guest.status,200);const html=await guest.text();assert.match(html,/guest-workspace.js/);assert.ok(!html.includes('src="js/main.js'));assert.ok(!html.includes('ThirdHandWorkspace.mountWorkspace(document, window)'));
- for(const p of ['/guest-assets/js/guest-workspace.js','/guest-assets/js/model-resources.js'])assert.equal((await fetch(base+p)).status,200);
+ for(const p of ['/guest-assets/js/guest-workspace.js','/guest-assets/js/model-resources.js','/guest-assets/js/onboarding.js','/guest-assets/js/onboarding-spotlight.js'])assert.equal((await fetch(base+p)).status,200);
  for(const p of ['/guest-assets/js/main.js','/guest-assets/js/workspace-session.js','/guest-assets/../.env'])assert.equal((await fetch(base+p)).status,404);
  for(const p of ['/api/v1/devices','/api/v1/me/waypoints','/api/v1/session'])assert.equal((await fetch(base+p)).status,401);
  assert.equal((await fetch(base+'/api/v1/control/lease',{method:'POST'})).status,401);

@@ -1,5 +1,6 @@
 // Guest demo: local model previews, browser storage and a read-only camera.
 const doc=document;
+doc.getElementById('app').dataset.guestDemo='true';
 doc.getElementById('estop-overlay').style.display='none';
 const shell=globalThis.ThirdHandWorkspace.mountWorkspace(doc,window,{calibrationEntry:null,runSystemCheck:async id=>({status:'skipped',detail:'Guest preview does not report live hardware status.'})});
 const node=(tag,text)=>{const el=doc.createElement(tag);el.textContent=text;return el;};
@@ -63,14 +64,14 @@ async function sendMessage(event){
  try{
   const response=await fetch('/guest-ai/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message,history:messages.slice(-8),joints:modelPreview?.joints()||[0,90,-90,0,0,0]}),signal:AbortSignal.timeout(35000)});
   if(!response.ok){pending.textContent=response.status===429?'AI is busy. Please wait a minute and try again.':'AI is temporarily unavailable. Please try again.';aiState.textContent='AI unavailable';return;}
-  const result=await response.json();pending.textContent=result.reply;aiState.textContent='AI ready';
+  const result=await response.json();pending.textContent=result.reply;aiState.textContent='AI ready';doc.dispatchEvent(new window.Event('thirdhand:ai-reply'));
   messages.push({role:'user',content:message},{role:'assistant',content:result.reply});if(messages.length>8)messages.splice(0,messages.length-8);
   if(result.joints||result.gripper!==null){
    const preview=node('button','Preview in model');preview.className='action-btn';pending.append(doc.createElement('br'),preview);
    preview.addEventListener('click',()=>{
     if(!modelPreview){preview.textContent='Model is loading. Try again.';return;}
     if(result.joints&&result.joints.some((v,i)=>v<modelPreview.limits[i][0]||v>modelPreview.limits[i][1])){preview.textContent='Pose exceeds model limits. Please revise.';return;}
-    modelPreview.apply(result);shell.go('control');preview.textContent='Preview applied';
+    modelPreview.apply(result);doc.dispatchEvent(new window.Event('thirdhand:model-preview'));shell.go('control');preview.textContent='Preview applied';
    });
    const control=node('button','Request robot access');control.className='action-btn';control.addEventListener('click',requireControl);pending.append(control);
   }
@@ -81,16 +82,17 @@ doc.getElementById('voice-text-form').addEventListener('submit',sendMessage);
 messageInput.addEventListener('keydown',event=>{if(event.key==='Enter'&&!event.shiftKey&&!event.isComposing)void sendMessage(event);});
 for(const id of ['voice-record-toggle','voice-mic-toggle']){const button=doc.getElementById(id);button.disabled=false;button.addEventListener('click',()=>addMessage('ai','Voice input is not available in this demo yet. Please type your message.'));}
 doc.getElementById('voice-ai-reconnect').addEventListener('click',()=>addMessage('ai','Send a message to retry the AI connection.'));
+const guide=shell.installOnboarding(globalThis.ThirdHandOnboarding);
 const label=doc.getElementById('model-loading-text');
 try{
  const {createViewer}=await import('./model-resources.js');
  const {SceneManager,ArmModel}=createViewer({assetBase:'/guest-assets',timeoutMs:120000,onProgress:(bytes,total)=>{label.textContent=total?`Loading model · ${Math.round(bytes/total*100)}%`:'Loading model…';}});
  const scene=new SceneManager(doc.getElementById('three-container')),arm=new ArmModel(scene.scene);
- await arm.loadingPromise;await arm.geometryReady;arm.setJointAngles([0,90,-90,0,0,0]);scene.fitModel(arm.mount);doc.getElementById('model-loading')?.remove();
+ await arm.loadingPromise;await arm.geometryReady;shell.bindRuntime({scene,ui:{arm}});arm.setJointAngles([0,90,-90,0,0,0]);scene.fitModel(arm.mount);doc.getElementById('model-loading')?.remove();
  const body=doc.getElementById('joint-controls-body');body.replaceChildren();
  arm.jointLimits.forEach(([min,max],i)=>{
   const row=doc.createElement('label');row.className='joint-row';const title=doc.createElement('span');title.textContent=`J${i+1} · Model preview`;
-  const value=doc.createElement('output');const slider=doc.createElement('input');slider.type='range';slider.min=min;slider.max=max;slider.step='0.1';slider.value=arm.getJointAngles()[i];slider.setAttribute('aria-label',`J${i+1} preview angle`);
+  const value=doc.createElement('output');const slider=doc.createElement('input');slider.id='slider-j'+i;slider.type='range';slider.min=min;slider.max=max;slider.step='0.1';slider.value=arm.getJointAngles()[i];slider.setAttribute('aria-label',`J${i+1} preview angle`);
   const update=()=>{const angles=arm.getJointAngles();angles[i]=Number(slider.value);arm.setJointAngles(angles);value.textContent=Number(slider.value).toFixed(1)+'°';};slider.addEventListener('input',update);update();row.append(title,value,slider);body.append(row);
  });
  const sync=()=>{Array.from(body.querySelectorAll('input')).forEach((input,i)=>{input.value=arm.getJointAngles()[i];input.parentElement.querySelector('output').textContent=Number(input.value).toFixed(1)+'°';});};

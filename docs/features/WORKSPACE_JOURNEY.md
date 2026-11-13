@@ -55,3 +55,5 @@ Mount the navigation/self-check shell before the model module graph loads, reusi
 ### Model loading feedback
 
 A live browser session encountered a 502 on model-waypoints.js and an unfinished Three.js request, preventing the module graph from starting while the shell remained usable. Added a visible model loading overlay, dependency-load and model-load failure messages, and a Reload model action. Successful geometry loading removes the overlay. Bumped entry asset versions. The reload action reloads the page and sends no motion. Twenty-five targeted checks pass.
+
+A direct download measured only 375,324 bytes in 25 seconds despite HTTP 200. At that observed rate the 3 MB model exceeds the former 120-second timeout. Local model loading now allows up to ten minutes and displays actual received-byte progress; cloud default remains 15 seconds. No synthetic model progress is used.

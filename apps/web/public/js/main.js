@@ -149,7 +149,10 @@ const BASE_TO_THREE_DIRECTIONS = Object.freeze({
 
 // === SceneManager ===
 // The shared viewer has no transport startup; legacy local controls keep their own bootstrap.
-const { SceneManager, ArmModel } = createViewer({assetBase:'.',timeoutMs:120000});
+const { SceneManager, ArmModel } = createViewer({assetBase:'.',timeoutMs:600000,onProgress:(received,total)=>{
+  const label=document.getElementById('model-loading-text');
+  if(label)label.textContent=total?`Downloading robot model · ${Math.round(received/total*100)}%`:`Downloading robot model · ${Math.round(received/1024)} KB`;
+}});
 
 // === WSClient ===
 class WSClient {

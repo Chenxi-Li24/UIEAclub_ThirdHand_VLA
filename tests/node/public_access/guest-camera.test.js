@@ -1,0 +1,20 @@
+const test=require('node:test'),assert=require('node:assert/strict'),http=require('node:http');
+const {createGuestCamera}=require('../../../services/cloud-api/src/guest-camera');
+test('public camera is read-only, publisher authenticated, and stale frames disappear',async t=>{
+ let now=10000;
+ const handle=createGuestCamera({token:()=> 'test-upload-secret',now:()=>now,maxBytes:16});
+ const server=http.createServer(async(req,res)=>{if(!await handle(req,res,new URL(req.url,'http://localhost').pathname)){res.writeHead(404);res.end();}});
+ await new Promise(r=>server.listen(0,'127.0.0.1',r));t.after(()=>new Promise(r=>{server.closeAllConnections();server.close(r);}));
+ const url='http://127.0.0.1:'+server.address().port+'/guest-camera/frame';
+ assert.equal((await fetch(url)).status,503);
+ assert.equal((await fetch(url,{method:'POST',body:'x'})).status,403);
+ const headers={'Authorization':'Bearer test-upload-secret','Content-Type':'image/jpeg'};
+ assert.equal((await fetch(url,{method:'POST',headers,body:'not a frame'})).status,400);
+ const frame=Buffer.from([255,216,1,2,255,217]);
+ assert.equal((await fetch(url,{method:'POST',headers,body:frame})).status,200);
+ const result=await fetch(url);assert.equal(result.status,200);assert.equal(result.headers.get('content-type'),'image/jpeg');assert.equal(result.headers.get('cache-control'),'no-store');assert.deepEqual(Buffer.from(await result.arrayBuffer()),frame);
+ assert.equal((await fetch(url,{method:'DELETE'})).status,405);
+ assert.equal((await fetch(url+'/../control')).status,404);
+ now+=8001;assert.equal((await fetch(url)).status,503);
+ assert.equal((await fetch(url,{method:'POST',headers,body:Buffer.alloc(17)})).status,413);
+});

@@ -38,9 +38,10 @@ function workspaceHtml(source,options={}){
   // HTML parsing normalizes CRLF/CR before CSP hashes are checked in the browser.
   source=source.replace(/\r\n?/g,'\n');
   let html=source.replace(/<script\b[^>]*\bsrc=["']js\/(?:dummy-control|runtime-endpoints)\.js[^"']*["'][^>]*>\s*<\/script>/g,'');
+  html=html.replace(/<script>ThirdHandWorkspace\.mountWorkspace\(document, window\);<\/script>/g,'');
   if(classic)html=html.replace('css/style.css','css/classic-source.css');
   if(classic)html=html.replace('<script defer src="js/i18n.js','<script defer src="/js/i18n-onboarding-catalog.js"></script><script defer src="/js/i18n-account-catalog.js"></script><script defer src="/js/i18n-status-catalog.js"></script><script defer src="js/i18n.js');
-  html=html.replace(/<script type="module" src="js\/main\.js[^\"]*"><\/script>/,
+  html=html.replace(/<script type="module" src="js\/main\.js[^\"]*"[^>]*><\/script>/,
     '<script src="/js/preferences.js"></script><script src="/js/simulation-controller.js"></script><script src="/js/tutorial-adapter.js"></script><script src="/js/lib/qrcode-generator-2.0.4.js"></script><script src="/js/admin-access.js"></script><script src="/js/account-security.js"></script><script src="/js/admin-control.js"></script><script src="/js/device-state.js"></script><script src="/js/workspace-navigation.js"></script><script src="/js/camera-view.js"></script><script src="/js/workspace-session.js"></script><script src="/js/workspace-startup.js"></script><script type="module" src="/js/cloud-workspace.js"></script>');
   if(!html.includes('/js/cloud-workspace.js')||html.includes('src="js/main.js'))throw new Error('Cloud entry replacement failed');
   if(classic)html=html.replace('<script src="/js/preferences.js">','<script src="/js/camera-lighting.js"></script><script src="/js/onboarding-spotlight.js"></script><script src="/js/onboarding.js"></script><script src="/js/account-settings.js"></script><script src="/js/status-lights.js"></script><script src="/js/classic-shell.js"></script><script src="/js/preferences.js">');

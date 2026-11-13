@@ -35,12 +35,12 @@
         const inputs=Array.from(doc.querySelectorAll('#joint-controls-body input,#preset-grid button,#btn-send,#gripper-input,#gripper-slider,#workspace-model .view-tools button')).map(node=>({node,disabled:initialDisabled.has(node)?initialDisabled.get(node):node.disabled}));
         for(const {node}of inputs)node.disabled=true;
         await arm.loadingPromise;await arm.geometryReady;if(!active)return;
-        arm.setJointAngles([0,90,-90,0,0,0]);arm.setGripperPosition(1);controls.setReady(true);scene.fitModel(arm.mount);spinner.remove();
+        arm.setJointAngles([0,90,-90,0,0,0]);arm.setGripperPosition(1);controls.setReady(true);scene.fitModel(arm.mount);spinner.remove();doc.getElementById('model-loading')?.remove();
         for(const {node,disabled}of inputs)node.disabled=disabled;
         waypoints.setReady(true);
         view.performance?.mark?.('thirdhand:model-ready');
       }catch{
-        if(active){spinner.textContent=tr('The robot model could not be loaded.');const retry=doc.createElement('button');retry.type='button';retry.className='action-btn action-secondary';retry.textContent=tr('Retry model');retry.addEventListener('click',()=>view.location.reload());spinner.append(retry);}
+        if(active){doc.getElementById('model-loading')?.remove();spinner.textContent=tr('The robot model could not be loaded.');const retry=doc.createElement('button');retry.type='button';retry.className='action-btn action-secondary';retry.textContent=tr('Retry model');retry.addEventListener('click',()=>view.location.reload());spinner.append(retry);}
       }finally{view.clearTimeout?.(modelTimer);}
     })();
     modelTimer=view.setTimeout?.(()=>{if(active&&spinner.isConnected){spinner.textContent=tr('The model is taking longer than expected.');const retry=doc.createElement('button');retry.type='button';retry.textContent=tr('Retry model');retry.addEventListener('click',()=>view.location.reload());spinner.append(retry);}},20000);

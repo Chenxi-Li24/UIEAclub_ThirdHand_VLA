@@ -47,3 +47,7 @@ Successful Web API results now show RTT in milliseconds measured from browser re
 ### Navigation and TCP check
 
 Navigation names are now unnumbered: System Check, Digital Twin, Vision tasks, Calibration, System and AI Agent. The top voice/chat entry also reads AI Agent; the microphone action still reads Voice input. TCP calibration is the seventh check and reads the gateway health dependency. Ready means the calibration service is available, not that physical calibration accuracy has been validated. Disabled/unconfigured services produce a warning with an explanation; missing status is unknown. No calibration or motion is triggered. The seven-step minimum presentation time is approximately 7.7 seconds.
+
+### Startup and cache correction
+
+Mount the navigation/self-check shell before the model module graph loads, reusing the existing mounted instance during runtime initialization. Bump shell, journey CSS and main asset URLs. Static responses now use no-cache with ETag revalidation, returning 304 for unchanged resources, and negotiate gzip for text assets. This avoids repeatedly transferring unchanged models and reduces JavaScript/CSS transfer size. No new dependencies or configuration. Restart the gateway for static-server changes. Twenty-six targeted tests pass, including gzip round-trip, conditional GET, and refreshing changed content.

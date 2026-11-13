@@ -7,11 +7,11 @@
   'use strict';
   const mounted = new WeakMap();
   const pages = [
-    ['overview', '◫', '01 · System ready', 'Prepare services and check connection feedback.'],
-    ['control', '⌁', '03 · Digital twin', 'Preview targets before confirming a movement.'],
+    ['overview', '◫', 'System Check', 'Prepare services and check connection feedback.'],
+    ['control', '⌁', 'Digital Twin', 'Preview targets before confirming a movement.'],
     ['vision', '◎', 'Vision tasks', 'Select a detected target and follow depth acquisition and grasp progress.'],
     ['calibration', '⊹', 'Calibration', 'Use the existing TCP wizard and its measured results.'],
-    ['assistant', '✧', '02 · Natural language', 'Describe a movement, inspect the candidate, then confirm or reject.'],
+    ['assistant', '✧', 'AI Agent', 'Describe a movement, inspect the candidate, then confirm or reject.'],
     ['system', '⚙', 'System', 'Live communication logs and interface settings.'],
   ];
   const iconPaths = {
@@ -64,11 +64,11 @@
     for (const [index, [id, , label, detail]] of pages.entries()) {
       const button = element('button', { type: 'button', 'data-page': id, 'aria-label': label, title: label });
       const navIcon = element('span', { class: 'nav-icon', 'aria-hidden': 'true' }); navIcon.appendChild(icon(id));
-      button.append(navIcon, element('span', { class: 'nav-label' }, label), element('span',{class:'nav-index','aria-hidden':'true'},String(index+1).padStart(2,'0')));
+      button.append(navIcon, element('span', { class: 'nav-label' }, label));
       button.addEventListener('click', () => id==='assistant'?setChatOpen(!chatOpen):go(id)); nav.appendChild(button); navNodes.set(id, button);
       const page = element('section', { id: `page-${id}`, class: 'workspace-page', 'aria-labelledby': `heading-${id}`, hidden: '' });
       const heading = element('div', { class: 'workspace-heading' });
-      heading.append(element('div',{class:'page-eyebrow','aria-hidden':'true','data-i18n-skip':''},`THIRDHAND / 0${index+1}`), element('h1', { id: `heading-${id}`, tabindex: '-1' }, label), element('p', {}, detail));
+      heading.append(element('div',{class:'page-eyebrow','aria-hidden':'true','data-i18n-skip':''},'THIRDHAND'), element('h1', { id: `heading-${id}`, tabindex: '-1' }, label), element('p', {}, detail));
       page.appendChild(heading); main.appendChild(page); pageNodes.set(id, page);
     }
     const navBottom=element('div',{class:'nav-bottom'});
@@ -143,7 +143,7 @@
       button.addEventListener('click', () => go(id)); shortcuts.appendChild(button);
     }
     const journey = element('section', {class:'workspace-journey'});
-    journey.append(element('h2', {}, 'System check'), element('p', {}, 'Six connection checks. One click.'));
+    journey.append(element('h2', {}, 'System check'), element('p', {}, 'Seven system checks. One click.'));
     overview.before(journey);shortcuts.hidden=true;
     const readyButton=element('button',{type:'button',class:'action-btn action-primary',id:'system-ready-button'},'Run system check');
     const readyResult=element('p',{role:'status','aria-live':'polite',id:'system-ready-result'},'Ready to check');
@@ -151,7 +151,7 @@
     const fill=element('span');progress.append(fill);
     const percentage=element('span',{class:'check-percentage','aria-hidden':'true'},'0%');
     const readyServices=element('ul',{id:'system-ready-services',class:'system-checks'});
-    const checks=[['api','Web API'],['sdk','SDK feedback'],['ai','AI service'],['vision','Vision service'],['network','Host network'],['wifi','Host Wi-Fi']];
+    const checks=[['api','Web API'],['sdk','SDK feedback'],['ai','AI service'],['vision','Vision service'],['network','Host network'],['wifi','Host Wi-Fi'],['tcp','TCP calibration']];
     const rows=new Map();
     for(const [id,label] of checks){
       const row=element('li',{'data-status':'pending'});
@@ -179,9 +179,14 @@
           if(!win.fetch)throw Error('unavailable');
           const clock=()=>win.performance?.now?.() ?? Date.now();
           const started=clock();
-          const response=await win.fetch(id==='api'?'/health':'/api/system-diagnostics?check='+id,{cache:'no-store',signal:win.AbortSignal?.timeout(8000)});
+          const response=await win.fetch((id==='api'||id==='tcp')?'/health':'/api/system-diagnostics?check='+id,{cache:'no-store',signal:win.AbortSignal?.timeout(8000)});
           if(!response.ok)throw Error('unavailable');
           const data=await response.json();
+          if(id==='tcp'){
+            const tcp=data.dependencies?.tcpCalibration;
+            data.status=tcp?.ready===true?'passed':tcp?'warning':'unknown';
+            data.detail=tcp?.ready===true?'TCP calibration service is ready. Physical calibration accuracy is not verified.':tcp?.reason==='tcp_calibration_disabled'?'TCP calibration is disabled on the host. Enable and configure the calibration service.':'TCP calibration is unavailable or not configured. Check host configuration.';
+          }
           const roundTripMs=Math.max(0,clock()-started);
           await dwell;
           if(disposed)break;
@@ -213,12 +218,13 @@
     nav.insertBefore(sidebarStatus,navBottom);
     for(const [index,id] of ['overview','assistant','control','vision','calibration','system'].entries()) {
       nav.insertBefore(navNodes.get(id),sidebarStatus);
-      navNodes.get(id).querySelector('.nav-index').textContent=String(index+1).padStart(2,'0');
     }
     const naturalEntry=navNodes.get('assistant');
     naturalEntry.classList.add('nav-natural-language');
-    naturalEntry.querySelector('.nav-label').textContent='Natural language';
-    naturalEntry.querySelector('.nav-index').remove();
+    naturalEntry.querySelector('.nav-label').textContent='AI Agent';
+    byId('btn-voice-toggle').querySelector('.voice-toggle-label').textContent='AI Agent';
+    byId('btn-voice-toggle').title='AI Agent';
+    byId('btn-voice-toggle').setAttribute('aria-label','AI Agent');
     navBottom.prepend(naturalEntry);
     const chat=byId('voice-panel');
     app.append(chat);chat.hidden=true;

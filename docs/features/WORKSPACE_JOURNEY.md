@@ -43,3 +43,7 @@ The system-check overview now uses one centered card. The overview-only model pa
 ### Connection latency
 
 Successful Web API results now show RTT in milliseconds measured from browser request start through response JSON receipt. AI and vision results show TCP connection time measured on Ubuntu using a monotonic clock. These are different paths and labeled explicitly; tooltips explain the scope. Values below one millisecond display <1 ms. Failed probes have null latency and no numeric badge. SDK feedback and Wi-Fi status do not claim a measured ping. Presentation dwell is excluded. Twenty-seven relevant tests pass, including measured service timing, failure handling, and separation of API timing from presentation delay. No dependency or database changes.
+
+### Navigation and TCP check
+
+Navigation names are now unnumbered: System Check, Digital Twin, Vision tasks, Calibration, System and AI Agent. The top voice/chat entry also reads AI Agent; the microphone action still reads Voice input. TCP calibration is the seventh check and reads the gateway health dependency. Ready means the calibration service is available, not that physical calibration accuracy has been validated. Disabled/unconfigured services produce a warning with an explanation; missing status is unknown. No calibration or motion is triggered. The seven-step minimum presentation time is approximately 7.7 seconds.

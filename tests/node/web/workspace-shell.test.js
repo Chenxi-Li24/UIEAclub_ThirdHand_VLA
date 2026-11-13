@@ -227,21 +227,31 @@ test('overview includes camera readiness and ongoing depth/following work off-pa
 
 test('system check advances on results, continues after failures and supports retry without motion',async()=>{
  const {document,view}=fixture();let calls=[];
- view.fetch=async url=>{calls.push(url);if(url.includes('sdk'))throw Error('offline');return {ok:true,json:async()=>url==='/health'?{status:'ready'}:{status:'passed',detail:'Reachable'}};};
+ view.fetch=async url=>{calls.push(url);if(url.includes('sdk'))throw Error('offline');return {ok:true,json:async()=>url==='/health'?{status:'ready',dependencies:{tcpCalibration:{ready:true}}}:{status:'passed',detail:'Reachable'}};};
  const button=document.getElementById('system-ready-button');button.click();button.click();
  for(let i=0;i<20;i++)await new Promise(setImmediate);
- assert.equal(calls.length,6);assert.ok(calls.every(url=>url==='/health'||url.startsWith('/api/system-diagnostics?check=')));
+ assert.equal(calls.length,7);assert.ok(calls.every(url=>url==='/health'||url.startsWith('/api/system-diagnostics?check=')));
  assert.equal(document.querySelector('[role=progressbar]').getAttribute('aria-valuenow'),'100');
  assert.match(document.getElementById('system-ready-result').textContent,/1 item need attention/);
  assert.equal(document.querySelectorAll('.system-checks [data-status=failed]').length,1);
- button.click();for(let i=0;i<20;i++)await new Promise(setImmediate);assert.equal(calls.length,12);
+ button.click();for(let i=0;i<20;i++)await new Promise(setImmediate);assert.equal(calls.length,14);
 });
 
 test('API latency excludes presentation dwell and service latency uses host measurement',async()=>{
  const {document,view}=fixture();let time=0;
  view.performance={now:()=>time};view.setTimeout=fn=>{time+=1100;fn();};
- view.fetch=async url=>{time+=35;return {ok:true,json:async()=>url==='/health'?{status:'ready'}:{status:'passed',latencyMs:2.4,detail:'Reachable'}};};
+ view.fetch=async url=>{time+=35;return {ok:true,json:async()=>url==='/health'?{status:'ready',dependencies:{tcpCalibration:{ready:true}}}:{status:'passed',latencyMs:2.4,detail:'Reachable'}};};
  document.getElementById('system-ready-button').click();for(let i=0;i<20;i++)await new Promise(setImmediate);
  const badges=Array.from(document.querySelectorAll('.check-badge')).map(e=>e.textContent);
  assert.match(badges[0],/RTT 35 ms/);assert.match(badges[2],/TCP 2 ms/);
+});
+
+test('navigation is unnumbered and disabled TCP calibration is reported as a warning',async()=>{
+ const {document,view}=fixture();
+ assert.equal(document.querySelectorAll('.nav-index').length,0);
+ assert.equal(document.querySelector('[data-page=overview] .nav-label').textContent,'System Check');
+ assert.equal(document.querySelector('.voice-toggle-label').textContent,'AI Agent');
+ view.fetch=async()=>({ok:true,json:async()=>({status:'ready',dependencies:{tcpCalibration:{ready:false,reason:'tcp_calibration_disabled'}}})});
+ document.getElementById('system-ready-button').click();for(let i=0;i<20;i++)await new Promise(setImmediate);
+ const tcp=document.querySelector('.system-checks li:last-child');assert.equal(tcp.dataset.status,'warning');assert.match(tcp.textContent,/disabled on the host/);
 });

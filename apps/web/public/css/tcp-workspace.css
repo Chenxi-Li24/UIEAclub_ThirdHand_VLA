@@ -1,0 +1,27 @@
+/* Embedded presentation only. The wizard retains its original controls and service. */
+[data-embedded="true"] { color-scheme: light; --bg: #ffffff; --panel: #fff; --line: #e2e6eb; --text: #202733; --muted: #697586; --accent: #e8630c; --danger: #d73545; }
+[data-embedded="true"] body { background: #ffffff; font-size: 14px; }
+[data-embedded="true"] body > header { display: none; }
+[data-embedded="true"] main { width: calc(100% - 32px); margin: 18px auto 80px; }
+[data-embedded="true"] section { background: white; box-shadow: none; padding: 20px; }
+[data-embedded="true"] .status { background: white; padding: 10px 16px; gap: 8px 16px; }
+[data-embedded="true"] #next-step { background: #fff2e8; color: #8a460f; border-color: #f7cda8; padding: 12px 16px; }
+[data-embedded="true"] input, [data-embedded="true"] select { background: #f8f9fb; }
+[data-embedded="true"] button { background: #fff2e8; border-color: #f7cda8; color: #b04c08; }
+[data-embedded="true"] .danger { background: #fff0f1; border-color: #f0b9bf; color: #be2535; }
+[data-embedded="true"] .capture-steps article, [data-embedded="true"] .transforms article { background: #ffffff; }
+[data-embedded="true"] .notice { background: #fff5eb; color: #8a460f; border-color: #f7cda8; }
+[data-embedded="true"] pre, [data-embedded="true"] #session-summary { color: #394758; }
+[data-embedded="true"] #message { background: white; }
+[data-embedded="true"] body { -webkit-font-smoothing: antialiased; color: #596570; font-size: 13px; }
+[data-embedded="true"] section { border-color: #e7ebee; border-radius: 12px; }
+[data-embedded="true"] h2 { color: #37424d; font-size: 16px; font-weight: 600; letter-spacing: -.3px; padding-left: 11px; border-left: 3px solid #eda870; }
+[data-embedded="true"] h3 { color: #65717b; font-size: 13px; font-weight: 600; }
+[data-embedded="true"] .notice { font-size: 12px; line-height: 1.8; border-radius: 8px; }
+[data-embedded="true"] input, [data-embedded="true"] select { border-color: #e6eaed; background: white; font-size: 12px; }
+[data-embedded="true"] input:focus, [data-embedded="true"] select:focus { outline: 2px solid #f5d2b7; outline-offset: 2px; }
+[data-embedded="true"] button { border-radius: 7px; font-size: 12px; min-height: 36px; }
+[data-embedded="true"] button:not(:disabled):hover { background: #ffead9; border-color: #edbb94; }
+[data-embedded="true"] .danger:not(:disabled):hover { background: #ffe6e9; border-color: #e4a3ad; }
+[data-embedded="true"] .capture-steps article { border-color: #e7ebee; border-radius: 9px; }
+[data-embedded="true"] pre { font: 11px/1.8 ui-monospace, SFMono-Regular, monospace; }

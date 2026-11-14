@@ -83,6 +83,81 @@ test('pitched start in horizontal mode never opens the gripper or moves the robo
  await c.start(2,'pitched-start');const s=await finish(c);
  assert.equal(s.reason,'tool_not_horizontal');assert.deepEqual(events,[]);
 });
+test('automatic preparation raises and levels before the first fresh depth read',async()=>{
+ const {c,state,events}=await setup({config:{orientationMode:'horizontal',executionMode:'phase_linear',autoLevelBeforeDepth:true,safeLevelSdkZM:.3064}});
+ state.flange_euler_rad=[0,.49,.2];
+ c.visionClient.trackingSnapshot=async()=>({observation:{frameId:10,observedAtMs:1000,selectedStableId:2,targets:[{stable_id:2,track_state:'confirmed'}]}});
+ c.robotClient.command=async command=>{events.push(command);if(command.cmd==='move_l'){
+  state.flange_position_m=[...command.position];state.flange_euler_rad=[...command.euler];
+ }if(command.cmd==='gripper')state.gripper_width_m=command.position===0?.03:.08;return {};};
+ const snapshot=c.visionClient.snapshot;let reads=0;
+ c.visionClient.snapshot=async id=>{if(++reads===1){assert.equal(events.length,2);assert.equal(state.flange_position_m[2],.3074);
+  assert.ok(state.flange_euler_rad.slice(0,2).every(x=>Math.abs(x)<1e-9));}return snapshot(id);};
+ await c.start(2,'automatic-leveling');const s=await finish(c);
+ assert.equal(s.phase,'complete',s.reason);assert.equal(s.depthValidFrames,3);
+ assert.deepEqual(events[0].euler,[0,.49,.2]);assert.equal(events[0].position[2],.3074);
+ assert.ok(events[1].euler.slice(0,2).every(x=>Math.abs(x)<1e-9));
+ assert.equal(events.filter(x=>x.cmd==='move_l').length,5);
+});
+test('leveling IK failure prevents even the safe-height raise',async()=>{
+ const {c,state,events,robot}=await setup({config:{orientationMode:'horizontal',autoLevelBeforeDepth:true,safeLevelSdkZM:.3064}});
+ state.flange_euler_rad=[0,.49,0];robot.preview=async pose=>({joints_deg:pose.euler[1]<.3?[0,0,1,0,0,0]:[0,0,-1,0,0,0]});
+ await c.start(2,'leveling-ik-failure');const s=await finish(c);
+ assert.equal(s.reason,'ik_invalid');assert.deepEqual(events,[]);
+});
+test('depth frames from before leveling and replayed frame IDs cannot authorize grasp',async()=>{
+ const {c,state,events}=await setup({config:{orientationMode:'horizontal',executionMode:'phase_linear',autoLevelBeforeDepth:true,safeLevelSdkZM:.3064}});
+ state.flange_euler_rad=[0,.4,0];
+ c.visionClient.trackingSnapshot=async()=>({observation:{frameId:10,observedAtMs:1000,selectedStableId:2,targets:[{stable_id:2,track_state:'confirmed'}]}});
+ c.robotClient.command=async command=>{events.push(command);if(command.cmd==='move_l'){
+  state.flange_position_m=[...command.position];state.flange_euler_rad=[...command.euler];
+ }if(command.cmd==='gripper')state.gripper_width_m=command.position===0?.03:.08;return {};};
+ const snapshot=c.visionClient.snapshot;let reads=0;
+ c.visionClient.snapshot=async id=>{const r=await snapshot(id);if(++reads===1)r.observation.ts=999;
+  if(reads===2)r.observation.frame_id=10;return r;};
+ await c.start(2,'fresh-post-level-only');const s=await finish(c);
+ assert.equal(s.phase,'complete',s.reason);assert.equal(s.frameId,15);
+});
+test('leveling preserves measured raised SDK position rather than descending through reach tolerance',async()=>{
+ const {c,state,events}=await setup({config:{orientationMode:'horizontal',executionMode:'phase_linear',autoLevelBeforeDepth:true,safeLevelSdkZM:.3064}});
+ state.flange_euler_rad=[0,.4,0];
+ c.robotClient.command=async command=>{events.push(command);if(command.cmd==='move_l'){
+  state.flange_position_m=[...command.position];state.flange_euler_rad=[...command.euler];
+  if(events.length===1)state.flange_position_m[2]+=.0008;
+ }if(command.cmd==='gripper')state.gripper_width_m=command.position===0?.03:.08;return {};};
+ await c.start(2,'level-actual-height');const s=await finish(c);
+ assert.equal(s.phase,'complete',s.reason);assert.ok(Math.abs(events[1].position[2]-events[0].position[2]-.0008)<1e-10);
+});
+test('raise feedback below minimum safe height must never begin rotation',async()=>{
+ const {c,state,events}=await setup({config:{orientationMode:'horizontal',autoLevelBeforeDepth:true,safeLevelSdkZM:.3064}});
+ state.flange_euler_rad=[0,.4,0];
+ c.robotClient.command=async command=>{events.push(command);state.flange_position_m=[...command.position];state.flange_position_m[2]=.3055;return {};};
+ await c.start(2,'below-safe-height');const s=await finish(c);
+ assert.equal(s.phase,'failed');assert.equal(events.length,1);assert.deepEqual(events[0].euler,[0,.4,0]);
+});
+test('initial acquisition waits for anchored recovery but stops for required reselection',async()=>{
+ const {c,events}=await setup();const snapshot=c.visionClient.snapshot;let reads=0;
+ c.visionClient.snapshot=async id=>{const r=await snapshot(id);if(++reads<4)r.observation.targets=r.observation.targets.map(t=>({...t,track_state:'lost',blockers:['target_reacquiring']}));return r;};
+ await c.start(2,'anchored-recovery-wait');assert.equal((await finish(c)).phase,'complete');
+ assert.ok(events.length>0);
+ const next=await setup();const read=next.c.visionClient.snapshot;
+ next.c.visionClient.snapshot=async id=>{const r=await read(id);r.observation.targets=r.observation.targets.map(t=>({...t,track_state:'lost',blockers:['target_reselection_required']}));return r;};
+ await next.c.start(2,'reselect-required');assert.equal((await finish(next.c)).reason,'target_reselection_required');assert.deepEqual(next.events,[]);
+});
+test('tilted preparation waits for original identity recovery and preserves reselection reason',async()=>{
+ for(const reselect of [false,true]){
+  const {c,state,events}=await setup({config:{orientationMode:'horizontal',executionMode:'phase_linear',autoLevelBeforeDepth:true,safeLevelSdkZM:.3064}});
+  state.flange_euler_rad=[0,.4,0];let reads=0;
+  c.visionClient.trackingSnapshot=async()=>({observation:{frameId:10,observedAtMs:1000,selectedStableId:2,
+   targets:[{stable_id:2,track_state:++reads<3||reselect?'lost':'confirmed',blockers:[reselect?'target_reselection_required':'target_reacquiring']}]}});
+  c.robotClient.command=async command=>{events.push(command);if(command.cmd==='move_l'){
+   state.flange_position_m=[...command.position];state.flange_euler_rad=[...command.euler];
+  }if(command.cmd==='gripper')state.gripper_width_m=command.position===0?.03:.08;return {};};
+  await c.start(2,'tilted-recovery-'+reselect);const s=await finish(c);
+  if(reselect){assert.equal(s.reason,'target_reselection_required');assert.deepEqual(events,[]);}
+  else {assert.equal(s.phase,'complete',s.reason);assert.ok(reads>=3);}
+ }
+});
 test('depth loss after preapproach completes against the initial base target without another correction',async()=>{
  const {c,events}=await setup({config:{orientationMode:'horizontal',executionMode:'phase_linear'}});
  const snapshot=c.visionClient.snapshot;let reachedCheckpoint=false,alignment=0;

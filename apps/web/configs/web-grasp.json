@@ -14,6 +14,8 @@
   "liftM": 0.05,
   "segmentM": 0.005,
   "orientationMode": "horizontal",
+  "autoLevelBeforeDepth": true,
+  "safeLevelSdkZM": 0.3064,
   "horizontalToleranceRad": 0.05,
   "executionMode": "phase_linear",
   "requestedSpeedScale": 0.1,

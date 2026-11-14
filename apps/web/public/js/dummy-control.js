@@ -29,6 +29,7 @@
     return result;
   }
   function render() {
+    section.dataset.running = String(state?.running === true);
     const external = state?.phase === 'external';
     el('phase').textContent = labels[state?.phase] || '无法获取状态';
     el('start').disabled = busy || !state?.available || state.running || !state.backendReady

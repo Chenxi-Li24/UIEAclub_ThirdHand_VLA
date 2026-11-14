@@ -2,7 +2,7 @@
 (() => {
   'use strict';
   const STORAGE_KEY = 'thirdhand.ui-language';
-  const supported = new Set(['en', 'zh-CN']);
+  const supported = new Set(['en']);
   let locale = 'en';
   try {
     const saved = globalThis.localStorage?.getItem(STORAGE_KEY);
@@ -35,6 +35,7 @@
   }
 
   function translate(source, language = locale, depth = 0) {
+    language = 'en';
     if (typeof source !== 'string' || !supported.has(language)) return source;
     const match = /^(\s*)([\s\S]*?)(\s*)$/.exec(source);
     const text = match[2];
@@ -124,7 +125,7 @@
   }
 
   function setLocale(next) {
-    if (!supported.has(next)) return false;
+    next = 'en';
     locale = next;
     try { globalThis.localStorage?.setItem(STORAGE_KEY, next); } catch { /* Session-only selection. */ }
     if (globalThis.document) {

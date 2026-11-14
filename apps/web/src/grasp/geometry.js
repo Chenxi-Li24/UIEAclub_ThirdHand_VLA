@@ -10,6 +10,9 @@ function validateConfig(c){
  if(c?.executionMode!==undefined&&!['segmented','phase_linear'].includes(c.executionMode))fail('grasp_config_invalid');
  if(c?.horizontalToleranceRad!==undefined&&(!Number.isFinite(c.horizontalToleranceRad)||c.horizontalToleranceRad<=0||c.horizontalToleranceRad>.1))fail('grasp_config_invalid');
  if(c?.horizontalYawRad!==undefined&&!Number.isFinite(c.horizontalYawRad))fail('grasp_config_invalid');
+ if(c?.autoLevelBeforeDepth!==undefined&&typeof c.autoLevelBeforeDepth!=='boolean')fail('grasp_config_invalid');
+ if(c?.autoLevelBeforeDepth===true&&(c.orientationMode!=='horizontal'||!Number.isFinite(c.safeLevelSdkZM)||
+  c.safeLevelSdkZM<c.workspace?.z?.[0]||c.safeLevelSdkZM>c.workspace?.z?.[1]))fail('grasp_config_invalid');
  if(c?.depthTimeoutMs!==undefined&&(!Number.isFinite(c.depthTimeoutMs)||c.depthTimeoutMs<1000||c.depthTimeoutMs>95000))fail('grasp_config_invalid');
  for(const k of ['gripOffsetM','sdkToolOffsetM','preapproachM','liftM','segmentM','visionMaxAgeMs'])if(!Number.isFinite(c?.[k])||c[k]<=0)fail('grasp_config_invalid');
  if(c.segmentM>0.005||c.gripOffsetM>0.3||c.sdkToolOffsetM>0.3||c.preapproachM>0.2||c.liftM>0.1)fail('grasp_config_invalid');
@@ -91,4 +94,4 @@ function buildGraspGeometry({observation,stableId,robot,config,now=Date.now()}){
  return {targetM,widthM,forwardBackoffM:backoff,frameId:observation.frameId??observation.frame_id,contact,preapproach,lift,
   paths:{preapproach:segments(robot.flange_position_m,preapproach,config),approach:segments(preapproach.position,contact,config),lift:segments(contact.position,lift,config)}};
 }
-module.exports={buildGraspGeometry,getGripPosition,validateConfig,validateJoints,vector,assertHorizontal,assertMotionStart};
+module.exports={buildGraspGeometry,getGripPosition,currentGripPose,validateConfig,validateJoints,vector,assertHorizontal,assertMotionStart};

@@ -1,38 +1,39 @@
-<!doctype html>
-<html lang="zh-CN">
+<!DOCTYPE html>
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>ThirdHand TCP标定</title>
+  <title>ThirdHand TCP Calibration</title>
   <link rel="stylesheet" href="css/tcp-calibration.css?v=6">
+  <link rel="stylesheet" href="css/tcp-workspace.css?v=3">
 </head>
 <body>
-<header><div><p class="eyebrow">THIRDHAND · 双人配合</p><h1>夹爪尖针 TCP 标定</h1><p>一人托住末端、摆位；一人操作网页、记录。仅使用人工示教。</p></div><a href="/" target="_blank" rel="noopener">主控制页</a></header>
-<div class="status-bar"><aside class="status"><strong id="session-status">尚未载入会话</strong><span id="robot-status">3000 状态未知</span><span id="frame-status">坐标系未知</span><button id="software-stop" class="danger">软件停止</button></aside><p id="next-step" role="status">正在恢复会话与机械臂状态…</p></div>
+<header><div><p class="eyebrow">THIRDHAND · Two-person operation</p><h1>Probe-tip TCP Calibration</h1><p>One person supports and positions the end effector; another operates the page and records. Manual teaching only.</p></div><a href="/" target="_blank" rel="noopener">Main control page</a></header>
+<div class="status-bar"><aside class="status"><strong id="session-status">Session not loaded</strong><span id="robot-status">3000 State unknown</span><span id="frame-status">Unknown coordinate frame</span><button id="software-stop" class="danger">Software stop</button></aside><p id="next-step" role="status">Restoring session and robot state…</p></div>
 <main>
-  <p id="service-warning" class="notice" role="alert">正在检查示教服务…</p>
-  <section data-stage="0"><h2>第0关：连接与安全检查</h2><p>确认探针居中夹紧、同一个固定尖点不会移动，并有急停人员在场。全过程只允许人工示教。</p>
+  <p id="service-warning" class="notice" role="alert">Checking teaching service…</p>
+  <section data-stage="0"><h2>Step 0: Connection and safety</h2><p>Confirm a centered secured probe, an immovable pivot and an emergency-stop operator on site. Use manual teaching throughout.</p>
     <p id="session-summary" hidden></p><div id="setup-fields">
-    <div class="grid"><label>操作员<input id="operator"></label><label>针尖到夹爪外端点（mm）<input id="needle-mm" type="number" min="0" step="0.1" value="20"></label><label>夹爪外端点到实际夹取中心（mm）<input id="distance-mm" type="number" min="0" step="0.1" value="60"></label><label>测量不确定度（mm）<input id="uncertainty-mm" type="number" min="0.1" max="10" step="0.1"></label><label>工具轴<select id="tool-axis"><option value="1,0,0">+X</option><option value="-1,0,0">-X</option><option value="0,1,0">+Y</option><option value="0,-1,0">-Y</option><option value="0,0,1">+Z</option><option value="0,0,-1">-Z</option></select></label></div><p>轴向合计：20 + 60 = 80 mm（针尖到实际夹取中心）</p>
-    <div class="checks"><label><input id="probe-centered" type="checkbox">探针已居中夹紧</label><label><input id="pivot-fixed" type="checkbox">固定尖点不会移动</label><label><input id="estop-ready" type="checkbox">急停人员已就位</label><label><input id="manual-only" type="checkbox">只使用人工示教</label></div></div><button id="start-session">开始标定会话</button>
-    <details><summary>重新标定 / 更正测量信息</summary><p>历史会话与样本保留；不会改变已激活的 TCP。请先确认机械臂静止且未处于示教模式。</p><label><input id="confirm-new-session" type="checkbox">结束本次会话并重新填写，保留历史数据与当前 TCP</label><button id="new-session" disabled>归档本次，开始新标定</button></details></section>
-  <section data-stage="1" class="capture"><h2>第1关：8姿态采集</h2><h3 id="capture-title">现在采集：8 个不同角度的拟合姿态</h3>
+    <div class="grid"><label>Operator<input id="operator"></label><label>Tip to outer gripper point (mm)<input id="needle-mm" type="number" min="0" step="0.1" value="20"></label><label>Outer gripper point to grasp center (mm)<input id="distance-mm" type="number" min="0" step="0.1" value="60"></label><label>Measurement uncertainty (mm)<input id="uncertainty-mm" type="number" min="0.1" max="10" step="0.1"></label><label>Tool axis<select id="tool-axis"><option value="1,0,0">+X</option><option value="-1,0,0">-X</option><option value="0,1,0">+Y</option><option value="0,-1,0">-Y</option><option value="0,0,1">+Z</option><option value="0,0,-1">-Z</option></select></label></div><p>Axial total: 20 + 60 = 80 mm (tip to grasp center)</p>
+    <div class="checks"><label><input id="probe-centered" type="checkbox">Probe centered and secured</label><label><input id="pivot-fixed" type="checkbox">Pivot is immovable</label><label><input id="estop-ready" type="checkbox">Emergency-stop operator ready</label><label><input id="manual-only" type="checkbox">Manual teaching only</label></div></div><button id="start-session">Start calibration session</button>
+    <details><summary>Recalibrate / correct measurements</summary><p>History and samples are retained; the active TCP is unchanged. Confirm the arm is stationary and teaching is inactive first.</p><label><input id="confirm-new-session" type="checkbox">End session and re-enter measurements; retain history and current TCP</label><button id="new-session" disabled>Archive and start new calibration</button></details></section>
+  <section data-stage="1" class="capture"><h2>Step 1: Capture eight poses</h2><h3 id="capture-title">Capture eight distinct fitting orientations</h3>
     <div class="progress-row"><strong id="fit-progress"></strong><strong id="validation-progress"></strong></div>
-    <p class="notice">已观察到 J5 在拖动时下坠。搭档应持续托住末端主体，不要扶针尖，也不要靠固定尖点承重。重力补偿尚未验证到能够悬停。</p>
+    <p class="notice">J5 has been observed dropping during teaching. Continuously support the end-effector body, not the probe tip. Never load the pivot. Gravity compensation has not been verified to hold position.</p>
     <div class="capture-steps">
-      <article><h3>① 扶稳，再进入拖动</h3><p>搭档托住末端主体，网页操作员等示教确认后再让搭档摆位。</p><label class="check-line"><input id="support-ready" type="checkbox">搭档已扶稳，急停人员就位</label><button id="teach-start" disabled>进入拖动示教（0 阻尼）</button></article>
-      <article><h3>② 对准同一尖点，再锁定</h3><p>从不同方向和倾角轻触同一个固定尖点，确认探针没有弯曲。锁定过程中继续支撑。</p><button id="teach-hold" disabled>锁定当前姿态</button></article>
-      <article><h3>③ 检查本次姿态，再记录</h3><p>锁定后确认能保持，逐渐减小支撑力。若下坠、针尖偏移或顶压，重新摆位，不记录。</p><label class="check-line"><input id="contact-ready" type="checkbox">针尖轻触同一固定尖点，探针未弯曲、未受顶压</label><label class="check-line"><input id="pose-stable" type="checkbox">锁定后能保持，减小支撑力后针尖没有偏移</label><button id="record-fit" disabled>记录当前姿态</button><button id="record-validation" disabled hidden>记录独立验证姿态</button></article>
+      <article><h3>1. Support, then enter teaching</h3><p>Support the end-effector body. Wait for teaching confirmation before repositioning.</p><label class="check-line"><input id="support-ready" type="checkbox">Partner supporting; emergency-stop operator ready</label><button id="teach-start" disabled>Enter teaching (zero damping)</button></article>
+      <article><h3>2. Contact the same pivot, then hold</h3><p>Lightly contact the same pivot from different orientations without bending the probe. Maintain support while holding.</p><button id="teach-hold" disabled>Hold current pose</button></article>
+      <article><h3>3. Verify the pose, then record</h3><p>Verify the hold, then gradually reduce support. If the arm drops, the tip shifts or contact is loaded, reposition and do not record.</p><label class="check-line"><input id="contact-ready" type="checkbox">Light contact with the same pivot; probe not bent or loaded</label><label class="check-line"><input id="pose-stable" type="checkbox">Pose holds; tip does not shift as support is reduced</label><button id="record-fit" disabled>Record current pose</button><button id="record-validation" disabled hidden>Record independent validation pose</button></article>
     </div>
-    <details><summary>姿态与双人配合说明</summary><p>每次明显改变末端朝向，不是只平移。第一次先远离固定尖点试验进入和锁定。0 阻尼模式带重力补偿，但不保证悬停；网页心跳中断 30 秒后服务会请求锁定，请保持现场监护。</p><p>建议覆盖前、后、左、右及不同倾角，另外保留 3 个不同姿态用于独立验证。</p></details>
-    <div class="sample-actions"><select id="fit-sample" aria-label="选择拟合样本"></select><button id="delete-fit" disabled>删除选中异常点</button><button id="solve" disabled>8 个姿态采满后，求解 TCP</button></div>
+    <details><summary>Pose and two-person procedure</summary><p>Change orientation distinctly for each sample, rather than only translating. First test teaching and hold away from the pivot. Zero damping includes gravity compensation but does not guarantee a stationary hold. After 30 seconds without a page heartbeat the service requests hold; maintain on-site supervision.</p><p>Cover front, rear, left, right and varied inclinations. Reserve three additional distinct poses for independent validation.</p></details>
+    <div class="sample-actions"><select id="fit-sample" aria-label="Select fitting sample"></select><button id="delete-fit" disabled>Delete selected outlier</button><button id="solve" disabled>Solve TCP after eight poses</button></div>
   </section>
-  <section data-stage="2"><h2>第2关：求解与诊断</h2><pre id="diagnostics">等待求解</pre><p>绿色可继续；黄色建议核对最差样本；红色禁止验证。</p></section>
-  <section data-stage="3"><h2>第3关：独立验证</h2><p>求解通过后，继续使用上方同一组拖动、锁定和记录按钮，另外采集至少 3 个姿态。它们不会重新参与拟合。</p><label class="check-line"><input id="confirm-derive" type="checkbox">确认验证姿态独立且均为轻触</label><button id="derive" disabled>完成验证并换算</button></section>
-  <section data-stage="4"><h2>第4关：换算夹爪TCP</h2><div class="transforms"><article><h3>当前 SDK 173.34 mm 名义工具点</h3><pre id="sdk-transform">--</pre></article><article><h3>探针尖端 TCP</h3><pre id="probe-transform">--</pre></article><article><h3>实际夹爪抓持中心 TCP</h3><pre id="grasp-transform">--</pre></article></div><div class="checks"><label><input id="confirm-distance" type="checkbox">卡尺距离正确</label><label><input id="confirm-axis" type="checkbox">工具轴方向正确</label><label><input id="confirm-probe-removed" type="checkbox">探针已经移除</label><label><input id="confirm-production" type="checkbox">夹爪已恢复生产状态</label></div></section>
-  <section data-stage="5"><h2>第5关：保存候选结果</h2><p>默认只保存 pending，不修改当前生产配置。</p><button id="finalize">保存 pending 候选</button><output id="pending-status">尚未保存</output></section>
-  <section data-stage="6"><h2>第6关：激活与回滚</h2><p>确认激活或回滚后，下一次网页一键抓取自动使用该 TCP；正在执行的抓取不会中途换版本。实测版本默认不叠加旧的 60 mm 水平经验退让。</p><label><input id="confirm-activate" type="checkbox">再次确认激活已验证版本</label><button id="activate">激活</button><label><input id="confirm-rollback" type="checkbox">确认回滚到上一版本</label><button id="rollback">回滚</button></section>
+  <section data-stage="2"><h2>Step 2: Solve and diagnose</h2><pre id="diagnostics">Waiting for solve</pre><p>Green: continue. Yellow: review the worst sample. Red: validation blocked.</p></section>
+  <section data-stage="3"><h2>Step 3: Independent validation</h2><p>After a successful solve, use the same teaching, hold and record controls to capture at least three additional validation poses. These are excluded from fitting.</p><label class="check-line"><input id="confirm-derive" type="checkbox">Validation poses are independent with light contact</label><button id="derive" disabled>Complete validation and derive TCP</button></section>
+  <section data-stage="4"><h2>Step 4: Derive gripper TCP</h2><div class="transforms"><article><h3>Current SDK nominal tool point (173.34 mm)</h3><pre id="sdk-transform">--</pre></article><article><h3>Probe tip TCP</h3><pre id="probe-transform">--</pre></article><article><h3>Actual gripper grasp-center TCP</h3><pre id="grasp-transform">--</pre></article></div><div class="checks"><label><input id="confirm-distance" type="checkbox">Caliper distance verified</label><label><input id="confirm-axis" type="checkbox">Tool-axis direction verified</label><label><input id="confirm-probe-removed" type="checkbox">Probe removed</label><label><input id="confirm-production" type="checkbox">Gripper restored for production</label></div></section>
+  <section data-stage="5"><h2>Step 5: Save candidate</h2><p>Save a pending candidate only; production configuration remains unchanged.</p><button id="finalize">Save pending candidate</button><output id="pending-status">Not saved</output></section>
+  <section data-stage="6"><h2>Step 6: Activation and rollback</h2><p>After confirmed activation or rollback, the next grasp uses that TCP. Active grasps retain their version. Measured versions do not add the legacy 60 mm horizontal offset by default.</p><label><input id="confirm-activate" type="checkbox">Confirm activation of validated version</label><button id="activate">Activate</button><label><input id="confirm-rollback" type="checkbox">Confirm rollback to previous version</label><button id="rollback">Roll back</button></section>
 </main>
 <div id="message" role="status" aria-live="polite"></div>
-<script src="js/tcp-calibration.js?v=10"></script>
+<script src="js/tcp-calibration.js?v=12"></script>
 </body></html>

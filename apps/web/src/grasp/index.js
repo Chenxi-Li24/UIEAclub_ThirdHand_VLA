@@ -20,7 +20,9 @@ function createFromFile(file,{ownerToken=null,webUrl=null,tcpStore=null}={}){
  const {resolveTcpPolicy}=require('./tcp-policy');
  const tcpPolicy=resolveTcpPolicy({runtimeFile:path.resolve(path.dirname(file),config.framePolicyFile),
   sourceFile:config.tcpSourceFramePolicyFile?path.resolve(path.dirname(file),config.tcpSourceFramePolicyFile):undefined,
-  sourceId:config.tcpSourceFramePolicyId||config.framePolicyId});
+  sourceId:config.tcpSourceFramePolicyId||config.framePolicyId,
+  rebindingFile:config.tcpPolicyRebindingFile?path.resolve(path.dirname(file),config.tcpPolicyRebindingFile):null,
+  rebindingId:config.tcpPolicyRebindingId??null});
  if(!tcpStore){
   const {TcpCalibrationArtifactStore}=require('../tcp-calibration/artifact-store');
   tcpStore=new TcpCalibrationArtifactStore({root:path.resolve(path.dirname(file),config.tcpArtifactRoot||'../../../runtime/tcp-calibration')});

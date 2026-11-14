@@ -1,0 +1,56 @@
+/* Settings is a separate navigation group, reusing the workspace router and controls. */
+.workspace[data-workspace-group="account"] #workspace-body { display: block; }
+.workspace[data-workspace-group="account"] #workspace-pages { height: 100%; padding: 5px 20px 35px; }
+.workspace .account-page { max-width: 860px; padding: 0 0 20px; }
+.account-page .workspace-heading { margin-bottom: 25px; }
+#workspace-nav .account-back { margin: 5px 0 16px; min-height: 36px; font-size: 10px; color: #8d989f; }
+#workspace-nav #workspace-account { border-top: 1px solid #edf0f2; border-radius: 0; width: 100%; margin-top: 14px; padding: 15px 7px 0; min-height: 63px; gap: 9px; }
+#workspace-nav #workspace-account:hover { background: transparent; }
+.account-avatar { display: grid; place-items: center; width: 31px; height: 31px; flex: 0 0 31px; border: 1px solid #ead3bf; border-radius: 9px; background: #faf0e7; color: #b87844; font-size: 10px; font-weight: 650; }
+.account-entry-copy { min-width: 0; flex: 1; }
+.account-entry-copy strong, .account-entry-copy > span { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.account-entry-copy strong { font-size: 10px; color: #5c6974; font-weight: 600; margin-bottom: 4px; }
+.account-entry-copy > span { color: #9ba4ab; font-size: 8px; }
+.account-active .account-avatar { background: #e98b44; color: white; border-color: #e98b44; }
+.account-card { border: 1px solid #e9edf0; border-radius: 14px; padding: 28px 32px; background: white; box-shadow: 0 3px 16px #26313b03; }
+.account-identity { display: flex; align-items: center; gap: 18px; }
+.account-avatar-large { width: 59px; height: 59px; flex-basis: 59px; border-radius: 17px; font-size: 18px; }
+.account-identity h2 { color: #37434e; font-size: 19px; font-weight: 600; letter-spacing: -.3px; margin: 0 0 8px; }
+.account-badge { display: inline-flex; font-size: 9px; color: #9c8067; background: #faf5f0; border: 1px solid #f0e4d9; border-radius: 5px; padding: 4px 7px; }
+.account-description { color: #8c969f; font-size: 11px; line-height: 1.9; padding: 19px 0 23px; margin: 0 0 23px; border-bottom: 1px solid #edf0f2; }
+.account-form { display: grid; grid-template-columns: 1fr 1fr; column-gap: 23px; row-gap: 21px; }
+.account-field { display: flex; flex-direction: column; gap: 9px; }
+.account-field > span { color: #6b7781; font-size: 11px; font-weight: 500; }
+.account-field input { width: 100%; box-sizing: border-box; background: #fff; border: 1px solid #e3e8eb; border-radius: 7px; padding: 11px 12px; color: #475660; font: inherit; font-size: 12px; }
+.account-field input:disabled { background: #fafbfc; color: #9aa4ac; }
+.account-field input::placeholder { color: #b0b7bd; }
+.account-field input:focus { outline: 2px solid #f1bd94; outline-offset: 1px; }
+.account-status { grid-column: 1 / -1; color: #969fa7; font-size: 10px; margin: 0; line-height: 1.7; }
+.account-form-actions { grid-column: 1 / -1; display: flex; justify-content: flex-end; gap: 10px; padding-top: 5px; }
+.workspace .account-page .action-btn { width: auto; min-height: 34px; font-size: 10px; padding: 9px 14px; }
+.workspace .account-form-actions .action-btn, .workspace .account-setting-row .action-btn { flex: 0 0 auto; }
+.account-setting-row { display: flex; gap: 25px; align-items: center; justify-content: space-between; padding: 24px 0; border-bottom: 1px solid #edf0f2; }
+.account-setting-row:first-child { padding-top: 0; }.account-setting-row:last-child { padding-bottom: 0; border: 0; }
+.account-setting-row > div:first-child, .account-setting-row > label { display: flex; flex-direction: column; gap: 8px; }
+.account-setting-row strong { font-size: 12px; color: #53616c; font-weight: 600; }
+.account-setting-row span { font-size: 10px; color: #939da5; line-height: 1.8; }
+.workspace #account-language-field #language-select { max-width: none; width: 155px; flex-shrink: 0; border-color: #e3e8ec; background: white; border-radius: 7px; padding: 10px 12px; font-size: 11px; }
+.account-setting-row .workspace-settings { border: 0; padding: 0; margin: 0; box-shadow: none; font-size: 0; }
+.account-setting-row .workspace-settings > strong { display: none; }
+.account-setting-row .workspace-palette { margin: 0; }
+.account-connection-row { display: flex; align-items: baseline; justify-content: space-between; gap: 25px; border-bottom: 1px solid #edf0f2; padding: 19px 0; }
+.account-connection-row:first-child { padding-top: 0; }.account-connection-row:last-child { padding-bottom: 0; border: 0; }
+.account-connection-row strong { flex-shrink: 0; color: #7c8891; font-size: 11px; font-weight: 500; }
+.account-connection-row > span { color: #53626d; font-size: 11px; line-height: 1.8; text-align: right; overflow-wrap: anywhere; }
+.account-about { text-align: center; padding: 50px 32px; }.account-about h2 { margin: 22px 0 13px; color: #384651; font-size: 25px; letter-spacing: -1px; }
+.account-about p { color: #8d979f; font-size: 12px; line-height: 1.9; margin-bottom: 25px; }
+.account-product-mark { display: inline-grid; place-items: center; width: 59px; height: 59px; background: #e68a46; border-radius: 16px; color: white; font-size: 20px; font-weight: 700; box-shadow: 0 7px 20px #e68a4625; }
+@media(max-width:650px) {
+ .workspace[data-workspace-group="account"] #workspace-pages { padding: 2px 4px 20px; }
+ .account-card { padding: 22px 20px; }
+ .account-form { grid-template-columns: 1fr; }
+ .account-setting-row { align-items: flex-start; flex-direction: column; gap: 16px; }
+ .account-connection-row { align-items: flex-start; flex-direction: column; gap: 8px; }
+ .account-connection-row > span { text-align: left; }
+ #workspace-nav #workspace-account { padding-left: 0; padding-right: 0; }
+}

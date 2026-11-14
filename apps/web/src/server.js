@@ -144,8 +144,14 @@ function createWebGateway(options = {}) {
 
   if (coordinator) coordinator.on('status', status => robotProxy.broadcast(status));
 
+  const systemDiagnostics = require('./system-diagnostics').createSystemDiagnostics({getRobotState: () => robotProxy.getRobotState(), voiceUrl: config.voiceWsUrl, visionUrl: config.visionHttpUrl});
+  const systemReady = require('./system-ready').createSystemReady({
+    busy: () => Boolean(robotProxy.hasActiveControl?.() || graspController?.status().active || coordinator?.status().active || tcpStateSource?.snapshot().teachActive || tcpStateSource?.teachTransition),
+  });
   const server = http.createServer(async (request, response) => {
     const pathname = new URL(request.url, 'http://localhost').pathname;
+    if (request.method === 'GET' && pathname === '/api/system-diagnostics') { writeJson(response, 200, await systemDiagnostics(new URL(request.url, 'http://localhost').searchParams.get('check'))); return; }
+    if (await systemReady(request, response, pathname)) return;
     if (request.method === 'GET' && pathname === '/api/runtime-config') {
       writeJson(response, 200, {
         voice: { endpoint: '/voice', protocol: VOICE_PROTOCOL },

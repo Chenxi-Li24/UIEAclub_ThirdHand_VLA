@@ -2,6 +2,8 @@
 
 const fs = require('node:fs');
 const path = require('node:path');
+const { createGzip } = require('node:zlib');
+const { pipeline } = require('node:stream');
 
 const CONTENT_TYPES = {
   '.css': 'text/css; charset=utf-8',
@@ -53,14 +55,31 @@ function serveStatic(request, response, config) {
   }
   if (!stat.isFile()) return false;
 
-  response.writeHead(200, {
+  const extension = path.extname(filename).toLowerCase();
+  const gzip = /\b(?:gzip)\b/i.test(request.headers?.['accept-encoding'] || '') &&
+    !/gzip\s*;\s*q=0(?:\.0*)?(?:\s*[,;]|\s*$)/i.test(request.headers?.['accept-encoding'] || '') &&
+    ['.html', '.css', '.js', '.mjs', '.json', '.urdf'].includes(extension);
+  const etag = `W/"${stat.size.toString(16)}-${stat.mtimeMs.toString(16)}"`;
+  const headers = {
     'content-type': CONTENT_TYPES[path.extname(filename).toLowerCase()]
       || 'application/octet-stream',
-    'content-length': stat.size,
+    'cache-control': 'no-cache',
+    'etag': etag,
+    'vary': 'Accept-Encoding',
     'x-content-type-options': 'nosniff',
-  });
+  };
+  if (request.headers?.['if-none-match']?.split(',').map(value => value.trim()).includes(etag)) {
+    response.writeHead(304, headers); response.end(); return true;
+  }
+  if (gzip) headers['content-encoding'] = 'gzip';
+  else headers['content-length'] = stat.size;
+  response.writeHead(200, headers);
   if (request.method === 'HEAD') response.end();
-  else fs.createReadStream(filename).pipe(response);
+  else {
+    const streams = [fs.createReadStream(filename)];
+    if (gzip) streams.push(createGzip());
+    pipeline(...streams, response, () => {});
+  }
   return true;
 }
 

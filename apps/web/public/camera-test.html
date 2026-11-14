@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>ThirdHand 双相机视觉状态</title>
+  <title>ThirdHand Dual Camera Status</title>
   <style>
     :root { color-scheme: dark; font-family: Inter, system-ui, sans-serif; }
     * { box-sizing: border-box; }
@@ -65,82 +65,79 @@
 </head>
 <body>
   <header>
-    <h1>双相机在线视觉</h1>
+    <h1>Dual Camera Vision</h1>
     <span class="lock" id="safety-lock">
       robotExecutionEnabled = false · activeViewExecutionEnabled = false
     </span>
   </header>
   <p id="demo-banner" hidden>
-    纯浏览器模拟 · 合成相机与深度数据 · 不连接后端、机械臂或夹爪
+    Browser simulation · Synthetic camera and depth data · No backend, arm or gripper connection
   </p>
   <main>
     <section class="camera-grid" aria-label="camera streams">
       <figure>
         <figcaption>
           <span class="camera-title">
-            <strong>Lumos 主视图</strong>
+            <strong>Lumos Primary view</strong>
             <span>canonical RGB / identity</span>
           </span>
           <span class="stream-tools" id="lumos-stream-tools">
-            <span id="lumos-stream-status">实时原始画面</span>
-            <button id="lumos-overlay-toggle" type="button">查看算法叠加</button>
+            <span id="lumos-stream-status">Live raw feed</span>
+            <button id="lumos-overlay-toggle" type="button">Show overlay</button>
           </span>
         </figcaption>
-        <div class="feed"><img id="lumos" data-stream="/camera_lumos"
-          data-overlay-stream="/camera_lumos_vision"
-          alt="Lumos inference overlay"></div>
+        <div class="feed"><img id="lumos" data-stream="/camera_lumos" data-overlay-stream="/camera_lumos_vision" alt="Lumos inference overlay"></div>
       </figure>
       <figure>
-        <figcaption><strong>D435 辅助视图</strong><span>metric depth / debug RGB</span></figcaption>
-        <div class="feed"><img id="d435" data-stream="/camera"
-          alt="D435 depth debug stream"></div>
+        <figcaption><strong>D435 Secondary view</strong><span>metric depth / debug RGB</span></figcaption>
+        <div class="feed"><img id="d435" data-stream="/camera" alt="D435 depth debug stream"></div>
       </figure>
     </section>
     <aside>
-      <h2>部署状态</h2>
+      <h2>Deployment status</h2>
       <dl>
-        <dt>在线</dt><dd id="online">等待状态</dd>
-        <dt>模型</dt><dd id="model">等待状态</dd>
-        <dt>Lumos 序列</dt><dd id="lumos-seq">—</dd>
-        <dt>D435 序列</dt><dd id="d435-seq">—</dd>
-        <dt>端到端延迟</dt><dd id="latency">—</dd>
-        <dt>GPU 预留</dt><dd id="gpu">—</dd>
-        <dt>状态年龄</dt><dd id="age">—</dd>
-        <dt>目标</dt><dd id="targets">0</dd>
+        <dt>Online</dt><dd id="online">Waiting for status</dd>
+        <dt>Model</dt><dd id="model">Waiting for status</dd>
+        <dt>Lumos Sequence</dt><dd id="lumos-seq">—</dd>
+        <dt>D435 Sequence</dt><dd id="d435-seq">—</dd>
+        <dt>End-to-end latency</dt><dd id="latency">—</dd>
+        <dt>GPU Reserved</dt><dd id="gpu">—</dd>
+        <dt>Status age</dt><dd id="age">—</dd>
+        <dt>Target</dt><dd id="targets">0</dd>
       </dl>
-      <h2>闭锁原因 / blockers</h2>
+      <h2>Blockers</h2>
       <ul id="blockers"><li>vision_not_started</li></ul>
-      <h2>目标算法状态</h2>
+      <h2>Target diagnostics</h2>
       <p class="muted visual-legend">
-        实例轮廓显示在 Lumos“算法叠加”画面；下方逐目标显示持久 ID、三维坐标、
-        目标状态、抓取点与是否允许抓取。
+        Instance outlines appear in the Lumos overlay. Each target below shows its persistent ID, 3D coordinates,
+        state, grasp point and grasp eligibility.
       </p>
-      <div id="target-diagnostics"><span class="muted">等待目标算法输出</span></div>
-      <h2>主动观察会话 / 观察建议</h2>
-      <div id="active-targets"><span class="muted">等待已确认目标</span></div>
+      <div id="target-diagnostics"><span class="muted">Waiting for target diagnostics</span></div>
+      <h2>Active observation / proposals</h2>
+      <div id="active-targets"><span class="muted">Waiting for confirmed targets</span></div>
       <dl>
-        <dt>会话阶段</dt><dd id="active-phase">idle</dd>
-        <dt>目标身份</dt><dd id="active-identity">—</dd>
-        <dt>建议观察位</dt><dd id="active-proposal">—</dd>
-        <dt>单步上限</dt><dd id="active-max-step">—</dd>
-        <dt>证据摘要</dt><dd id="active-evidence">—</dd>
-        <dt>桌面粗位置</dt><dd id="active-coarse">—</dd>
-        <dt>D435 深度质量</dt><dd id="active-depth">—</dd>
-        <dt>稳定样本</dt><dd id="active-stable">— / 5</dd>
-        <dt>剩余精调</dt><dd id="active-refinements">—</dd>
-        <dt>DINO 原型相似度</dt><dd id="identity-similarity">—</dd>
+        <dt>Session phase</dt><dd id="active-phase">idle</dd>
+        <dt>Target identity</dt><dd id="active-identity">—</dd>
+        <dt>Proposed observation pose</dt><dd id="active-proposal">—</dd>
+        <dt>Maximum step</dt><dd id="active-max-step">—</dd>
+        <dt>Evidence summary</dt><dd id="active-evidence">—</dd>
+        <dt>Coarse table position</dt><dd id="active-coarse">—</dd>
+        <dt>D435 Depth quality</dt><dd id="active-depth">—</dd>
+        <dt>Stable samples</dt><dd id="active-stable">— / 5</dd>
+        <dt>Remaining refinements</dt><dd id="active-refinements">—</dd>
+        <dt>DINO Prototype similarity</dt><dd id="identity-similarity">—</dd>
         <dt>REMIND work / stable</dt><dd id="identity-memory">—</dd>
-        <dt>关联代价 / 原因</dt><dd id="identity-association">—</dd>
-        <dt>抓取预览</dt><dd id="grasp-preview">未进入 GRASP_PREVIEW</dd>
+        <dt>Association cost / reason</dt><dd id="identity-association">—</dd>
+        <dt>Grasp preview</dt><dd id="grasp-preview">Not in GRASP_PREVIEW</dd>
       </dl>
       <div class="controls">
-        <button id="confirm-step" class="primary" type="button" disabled>确认本步观察运动</button>
-        <button id="cancel-session" class="danger" type="button" disabled>取消会话</button>
+        <button id="confirm-step" class="primary" type="button" disabled>Confirm observation step</button>
+        <button id="cancel-session" class="danger" type="button" disabled>Cancel session</button>
       </div>
-      <p id="active-result" class="muted" role="status">尚未发起会话</p>
-      <h2>主动观察 blockers</h2>
+      <p id="active-result" class="muted" role="status">No session started</p>
+      <h2>Observation blockers</h2>
       <ul id="active-blockers"><li>active_view_report_unavailable</li></ul>
-      <p class="muted">Lumos 用于广角识别与身份连续性；D435 用于近场度量深度。页面只发送身份、会话和提案 ID，不发送坐标或抓取命令；每一步均需人工确认。</p>
+      <p class="muted">Lumos provides wide-angle recognition and identity continuity; D435 provides near-field metric depth. Only identity, session and proposal IDs are sent, never coordinates or grasp commands. Every step requires confirmation.</p>
     </aside>
   </main>
   <script src="/live-camera-streams.js"></script>
@@ -162,14 +159,14 @@
       if (demoMode) {
         const result = demo.send(payload);
         const outcome = result.accepted === false
-          ? `模拟拒绝：${result.reason ?? 'unknown'}`
-          : `${result.action ?? 'command'} 已在浏览器模拟中受理`;
+          ? `Simulation rejected: ${result.reason ?? 'unknown'}`
+          : `${result.action ?? 'command'} accepted in browser simulation`;
         text('active-result', outcome);
         if (result.sessionId) sessionId = result.sessionId;
         return;
       }
       if (!socket || socket.readyState !== WebSocket.OPEN) {
-        text('active-result', '控制连接尚未就绪');
+        text('active-result', 'Control connection not ready');
         return;
       }
       socket.send(JSON.stringify(payload));
@@ -178,14 +175,14 @@
     function connectControl() {
       if (demoMode) {
         demo.subscribe(render);
-        text('active-result', '纯浏览器模拟已就绪 · 不创建控制连接');
+        text('active-result', 'Browser simulation ready · No control connection');
         return;
       }
       const scheme = location.protocol === 'https:' ? 'wss:' : 'ws:';
       socket = new WebSocket(`${scheme}//${location.host}/ws`);
-      socket.addEventListener('open', () => text('active-result', 'ID-only 控制通道已连接'));
+      socket.addEventListener('open', () => text('active-result', 'ID-only control channel connected'));
       socket.addEventListener('close', () => {
-        text('active-result', '控制通道已断开，正在重连');
+        text('active-result', 'Control channel disconnected; reconnecting');
         setTimeout(connectControl, 1000);
       });
       socket.addEventListener('message', event => {
@@ -193,8 +190,8 @@
         try { message = JSON.parse(event.data); } catch { return; }
         if (message.type === 'active_view_command_result') {
           const outcome = message.accepted === false || message.approved === false
-            ? `拒绝：${message.reason ?? 'unknown'}`
-            : `${message.action ?? 'command'} 已受理`;
+            ? `Rejected: ${message.reason ?? 'unknown'}`
+            : `${message.action ?? 'command'} accepted`;
           text('active-result', outcome);
           if (message.sessionId) sessionId = message.sessionId;
         }
@@ -248,10 +245,10 @@
       const image = byId('lumos');
       const toggle = byId('lumos-overlay-toggle');
       const statusCopy = {
-        raw: '实时原始画面',
-        checking_overlay: '正在检查算法叠加…',
-        overlay_unavailable: '算法叠加不可用，继续显示原始画面',
-        overlay: '算法叠加画面',
+        raw: 'Live raw feed',
+        checking_overlay: 'Checking overlay…',
+        overlay_unavailable: 'Overlay unavailable; showing raw feed',
+        overlay: 'Overlay feed',
       };
       lumosSelector = window.ThirdHandLiveCameraStreams.createLumosStreamSelector({
         rawUrl: image.dataset.stream,
@@ -260,7 +257,7 @@
         report: status => {
           text('lumos-stream-status', statusCopy[status] ?? status);
           toggle.disabled = status === 'checking_overlay';
-          toggle.textContent = status === 'overlay' ? '返回原始画面' : '查看算法叠加';
+          toggle.textContent = status === 'overlay' ? 'Show raw feed' : 'Show overlay';
         },
         timeoutMs: 2500,
       });
@@ -273,7 +270,7 @@
 
     function render(status) {
       latestStatus = status;
-      text('online', status.online && !status.stale ? '是' : '否');
+      text('online', status.online && !status.stale ? 'Yes' : 'No');
       byId('online').className = status.online && !status.stale ? 'ok' : 'bad';
       text('model', status.modelReady ? 'ready' : 'unavailable');
       byId('model').className = status.modelReady ? 'ok' : 'bad';
@@ -301,7 +298,7 @@
         label.textContent = `#${target.identityId} · ${target.label}`;
         const start = document.createElement('button');
         start.type = 'button';
-        start.textContent = '开始主动观察';
+        start.textContent = 'Start observation';
         start.disabled = !restartablePhase;
         start.addEventListener('click', () => {
           const identityId = target.identityId;
@@ -313,7 +310,7 @@
       if (!eligibleTargets.length) {
         const empty = document.createElement('span');
         empty.className = 'muted';
-        empty.textContent = '没有新鲜且已确认身份的目标';
+        empty.textContent = 'No fresh targets with confirmed identity';
         targetList.replaceChildren(empty);
       }
       const list = byId('blockers');
@@ -344,11 +341,11 @@
         report === null
           ? '—'
           : report.kind === 'none'
-            ? '无动作建议'
-            : `${report.kind} · ${report.targetPoseId ?? '未命名观察位'}`,
+            ? 'No motion proposal'
+            : `${report.kind} · ${report.targetPoseId ?? 'Unnamed observation pose'}`,
       );
       const maxStep = finite(activeControl.maxStepM);
-      text('active-max-step', maxStep === null ? '预标定观察位' : `≤ ${(maxStep * 1000).toFixed(0)} mm`);
+      text('active-max-step', maxStep === null ? 'Precalibrated observation pose' : `≤ ${(maxStep * 1000).toFixed(0)} mm`);
       text(
         'active-evidence',
         Array.isArray(activeControl.evidenceIdsShort) && activeControl.evidenceIdsShort.length
@@ -359,7 +356,7 @@
       text(
         'active-coarse',
         Array.isArray(coarse) && coarse.length === 2
-          ? `${coarse[0].toFixed(3)}, ${coarse[1].toFixed(3)} m（仅观察规划）`
+          ? `${coarse[0].toFixed(3)}, ${coarse[1].toFixed(3)} m (observation planning only)`
           : '—',
       );
       const central = finite(report?.centralFraction);
@@ -368,7 +365,7 @@
         'active-depth',
         report === null
           ? '—'
-          : `${pointCount ?? 0} 点 · 中央比例 ${
+          : `${pointCount ?? 0} points · Center ratio ${
             central === null ? '—' : central.toFixed(2)
           }`,
       );
@@ -383,7 +380,7 @@
       const associationCost = finite(identityMemory?.associationCost);
       text(
         'identity-similarity',
-        similarity === null ? '新身份或无可靠原型比较' : `${(similarity * 100).toFixed(1)}%`,
+        similarity === null ? 'New identity or no reliable prototype comparison' : `${(similarity * 100).toFixed(1)}%`,
       );
       text(
         'identity-memory',
@@ -401,9 +398,9 @@
         'grasp-preview',
         activeControl.phase === 'grasp_preview'
           ? diagnosticTarget && Array.isArray(diagnosticTarget.positionM)
-            ? `GRASP_PREVIEW · ${diagnosticTarget.positionM.map(value => value.toFixed(3)).join(', ')} m · 仅预览，不能执行抓取`
-            : 'GRASP_PREVIEW · 深度几何待刷新 · 仅预览，不能执行抓取'
-          : '未进入 GRASP_PREVIEW',
+            ? `GRASP_PREVIEW · ${diagnosticTarget.positionM.map(value => value.toFixed(3)).join(', ')} m · Preview only; grasp execution unavailable`
+            : 'GRASP_PREVIEW · Depth geometry requires refresh · Preview only; grasp execution unavailable'
+          : 'Not in GRASP_PREVIEW',
       );
       const controlReasons = Array.isArray(activeControl.reasons) ? activeControl.reasons : [];
       const activeReasons = controlReasons.length
@@ -427,7 +424,7 @@
       );
       if (status.robotExecutionEnabled !== false ||
           (status.activeViewExecutionEnabled === true && activeControl.phase !== 'moving_to_view')) {
-        text('online', '安全配置错误');
+        text('online', 'Safety configuration error');
         byId('online').className = 'bad';
       }
     }
@@ -446,57 +443,57 @@
       if (!Array.isArray(targets) || targets.length === 0) {
         const empty = document.createElement('span');
         empty.className = 'muted';
-        empty.textContent = '当前帧没有目标';
+        empty.textContent = 'No targets in current frame';
         targetDiagnostics.replaceChildren(empty);
         return;
       }
       const stateCopy = {
-        identity_pending: '身份待确认',
-        depth_pending: '等待稳定深度',
-        tracked_3d: '三维跟踪中',
-        blocked: '感知门控未通过',
-        grasp_preview: '抓取候选预览',
+        identity_pending: 'Identity pending',
+        depth_pending: 'Waiting for stable depth',
+        tracked_3d: '3D tracking',
+        blocked: 'Perception gate blocked',
+        grasp_preview: 'Grasp candidate preview',
       };
       const cards = targets.map(target => {
         const card = document.createElement('article');
         card.className = `target-card${target.graspAllowed === true ? ' ready' : ''}`;
         const title = document.createElement('h3');
         const score = finite(target.score);
-        title.textContent = `持久 ID ${Number.isSafeInteger(target.identityId)
-          ? `#${target.identityId}` : '待分配'} · ${target.label ?? 'unknown'}` +
+        title.textContent = `Persistent ID ${Number.isSafeInteger(target.identityId)
+          ? `#${target.identityId}` : 'Pending assignment'} · ${target.label ?? 'unknown'}` +
           `${score === null ? '' : ` · ${(score * 100).toFixed(1)}%`}`;
         const details = document.createElement('dl');
         const xyz = Array.isArray(target.positionM) && target.positionM.length === 3
           ? `${target.positionM.map(value => Number(value).toFixed(3)).join(', ')} m` +
             `${target.positionFrame ? ` · ${target.positionFrame}` : ''}`
-          : '未获得可靠三维坐标';
+          : 'No reliable 3D coordinates';
         const standardDeviation = Array.isArray(target.positionStdM) &&
           target.positionStdM.length === 3
           ? `σ ≤ ${(Math.max(...target.positionStdM) * 1000).toFixed(1)} mm`
-          : 'σ 未知';
+          : 'σ Unknown';
         const pointM = Array.isArray(target.graspPointM) && target.graspPointM.length === 3
           ? `${target.graspPointM.map(value => Number(value).toFixed(3)).join(', ')} m` +
             `${target.graspPointFrame ? ` · ${target.graspPointFrame}` : ''}`
           : null;
         const pointPx = Array.isArray(target.graspPointPx) && target.graspPointPx.length === 2
-          ? `像素 ${target.graspPointPx.map(value => Number(value).toFixed(0)).join(', ')}`
+          ? `Pixels ${target.graspPointPx.map(value => Number(value).toFixed(0)).join(', ')}`
           : null;
-        const graspPoint = [pointM, pointPx].filter(Boolean).join(' · ') || '未生成';
+        const graspPoint = [pointM, pointPx].filter(Boolean).join(' · ') || 'Not generated';
         const graspReasons = Array.isArray(target.graspReasons) && target.graspReasons.length
           ? target.graspReasons.join(' · ')
           : 'gate_not_authorized';
         const rows = [
           ...diagnosticRow(
-            '目标状态',
-            `${stateCopy[target.targetState] ?? target.targetState ?? '未知'} · ` +
+            'Target state',
+            `${stateCopy[target.targetState] ?? target.targetState ?? 'Unknown'} · ` +
               `${target.identityStatus ?? 'unknown'}`,
           ),
-          ...diagnosticRow('三维坐标', `${xyz} · ${standardDeviation}`),
-          ...diagnosticRow('深度支持', `${target.registeredDepthPoints ?? 0} 个注册点`),
-          ...diagnosticRow('抓取点', graspPoint),
+          ...diagnosticRow('3D coordinates', `${xyz} · ${standardDeviation}`),
+          ...diagnosticRow('Depth support', `${target.registeredDepthPoints ?? 0} registered points`),
+          ...diagnosticRow('Grasp point', graspPoint),
           ...diagnosticRow(
-            '允许抓取',
-            target.graspAllowed === true ? '允许' : `不允许 · ${graspReasons}`,
+            'Grasp allowed',
+            target.graspAllowed === true ? 'Allowed' : `Not allowed · ${graspReasons}`,
             target.graspAllowed === true ? 'grasp-yes' : 'grasp-no',
           ),
         ];
@@ -517,7 +514,7 @@
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         render(await response.json());
       } catch (error) {
-        text('online', `状态不可用: ${error.message}`);
+        text('online', `Status unavailable: ${error.message}`);
         byId('online').className = 'bad';
       }
     }

@@ -3,6 +3,8 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { STLLoader } from 'three/addons/loaders/STLLoader.js';
 import { ColladaLoader } from 'three/addons/loaders/ColladaLoader.js';
+import './robot-viewer.js';
+import { createViewer } from './model-resources.js';
 import { VoiceControl } from './voice-control.js?v=12';
 console.log('[main.js] Modules imported, THREE keys:', Object.keys(THREE).length);
 
@@ -146,308 +148,11 @@ const BASE_TO_THREE_DIRECTIONS = Object.freeze({
 });
 
 // === SceneManager ===
-class SceneManager {
-  constructor(container) {
-    this.container = container;
-    this.scene = null;
-    this.camera = null;
-    this.renderer = null;
-    this.controls = null;
-    this.grid = null;
-    this.axes = null;
-    this.showGrid = true;
-    this.showAxes = true;
-    this._init();
-  }
-
-  _init() {
-    const w = this.container.clientWidth;
-    const h = this.container.clientHeight;
-
-    this.scene = new THREE.Scene();
-    // 背景色跟随 CSS --bg-primary（通过计算样式获取），默认深空色
-    const bgColor = this._getComputedBgColor();
-    this.scene.background = bgColor;
-    this.scene.fog = new THREE.Fog(bgColor.getHex(), 800, 3000);
-
-    this.camera = new THREE.PerspectiveCamera(50, w / h, 1, 5000);
-    this.camera.position.set(600, 400, 600);
-    this.camera.lookAt(0, 200, 0);
-
-    this.renderer = new THREE.WebGLRenderer({ antialias: true });
-    this.renderer.setSize(w, h);
-    this.renderer.setPixelRatio(window.devicePixelRatio);
-    this.renderer.shadowMap.enabled = true;
-    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-    this.container.appendChild(this.renderer.domElement);
-
-    if (OrbitControls) {
-      this.controls = new OrbitControls(this.camera, this.renderer.domElement);
-      this.controls.enableDamping = true;
-      this.controls.dampingFactor = 0.08;
-      this.controls.target.set(0, 250, 0);
-      this.controls.minDistance = 200;
-      this.controls.maxDistance = 2000;
-    }
-
-    this.scene.add(new THREE.AmbientLight(0xffffff, 0.6));
-    this.scene.add(new THREE.HemisphereLight(0xffffff, 0x444444, 0.4));
-
-    const dirLight1 = new THREE.DirectionalLight(0xffffff, 0.8);
-    dirLight1.position.set(500, 800, 500);
-    this.scene.add(dirLight1);
-
-    const dirLight2 = new THREE.DirectionalLight(0xffffff, 0.4);
-    dirLight2.position.set(-500, 400, -300);
-    this.scene.add(dirLight2);
-
-    const dirLight3 = new THREE.DirectionalLight(0xffffff, 0.3);
-    dirLight3.position.set(0, -200, 500);
-    this.scene.add(dirLight3);
-
-    this.grid = new THREE.GridHelper(1200, 24, 0x2d3a5c, 0x1a2340);
-    this.scene.add(this.grid);
-
-    this.axes = new THREE.Group();
-    this.axes.name = 'startouch-base-coordinate-axes';
-    const baseAxisLength = 250;
-    const baseAxisHeadLength = 24;
-    const baseAxisHeadWidth = 12;
-    [
-      ['x', 0xff4545],
-      ['y', 0x45d483],
-      ['z', 0x438cff],
-    ].forEach(([axis, color]) => {
-      const direction = BASE_TO_THREE_DIRECTIONS[axis];
-      this.axes.add(new THREE.ArrowHelper(
-        new THREE.Vector3(...direction),
-        new THREE.Vector3(0, 0, 0),
-        baseAxisLength,
-        color,
-        baseAxisHeadLength,
-        baseAxisHeadWidth,
-      ));
-    });
-    this.scene.add(this.axes);
-
-    window.addEventListener('resize', () => this._onResize());
-    // 监听主题切换更新背景色
-    const observer = new MutationObserver(() => this._updateBgColor());
-    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
-
-    this._animate();
-  }
-
-  _getComputedBgColor() {
-    const style = getComputedStyle(document.documentElement);
-    const bg = style.getPropertyValue('--bg-primary').trim();
-    // 解析 css var，从 computedStyle 获取实际值
-    const computed = document.documentElement.style.getPropertyValue('--bg-primary');
-    if (computed) {
-      const el = document.createElement('div');
-      el.style.color = computed;
-      document.body.appendChild(el);
-      const color = getComputedStyle(el).color;
-      document.body.removeChild(el);
-      const m = color.match(/(\d+),\s*(\d+),\s*(\d+)/);
-      if (m) return new THREE.Color(+m[1]/255, +m[2]/255, +m[3]/255);
-    }
-    return new THREE.Color(0x0a0e1a);
-  }
-
-  _updateBgColor() {
-    const bgColor = this._getComputedBgColor();
-    if (this.scene) {
-      this.scene.background = bgColor;
-      this.scene.fog.color = bgColor;
-    }
-  }
-
-  _onResize() {
-    const w = this.container.clientWidth;
-    const h = this.container.clientHeight;
-    this.camera.aspect = w / h;
-    this.camera.updateProjectionMatrix();
-    this.renderer.setSize(w, h);
-  }
-
-  _animate() {
-    requestAnimationFrame(() => this._animate());
-    if (this.controls) this.controls.update();
-    this.renderer.render(this.scene, this.camera);
-  }
-
-  toggleGrid() {
-    this.showGrid = !this.showGrid;
-    this.grid.visible = this.showGrid;
-    return this.showGrid;
-  }
-
-  toggleAxes() {
-    this.showAxes = !this.showAxes;
-    this.axes.visible = this.showAxes;
-    return this.showAxes;
-  }
-
-  resetView() {
-    this.camera.position.set(600, 400, 600);
-    if (this.controls) {
-      this.controls.target.set(0, 250, 0);
-      this.controls.update();
-    }
-  }
-}
-
-
-// === ArmModel ===
-class ArmModel {
-  constructor(scene) {
-    this.scene = scene;
-    this.mount = new THREE.Group();
-    this.scene.add(this.mount);
-    this.robot = null;
-    this.jointAngles = [0, 0, 0, 0, 0, 0];
-    this.gripperPosition = 1;
-    this.tcpOffsetMeters = 0.17334;
-    this.jointNames = ['joint1', 'joint2', 'joint3', 'joint4', 'joint5', 'joint6'];
-    this.loaded = false;
-    this.installMode = 'floor';
-    this.jointLimits = [
-      [-162, 162], [-12, 201], [-183, 0],
-      [-98, 98], [-98, 98], [-164, 164],
-    ];
-    this.loadingPromise = this._loadModel();
-  }
-
-  async _loadModel() {
-    // The bundled URDF loader is UMD, so expose the module build of Three.js to it.
-    globalThis.THREE = { ...THREE, STLLoader, ColladaLoader };
-    await import('./lib/URDFLoader.js');
-
-    const loader = new globalThis.URDFLoader();
-    loader.packages = {
-      'FastTouchV3.SLDASM': './models/startouch-v3',
-    };
-    const robot = await loader.loadAsync('./models/startouch-v3/FastTouchV3.SLDASM.urdf');
-    robot.name = 'Startouch FastTouchV3';
-    robot.scale.setScalar(1000);
-    robot.rotation.x = -Math.PI / 2;
-    robot.traverse(object => {
-      if (object.isMesh) {
-        object.castShadow = true;
-        object.receiveShadow = true;
-      }
-    });
-
-    this.robot = robot;
-    this.mount.add(robot);
-    this.setJointLimits(this.jointLimits);
-
-    this.endEffector = new THREE.Group();
-    this.endEffector.name = 'type-lj-tcp';
-    this.endEffector.position.set(this.tcpOffsetMeters, 0, 0);
-    this.tcpAxes = new THREE.AxesHelper(0.08);
-    this.tcpAxes.name = 'type-lj-tcp-axes';
-    this.endEffector.add(this.tcpAxes);
-    robot.links.gripper_base.add(this.endEffector);
-    this.loaded = true;
-    console.log('[ArmModel] Startouch FastTouchV3 URDF model ready');
-  }
-
-  setJointAngles(angles) {
-    if (!this.robot || !angles) return;
-    const clampedAngles = this.jointAngles.slice();
-    for (let i = 0; i < this.jointNames.length && i < angles.length; i++) {
-      const [mn, mx] = this.jointLimits[i] || [-180, 180];
-      const clamped = Math.max(mn, Math.min(mx, angles[i]));
-      this.robot.joints[this.jointNames[i]].setJointValue(clamped * Math.PI / 180);
-      clampedAngles[i] = clamped;
-    }
-    this.jointAngles = clampedAngles;
-  }
-
-  getJointAngles() { return this.jointAngles.slice(); }
-
-  setJointLimits(limits) {
-    if (!Array.isArray(limits) || limits.length !== 6) return;
-    this.jointLimits = limits.map(limit => [Number(limit[0]), Number(limit[1])]);
-    if (!this.robot) return;
-    this.jointNames.forEach((name, index) => {
-      const joint = this.robot.joints[name];
-      if (!joint) throw new Error(`URDF joint missing: ${name}`);
-      joint.limit.lower = this.jointLimits[index][0] * Math.PI / 180;
-      joint.limit.upper = this.jointLimits[index][1] * Math.PI / 180;
-    });
-    this.setJointAngles(this.jointAngles);
-  }
-
-  setGripperPosition(position) {
-    if (!this.robot || !Number.isFinite(position)) return;
-    this.gripperPosition = Math.max(0, Math.min(1, position));
-    const opening = this.gripperPosition * 0.0425;
-    this.robot.joints.gripper_joint1?.setJointValue(-opening);
-    this.robot.joints.gripper_joint2?.setJointValue(opening);
-  }
-
-  getGripperPosition() {
-    return this.gripperPosition;
-  }
-
-  setInstallMode(mode) {
-    if (!this.mount) return;
-    this.installMode = mode;
-    if (mode === 'floor') {
-      this.mount.rotation.set(0, 0, 0);
-    } else {
-      this.mount.rotation.set(0, 0, Math.PI / 2);
-    }
-    console.log('[ArmModel] Install mode:', mode);
-  }
-
-  goHome() {
-    this.setJointAngles(new Array(this.jointNames.length).fill(0));
-  }
-
-  getEndEffectorPosition() {
-    if (!this.robot) return { x: 0, y: 0, z: 0 };
-    const p = new THREE.Vector3();
-    if (this.endEffector) this.endEffector.getWorldPosition(p);
-    return { x: p.x, y: p.y, z: p.z };
-  }
-
-  getEndEffectorBasePosition() {
-    if (!this.robot || !this.endEffector) return { x: 0, y: 0, z: 0 };
-    this.robot.updateWorldMatrix(true, true);
-    const position = new THREE.Vector3();
-    this.endEffector.getWorldPosition(position);
-    this.robot.worldToLocal(position);
-    return { x: position.x * 1000, y: position.y * 1000, z: position.z * 1000 };
-  }
-
-  getEndEffectorBaseEuler() {
-    if (!this.robot || !this.endEffector) return { rx: 0, ry: 0, rz: 0 };
-    this.robot.updateWorldMatrix(true, true);
-    const robotQuaternion = new THREE.Quaternion();
-    const tcpQuaternion = new THREE.Quaternion();
-    this.robot.getWorldQuaternion(robotQuaternion);
-    this.endEffector.getWorldQuaternion(tcpQuaternion);
-    const relativeQuaternion = robotQuaternion.invert().multiply(tcpQuaternion);
-    const euler = new THREE.Euler().setFromQuaternion(relativeQuaternion, 'XYZ');
-    return {
-      rx: THREE.MathUtils.radToDeg(euler.x),
-      ry: THREE.MathUtils.radToDeg(euler.y),
-      rz: THREE.MathUtils.radToDeg(euler.z),
-    };
-  }
-
-  getEndEffectorBasePose() {
-    return {
-      positionMm: this.getEndEffectorBasePosition(),
-      eulerDeg: this.getEndEffectorBaseEuler(),
-    };
-  }
-}
-
+// The shared viewer has no transport startup; legacy local controls keep their own bootstrap.
+const { SceneManager, ArmModel } = createViewer({assetBase:'.',timeoutMs:600000,onProgress:(received,total)=>{
+  const label=document.getElementById('model-loading-text');
+  if(label)label.textContent=total?`Downloading robot model · ${Math.round(received/total*100)}%`:`Downloading robot model · ${Math.round(received/1024)} KB`;
+}});
 
 // === WSClient ===
 class WSClient {
@@ -1088,6 +793,7 @@ class UIControls {
 
     // ── XVisio vision and grasp controls ──────────────────
     const xvisionFeed = document.getElementById('xvision-feed');
+    const visionPage = document.getElementById('page-vision');
     let xvisionStream = 'vision';
     let xvisionRetryTimer = null;
     let xvisionRetryCount = 0;
@@ -1106,6 +812,7 @@ class UIControls {
       if (resetBackoff) xvisionRetryCount = 0;
       if (xvisionRetryTimer) clearTimeout(xvisionRetryTimer);
       xvisionRetryTimer = null;
+      if (visionPage?.hidden) { xvisionFeed.removeAttribute('src'); return; }
       xvisionFeed.src = `/camera/xvisio/${xvisionStream}?stream=${Date.now()}`;
     };
 
@@ -1121,6 +828,7 @@ class UIControls {
         xvisionFeed.alt = `XVisio ${describeXVisionStream()}`;
       });
       xvisionFeed.addEventListener('error', () => {
+        if (visionPage?.hidden) return;
         const dot = document.getElementById('cam-dot');
         const label = document.getElementById('cam-label');
         if (dot) dot.className = 'cam-dot';
@@ -1134,6 +842,11 @@ class UIControls {
         }, delayMs);
       });
       reloadXVisionFeed(true);
+      if (visionPage) {
+        const visibilityObserver = new MutationObserver(() => reloadXVisionFeed(true));
+        visibilityObserver.observe(visionPage, { attributes: true, attributeFilter: ['hidden'] });
+        window.addEventListener('pagehide', () => { visibilityObserver.disconnect(); clearTimeout(xvisionRetryTimer); }, { once: true });
+      }
     }
 
     document.querySelectorAll('[data-xvision-stream]').forEach(button => {
@@ -1415,7 +1128,7 @@ class UIControls {
 
   _renderWebGrasp() {
     const state=this.webGraspStatus||{},phase=state.phase||'idle';
-    const labels={idle:'待机',unavailable:'服务不可用',depth_acquiring:'获取深度',planning:'坐标规划',path_checking:'路径检查',
+    const labels={idle:'待机',unavailable:'服务不可用',preparation_checking:'检查调平路径',preparing_raise:'抬到安全高度',preparing_level:'自动调平',depth_acquiring:'获取新深度',planning:'坐标规划',path_checking:'路径检查',
       opening:'张开夹爪',preapproach:'预接近',target_refresh:'确认固定目标',approach:'接近目标',closing:'闭合夹爪',
       lifting:'抬升',complete:'流程完成',failed:'执行失败',stopping:'正在停止，等待确认',stopped:'已停止',uncertain:'停止未确认，请现场检查'};
     const set=(id,text)=>{const node=document.getElementById(id);if(node)node.textContent=text;};
@@ -1425,15 +1138,16 @@ class UIControls {
     const translation=tcp?.T_flange_grasp_tcp?.slice(0,3).map(row=>row[3]);
     set('grasp-tcp',tcp?`${state.tcp?'本次':'下次'} TCP：${tcp.source==='measured'?'实测':'近似'} [${mm(translation)}] mm${tcp.id?' · '+tcp.id:''} · 水平退让 ${((tcp.forwardBackoffM||0)*1000).toFixed(0)} mm`:'TCP：等待配置');
     const motion=this.webGraspConfig?.motion;
-    set('grasp-motion-mode',motion?`${motion.orientationMode==='horizontal'?'水平锁定':'保持当前姿态'} · ${motion.executionMode==='phase_linear'?'阶段连续移动':'分段移动'} · ${(motion.sampleM*1000).toFixed(0)} mm 路径检查${Number.isFinite(motion.requestedSpeedScale)?' · 请求限速 '+(motion.requestedSpeedScale*100).toFixed(0)+'%':''}`:'运动配置：等待服务');
+    set('grasp-motion-mode',motion?`${motion.autoLevelBeforeDepth?'先抬至 SDK Z≥'+(motion.safeLevelSdkZM*1000).toFixed(1)+' mm 调平，再测深度':motion.orientationMode==='horizontal'?'水平锁定':'保持当前姿态'} · ${motion.executionMode==='phase_linear'?'阶段连续移动':'分段移动'} · ${(motion.sampleM*1000).toFixed(0)} mm 路径检查${Number.isFinite(motion.requestedSpeedScale)?' · 请求限速 '+(motion.requestedSpeedScale*100).toFixed(0)+'%':''}`:'运动配置：等待服务');
     set('grasp-target-position',mm(state.targetM));set('grasp-contact-position',mm(state.plan?.contact?.position));
     set('grasp-depth',`${state.depthValidFrames||0} / 3`);
     set('grasp-progress',state.progress?`${state.progress.completed} / ${state.progress.total}（累计 ${state.completedSegments||0}）`:'--');
-    set('grasp-result',this.webGraspError||(state.reason==='tool_not_horizontal'?'末端尚未水平，请在安全高度调平；不会自动扫过桌面。':state.reason)|| (phase==='complete'
+    const reasons={tool_not_horizontal:'末端尚未水平，当前配置未启用自动调平。',target_reselection_required:'相机换姿态后缺少可靠的目标关联，请重新选择眼前的瓶子。',target_reacquiring:'正在恢复原目标关联，等待连续三帧确认。',leveling_angle_limit:'调平角度超过 60°，请先手动调整姿态。',safe_height_not_reached:'尚未到达安全高度，已停止调平。'};
+    set('grasp-result',this.webGraspError||reasons[state.reason]||state.reason|| (phase==='complete'
       ?'流程完成，夹爪保持；实物抓取未确认，请现场观察。'
       :state.holding?'夹爪保持，不自动松爪。':'选定目标后一次执行到抬升；不自动松爪'));
-    const stages=['depth_acquiring','path_checking','opening','preapproach','target_refresh','approach','closing','lifting'];
-    const index=phase==='planning'?1:stages.indexOf(phase);
+    const stages=['preparing_raise','preparing_level','depth_acquiring','path_checking','opening','preapproach','target_refresh','approach','closing','lifting'];
+    const index=phase==='preparation_checking'?0:phase==='planning'?3:stages.indexOf(phase);
     stages.forEach((stage,i)=>{const node=document.getElementById(`grasp-stage-${stage}`);if(!node)return;
       node.classList.toggle('current',i===index);node.classList.toggle('done',phase==='complete'||(index>=0&&i<index));});
   }
@@ -1605,6 +1319,7 @@ class UIControls {
   }
 
   languageControlReady() {
+    if (!this.arm.loaded) return false;
     if (this.languageBackend === 'formal-3000-upstream') {
       return Boolean(
         this.languageRobotState.connected &&
@@ -2107,8 +1822,21 @@ class UIControls {
     }, 150);
   }
 
+  selectWorkspaceControl(tab) {
+    this.workspaceManualControl = tab;
+    if (tab !== 'tcp') {
+      clearTimeout(this.tcpPreviewTimer);
+      this.tcpPreviewRequestId = null;
+      this.tcpPreviewOk = false;
+      this.tcpDraftActive = false;
+    }
+  }
+
   _sendSelectedTarget() {
-    if (this.activeManualTarget === 'tcp') this._sendTcp();
+    if (this.workspaceManualControl === 'gripper') return;
+    const target = this.workspaceManualControl === 'tcp' ? 'tcp'
+      : this.workspaceManualControl === 'joints' ? 'joint' : this.activeManualTarget;
+    if (target === 'tcp') this._sendTcp();
     else this._sendServo();
   }
 
@@ -2298,6 +2026,8 @@ function createLocalCandidateSimulator(getUi) {
 
 function startApp() {
   console.log('[App] ThirdHand Web Control starting...');
+  const workspace = globalThis.ThirdHandWorkspace.mountWorkspace(document, window);
+  workspace.installOnboarding(globalThis.ThirdHandOnboarding);
 
   let ui = null;
   const visionWs = new WSClient('/vision', 'Vision WS');
@@ -2344,7 +2074,7 @@ function startApp() {
   // 主题切换
   const themeSelect = document.getElementById('theme-select');
   if (themeSelect) {
-    const saved = localStorage.getItem('theme') || 'deepspace';
+    const saved = workspace ? 'workspace' : localStorage.getItem('theme') || 'deepspace';
     if (saved !== 'deepspace') {
       document.documentElement.setAttribute('data-theme', saved);
     }
@@ -2359,20 +2089,33 @@ function startApp() {
     });
   }
 
-  arm.loadingPromise.then(() => {
+  // Network state and chat must not wait for a remote model download.
     ui.build();
     ui.bindViewControls(scene);
+    workspace.bindRuntime({ ws, ui, voice, scene });
+    let measuredFrame = false;
+    ws.on('robot_state', () => {
+      if (!measuredFrame && ui.robotStateReady && scene.modelObject) {
+        scene.fitModel(); measuredFrame = true;
+      }
+    });
     ws.on('connection', () => voice.handleRobotMessage({ type: 'runtime-readiness' }));
     ws.on('config', () => voice.handleRobotMessage({ type: 'runtime-readiness' }));
     ws.on('robot_state', () => voice.handleRobotMessage({ type: 'runtime-readiness' }));
     ws.on('language_backend', () => voice.handleRobotMessage({ type: 'runtime-readiness' }));
     visionWs.connect();
     ws.connect();
-    arm.setJointAngles([0, 0, 0, 0, 0, 0]);
-    ui.setJointValues([0, 0, 0, 0, 0, 0]);
     console.log('[App] Ready.');
+  arm.loadingPromise.then(() => {
+    return arm.geometryReady.then(() => {
+      scene.fitModel(arm.mount);
+      document.getElementById('model-loading')?.remove();
+    });
   }).catch(e => {
     console.error('[App] Model load failed:', e);
+    const loading=document.getElementById('model-loading-text');
+    if(loading)loading.textContent='Model download failed. Check your connection and reload.';
+    ui._log('3D model download failed. Reload to retry. Live status and chat remain available.');
   });
 }
 

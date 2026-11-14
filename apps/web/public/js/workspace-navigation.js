@@ -5,6 +5,8 @@
  function mount({document:doc,view,shell,identity}){
   const tr=s=>view.ThirdHandI18n?.translate(s,doc.documentElement.lang)||s,classic=doc.documentElement.dataset.layout==='classic';
   const nav=doc.getElementById('workspace-nav'),bottom=nav.querySelector('.nav-bottom'),top=doc.querySelector('.classic-user-tools');
+  // Modern page names belong to the shared shell; only Classic uses the legacy names.
+  const pageEntries=classic?entries:entries.map(([id,label])=>[id,nav.querySelector(`[data-page="${id}"] .nav-label`)?.textContent||label]);
   const el=(tag,text,attrs={})=>{const n=doc.createElement(tag);if(text)n.textContent=tr(text);for(const[k,v]of Object.entries(attrs))n.setAttribute(k,v);return n;};
   const history=el('a',null,{href:'/history',class:'workspace-history-link',title:tr('Data'),'aria-label':tr('Data'),'data-workspace-entry':'data'});
   const icon=doc.createElementNS('http://www.w3.org/2000/svg','svg');icon.setAttribute('viewBox','0 0 24 24');icon.setAttribute('aria-hidden','true');icon.innerHTML='<path d="M4 4h16v16H4z M4 10h16 M10 4v16" fill="none" stroke="currentColor" stroke-width="1.6"/>';
@@ -27,11 +29,11 @@
   const cameraDescription=doc.querySelector('#page-vision .workspace-heading p');if(cameraDescription)cameraDescription.textContent=tr('View an authorized camera stream. Voice and robot motion are unavailable here.');
   (doc.getElementById('page-overview')||doc.getElementById('page-account-connections')).append(note);
   function render(){
-   for(const[id,label]of entries){const button=nav.querySelector(`[data-page="${id}"]`);if(button){const copy=button.querySelector('.nav-label');if(copy)copy.textContent=tr(label);button.title=tr(label);button.setAttribute('aria-label',tr(label));}const heading=doc.getElementById('heading-'+id);if(heading)heading.textContent=tr(label);}
+   for(const[id,label]of pageEntries){const button=nav.querySelector(`[data-page="${id}"]`);if(button){const copy=button.querySelector('.nav-label');if(copy)copy.textContent=tr(label);button.title=tr(label);button.setAttribute('aria-label',tr(label));}const heading=doc.getElementById('heading-'+id);if(heading)heading.textContent=tr(label);}
    history.title=tr('Data');history.setAttribute('aria-label',tr('Data'));history.querySelector('.nav-label').textContent=tr('Data');
   }
   render();const observer=new view.MutationObserver(render);observer.observe(doc.documentElement,{attributes:true,attributeFilter:['lang']});
-  return {dispose(){observer.disconnect();},entries};
+  return {dispose(){observer.disconnect();},entries:pageEntries};
  }
  return {entries,mount};
 });

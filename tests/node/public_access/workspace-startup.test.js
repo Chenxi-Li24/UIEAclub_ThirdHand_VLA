@@ -7,11 +7,11 @@ const preferences=require('../../../apps/web/public/js/preferences');
 const security=require('../../../apps/web/public/js/account-security');
 const shellApi=require('../../../apps/web/public/js/workspace-shell');
 const startup=require('../../../apps/web/public/js/workspace-startup');
-function fixture({slowModules=false,slowProfile=false}={}){
+function fixture({slowModules=false,slowProfile=false,mode='observe'}={}){
   const {document,window}=parseHTML(fs.readFileSync('apps/web/public/index.html','utf8'));
   let resolveModel,rejectModel,monitoring=false,fits=0;
   const loading=new Promise((resolve,reject)=>{resolveModel=resolve;rejectModel=reject;});
-  const requests=[],events=new Map(),identity={userId:'test',sessionId:'test-session',role:'observer',mode:'observe',csrfToken:'fixture',displayName:'Startup user'};
+  const requests=[],events=new Map(),identity={userId:'test',sessionId:'test-session',role:mode==='admin'?'admin':'observer',mode,csrfToken:'fixture',displayName:'Startup user'};
   const session={load:async()=>identity,request:async(path)=>{requests.push(path);if(path==='/api/v1/me/profile'&&slowProfile)return new Promise(()=>{});return path==='/api/v1/tutorial'?{state:{status:'completed'}}:path==='/api/v1/me/waypoints'?{waypoints:[],limit:100}:path.includes('preferences')?{locale:'en',themeId:'light',backgroundConfig:{kind:'soft',color:'#fffcf9'},revision:0}:{};},startMonitoring(){monitoring=true;},close(){}};
   const view={document,location:{hash:'#vision',assign(){}},history:{replaceState(){}},localStorage:{getItem(){return null;},setItem(){}},MutationObserver:window.MutationObserver,addEventListener:(name,fn)=>events.set(name,fn),setInterval(){return 1;},clearInterval(){},ThirdHandAccountSettings:require('../../../apps/web/public/js/account-settings')};
   view.requestAnimationFrame=fn=>fn();view.setTimeout=setTimeout;view.clearTimeout=clearTimeout;
@@ -24,12 +24,32 @@ function fixture({slowModules=false,slowProfile=false}={}){
   Object.assign(view,{
     ThirdHandWorkspaceSession:{...workspace,createWorkspaceSession:()=>session},ThirdHandPreferences:preferences,
     ThirdHandTutorialAdapter:{scopedTutorialView:()=>view},ThirdHandWorkspace:{mountWorkspace(...args){return {...shellApi.mountWorkspace(...args),installOnboarding(){}};}},
+    ThirdHandWorkspaceNavigation:require('../../../apps/web/public/js/workspace-navigation'),
     ThirdHandRobotViewer:{createRobotViewer:()=>({SceneManager:Scene,ArmModel:Arm})},ThirdHandAccountSecurity:security,ThirdHandCameraView:camera,
     ThirdHandAdminControl:{mountAdminControl(){return {dispose(){}};}},ThirdHandModelWaypoints:require('../../../apps/web/public/js/model-waypoints'),ThirdHandOnboarding:{}});
   const boot=startup.start({document,view,loadModel:()=>slowModules?new Promise(()=>{}):Promise.resolve({createViewer:()=>({SceneManager:Scene,ArmModel:Arm})})});
   return {document,requests,boot,resolveModel,rejectModel,get monitoring(){return monitoring;},get fits(){return fits;},dispose(){events.get('pagehide')?.();}};
 }
 const flush=async()=>{for(let i=0;i<30;i++)await Promise.resolve();};
+test('authenticated modern startup keeps the current shell navigation and account/data access for both roles',async()=>{
+ for(const mode of ['observe','admin']){
+  const f=fixture({slowModules:true,mode});await f.boot;await flush();
+  try{
+   for(const [id,label]of [['overview','System Check'],['control','Digital Twin'],['vision','Vision tasks'],['system','System']]){
+    const button=f.document.querySelector(`#workspace-nav [data-page="${id}"]`);
+    assert.equal(button.querySelector('.nav-label').textContent,label);
+    assert.equal(button.getAttribute('aria-label'),label);
+    assert.equal(f.document.getElementById('heading-'+id).textContent,label);
+   }
+   assert.equal(f.document.querySelector('[data-workspace-entry="data"]').getAttribute('href'),'/history');
+   assert.ok(f.document.getElementById('workspace-account'));assert.ok(f.document.getElementById('workspace-logout'));
+   for(const id of ['calibration','assistant'])assert.equal(f.document.querySelector(`#workspace-nav [data-page="${id}"]`).hidden,mode!=='admin');
+   f.document.documentElement.lang='en';await new Promise(setImmediate);
+   assert.equal(f.document.querySelector('[data-page="control"] .nav-label').textContent,'Digital Twin');
+   assert.equal(f.requests.some(path=>/sdk|control\/command/.test(path)),false);
+  }finally{f.dispose();}
+ }
+});
 test('slow model geometry does not block account, camera, or session monitoring; only model controls wait',async()=>{
   const f=fixture();await flush();
   try{

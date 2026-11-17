@@ -55,14 +55,28 @@
 
 ### Task 3: Authenticated integration, English first render and SDK diagnosis
 
-**Files:** Modify `apps/web/public/js/workspace-startup.js`, `workspace-session.js`, `guest-workspace.js`; `services/cloud-api/src/server.js`, `guest-pages.js`, `workspace-pages.js`, `workspace-bootstrap.js`; focused startup/model/bootstrap/HTTP/Guest tests and feature docs.
+**Files:** Modify `apps/web/public/js/workspace-startup.js`, `workspace-session.js`, `simulation-controller.js`, `guest-workspace.js`; `services/cloud-api/src/server.js`, `guest-pages.js`, `workspace-pages.js`, `workspace-bootstrap.js`; narrowly adjust `ai-preview-chat.js` for shell-created audio affordances; focused presenter/simulation/startup/model/bootstrap/HTTP/Guest tests and feature docs.
 
 **Interfaces:** Server `createCloudApi` accepts optional `previewAi` for tests; otherwise creates one shared service and Guest handler. Pass `previewAi` into authenticated route context and optional Guest AI handler into `serveGuestPage`. Authenticated chat transport calls `/api/v1/ai/preview` through session.request with a 35-second client timeout; provider timeout remains 30 seconds. Session.request accepts an optional third argument `{timeoutMs}` without changing existing requests. Bind chat to `controls.simulation` and the exact current model after ready; validate full joint/gripper proposals before applying either.
 
+`simulation.applyPreview({joints,gripper})` validates the entire proposal before changing live following, playback or either model field, then emits one coherent state. `mountModelWorkspace` exposes a readiness/disposal-bound preview adapter; startup binds only after geometry readiness.
+
 - [ ] First add failing authenticated-startup/model tests: admin chat enabled before geometry, preview binds afterward, exact inputs follow it, new live samples do not overwrite the AI draft, explicit Sync resumes. Observer AI remains unauthorized. Preserve measured out-of-edit-limit display.
 - [ ] Wire shared presenter into Guest and authenticated startup, remove only the authenticated Administrator chat toggle from legacy disabled lists, keep old physical/voice channels disabled, and dispose callbacks during page exit. Keep Guest permission behavior and public assets allowlist/CSP.
+- [ ] Hide shell-created audio affordances when mounting the model-only presenter; no empty microphone/settings drawer remains after legacy capture controls are hidden.
 - [ ] Add HTTP integration tests for sessions, Origin, CSRF and `voice.use`; share the provider quota instance between public/authenticated routes. Test no legacy proxy routes/tools are opened.
 - [ ] Normalize initial authenticated HTML/bootstrap UI locale to English without modifying account database rows or user content; add old-locale regression coverage.
 - [ ] Inspect SDK catalog/client/config paths and public endpoints without connecting hardware. If SSH becomes available, read active release, service state, relay/SDK diagnostics and existing operation activity before any deployment. Otherwise record the precise access limitation and leave the runtime claim unverified.
 - [ ] Run focused suites, boundary/whitespace checks and appropriate full Node comparison; request independent review. Record accepted residual baseline failures accurately.
 - [ ] Commit the integrated change and documentation. If server access and authorization permit, deploy a finite reviewed immutable release delta with rollback and fresh versioned assets, then verify actual signed-in UI. Never substitute source/tests/Guest success for authenticated or hardware success.
+
+### Task 4: Bounded SDK wait and actionable cloud feedback
+
+**Files:** Modify `apps/web/public/js/admin-control.js`, focused `admin-control-client.test.js` and `admin-control-ui.test.js`, and the SDK diagnosis section of the feature doc. Do not change robot bridge/controller, source-bound calibration manifests, leases, readiness or read-only policy.
+
+**Interfaces:** Use the Task 3 optional session request timeout only for explicit `connect`/`disconnect` command calls (40 seconds, beyond the relay's existing 35-second acknowledgement deadline). Preserve ambiguous outcomes after submission; never auto-retry. Display only allowlisted machine reason codes, never raw upstream exception text.
+
+- [x] Add failing client tests for the bounded SDK command timeout, ordinary request compatibility, ambiguous timeout/disconnect results and preserved policy denial codes.
+- [x] Improve English feedback for rejected/failed SDK commands and unknown results with safe reason codes; keep confirmation and heartbeat behavior unchanged. Add DOM regressions for busy state and no repeated submissions.
+- [x] Record the source-level correlation gap (connect failure receipt lacks request ID), public endpoint observations and SSH access limitation. Changes to calibration-bound robot source require separate physical-service validation; do not silently rebind provenance hashes.
+- [x] Run focused checks, update documentation, self-review and commit. No live SDK operation or deployment is part of this task.

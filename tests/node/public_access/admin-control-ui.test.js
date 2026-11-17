@@ -109,3 +109,52 @@ test('SDK confirmation never blocks browser heartbeat callbacks; cancel and lost
     mounted.dispose();
   }
 });
+
+async function authorizedUi(request){
+  const {document}=parseHTML('<html lang="en"><body><section id="page-system"></section></body></html>');
+  const sockets=[];
+  class Socket{constructor(){sockets.push(this);}send(){}close(){this.onclose?.();}receive(value){this.onmessage?.({data:JSON.stringify(value)});}}
+  const view={WebSocket:Socket,crypto:require('node:crypto'),location:{protocol:'https:',host:'example.invalid'},performance:{now:()=>1000}};
+  const mounted=mountAdminControl({document,view,identity:{role:'observer',mode:'observe'},sessionClient:{request:async(path,body,options)=>path.endsWith('/lease')?{id:'test-lease',state:'active',leaseEpoch:1}:request(path,body,options)}});
+  // LinkeDOM's select.value has no setter; browsers expose a writable selection.
+  Object.defineProperty(document.querySelector('select'),'value',{value:'test-device',writable:true});
+  const opening=mounted.client.open(),ws=sockets[0],connectionId='test-channel';ws.onopen();
+  ws.receive({type:'bound',connectionId});ws.receive({type:'challenge',connectionId,sequence:1,nonce:'x'.repeat(43)});ws.receive({type:'fresh',connectionId,sequence:1});await opening;
+  await mounted.client.acquire('test-device');
+  return {document,mounted};
+}
+
+test('pending SDK confirmation and submission ignore duplicate clicks and report sanitized rejected or failed device outcomes',async()=>{
+  for(const [state,code,want]of [['rejected','READ_ONLY_DEVICE','READ_ONLY_DEVICE'],['failed','ROBOT_REJECTED','ROBOT_REJECTED'],['failed','PRIVATE_UPSTREAM_CODE',null]]){
+    let finish,submissions=0;
+    const {document,mounted}=await authorizedUi(()=>{submissions++;return new Promise(resolve=>{finish=resolve;});});
+    const button=[...document.querySelectorAll('button')].find(b=>b.textContent==='Connect SDK');
+    button.click();button.click();await new Promise(setImmediate);
+    assert.equal(submissions,0);assert.equal(button.disabled,true);assert.equal(button.getAttribute('aria-busy'),'true');
+    const confirm=document.querySelector('[role="alertdialog"] button');confirm.click();confirm.click();await new Promise(setImmediate);
+    button.click();await new Promise(setImmediate);assert.equal(submissions,1);assert.equal(button.disabled,true);
+    finish({state,code,reasonCode:'PRIVATE_FORGED_CODE',message:'private exception'});await new Promise(setImmediate);
+    const text=document.querySelector('[role="status"]').textContent;
+    assert.match(text,state==='rejected'?/device rejected/:/command failed/);
+    if(want)assert.ok(text.includes(want));
+    assert.doesNotMatch(text,/PRIVATE_|private/);assert.equal(button.hasAttribute('aria-busy'),false);assert.equal(button.disabled,false);
+    mounted.dispose();
+  }
+});
+
+test('SDK unknown and read-only denial feedback shows safe codes without raw exception text or automatic resubmission',async()=>{
+  for(const [reply,pattern,want]of [
+    [{state:'unknown',code:'SUBMISSION_RESULT_UNKNOWN'},/result is unknown/,'SUBMISSION_RESULT_UNKNOWN'],
+    [Object.assign(Error('private cause'),{code:'REQUEST_TIMEOUT'}),/result is unknown/,'REQUEST_TIMEOUT'],
+    [Object.assign(Error('private cause'),{code:'CONTROL_DISCONNECTED'}),/result is unknown/,'CONTROL_DISCONNECTED'],
+    [Object.assign(Error('private cause'),{code:'READ_ONLY_DEVICE'}),/SDK connection and state reading only/,'READ_ONLY_DEVICE'],
+    [Object.assign(Error('private cause'),{code:'PRIVATE_UPSTREAM_CODE',reasonCode:'PRIVATE_FORGED_CODE'}),/result is unknown/,null]
+  ]){
+    let submissions=0;
+    const {document,mounted}=await authorizedUi(async()=>{submissions++;if(reply instanceof Error)throw reply;return reply;});
+    const button=[...document.querySelectorAll('button')].find(b=>b.textContent==='Disconnect SDK');button.click();await new Promise(setImmediate);
+    const text=document.querySelector('[role="status"]').textContent;assert.match(text,pattern);if(want)assert.ok(text.includes(want));
+    assert.doesNotMatch(text,/private|PRIVATE_/);assert.equal(submissions,1);assert.equal(button.hasAttribute('aria-busy'),false);assert.equal(button.disabled,true);
+    mounted.dispose();
+  }
+});

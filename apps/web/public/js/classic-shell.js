@@ -16,6 +16,8 @@
     function setAvailable(value){available=allowed&&value===true&&!disposed;entry.hidden=!available;entry.disabled=!available;if(!available)setOpen(false,{focus:false});}
     panel.hidden=true;panel.setAttribute('aria-label','AI Agent');entry.title='AI Agent';entry.setAttribute('aria-label','AI Agent');entry.querySelector('.voice-toggle-label').textContent='AI Agent';setAvailable(allowed);
     if(allowed){
+      // The archived panel is a body sibling; compact rules belong to the Classic app.
+      byId('app').append(panel);
       const el=(tag,attrs,text)=>{const node=doc.createElement(tag);for(const [key,value]of Object.entries(attrs))node.setAttribute(key,value);if(text)node.textContent=text;return node;};
       const body=panel.querySelector('.voice-panel-body'),replies=el('section',{id:'chat-replies',class:'chat-replies','aria-label':'AI replies',hidden:''});
       const toggle=el('button',{type:'button',class:'chat-icon',id:'chat-replies-toggle','aria-controls':'chat-replies'},'✧');

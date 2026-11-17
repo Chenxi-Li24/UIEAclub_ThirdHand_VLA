@@ -131,6 +131,7 @@ test('Classic Administrator opens compact English chat and previews exact joints
  try{
   assert.equal(f.document.documentElement.dataset.layout,'classic');assert.equal(f.document.documentElement.dataset.theme,'deepspace');
   assert.equal(entry.hidden,false);assert.equal(entry.getAttribute('aria-label'),'AI Agent');
+  assert.equal(panel.closest('.classic-console')?.id,'app','compact CSS must reach the real Classic panel');
   let focused='';f.document.getElementById('voice-text-input').focus=()=>{focused='input';};entry.focus=()=>{focused='entry';};
   assert.equal(f.document.getElementById('chat-replies-toggle').getAttribute('aria-expanded'),'true');
   entry.click();assert.equal(focused,'input');assert.equal(panel.hidden,false);assert.equal(entry.getAttribute('aria-expanded'),'true');assert.equal(panel.classList.contains('chat-minimal'),true);

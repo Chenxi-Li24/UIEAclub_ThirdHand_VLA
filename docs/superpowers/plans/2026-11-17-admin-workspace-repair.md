@@ -80,3 +80,16 @@
 - [x] Improve English feedback for rejected/failed SDK commands and unknown results with safe reason codes; keep confirmation and heartbeat behavior unchanged. Add DOM regressions for busy state and no repeated submissions.
 - [x] Record the source-level correlation gap (connect failure receipt lacks request ID), public endpoint observations and SSH access limitation. Changes to calibration-bound robot source require separate physical-service validation; do not silently rebind provenance hashes.
 - [x] Run focused checks, update documentation, self-review and commit. No live SDK operation or deployment is part of this task.
+
+### Task 5: Classic account AI entry and compact chat
+
+**Files:** Narrow changes to `apps/web/public/js/classic-shell.js`, `ai-preview-chat.js`, existing chat/layout CSS (or one focused shared chat stylesheet with corresponding asset wiring), focused Classic/presenter/startup tests, and feature docs. Preserve current Modern and Guest chat behavior.
+
+**Interfaces:** Keep the shared presenter/service/model adapter contracts. Preserve the saved account layout and theme. Classic Administrator must have a visible English AI Agent entry, compact typed chat with close/Escape/focus behavior, and the same explicit model preview. Observer has no AI entry or active AI controller. `shell.go('assistant')` must open the supported chat, including onboarding access.
+
+- [x] Add failing actual Classic DOM tests for the previously hidden/unbound AI entry, opening/closing chat, English model-only content, disposal and Observer exclusion. Keep old voice/config/interpretation controls hidden.
+- [x] Integrate the same compact presenter into Classic without enabling legacy main/voice transports or changing layout preferences, model adapter, SDK controls, calibration/recording protections or database rows.
+- [ ] Test Classic explicit model preview updates the same joint/gripper state and pauses live following; retain all existing Modern/Guest tests. Parent verifies visible Classic entry and preview in the actual browser with mock account/provider.
+- [ ] Run focused checks, update behavior/assets/startup/validation/limits docs, self-review, commit and task-review before final broad validation.
+
+Implementation checks pass 58/58 plus Classic compatibility 1/1. Model preview/follow tests are complete; parent browser verification, task review and final broad validation remain pending. The pre-existing Classic archived-HTML snapshot mismatch is recorded in `docs/features/ADMIN_WORKSPACE.md`.

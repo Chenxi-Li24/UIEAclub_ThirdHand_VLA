@@ -51,6 +51,7 @@
    }catch(error){if(disposed)return;pending.textContent=error?.status===429||error?.code==='AI_BUSY'?'AI is busy. Please wait a minute and try again.':'AI is temporarily unavailable. Please try again.';state('AI unavailable');}
    finally{if(!disposed){busy=false;send.disabled=false;}}
   }
+  shell?.setAssistantAvailable?.(true);
   conversation.replaceChildren();addMessage('ai','Ask a question or describe a model pose. Previews change the model only.');state('AI ready');send.disabled=false;
   if(byId('voice-text-help'))byId('voice-text-help').textContent='AI replies in English. Model previews only.';
   input.placeholder='Message…';input.maxLength=2000;
@@ -65,7 +66,7 @@
   listen(form,'submit',sendMessage);
   listen(input,'keydown',event=>{if(event.key==='Enter'&&!event.shiftKey&&!event.isComposing)void sendMessage(event);});
   listen(byId('voice-ai-reconnect'),'click',()=>{if(!disposed)addMessage('ai','Send a message to retry the AI connection.');});
-  return {bindModel(adapterOrNull){if(!disposed)model=adapterOrNull;},dispose(){if(disposed)return;disposed=true;model=null;history.length=0;listeners.splice(0).forEach(remove=>remove());send.disabled=true;}};
+  return {bindModel(adapterOrNull){if(!disposed)model=adapterOrNull;},dispose(){if(disposed)return;disposed=true;shell?.setAssistantAvailable?.(false);shell?.disposeAssistant?.();model=null;history.length=0;listeners.splice(0).forEach(remove=>remove());send.disabled=true;}};
  }
  return {mountAiPreviewChat};
 });

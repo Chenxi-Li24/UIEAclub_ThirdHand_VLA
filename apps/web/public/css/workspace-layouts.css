@@ -60,7 +60,7 @@
 .workspace[data-workspace-group=account] .nav-data{display:none}
 .workspace #workspace-nav-toggle{margin:0 8px 12px;flex-shrink:0}
 .workspace #workspace-nav .nav-label{white-space:normal;overflow-wrap:normal;line-height:1.4;min-width:0}.workspace #workspace-nav [data-page]{height:auto;min-height:44px}.workspace #workspace-nav .nav-index{display:none}
-.workspace #hb-label,.workspace #workspace-web-status{font-size:12px}.workspace #topbar #btn-estop-top,.workspace #topbar #btn-voice-toggle,.classic-console #topbar #btn-estop-top,.classic-console #topbar #btn-voice-toggle{display:none!important}
+.workspace #hb-label,.workspace #workspace-web-status{font-size:12px}.workspace #topbar #btn-estop-top,.workspace #topbar #btn-voice-toggle,.classic-console #topbar #btn-estop-top{display:none!important}
 .status-chip .service-name,.status-chip .service-value{font-size:12px!important}#admin-user-search{display:block;width:100%;max-width:440px;margin-top:16px;padding:10px 12px;border:1px solid var(--border);border-radius:8px;background:var(--bg-card);color:var(--text-primary);font-size:14px}
 .cloud-users-table td:nth-child(3){min-width:190px}.cloud-users-table td:first-child{min-width:140px}
 .workspace #workspace-logout{white-space:nowrap;min-height:44px;font-size:14px}
@@ -86,3 +86,17 @@
  .cloud-users-table,.cloud-users-table tbody,.cloud-users-table tr,.cloud-users-table td{display:block;width:100%;min-width:0!important}.cloud-users-table thead{display:none}.cloud-users-table tr{border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:12px}.cloud-users-table td{position:static!important;display:grid;grid-template-columns:minmax(85px,35%) minmax(0,1fr);gap:8px;padding:8px 0}.cloud-users-table td::before{content:attr(data-label);font-size:12px;color:var(--text-secondary)}.cloud-users-table td:last-child{display:flex;flex-wrap:wrap;gap:8px}.cloud-users-table td:last-child::before{display:none}.cloud-users-scroll{overflow:visible}
  .classic-console #workspace-web-status,.classic-console #workspace-mode{display:none}.classic-console .topbar-status{flex:1 1 60px}.classic-console .classic-user-tools{gap:4px}.classic-console #device-status-entry{font-size:11px;max-width:66px}.classic-console .classic-more summary{padding:6px}.classic-console #topbar{padding-left:6px;padding-right:6px}.classic-console .topbar-brand{display:none}
 }
+
+/* Compact model-only chat for saved Classic layouts; archived source stays intact. */
+.classic-console #topbar #btn-voice-toggle:not([hidden]){display:inline-flex;min-width:84px;min-height:40px;width:auto;padding:6px 10px}
+.classic-console #btn-voice-toggle .voice-toggle-label{display:inline;white-space:nowrap}.classic-console #btn-voice-toggle .voice-toggle-icon,.classic-console #btn-voice-toggle .voice-toggle-led{display:none}
+.classic-console #voice-panel.chat-minimal{left:50%;right:auto;bottom:48px;transform:translateX(-50%);width:min(720px,calc(100vw - 32px));max-height:none;overflow:visible;border:0;background:transparent;box-shadow:none;backdrop-filter:none}
+.classic-console .chat-minimal>.voice-panel-header,.classic-console .chat-minimal>.voice-panel-footer,.classic-console .chat-minimal .voice-conversation-block,.classic-console .chat-minimal .voice-text-help,.classic-console .chat-minimal .voice-text-channel{display:none!important}
+.classic-console .chat-minimal .voice-panel-body{display:block;padding:0;overflow:visible;background:transparent}.classic-console .chat-minimal .voice-text-composer{margin:0;padding:0;border:0}
+.classic-console .chat-minimal .voice-text-rail{display:flex;align-items:center;gap:8px;padding:12px;border-radius:24px;background:var(--bg-card);border:1px solid var(--border);box-shadow:0 6px 24px #0002}
+.classic-console .chat-minimal #voice-text-input{flex:1;min-width:0;min-height:40px;padding:8px 0;font-size:15px;line-height:24px}
+.classic-console .chat-minimal .chat-icon{display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;width:36px;height:36px;padding:6px;border:0;border-radius:50%;background:transparent;color:var(--text-primary);cursor:pointer}
+.classic-console .chat-minimal .chat-icon:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.classic-console .chat-minimal #voice-text-send{width:36px;min-width:36px;height:36px;padding:0;border-radius:50%}.classic-console .chat-minimal #voice-text-send span:first-child{display:none}
+.classic-console .chat-minimal .chat-replies{position:absolute;bottom:calc(100% + 12px);left:0;right:0;max-height:55dvh;overflow:auto;padding:16px;border:1px solid var(--border);border-radius:20px;background:var(--bg-card);box-shadow:0 12px 40px #0003}
+.classic-console .chat-minimal #chat-replies-close{margin-left:auto;display:flex}.classic-console .chat-minimal .voice-conversation{min-height:0;max-height:28vh}

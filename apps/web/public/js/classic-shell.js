@@ -1,9 +1,43 @@
 /* Original 372ac80 presentation + shared cloud adapters; never import old main.js. */
 (function(root,factory){const api=factory();if(typeof module==='object'&&module.exports)module.exports=api;root.ThirdHandClassicShell=api;})(globalThis,function(){
   'use strict';
-  function mountWorkspace(doc,view){
+  // Classic reuses the compact typed chat and shared presenter, without legacy voice bindings.
+  function mountAssistant(doc,view,options){
+    const byId=id=>doc.getElementById(id),entry=byId('btn-voice-toggle'),panel=byId('voice-panel'),input=byId('voice-text-input');
+    const allowed=options.canOpenPage?options.canOpenPage('assistant'):doc.documentElement.dataset.accessMode==='admin';
+    let available=allowed,disposed=false;const listeners=[];
+    function listen(node,type,handler){node.addEventListener(type,handler);listeners.push(()=>node.removeEventListener(type,handler));}
+    function setOpen(open,{focus=true}={}){
+      if(open&&(!available||disposed))return false;
+      const changed=panel.hidden===open;
+      panel.hidden=!open;panel.classList.toggle('open',open);panel.setAttribute('aria-hidden',String(!open));entry.setAttribute('aria-expanded',String(open));
+      if(focus&&changed)(open?input:entry).focus();return true;
+    }
+    function setAvailable(value){available=allowed&&value===true&&!disposed;entry.hidden=!available;entry.disabled=!available;if(!available)setOpen(false,{focus:false});}
+    panel.hidden=true;panel.setAttribute('aria-label','AI Agent');entry.title='AI Agent';entry.setAttribute('aria-label','AI Agent');entry.querySelector('.voice-toggle-label').textContent='AI Agent';setAvailable(allowed);
+    if(allowed){
+      const el=(tag,attrs,text)=>{const node=doc.createElement(tag);for(const [key,value]of Object.entries(attrs))node.setAttribute(key,value);if(text)node.textContent=text;return node;};
+      const body=panel.querySelector('.voice-panel-body'),replies=el('section',{id:'chat-replies',class:'chat-replies','aria-label':'AI replies',hidden:''});
+      const toggle=el('button',{type:'button',class:'chat-icon',id:'chat-replies-toggle','aria-controls':'chat-replies'},'✧');
+      const close=byId('voice-panel-close');close.setAttribute('aria-label','Close AI Agent');close.classList.add('chat-icon');
+      const replyClose=el('button',{type:'button',class:'chat-icon',id:'chat-replies-close','aria-label':'Close replies'},'×');
+      replies.append(replyClose,byId('voice-conversation'));const composer=byId('voice-text-form'),rail=composer.querySelector('.voice-text-rail');rail.prepend(toggle);rail.append(close);body.append(replies,composer);panel.classList.add('chat-dock','chat-minimal');
+      byId('voice-text-send').setAttribute('aria-label','Send message');doc.querySelector('label[for="voice-text-input"]').textContent='Message AI Agent';
+      function showReplies(open){replies.hidden=!open;toggle.setAttribute('aria-expanded',String(open));toggle.setAttribute('aria-label',open?'Hide replies':'Show replies');}
+      const repliesObserver=new view.MutationObserver(()=>{toggle.setAttribute('aria-expanded',String(!replies.hidden));toggle.setAttribute('aria-label',replies.hidden?'Show replies':'Hide replies');});
+      repliesObserver.observe(replies,{attributes:true,attributeFilter:['hidden']});listeners.push(()=>repliesObserver.disconnect());
+      showReplies(false);listen(toggle,'click',()=>showReplies(replies.hidden));listen(replyClose,'click',()=>{showReplies(false);toggle.focus();});
+      listen(entry,'click',()=>setOpen(panel.hidden));listen(close,'click',()=>setOpen(false));
+      listen(panel,'keydown',event=>{if(event.key==='Escape'){event.preventDefault();setOpen(false);}});
+    }
+    function dispose(){if(disposed)return;disposed=true;setAvailable(false);listeners.splice(0).forEach(remove=>remove());}
+    view.addEventListener('pagehide',dispose,{once:true});
+    return {setOpen,setAvailable,dispose};
+  }
+  function mountWorkspace(doc,view,options={}){
     const byId=id=>doc.getElementById(id),tr=value=>view.ThirdHandI18n?.translate(value)||value;
     const el=(tag,attrs={},text)=>{const node=doc.createElement(tag);for(const [key,value]of Object.entries(attrs))node.setAttribute(key,String(value));if(text)node.textContent=tr(text);return node;};
+    const assistant=mountAssistant(doc,view,options);
     const app=byId('app');app.classList.remove('workspace');app.classList.add('classic-console');
     const mode=el('span',{id:'workspace-mode'},'Unknown mode');byId('topbar').querySelector('.topbar-status').prepend(mode);
     const panel=el('dialog',{id:'classic-settings',class:'workspace','aria-label':'Account and settings'}),close=el('button',{type:'button',class:'action-btn action-secondary',id:'classic-settings-close'},'Back to model');
@@ -13,6 +47,8 @@
     const pages=new Map(),runtime={};let current='control',account;
     function hidePanel(){if(panel.open)panel.close();panel.hidden=true;}
     function go(id){
+      if(id==='assistant'){if(!assistant.setOpen(true,{focus:false}))return false;hidePanel();byId('voice-text-input').focus();return true;}
+      assistant.setOpen(false,{focus:false});
       if(id==='system'||id==='devices')id='account-connections';
       if(pages.has(id)){
         if(notice.classList.contains('classic-notice')){notice.classList.remove('classic-notice');notice.hidden=true;main.prepend(notice);}
@@ -49,7 +85,7 @@
     doc.querySelector('a[href="tcp-calibration.html"]')?.addEventListener('click',event=>{event.preventDefault();go('calibration');});
     view.ThirdHandStatusLights?.mountStatusLights(doc,view);
     let guide;
-    const shell={go,setAccountDataProvider:provider=>account.setDataProvider(provider),
+    const shell={go,setAssistantAvailable:value=>assistant.setAvailable(value),disposeAssistant:()=>assistant.dispose(),setAccountDataProvider:provider=>account.setDataProvider(provider),
       bindRuntime(value){Object.assign(runtime,value);view.requestAnimationFrame(()=>runtime.scene?._onResize());guide?.bindScene?.(runtime.scene);},
       attachEssentials({preferences}){
         // The compact original header hides text actions on small screens.

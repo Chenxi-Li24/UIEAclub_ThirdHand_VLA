@@ -20,13 +20,23 @@ test('guest import map CSP covers the final public asset paths',async t=>{
 
 const fs=require('node:fs'),vm=require('node:vm');
 const {parseHTML}=require('linkedom');
-test('guest navigation stays available and robot actions open a permission dialog',()=>{
+test('guest initialization leaves Calibration freely navigable and robot actions open a permission dialog',()=>{
  const {document,window}=parseHTML(fs.readFileSync('apps/web/public/index.html','utf8'));
- const view={location:{hash:'#control'},history:{replaceState(){}},addEventListener(){},requestAnimationFrame(fn){fn();},MutationObserver:window.MutationObserver,matchMedia:()=>({matches:true,addEventListener(){}})};
+ const view={location:{hash:'#calibration'},history:{replaceState(_a,_b,hash){view.location.hash=hash;}},addEventListener(){},requestAnimationFrame(fn){fn();},MutationObserver:window.MutationObserver,matchMedia:()=>({matches:true,addEventListener(){}})};
  const shell=require('../../../apps/web/public/js/workspace-shell');
  const source=fs.readFileSync('apps/web/public/js/guest-workspace.js','utf8').replace(/\r\n/g,"\n").split("try{\n const {createViewer}")[0];
  vm.runInNewContext(source,{document,window:view,ThirdHandWorkspace:shell});
  assert.equal(document.querySelectorAll('#workspace-nav [data-page]').length,6);
+ assert.equal(document.getElementById('page-calibration').hidden,false);
+ assert.ok(!document.querySelector('iframe'),'unavailable calibration must not mount a local wizard');
+ assert.match(document.querySelector('.workspace-calibration-info').textContent,/local hardware calibration is unavailable/i);
+ for(const page of ['control','system','overview','calibration','control']){
+  document.querySelector(`#workspace-nav [data-page="${page}"]`).click();
+  assert.equal(view.location.hash,'#'+page);assert.equal(document.getElementById('page-'+page).hidden,false);
+ }
+ document.querySelector('#workspace-nav [data-page="assistant"]').click();
+ assert.equal(document.getElementById('voice-panel').hidden,false);assert.equal(view.location.hash,'#control');
+ assert.ok(!document.querySelector('iframe'),'unavailable calibration must not mount a local wizard');
  const dialog=document.getElementById('guest-permission');dialog.showModal=()=>dialog.setAttribute('open','');dialog.close=()=>dialog.removeAttribute('open');
  const send=document.getElementById('btn-send');assert.equal(send.disabled,false);send.click();assert.ok(dialog.hasAttribute('open'));assert.match(dialog.textContent,/Control permission required/);
  assert.equal(dialog.querySelector('a').getAttribute('href'),'/login');

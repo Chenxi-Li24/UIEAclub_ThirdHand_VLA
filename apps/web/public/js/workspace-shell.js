@@ -45,6 +45,8 @@
       return svg;
     };
     const app = byId('app');
+    const calibrationEntry = options.calibrationEntry === undefined && (byId('workspace-bootstrap') || app.dataset.guestDemo === 'true')
+      ? null : options.calibrationEntry;
     doc.documentElement.dataset.theme = 'workspace';
     app.classList.add('workspace');
     const nav = element('nav', { id: 'workspace-nav', 'aria-label': 'Workspace pages' });
@@ -287,7 +289,9 @@
 
     const calibration = pageNodes.get('calibration');
     const calibrationInfo = element('div', { class: 'workspace-calibration-info' });
-    calibrationInfo.append(element('p', {}, 'TCP calibration uses the existing service. Hand-eye collection is not exposed by this gateway.'),
+    calibrationInfo.append(element('p', {}, calibrationEntry === null
+      ? 'Local hardware calibration is unavailable in this workspace. Open the local robot workspace for TCP calibration.'
+      : 'TCP calibration uses the existing service. Hand-eye collection is not exposed by this gateway.'),
       element('p', { id: 'workspace-calibration-tcp', 'data-i18n-skip': '' }, 'TCP: --'));
     calibration.appendChild(calibrationInfo);
     const palette=element('div',{class:'workspace-palette','aria-hidden':'true'});
@@ -353,8 +357,8 @@
         button.classList.toggle('active', key === 'assistant' ? chatOpen : key === id);
         if (key === id) button.setAttribute('aria-current', 'page'); else button.removeAttribute('aria-current');
       }
-      if (id === 'calibration' && !frame && options.calibrationEntry !== null) {
-        frame = element('iframe', { id: 'workspace-calibration-frame', title: 'TCP calibration', src: options.calibrationEntry || 'tcp-calibration.html?embedded=1' });
+      if (id === 'calibration' && !frame && calibrationEntry !== null) {
+        frame = element('iframe', { id: 'workspace-calibration-frame', title: 'TCP calibration', src: calibrationEntry || 'tcp-calibration.html?embedded=1' });
         calibration.appendChild(frame);
       }
       if (id === 'assistant') runtime.voice?.openPanel();

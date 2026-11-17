@@ -5,15 +5,17 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { parseHTML } = require('linkedom');
 const root = path.resolve(__dirname, '../../..');
-function fixture({navPreference,narrow=false,storageBlocked=false,runSystemCheck}={}) {
+function fixture({navPreference,narrow=false,storageBlocked=false,runSystemCheck,cloudBootstrap=false,guestDemo=false,hash='',workspaceOptions={}}={}) {
   const { document, window } = parseHTML(fs.readFileSync(path.join(root, 'apps/web/public/index.html'), 'utf8'));
+  if(cloudBootstrap){const bootstrap=document.createElement('script');bootstrap.id='workspace-bootstrap';bootstrap.type='application/json';bootstrap.textContent='{}';document.body.prepend(bootstrap);}
+  if(guestDemo)document.getElementById('app').dataset.guestDemo='true';
   const preferences=new Map(navPreference?[['thirdhand.nav-state',navPreference]]:[]);
   const media={matches:!narrow,addEventListener(_event,handler){this.changed=handler;}};
-  const view = { location: { hash: '' }, history: { replaceState(_a, _b, hash) { view.location.hash = hash; } },
+  const view = { location: { hash }, history: { replaceState(_a, _b, hash) { view.location.hash = hash; } },
     addEventListener() {}, requestAnimationFrame(fn) { fn(); }, MutationObserver: window.MutationObserver,
     matchMedia(){return media;},localStorage:{getItem(key){if(storageBlocked)throw Error('blocked');return preferences.get(key);},setItem(key,value){if(storageBlocked)throw Error('blocked');preferences.set(key,value);}}};
   const { mountWorkspace } = require(path.join(root, 'apps/web/public/js/workspace-shell.js'));
-  return { document, window, shell: mountWorkspace(document, view, {runSystemCheck}), mountWorkspace, view, preferences, media };
+  return { document, window, shell: mountWorkspace(document, view, {runSystemCheck,...workspaceOptions}), mountWorkspace, view, preferences, media };
 }
 test('minimal composer keeps drafts while independent reply and voice popovers open and close',()=>{
  const {document,shell}=fixture();let requests=0;
@@ -169,10 +171,59 @@ test('the visible manual tab owns send dispatch and gripper has no hidden arm se
   assert.deepEqual(choices, ['joints', 'tcp', 'joints', 'gripper']);
   assert.equal(document.getElementById('sec-actions').hidden, true);
 });
+test('default cloud pre-mount cannot create a wizard or trap ordinary routes before authenticated startup',()=>{
+ const {document,shell,mountWorkspace,view}=fixture({cloudBootstrap:true,hash:'#calibration'});let writes=0;
+ shell.bindRuntime({ws:{on(){},send(){writes++;},connect(){writes++;}}});
+ assert.equal(document.getElementById('page-calibration').hidden,false);
+ assert.ok(!document.querySelector('iframe'),'unavailable calibration must not mount a local wizard');
+ assert.match(document.querySelector('.workspace-calibration-info').textContent,/local hardware calibration is unavailable/i);
+ assert.equal(mountWorkspace(document,view,{calibrationEntry:null}),shell);
+ for(const page of ['control','vision','system','overview','calibration']){
+  document.querySelector(`#workspace-nav [data-page="${page}"]`).click();
+  assert.equal(view.location.hash,'#'+page);assert.equal(document.getElementById('page-'+page).hidden,false);
+ }
+ assert.equal(shell.go('assistant'),true);assert.equal(document.getElementById('voice-panel').hidden,false);
+ assert.equal(shell.go('control'),true);assert.ok(!document.querySelector('iframe'),'unavailable calibration must not mount a local wizard');assert.equal(writes,0);
+});
+test('Guest marker defaults to unavailable calibration before any Guest initialization options',()=>{
+ const {document,shell}=fixture({guestDemo:true,hash:'#calibration'});
+ assert.ok(!document.querySelector('iframe'),'unavailable calibration must not mount a local wizard');
+ assert.match(document.querySelector('.workspace-calibration-info').textContent,/local hardware calibration is unavailable/i);
+ assert.equal(shell.go('vision'),true);assert.equal(document.getElementById('page-vision').hidden,false);
+});
+test('explicitly unavailable calibration has clear copy and leaves ordinary navigation available',()=>{
+ const {document,shell}=fixture({workspaceOptions:{calibrationEntry:null},hash:'#calibration'});
+ assert.ok(!document.querySelector('iframe'),'unavailable calibration must not mount a local wizard');
+ assert.match(document.querySelector('.workspace-calibration-info').textContent,/local hardware calibration is unavailable/i);
+ assert.equal(shell.go('control'),true);
+});
+test('explicit local wizard configuration retains its source and initial safety guard',()=>{
+ const {document,shell}=fixture({cloudBootstrap:true,workspaceOptions:{calibrationEntry:'/local/tcp-wizard?embedded=1'},hash:'#calibration'});
+ const frame=document.getElementById('workspace-calibration-frame');
+ assert.equal(frame.getAttribute('src'),'/local/tcp-wizard?embedded=1');
+ assert.equal(shell.go('control'),false);
+ Object.defineProperty(frame,'contentWindow',{value:{ThirdHandCalibrationNavigationState:()=>({known:true,teachActive:false,teachPending:false})}});
+ assert.equal(shell.go('control'),true);
+});
+test('a repeated unavailable mount preserves a real unsafe wizard and its navigation latch',()=>{
+ const {document,shell,mountWorkspace,view}=fixture({hash:'#calibration'});
+ const frame=document.getElementById('workspace-calibration-frame');let state={known:true,teachActive:true};
+ Object.defineProperty(frame,'contentWindow',{value:{ThirdHandCalibrationNavigationState:()=>state}});
+ assert.equal(shell.go('control'),false);
+ assert.equal(mountWorkspace(document,view,{calibrationEntry:null}),shell);
+ assert.equal(document.getElementById('workspace-calibration-frame'),frame);
+ state={loaded:true,known:false,teachActive:false};assert.equal(shell.go('control'),false);
+ state={known:true,teachActive:false,teachPending:false};assert.equal(shell.go('control'),true);
+});
 test('calibration iframe is persistent and active/pending teaching blocks leaving until confirmed locked', () => {
-  const { document, shell } = fixture(); shell.go('calibration');
+  const { document, shell, view } = fixture();let writes=0;const timers=[];
+  view.setTimeout=callback=>{timers.push(callback);return timers.length;};
+  shell.bindRuntime({ws:{on(){},send(){writes++;},connect(){writes++;}}});shell.go('calibration');
   const frame = document.getElementById('workspace-calibration-frame');
+  assert.equal(frame.getAttribute('src'),'tcp-calibration.html?embedded=1');
   assert.equal(shell.go('control'),false,'initial loading cannot hide a wizard that may restore teaching');
+  for(const callback of timers.splice(0))callback();
+  assert.equal(shell.go('control'),false,'elapsed presentation timers cannot prove a safe calibration state');
   let state = { teachActive: true, teachPending: false, known: true };
   Object.defineProperty(frame, 'contentWindow', { value: { ThirdHandCalibrationNavigationState: () => state } });
   assert.equal(shell.go('control'), false);
@@ -181,6 +232,7 @@ test('calibration iframe is persistent and active/pending teaching blocks leavin
   state = { known: true, teachActive: false, teachPending: false }; assert.equal(shell.go('control'), true);
   shell.go('calibration'); assert.equal(document.getElementById('workspace-calibration-frame'), frame);
   assert.equal(document.querySelectorAll('iframe').length, 1);
+  assert.equal(writes,0);
 });
 test('an explicitly unavailable calibration service allows leaving its idle wizard',()=>{
  const {document,shell}=fixture();shell.go('calibration');

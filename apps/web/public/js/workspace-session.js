@@ -56,7 +56,7 @@
     const numbers=[],sliders=[],errors=[];
     const report=text=>{status.textContent=tr(text);};
     const simulation=simulationApi.createSimulationController({armModel:arm,...(simulationClock?{clock:simulationClock}:{}),onChange:state=>{
-      state.joints.forEach((value,index)=>{if(numbers[index])numbers[index].value=String(state.followingLive?Number(value.toFixed(2)):value);if(sliders[index]){sliders[index].value=String(value);const [min,max]=arm.jointLimits[index];sliders[index].disabled=state.followingLive&&(value<min||value>max);sliders[index].title=sliders[index].disabled?tr('Measured angle is outside the editable range. Numeric feedback is unchanged.'):'';}});
+      state.joints.forEach((value,index)=>{if(numbers[index])numbers[index].value=String(state.followingLive?Number(value.toFixed(2)):value);if(sliders[index]){sliders[index].value=String(value);const [min,max]=arm.jointLimits[index];sliders[index].disabled=value<min||value>max;sliders[index].title=sliders[index].disabled?tr('Measured angle is outside the editable range. Numeric feedback is unchanged.'):'';}});
       if(Number.isFinite(state.gripper)){const number=byId('gripper-input'),slider=byId('gripper-slider');if(number)number.value=String(state.followingLive?Number((state.gripper*100).toFixed(2)):state.gripper*100);if(slider)slider.value=String(state.gripper);}
       status.textContent=tr(state.playing?'Playing model sequence':state.followingLive?'Following real robot · display only, no motion commands.':'Model simulation · no robot commands');
     }});

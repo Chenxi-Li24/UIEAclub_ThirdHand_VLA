@@ -100,6 +100,10 @@ test('AI gripper-only zero preserves an out-of-edit measured pose and readiness 
   const actual=measured();actual.sample.jointPositionRad[1]=-12.21*Math.PI/180;f.push(actual);f.controls.setReady(true);
   const before=f.arm.getJointAngles();assert.equal(f.controls.previewAdapter.read().joints[1],before[1]);
   assert.equal(f.controls.previewAdapter.apply({joints:null,gripper:0}),true);assert.deepEqual(f.arm.joints,before);assert.equal(f.arm.gripper,0);
-  assert.equal(f.document.getElementById('jinput-1').value,'-12.21');assert.equal(f.requests.length,0);
+  assert.equal(f.document.getElementById('jinput-1').value,'-12.21');
+  assert.ok(Math.abs(f.arm.joints[1]+12.21)<1e-10);
+  assert.equal(f.document.getElementById('slider-j1').disabled,true);
+  assert.match(f.document.getElementById('slider-j1').title,/outside the editable range/);
+  assert.equal(f.controls.simulation.getState().followingLive,false);assert.equal(f.requests.length,0);
  }finally{f.controls.dispose();}
 });

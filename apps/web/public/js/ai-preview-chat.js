@@ -55,6 +55,13 @@
   if(byId('voice-text-help'))byId('voice-text-help').textContent='AI replies in English. Model previews only.';
   input.placeholder='Message…';input.maxLength=2000;
   for(const selector of ['#voice-intent-card','#voice-preview-indicator','#voice-record-toggle','#voice-record-cancel','#voice-mic-toggle','.voice-config-block','.voice-capture-block','.voice-signal-ribbon','.voice-mock-badge','.voice-kicker'])for(const element of doc.querySelectorAll(selector))element.hidden=true;
+  const voiceEntry=byId('chat-voice'),audioDrawer=byId('chat-audio');
+  if(voiceEntry){
+   voiceEntry.hidden=true;
+   voiceEntry.disabled=true;
+   voiceEntry.setAttribute('aria-expanded','false');
+  }
+  if(audioDrawer)audioDrawer.hidden=true;
   listen(form,'submit',sendMessage);
   listen(input,'keydown',event=>{if(event.key==='Enter'&&!event.shiftKey&&!event.isComposing)void sendMessage(event);});
   listen(byId('voice-ai-reconnect'),'click',()=>{if(!disposed)addMessage('ai','Send a message to retry the AI connection.');});

@@ -25,3 +25,12 @@ test('trusted bootstrap hydrates the same account without a second preferences r
   assert.equal(client.current().layoutId,'classic');assert.equal(client.current().themeId,'dark');
   assert.equal(seen.length,1);assert.equal(seen[0].layoutId,'classic');client.dispose();
 });
+
+test('old Chinese account locale renders English HTML/bootstrap without rewriting account data or layout',async()=>{
+ const old={...preferences,locale:'zh-CN'},bootstrap={identity:{userId:'a',mode:'admin',displayName:'用户原名'},preferences:old};
+ const {html}=workspaceHtml(source,{bootstrap});const {document}=parseHTML(html);
+ assert.equal(document.documentElement.lang,'en');assert.equal(document.getElementById('workspace-opening').textContent,'Opening workspace…');
+ assert.equal(JSON.parse(document.getElementById('workspace-bootstrap').textContent).preferences.locale,'en');assert.equal(old.locale,'zh-CN');assert.equal(document.documentElement.dataset.layout,'classic');
+ const queries=[];const loaded=await require('../../../services/cloud-api/src/workspace-bootstrap').loadWorkspaceBootstrap({query:async(sql,args)=>{queries.push(sql);return {rows:[{displayName:'用户原名',locale:'zh-CN',layoutId:'classic',themeId:'dark',revision:5}]};}},{userId:'a'});
+ assert.equal(loaded.preferences.locale,'en');assert.equal(loaded.identity.displayName,'用户原名');assert.equal(queries.length,1);assert.match(queries[0],/^SELECT/);assert.doesNotMatch(queries[0],/UPDATE|INSERT/);
+});

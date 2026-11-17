@@ -26,3 +26,14 @@ test('English errors and compact placeholders preserve Software Stop and SDK con
 });
 
 test('a non-English provider reply is rejected and a rejected adapter apply never navigates',async()=>{const f=fixture(async()=>({...answer,reply:'Привет'}));f.send();await settle();assert.equal(f.buttons().length,0);assert.doesNotMatch(f.document.getElementById('voice-conversation').textContent,/Привет/);const g=fixture();g.chat.bindModel({read:()=>({joints:pose,gripper:1}),limits,apply:()=>false});g.send();await settle();g.buttons()[0].click();assert.deepEqual(g.pages,[]);assert.match(g.buttons()[0].textContent,/unavailable/i);});
+
+test('model-only chat hides the real shell audio entry and drawer while retaining chat and physical controls',()=>{
+ const {document,window}=parseHTML(fs.readFileSync('apps/web/public/index.html','utf8'));
+ const view={Event:window.Event,location:{hash:'#control'},history:{replaceState(){}},addEventListener(){},requestAnimationFrame(fn){fn();},MutationObserver:window.MutationObserver,localStorage:{getItem(){return null;},setItem(){}}};
+ const shell=require('../../../apps/web/public/js/workspace-shell').mountWorkspace(document,view,{calibrationEntry:null});
+ const voice=document.getElementById('chat-voice'),audio=document.getElementById('chat-audio');assert.ok(voice);assert.ok(audio);
+ voice.click();assert.equal(audio.hidden,false);
+ const chat=mountAiPreviewChat({document,view,shell,request:async()=>answer});
+ assert.equal(voice.hidden,true);assert.equal(voice.disabled,true);assert.equal(voice.getAttribute('aria-expanded'),'false');assert.equal(audio.hidden,true);
+ assert.equal(document.getElementById('voice-text-send').disabled,false);assert.equal(document.getElementById('btn-estop-top').hidden,false);assert.equal(document.getElementById('btn-connect').hidden,false);chat.dispose();
+});

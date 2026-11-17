@@ -5,9 +5,9 @@
   const preferencesApi=typeof module==='object'&&module.exports?require('./preferences'):root.ThirdHandPreferences;
   function createWorkspaceSession({view=root,onRevoked=()=>view.location.assign('/login'),initialIdentity=null,timeoutMs=12000}={}){
     let identity=initialIdentity?{...initialIdentity}:null,timer=null,lastActivity=0,closed=false;
-    async function request(path,body){
+    async function request(path,body,{timeoutMs:requestTimeout=timeoutMs}={}){
       if(!path.startsWith('/api/v1/'))throw new Error('Invalid API path');
-      try{return await preferencesApi.fetchJson(view,path,{method:body===undefined?'GET':'POST',credentials:'same-origin',headers:{...(body===undefined?{}:{'Content-Type':'application/json'}),...(identity?.csrfToken?{'X-CSRF-Token':identity.csrfToken}:{})},...(body===undefined?{}:{body:JSON.stringify(body)})},{timeoutMs});}
+      try{return await preferencesApi.fetchJson(view,path,{method:body===undefined?'GET':'POST',credentials:'same-origin',headers:{...(body===undefined?{}:{'Content-Type':'application/json'}),...(identity?.csrfToken?{'X-CSRF-Token':identity.csrfToken}:{})},...(body===undefined?{}:{body:JSON.stringify(body)})},{timeoutMs:requestTimeout});}
       catch(error){if(error.status===401&&error.code==='UNAUTHENTICATED'&&!closed){closed=true;onRevoked();}throw error;}
     }
     async function load(){const next=await request('/api/v1/session');if(identity&&(next.userId!==identity.userId||next.sessionId!==identity.sessionId||next.mode!==identity.mode)){onRevoked();throw new Error('Session changed');}identity=next;return {...identity};}
@@ -25,7 +25,8 @@
     const mode=()=>{byId('workspace-mode').textContent=tr(identity.mode==='admin'?'Administrator · model simulation':'Observer · model simulation');};mode();
     const sync=byId('chk-sync');if(sync){sync.checked=true;sync.disabled=true;sync.title=tr('Waiting for the model to load.');}
     if(byId('btn-send'))byId('btn-send').textContent=tr('Apply to model');
-    for(const selector of ['#btn-connect','#btn-disconnect','#btn-estop-top','#btn-stop-reconnect','#btn-voice-toggle','#sec-xvision button','#sec-dummy button','#sec-gripper button','#tab-tcp'])for(const button of doc.querySelectorAll(selector)){if(button.classList.contains('sec-toggle'))continue;button.disabled=true;button.title=tr('Real robot control is unavailable');}
+    for(const selector of ['#btn-connect','#btn-disconnect','#btn-estop-top','#btn-stop-reconnect','#sec-xvision button','#sec-dummy button','#sec-gripper button','#tab-tcp'])for(const button of doc.querySelectorAll(selector)){if(button.classList.contains('sec-toggle'))continue;button.disabled=true;button.title=tr('Real robot control is unavailable');}
+    if(byId('btn-voice-toggle'))byId('btn-voice-toggle').disabled=identity.mode!=='admin';
     if(identity.mode==='observe'){byId('btn-estop-top').hidden=true;const assistant=doc.querySelector('[data-page="assistant"]');if(assistant)assistant.hidden=true;}
     const logout=el('button',{type:'button',id:'workspace-logout',class:'action-btn action-secondary'},'Sign out');
     logout.addEventListener('click',async()=>{logout.disabled=true;try{await sessionClient.request('/api/v1/session/logout',{});preferences?.logout({silent:true});view.location.assign('/login');}catch{logout.disabled=false;report('The service is unavailable. Please try again later.');}});doc.querySelector('.nav-bottom').append(logout);
@@ -55,8 +56,8 @@
     const numbers=[],sliders=[],errors=[];
     const report=text=>{status.textContent=tr(text);};
     const simulation=simulationApi.createSimulationController({armModel:arm,...(simulationClock?{clock:simulationClock}:{}),onChange:state=>{
-      state.joints.forEach((value,index)=>{if(numbers[index])numbers[index].value=String(Number(value.toFixed(2)));if(sliders[index]){sliders[index].value=String(value);const [min,max]=arm.jointLimits[index];sliders[index].disabled=state.followingLive&&(value<min||value>max);sliders[index].title=sliders[index].disabled?tr('Measured angle is outside the editable range. Numeric feedback is unchanged.'):'';}});
-      if(Number.isFinite(state.gripper)){const number=byId('gripper-input'),slider=byId('gripper-slider');if(number)number.value=String(Number((state.gripper*100).toFixed(2)));if(slider)slider.value=String(state.gripper);}
+      state.joints.forEach((value,index)=>{if(numbers[index])numbers[index].value=String(state.followingLive?Number(value.toFixed(2)):value);if(sliders[index]){sliders[index].value=String(value);const [min,max]=arm.jointLimits[index];sliders[index].disabled=state.followingLive&&(value<min||value>max);sliders[index].title=sliders[index].disabled?tr('Measured angle is outside the editable range. Numeric feedback is unchanged.'):'';}});
+      if(Number.isFinite(state.gripper)){const number=byId('gripper-input'),slider=byId('gripper-slider');if(number)number.value=String(state.followingLive?Number((state.gripper*100).toFixed(2)):state.gripper*100);if(slider)slider.value=String(state.gripper);}
       status.textContent=tr(state.playing?'Playing model sequence':state.followingLive?'Following real robot · display only, no motion commands.':'Model simulation · no robot commands');
     }});
     const grid=byId('joint-controls-body');grid.replaceChildren();
@@ -76,9 +77,10 @@
     const ui={arm,robotConnected:false,robotStateReady:false,syncMode:true,lastRobotState:{stateName:null},selectWorkspaceControl(id){send.hidden=id!=='joints';}};
     shell.bindRuntime({ui,scene});
     byId('workspace-mode').textContent=tr(identity.mode==='admin'?'Administrator · model simulation':'Observer · model simulation');
-    for(const selector of ['#btn-connect','#btn-disconnect','#btn-estop-top','#btn-stop-reconnect','#btn-voice-toggle','#sec-dummy button','#sec-gripper button']){
+    for(const selector of ['#btn-connect','#btn-disconnect','#btn-estop-top','#btn-stop-reconnect','#sec-dummy button','#sec-gripper button']){
       for(const node of doc.querySelectorAll(selector)){if(node.classList.contains('sec-toggle'))continue;node.disabled=true;node.title=tr('Real robot control is unavailable');}
     }
+    if(byId('btn-voice-toggle'))byId('btn-voice-toggle').disabled=identity.mode!=='admin';
     if(identity.mode==='observe'){byId('btn-estop-top').hidden=true;const assistant=doc.querySelector('[data-page="assistant"]');if(assistant)assistant.hidden=true;}
     const tcpTab=byId('tab-tcp');if(tcpTab){tcpTab.disabled=false;tcpTab.title=tr('Measured flange pose · editable draft only');}
     for(const button of doc.querySelectorAll('#sec-tcp button:not(.sec-toggle)')){button.disabled=true;button.title=tr('Real robot control is unavailable');}
@@ -128,7 +130,15 @@
     const resume=()=>{applied=null;simulation.followLive(sync.checked);receiveState(latest);};sync?.addEventListener('change',resume);
     const unsubscribeState=stateStore?.subscribe(receiveState);
     const language=new view.MutationObserver(renderFollow);language.observe(doc.documentElement,{attributes:true,attributeFilter:['lang']});renderFollow();
-    return {simulation,setReady(value){modelReady=value===true;simulation.followLive(simulation.getState().followingLive);receiveState(stateStore?.snapshot()||latest);},dispose(){disposed=true;unsubscribeState?.();unsubscribeSimulation();sync?.removeEventListener('change',resume);simulation.stop();language.disconnect();followStatus.remove();}};
+    const previewAdapter={
+      limits:arm.jointLimits,
+      read(){return {joints:arm.getJointAngles(),gripper:arm.getGripperPosition?.()??null};},
+      apply(result){
+        if(disposed||!modelReady)return false;
+        try{simulation.applyPreview(result);return true;}catch{return false;}
+      }
+    };
+    return {simulation,previewAdapter,setReady(value){modelReady=value===true;simulation.followLive(simulation.getState().followingLive);receiveState(stateStore?.snapshot()||latest);},dispose(){disposed=true;unsubscribeState?.();unsubscribeSimulation();sync?.removeEventListener('change',resume);simulation.stop();language.disconnect();followStatus.remove();}};
   }
   return {createWorkspaceSession,mountWorkspaceEssentials,mountModelWorkspace};
 });

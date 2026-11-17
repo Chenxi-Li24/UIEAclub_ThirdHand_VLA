@@ -25,7 +25,7 @@ test('guest initialization leaves Calibration freely navigable and robot actions
  const view={location:{hash:'#calibration'},history:{replaceState(_a,_b,hash){view.location.hash=hash;}},addEventListener(){},requestAnimationFrame(fn){fn();},MutationObserver:window.MutationObserver,matchMedia:()=>({matches:true,addEventListener(){}})};
  const shell=require('../../../apps/web/public/js/workspace-shell');
  const source=fs.readFileSync('apps/web/public/js/guest-workspace.js','utf8').replace(/\r\n/g,"\n").split("try{\n const {createViewer}")[0];
- vm.runInNewContext(source,{document,window:view,ThirdHandWorkspace:shell});
+ vm.runInNewContext(source,{document,window:view,ThirdHandWorkspace:shell,ThirdHandAiPreviewChat:require('../../../apps/web/public/js/ai-preview-chat')});
  assert.equal(document.querySelectorAll('#workspace-nav [data-page]').length,6);
  assert.equal(document.getElementById('page-calibration').hidden,false);
  assert.ok(!document.querySelector('iframe'),'unavailable calibration must not mount a local wizard');
@@ -40,4 +40,27 @@ test('guest initialization leaves Calibration freely navigable and robot actions
  const dialog=document.getElementById('guest-permission');dialog.showModal=()=>dialog.setAttribute('open','');dialog.close=()=>dialog.removeAttribute('open');
  const send=document.getElementById('btn-send');assert.equal(send.disabled,false);send.click();assert.ok(dialog.hasAttribute('open'));assert.match(dialog.textContent,/Control permission required/);
  assert.equal(dialog.querySelector('a').getAttribute('href'),'/login');
+});
+
+test('Guest shares null-context chat before geometry and applies explicit model previews without granting control',async()=>{
+ const {document,window}=parseHTML(fs.readFileSync('apps/web/public/index.html','utf8'));
+ const events=new Map(),requests=[];let resolveModel,adapter;
+ const loading=new Promise(r=>resolveModel=r);
+ const view={Event:window.Event,location:{hash:'#control'},history:{replaceState(_a,_b,hash){view.location.hash=hash;}},addEventListener(name,fn){events.set(name,fn);},requestAnimationFrame(fn){fn();},MutationObserver:window.MutationObserver,matchMedia:()=>({matches:true,addEventListener(){}})};
+ const arm={jointLimits:Array.from({length:6},()=>[-180,180]),joints:[0,0,0,0,0,0],gripper:1,loadingPromise:loading,geometryReady:Promise.resolve(),getJointAngles(){return this.joints.slice();},setJointAngles(joints){this.joints=Array.from(joints);},getGripperPosition(){return this.gripper;},setGripperPosition(v){this.gripper=v;}};
+ const viewer={createViewer:()=>({ArmModel:function(){return arm;},SceneManager:function(){this.scene={};this.fitModel=()=>{};this._onResize=()=>{};}})};
+ const presenter=require('../../../apps/web/public/js/ai-preview-chat');
+ const source=fs.readFileSync('apps/web/public/js/guest-workspace.js','utf8').replace("await import('./model-resources.js')",'viewer');
+ const task=vm.runInNewContext('(async()=>{'+source+'})()',{document,window:view,viewer,localStorage:{getItem(){return null;}},clearTimeout,setTimeout,AbortSignal,
+  ThirdHandWorkspace:require('../../../apps/web/public/js/workspace-shell'),
+  ThirdHandAiPreviewChat:{mountAiPreviewChat(options){const chat=presenter.mountAiPreviewChat(options);return {...chat,bindModel(value){adapter=value;chat.bindModel(value);}};}},
+  fetch:async(path,options)=>{requests.push({path,body:JSON.parse(options.body)});return {ok:true,json:async()=>({reply:'Preview the model.',joints:null,gripper:0,mode:'preview-only'})};}});
+ const flush=async()=>{for(let i=0;i<30;i++)await Promise.resolve();};
+ const send=async()=>{document.getElementById('voice-text-input').value='Close gripper';document.getElementById('voice-text-form').dispatchEvent(new window.Event('submit',{cancelable:true}));await flush();};
+ await send();assert.equal(requests[0].body.joints,null);assert.equal(requests[0].body.gripper,null);assert.equal(arm.gripper,1);
+ const preview=document.querySelector('#voice-conversation .action-btn');preview.click();assert.match(preview.textContent,/loading/);
+ resolveModel();await task;preview.click();assert.equal(arm.gripper,0);assert.equal(document.getElementById('gripper-input').value,'0');
+ const before=arm.getJointAngles();assert.equal(adapter.apply({joints:new Array(6),gripper:.5}),false);assert.equal(adapter.apply({joints:[25,90,-90,0,0,0],gripper:2}),false);assert.deepEqual(arm.joints,before);assert.equal(arm.gripper,0);
+ assert.equal(adapter.apply({joints:[25,90,-90,0,0,0],gripper:.65}),true);assert.equal(document.getElementById('slider-j0').value,'25');assert.equal(document.getElementById('gripper-input').value,'65');
+ events.get('pagehide')();assert.equal(adapter.apply({joints:null,gripper:1}),false);await send();assert.equal(requests.length,1);assert.equal(requests[0].path,'/guest-ai/chat');
 });

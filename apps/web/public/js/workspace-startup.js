@@ -22,6 +22,10 @@
     const camera=get('ThirdHandCameraView').mountCameraView({document:doc,view,sessionClient:session});
     const deviceState=get('ThirdHandDeviceState')?.mountDeviceState({document:doc,view,sessionClient:session,shell});
     const liveControls=get('ThirdHandAdminControl').mountAdminControl({document:doc,view,identity,sessionClient:session,stateStore:deviceState?.store});
+    const chat=identity.mode==='admin'?get('ThirdHandAiPreviewChat').mountAiPreviewChat({
+      document:doc,view,shell,
+      request:body=>session.request('/api/v1/ai/preview',body,{timeoutMs:35000})
+    }):null;
     shell.attachEssentials?.({preferences});
     session.startMonitoring();doc.getElementById('app').dataset.ready='true';doc.getElementById('workspace-opening')?.remove();
     view.performance?.mark?.('thirdhand:shell-ready');
@@ -39,16 +43,18 @@
         const inputs=Array.from(doc.querySelectorAll('#joint-controls-body input,#preset-grid button,#btn-send,#gripper-input,#gripper-slider,#workspace-model .view-tools button')).map(node=>({node,disabled:initialDisabled.has(node)?initialDisabled.get(node):node.disabled}));
         for(const {node}of inputs)node.disabled=true;
         await arm.loadingPromise;await arm.geometryReady;if(!active)return;
-        arm.setJointAngles([0,90,-90,0,0,0]);arm.setGripperPosition(1);controls.setReady(true);scene.fitModel(arm.mount);spinner.remove();doc.getElementById('model-loading')?.remove();
+        arm.setJointAngles([0,90,-90,0,0,0]);arm.setGripperPosition(1);scene.fitModel(arm.mount);spinner.remove();doc.getElementById('model-loading')?.remove();
         for(const {node,disabled}of inputs)node.disabled=disabled;
+        controls.setReady(true);
         waypoints.setReady(true);
+        chat?.bindModel(controls.previewAdapter);
         view.performance?.mark?.('thirdhand:model-ready');
       }catch{
         if(active){doc.getElementById('model-loading')?.remove();spinner.textContent=tr('The robot model could not be loaded.');const retry=doc.createElement('button');retry.type='button';retry.className='action-btn action-secondary';retry.textContent=tr('Retry model');retry.addEventListener('click',()=>view.location.reload());spinner.append(retry);}
       }finally{view.clearTimeout?.(modelTimer);}
     })();
     modelTimer=view.setTimeout?.(()=>{if(active&&spinner.isConnected){spinner.textContent=tr('The model is taking longer than expected.');const retry=doc.createElement('button');retry.type='button';retry.textContent=tr('Retry model');retry.addEventListener('click',()=>view.location.reload());spinner.append(retry);}},20000);
-    view.addEventListener('pagehide',()=>{active=false;view.clearTimeout?.(modelTimer);waypoints?.dispose();camera.dispose();navigation?.dispose();deviceState?.dispose();liveControls?.dispose();controls?.dispose();essentials.dispose();session.close();preferences.dispose();},{once:true});
+    view.addEventListener('pagehide',()=>{active=false;view.clearTimeout?.(modelTimer);chat?.dispose();waypoints?.dispose();camera.dispose();navigation?.dispose();deviceState?.dispose();liveControls?.dispose();controls?.dispose();essentials.dispose();session.close();preferences.dispose();},{once:true});
     shell.installOnboarding(get('ThirdHandOnboarding'));
     void (async()=>{
       let tutorial={state:{status:'unavailable'},entry:null};try{tutorial=await session.request('/api/v1/tutorial');}catch{}

@@ -23,3 +23,9 @@ test('stalled requests time out, abort transport and remain retryable without lo
   await assert.rejects(client.request('/api/v1/me/profile'),{code:'REQUEST_TIMEOUT'});
   assert.equal(signal.aborted,true);assert.equal(revoked,0);client.close();
 });
+
+test('AI can override its deadline while ordinary session requests retain 12 seconds',async()=>{
+ const deadlines=[];const view={setTimeout(fn,ms){deadlines.push(ms);return 1;},clearTimeout(){},fetch:async()=>({ok:true,json:async()=>({})})};
+ const client=createWorkspaceSession({view});await client.request('/api/v1/session');await client.request('/api/v1/ai/preview',{}, {timeoutMs:35000});await client.request('/api/v1/session');
+ assert.deepEqual(deadlines,[12000,35000,12000]);
+});

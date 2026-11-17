@@ -27,3 +27,14 @@ test('incoming live telemetry cannot overwrite an edited simulation; stopping ca
   const playing=f.controller.playSequence([{joints:[10,50,-60,0,0,0],durationMs:1000}]);f.controller.stop();
   assert.equal((await playing).completed,false);assert.equal(f.networkCalls(),0);
 });
+
+test('AI previews validate the entire edit before touching playback, follow state or either model value',()=>{
+ const f=fixture();f.model.gripper=.8;f.model.setGripperPosition=value=>{f.model.gripper=value;};f.model.getGripperPosition=()=>f.model.gripper;
+ const updates=[];f.controller.subscribe(state=>updates.push(state));f.controller.followLive(true);updates.length=0;
+ const before=f.controller.getState();
+ for(const proposal of [{joints:[1,2],gripper:0},{joints:new Array(6),gripper:0},{joints:[1,90,-90,0,0,0],gripper:NaN},{joints:[999,90,-90,0,0,0],gripper:0}]){
+  assert.throws(()=>f.controller.applyPreview(proposal));assert.deepEqual(f.controller.getState(),before);assert.equal(updates.length,0);
+ }
+ f.controller.applyPreview({joints:[12.345,80,-75,0,0,0],gripper:0});
+ assert.equal(updates.length,1);assert.equal(updates[0].followingLive,false);assert.equal(updates[0].gripper,0);assert.equal(updates[0].joints[0],12.345);assert.equal(f.networkCalls(),0);
+});

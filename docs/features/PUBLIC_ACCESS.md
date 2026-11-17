@@ -2,6 +2,8 @@
 
 本说明对应2026-11-01的login分支实现。展示站为`uiea-thirdhand.com`；登录/控制业务目前在`staging.uiea-thirdhand.com`，当前云端已部署C8，设备部分已回退、修正候选待应用。实际状态以[C8部署记录](../operations/2026-11-01-C8-deployment-change.md)为准。代码具备的接口不等于真机运动已获准。
 
+Administrator/Guest model-only AI integration and cloud calibration behavior are documented in [Administrator workspace repair](ADMIN_WORKSPACE.md).
+
 ## 组成和数据流
 
 | 模块 | 职责与入口 |

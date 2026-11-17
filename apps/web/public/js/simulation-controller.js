@@ -39,6 +39,18 @@
       }catch(error){if(token===generation){playing=false;outcome='failed';notify();}throw error;}
     }
     return {
+      applyPreview({joints,gripper}){
+        // Validate everything before cancelling playback or changing follow/model state.
+        const angles=joints===null?null:validate(joints);
+        if(gripper!==null){
+          const valid=Number.isFinite(gripper)&&gripper>=0&&gripper<=1;
+          if(!valid||typeof armModel.setGripperPosition!=='function')throw Error('Invalid model gripper');
+        }
+        generation++;playing=false;followingLive=false;outcome='idle';
+        if(angles!==null)armModel.setJointAngles(angles);
+        if(gripper!==null)armModel.setGripperPosition(gripper);
+        notify();
+      },
       setJoints(angles){const validated=validate(angles);stop();followingLive=false;outcome='idle';publish(validated);},
       playPreset(name){if(!Object.hasOwn(PRESETS,name))throw new Error('Unknown simulation preset');return playSequence([{joints:PRESETS[name],durationMs:400}]);},
       playSequence,stop,

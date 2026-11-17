@@ -6,7 +6,7 @@ const {createHash}=require('node:crypto');
 const {assetPath,isolateAssets}=require('./asset-paths');
 const root=path.resolve(__dirname,'../../../apps/web/public'),models=path.resolve(__dirname,'../../../assets/robot');
 const files=new Set([
-  'js/guest-workspace.js','css/workspace-journey.css','css/auth.css','js/preferences.js','js/i18n.js','js/i18n-catalog.js','js/i18n-auth-catalog.js',
+  'js/guest-workspace.js','js/ai-preview-chat.js','css/workspace-journey.css','css/auth.css','js/preferences.js','js/i18n.js','js/i18n-catalog.js','js/i18n-auth-catalog.js',
   'css/classic-source.css','js/classic-shell.js',
   'js/workspace-navigation.js','js/device-state.js','js/workspace-startup.js','js/model-resources.js','css/workspace-layouts.css',
   'js/model-waypoints.js','css/model-waypoints.css',
@@ -42,17 +42,19 @@ function workspaceHtml(source,options={}){
   if(classic)html=html.replace('css/style.css','css/classic-source.css');
   if(classic)html=html.replace('<script defer src="js/i18n.js','<script defer src="/js/i18n-onboarding-catalog.js"></script><script defer src="/js/i18n-account-catalog.js"></script><script defer src="/js/i18n-status-catalog.js"></script><script defer src="js/i18n.js');
   html=html.replace(/<script type="module" src="js\/main\.js[^\"]*"[^>]*><\/script>/,
-    '<script src="/js/preferences.js"></script><script src="/js/simulation-controller.js"></script><script src="/js/tutorial-adapter.js"></script><script src="/js/lib/qrcode-generator-2.0.4.js"></script><script src="/js/admin-access.js"></script><script src="/js/account-security.js"></script><script src="/js/admin-control.js"></script><script src="/js/device-state.js"></script><script src="/js/workspace-navigation.js"></script><script src="/js/camera-view.js"></script><script src="/js/workspace-session.js"></script><script src="/js/workspace-startup.js"></script><script type="module" src="/js/cloud-workspace.js"></script>');
+    '<script src="/js/preferences.js"></script><script src="/js/simulation-controller.js"></script><script src="/js/tutorial-adapter.js"></script><script src="/js/lib/qrcode-generator-2.0.4.js"></script><script src="/js/admin-access.js"></script><script src="/js/account-security.js"></script><script src="/js/admin-control.js"></script><script src="/js/device-state.js"></script><script src="/js/workspace-navigation.js"></script><script src="/js/camera-view.js"></script><script src="/js/workspace-session.js"></script><script src="/js/ai-preview-chat.js"></script><script src="/js/workspace-startup.js"></script><script type="module" src="/js/cloud-workspace.js"></script>');
   if(!html.includes('/js/cloud-workspace.js')||html.includes('src="js/main.js'))throw new Error('Cloud entry replacement failed');
   if(classic)html=html.replace('<script src="/js/preferences.js">','<script src="/js/camera-lighting.js"></script><script src="/js/onboarding-spotlight.js"></script><script src="/js/onboarding.js"></script><script src="/js/account-settings.js"></script><script src="/js/status-lights.js"></script><script src="/js/classic-shell.js"></script><script src="/js/preferences.js">');
   html=html.replace('<script defer src="js/i18n.js','<script defer src="/js/i18n-auth-catalog.js"></script><script defer src="/js/i18n-cloud-catalog.js"></script><script defer src="/js/i18n-history-catalog.js"></script><script defer src="js/i18n.js');
-  const locale=prefs.locale==='zh-CN'?'zh-CN':'en',layout=classic?'classic':'workspace',classicTheme=['deepspace','industrial','cyber','dark','green','blue','purple','orange','light'].includes(prefs.classicThemeId)?prefs.classicThemeId:'deepspace';
+  const locale='en',layout=classic?'classic':'workspace',classicTheme=['deepspace','industrial','cyber','dark','green','blue','purple','orange','light'].includes(prefs.classicThemeId)?prefs.classicThemeId:'deepspace';
   const appearance=classic?(classicTheme==='light'?'light':'dark'):prefs.themeId==='dark'?'dark':'light';
   html=html.replace('<html lang="en">',`<html lang="${locale}" data-theme="${classic?classicTheme:'workspace'}" data-layout="${layout}" data-appearance="${appearance}" data-access-mode="${bootstrap?.identity?.mode==='admin'?'admin':'observe'}">`)
     .replace('<div id="app">',`<div id="app" class="${classic?'classic-console':'workspace'}" data-ready="false">`);
-  const boot=JSON.stringify({...bootstrap,assetBase:'/control-assets'+(assetVersion?`/v${assetVersion}`:'')}).replace(/</g,'\\u003c');
+  const presentationBootstrap={...bootstrap};
+  if(bootstrap?.preferences)presentationBootstrap.preferences={...bootstrap.preferences,locale:'en'};
+  const boot=JSON.stringify({...presentationBootstrap,assetBase:'/control-assets'+(assetVersion?`/v${assetVersion}`:'')}).replace(/</g,'\\u003c');
   html=html.replace('</head>',(classic?'<link rel="stylesheet" href="/css/account-settings.css"><link rel="stylesheet" href="/css/status-lights.css"><link rel="stylesheet" href="/css/onboarding.css">':'')+'<link rel="stylesheet" href="/css/cloud-workspace.css"><link rel="stylesheet" href="/css/model-waypoints.css"><link rel="stylesheet" href="/css/workspace-layouts.css"></head>')
-    .replace('<body>',`<body><script type="application/json" id="workspace-bootstrap">${boot}</script><div id="workspace-opening" role="status">${locale==='zh-CN'?'正在打开工作台…':'Opening workspace…'}</div>`);
+    .replace('<body>',`<body><script type="application/json" id="workspace-bootstrap">${boot}</script><div id="workspace-opening" role="status">Opening workspace…</div>`);
   return protectedHtml(html,options);
 }
 function protectedHtml(html,{publicOrigin,assetVersion}={}){

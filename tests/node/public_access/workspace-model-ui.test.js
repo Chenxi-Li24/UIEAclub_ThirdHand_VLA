@@ -80,3 +80,26 @@ test('waypoint/sequence playback pauses following and cannot be overwritten by f
   f.push(measured(3));assert.equal(f.arm.joints[0],20);assert.equal(f.requests.length,0);
  }finally{f.controls.dispose();}
 });
+
+test('AI adapter validates atomically, updates exact model inputs and pauses live samples until explicit Sync',()=>{
+ const f=fixture({live:true,mode:'admin'});try{
+  f.push(measured());const before=f.controls.simulation.getState();
+  for(const proposal of [{joints:[1,2],gripper:0},{joints:[0,90,-90,0,0,0],gripper:2},{joints:[NaN,90,-90,0,0,0],gripper:0}]){
+   assert.equal(f.controls.previewAdapter.apply(proposal),false);assert.deepEqual(f.controls.simulation.getState(),before);
+  }
+  const snapshots=[];f.controls.simulation.subscribe(s=>snapshots.push(s));const joints=[12.345,80,-70,6,7,8];
+  assert.equal(f.controls.previewAdapter.apply({joints,gripper:0}),true);assert.equal(snapshots.length,1);assert.deepEqual(snapshots[0].joints,joints);assert.equal(snapshots[0].gripper,0);
+  assert.deepEqual(f.arm.joints,joints);assert.equal(f.document.getElementById('jinput-0').value,'12.345');assert.equal(f.document.getElementById('slider-j0').value,'12.345');assert.equal(f.document.getElementById('gripper-input').value,'0');
+  f.push(measured(2));assert.deepEqual(f.arm.joints,joints);assert.equal(f.document.getElementById('chk-sync').checked,false);
+  resume(f);assert.ok(Math.abs(f.arm.joints[0]-.1*180/Math.PI)<1e-9);
+ }finally{f.controls.dispose();}assert.equal(f.controls.previewAdapter.apply({joints:null,gripper:0}),false);
+});
+test('AI gripper-only zero preserves an out-of-edit measured pose and readiness rejects all previews',()=>{
+ const f=fixture({live:true,mode:'admin',modelReady:false});try{
+  assert.equal(f.controls.previewAdapter.apply({joints:null,gripper:0}),false);
+  const actual=measured();actual.sample.jointPositionRad[1]=-12.21*Math.PI/180;f.push(actual);f.controls.setReady(true);
+  const before=f.arm.getJointAngles();assert.equal(f.controls.previewAdapter.read().joints[1],before[1]);
+  assert.equal(f.controls.previewAdapter.apply({joints:null,gripper:0}),true);assert.deepEqual(f.arm.joints,before);assert.equal(f.arm.gripper,0);
+  assert.equal(f.document.getElementById('jinput-1').value,'-12.21');assert.equal(f.requests.length,0);
+ }finally{f.controls.dispose();}
+});

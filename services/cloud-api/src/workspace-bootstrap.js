@@ -6,7 +6,7 @@ async function loadWorkspaceBootstrap(pool,principal){
     FROM auth.users u JOIN auth.user_preferences p ON p.user_id=u.id WHERE u.id=$1`,[principal.userId])).rows[0];
   if(!row)throw Error('Workspace preferences unavailable');
   const identity=Object.fromEntries(['userId','sessionId','role','mode','roleVersion','csrfToken'].map(key=>[key,principal[key]]));
-  return {identity:{...identity,displayName:row.displayName},preferences:{locale:row.locale,
+  return {identity:{...identity,displayName:row.displayName},preferences:{locale:'en',
     themeId:row.themeId==='dark'?'dark':'light',classicThemeId:row.classicThemeId,layoutId:row.layoutId==='classic'?'classic':'workspace',
     backgroundConfig:['soft','plain'].includes(row.backgroundConfig?.kind)?row.backgroundConfig:{kind:'soft',color:'#fffcf9'},revision:row.revision}};
 }

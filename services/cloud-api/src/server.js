@@ -23,6 +23,9 @@ const {createControlWebSocket}=require('./control/websocket');
 const {historyRoute}=require('./routes/history');
 const {exportsRoute}=require('./routes/exports');
 const {mediaRoute,mediaSignalRoute}=require('./routes/media');
+const {createAiPreviewService}=require('./ai-preview');
+const {createGuestAi}=require('./guest-ai');
+const {aiPreviewRoute}=require('./routes/ai-preview');
 
 const PUBLIC_AUTH = new Set(['register','login','verify-email','forgot-password','resend-verification','reset-password'].map(name=>`/api/v1/auth/${name}`));
 const STATUS = { INVALID_INPUT:400, INVALID_PASSWORD:400, INVALID_TOKEN:400, BODY_TOO_LARGE:413, UNSUPPORTED_MEDIA:415,
@@ -34,9 +37,10 @@ const STATUS = { INVALID_INPUT:400, INVALID_PASSWORD:400, INVALID_TOKEN:400, BOD
   INVALID_CURSOR:400,HISTORY_UNAVAILABLE:503,HISTORY_BUSY:429,EXPORT_SERVICE_UNAVAILABLE:503,EXPORT_BUSY:429,EXPORT_EXPIRED:410,EXPORT_NOT_READY:409,
   MEDIA_UNAVAILABLE:503,MEDIA_BUSY:429,MEDIA_PUBLISHER_BUSY:409,MEDIA_REVOCATION_PENDING:503,STALE_VIDEO_FRAME:409,WAYPOINT_LIMIT_REACHED:409 };
 
-function createCloudApi({ pool, accounts, sessions, mfa, publicOrigin, tutorialAdapter, controlService,controlChannels,history,exports,mediaService,latestState, trustProxyLoopback=false, clock = { now:()=>new Date() } }) {
+function createCloudApi({ pool, accounts, sessions, mfa, publicOrigin, tutorialAdapter, controlService,controlChannels,history,exports,mediaService,latestState, previewAi=createAiPreviewService(), trustProxyLoopback=false, clock = { now:()=>new Date() } }) {
   const origin = new URL(publicOrigin).origin;
   if (!publicOrigin.startsWith('https://') || publicOrigin.replace(/\/$/,'') !== origin) throw new Error('Exact HTTPS publicOrigin required');
+  const guestAi=createGuestAi({service:previewAi});
   const server = http.createServer(async (request, response) => {
     let auditContext=null;
     response.setHeader('X-Content-Type-Options','nosniff'); response.setHeader('Referrer-Policy','no-referrer');
@@ -47,7 +51,7 @@ function createCloudApi({ pool, accounts, sessions, mfa, publicOrigin, tutorialA
       // No legacy proxy endpoints and no permissive WebSocket forwarding.
       if (['/ws','/execution','/voice','/vision'].some(prefix=>path===prefix||path.startsWith(`${prefix}/`))) return json(response,404,{error:'NOT_FOUND'});
       if (path === '/healthz' && request.method === 'GET') return json(response,200,{service:'thirdhand-cloud-api',deviceControl:controlService?'explicit-read-only':'unavailable'});
-      if (await require('./guest-pages').serveGuestPage(request,response,path,{publicOrigin:origin})) return;
+      if (await require('./guest-pages').serveGuestPage(request,response,path,{publicOrigin:origin,serveAi:guestAi})) return;
       if (await serveAuthPage(request,response,path)) return;
       if(isWorkspacePath(path)&&['GET','HEAD'].includes(request.method)){
         const authenticated=await sessions?.resolveSession(request);
@@ -74,10 +78,10 @@ function createCloudApi({ pool, accounts, sessions, mfa, publicOrigin, tutorialA
         if (!publicAuth && !sessions.verifyCsrf(request,principal)) throw identityError('FORBIDDEN');
         body = await readBody(request);
       }
-      const context = { path,request,response,body,principal,pool,accounts,sessions,mfa,sourceKey,clock,tutorialAdapter,controlService,history,exports,mediaService,latestState };
+      const context = { path,request,response,body,principal,pool,accounts,sessions,mfa,sourceKey,clock,tutorialAdapter,controlService,history,exports,mediaService,latestState,previewAi };
       if (publicAuth && request.method === 'POST') await authRoute(context);
       if (!response.writableEnded && !publicAuth) {
-        for (const route of [sessionRoute,adminApplicationsRoute,adminRoute,profileRoute,preferencesRoute,waypointsRoute,tutorialRoute,historyRoute,exportsRoute,mediaRoute,controlRoute,workspaceRoute]) { await route(context); if (response.writableEnded||response.destroyed) break; }
+        for (const route of [aiPreviewRoute,sessionRoute,adminApplicationsRoute,adminRoute,profileRoute,preferencesRoute,waypointsRoute,tutorialRoute,historyRoute,exportsRoute,mediaRoute,controlRoute,workspaceRoute]) { await route(context); if (response.writableEnded||response.destroyed) break; }
       }
       if (!response.writableEnded) json(response,404,{error:'NOT_FOUND'});
     } catch (error) {

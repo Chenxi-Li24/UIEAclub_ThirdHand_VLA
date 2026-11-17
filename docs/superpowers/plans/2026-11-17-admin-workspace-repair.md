@@ -36,11 +36,11 @@
 
 **Interfaces:** Follow the exact factories, callback/adapter shapes and route in the Spec. `createGuestAi` additionally accepts optional `{service}` while preserving its existing `{fetchImpl,env,now}` API. `chat(body,clientKey)` returns the bounded result and throws errors with `code` plus HTTP `status`; the Guest wrapper and authenticated route return the documented status without exposing provider exceptions. Client quota keys are guest IP or authenticated user ID; callers share one service instance during integration.
 
-- [ ] Add failing tests for existing Guest compatibility, valid/invalid/null context, English reply validation, timeout/quota and no execution tools; implement provider extraction with original limits (3 concurrent, 120/hour total, 10/minute/client, 2048 active client buckets).
-- [ ] Add failing route tests for Administrator+MFA versus anonymous/Observer/no-MFA and exact route/method. Implement route authorization; full HTTP middleware coverage belongs to Task 3.
-- [ ] Add failing real-DOM presenter tests for delayed model, exact joint/gripper preview, invalid proposal atomicity, duplicate submissions, English messages, bounded history and ignoring late replies after disposal. Implement presenter and preview adapter binding; no network path is hardcoded in the presenter.
-- [ ] Preserve `Preview in model`, support gripper-only zero, and hide obsolete voice interpretation/execution placeholders without removing Software Stop or SDK controls. No hardcoded fallback home pose.
-- [ ] Run focused tests, update the feature doc with implemented contracts/validation, self-review, and commit only task-owned files. Report exact commands/results and remaining integration needs.
+- [x] Add failing tests for existing Guest compatibility, valid/invalid/null context, English reply validation, timeout/quota and no execution tools; implement provider extraction with original limits (3 concurrent, 120/hour total, 10/minute/client, 2048 active client buckets).
+- [x] Add failing route tests for Administrator+MFA versus anonymous/Observer/no-MFA and exact route/method. Implement route authorization; full HTTP middleware coverage belongs to Task 3.
+- [x] Add failing real-DOM presenter tests for delayed model, exact joint/gripper preview, invalid proposal atomicity, duplicate submissions, English messages, bounded history and ignoring late replies after disposal. Implement presenter and preview adapter binding; no network path is hardcoded in the presenter.
+- [x] Preserve `Preview in model`, support gripper-only zero, and hide obsolete voice interpretation/execution placeholders without removing Software Stop or SDK controls. No hardcoded fallback home pose.
+- [x] Run focused tests, update the feature doc with implemented contracts/validation, self-review, and commit only task-owned files. Report exact commands/results and remaining integration needs.
 
 ### Task 2: Calibration capability and navigation recovery
 
@@ -48,10 +48,10 @@
 
 **Interfaces:** `mountWorkspace(document,view,options)` retains its API. When `calibrationEntry` is omitted and a `workspace-bootstrap` element or `app.dataset.guestDemo==='true'` exists, default the effective entry to null before navigation creates a frame. An explicit null is unavailable. Plain local default/custom wizard retains current behavior. Do not clear an existing unsafe iframe on a repeated mount.
 
-- [ ] Reproduce a default cloud pre-mount entering Calibration before authenticated mount; assert no iframe can be created under the trusted cloud marker and all ordinary routes remain reachable. Implement narrow capability defaulting.
-- [ ] Add Guest initialization navigation regressions and explicit English unavailable-calibration copy. Preserve all real wizard loading/active/pending/unknown latch and recording tests.
-- [ ] Test local default mount still blocks leaving an unknown/unsafe wizard and confirmed idle releases it; no timeout escape and no command requests.
-- [ ] Run focused checks, document behavior and current-source versus deployed uncertainty, self-review, and commit only task-owned files.
+- [x] Reproduce a default cloud pre-mount entering Calibration before authenticated mount; assert no iframe can be created under the trusted cloud marker and all ordinary routes remain reachable. Implement narrow capability defaulting.
+- [x] Add Guest initialization navigation regressions and explicit English unavailable-calibration copy. Preserve all real wizard loading/active/pending/unknown latch and recording tests.
+- [x] Test local default mount still blocks leaving an unknown/unsafe wizard and confirmed idle releases it; no timeout escape and no command requests.
+- [x] Run focused checks, document behavior and current-source versus deployed uncertainty, self-review, and commit only task-owned files.
 
 ### Task 3: Authenticated integration, English first render and SDK diagnosis
 
@@ -61,14 +61,14 @@
 
 `simulation.applyPreview({joints,gripper})` validates the entire proposal before changing live following, playback or either model field, then emits one coherent state. `mountModelWorkspace` exposes a readiness/disposal-bound preview adapter; startup binds only after geometry readiness.
 
-- [ ] First add failing authenticated-startup/model tests: admin chat enabled before geometry, preview binds afterward, exact inputs follow it, new live samples do not overwrite the AI draft, explicit Sync resumes. Observer AI remains unauthorized. Preserve measured out-of-edit-limit display.
-- [ ] Wire shared presenter into Guest and authenticated startup, remove only the authenticated Administrator chat toggle from legacy disabled lists, keep old physical/voice channels disabled, and dispose callbacks during page exit. Keep Guest permission behavior and public assets allowlist/CSP.
-- [ ] Hide shell-created audio affordances when mounting the model-only presenter; no empty microphone/settings drawer remains after legacy capture controls are hidden.
-- [ ] Add HTTP integration tests for sessions, Origin, CSRF and `voice.use`; share the provider quota instance between public/authenticated routes. Test no legacy proxy routes/tools are opened.
-- [ ] Normalize initial authenticated HTML/bootstrap UI locale to English without modifying account database rows or user content; add old-locale regression coverage.
-- [ ] Inspect SDK catalog/client/config paths and public endpoints without connecting hardware. If SSH becomes available, read active release, service state, relay/SDK diagnostics and existing operation activity before any deployment. Otherwise record the precise access limitation and leave the runtime claim unverified.
-- [ ] Run focused suites, boundary/whitespace checks and appropriate full Node comparison; request independent review. Record accepted residual baseline failures accurately.
-- [ ] Commit the integrated change and documentation. If server access and authorization permit, deploy a finite reviewed immutable release delta with rollback and fresh versioned assets, then verify actual signed-in UI. Never substitute source/tests/Guest success for authenticated or hardware success.
+- [x] First add failing authenticated-startup/model tests: admin chat enabled before geometry, preview binds afterward, exact inputs follow it, new live samples do not overwrite the AI draft, explicit Sync resumes. Observer AI remains unauthorized. Preserve measured out-of-edit-limit display.
+- [x] Wire shared presenter into Guest and authenticated startup, remove only the authenticated Administrator chat toggle from legacy disabled lists, keep old physical/voice channels disabled, and dispose callbacks during page exit. Keep Guest permission behavior and public assets allowlist/CSP.
+- [x] Hide shell-created audio affordances when mounting the model-only presenter; no empty microphone/settings drawer remains after legacy capture controls are hidden.
+- [x] Add HTTP integration tests for sessions, Origin, CSRF and `voice.use`; share the provider quota instance between public/authenticated routes. Test no legacy proxy routes/tools are opened.
+- [x] Normalize initial authenticated HTML/bootstrap UI locale to English without modifying account database rows or user content; add old-locale regression coverage.
+- [x] Inspect SDK catalog/client/config paths and public endpoints without connecting hardware. If SSH becomes available, read active release, service state, relay/SDK diagnostics and existing operation activity before any deployment. Otherwise record the precise access limitation and leave the runtime claim unverified.
+- [x] Run focused suites, boundary/whitespace checks and appropriate full Node comparison; request independent review. Record accepted residual baseline failures accurately.
+- [x] Commit the integrated change and documentation. If server access and authorization permit, deploy a finite reviewed immutable release delta with rollback and fresh versioned assets, then verify actual signed-in UI. Never substitute source/tests/Guest success for authenticated or hardware success.
 
 ### Task 4: Bounded SDK wait and actionable cloud feedback
 
@@ -89,7 +89,11 @@
 
 - [x] Add failing actual Classic DOM tests for the previously hidden/unbound AI entry, opening/closing chat, English model-only content, disposal and Observer exclusion. Keep old voice/config/interpretation controls hidden.
 - [x] Integrate the same compact presenter into Classic without enabling legacy main/voice transports or changing layout preferences, model adapter, SDK controls, calibration/recording protections or database rows.
-- [ ] Test Classic explicit model preview updates the same joint/gripper state and pauses live following; retain all existing Modern/Guest tests. Parent verifies visible Classic entry and preview in the actual browser with mock account/provider.
-- [ ] Run focused checks, update behavior/assets/startup/validation/limits docs, self-review, commit and task-review before final broad validation.
+- [x] Test Classic explicit model preview updates the same joint/gripper state and pauses live following; retain all existing Modern/Guest tests. Parent verifies visible Classic entry and preview in the actual browser with mock account/provider.
+- [x] Run focused checks, update behavior/assets/startup/validation/limits docs, self-review, commit and task-review before final broad validation.
 
-Implementation checks pass 58/58 plus Classic compatibility 1/1. Model preview/follow tests are complete; parent browser verification, task review and final broad validation remain pending. The pre-existing Classic archived-HTML snapshot mismatch is recorded in `docs/features/ADMIN_WORKSPACE.md`.
+Implementation checks pass 58/58 plus Classic compatibility 1/1. Model preview/follow tests, actual mock-account/provider browser verification and independent task/final scoped reviews are complete. The pre-existing Classic archived-HTML snapshot mismatch is recorded in `docs/features/ADMIN_WORKSPACE.md`.
+
+## Delivery status
+
+All five source tasks are implemented and task-reviewed. Modern and Classic mock-account/provider browser checks pass. Final root validation is 579/597 with 18 recorded baseline failures; related public checks are 97/98 with the base-reproduced Classic snapshot failure. Boundary and whitespace checks pass. Real database tests, authenticated public acceptance, native SDK diagnosis and deployment remain unverified because the required database/server access is unavailable. No hardware operation or service restart was performed. The conditional deployment step above was not performed.
